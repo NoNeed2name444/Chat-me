@@ -1,0 +1,12 @@
+{
+  "id": "thorax",
+  "title": "Thorax",
+  "status": "Review — schematic placeholder",
+  "sizeMB": 180,
+  "structures": [
+    {"id":"FMA_7574","name":"Right lung","synonyms":["pulmo dexter"],"system":"Respiratory","region":"Thorax","parent":"thorax","fmaID":"FMA:7574","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Schematic placeholder only; not a scan-derived lung."},
+    {"id":"FMA_7575","name":"Left lung","synonyms":["pulmo sinister"],"system":"Respiratory","region":"Thorax","parent":"thorax","fmaID":"FMA:7575","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Schematic placeholder only; not a scan-derived lung."},
+    {"id":"FMA_7088","name":"Heart","synonyms":["cor"],"system":"Cardiovascular","region":"Thorax","parent":"mediastinum","fmaID":"FMA:7088","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"No anatomical heart mesh is included in this build."},
+    {"id":"FMA_7480","name":"Thoracic cage","synonyms":["rib cage"],"system":"Skeletal","region":"Thorax","parent":"thorax","fmaID":"FMA:7480","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Placeholder bounds only; it is not a rib mesh."}
+  ]
+}
