@@ -7,6 +7,8 @@ struct ContentView: View {
                 .tabItem { Label("Viewer", systemImage: "view.3d") }
             LibraryView()
                 .tabItem { Label("Packs", systemImage: "square.stack.3d.down.right") }
+            QuizView()
+                .tabItem { Label("Quiz", systemImage: "brain.head.profile") }
             SourcesView()
                 .tabItem { Label("Sources", systemImage: "checklist") }
         }
