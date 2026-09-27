@@ -1,56 +1,58 @@
-from datetime import date
-
 from app.models.evidence import EvidenceItem
-from app.verification.contradiction import assess_evidence
-from app.verification.policy import decide_verdict
-from app.verification.reliability import aggregate, enrich
+from app.verification.evidence_model import check_entailment
+from app.verification.reliability import aggregate
 
-def item(identifier, publisher, family, supports=True):
-    return EvidenceItem(
-        id=identifier,
-        title="Metformin evidence",
-        source_type="regulatory" if family == "regulatory" else "literature",
+
+def _item(item_id, publisher, family="trial"):
+    item = EvidenceItem(
+        id=item_id,
+        title="Statins increase diabetes risk",
+        source_type=family,
         publisher=publisher,
-        passage="Metformin and hypoglycemia evidence in adults.",
-        supports=supports,
-        source_family=family,
-        publication_date=date.today(),
-        url="https://example.test/" + identifier,
-        source_authority=0.9 if family == "regulatory" else 0.8,
+        passage="Statins increase diabetes risk in adults.",
+        source_family="primary_literature",
+        independence_group=f"primary_literature:{publisher}",
+        quality_score=0.9,
     )
-
-def test_independent_corroboration():
-    a = enrich(item("a", "FDA", "regulatory"), "metformin hypoglycemia", date.today())
-    b = enrich(item("b", "PubMed", "primary_literature"), "metformin hypoglycemia", date.today())
-    assessed, _, _ = assess_evidence([a, b], "metformin hypoglycemia")
-    agg = aggregate(assessed)
-    verdict, _, _ = decide_verdict(
-        risk_level="moderate",
-        claim_type="drug_safety",
-        missing_context=[],
-        aggregate=agg,
-        evidence=assessed,
+    item.structured_entailment = check_entailment(
+        "Statins increase diabetes risk in adults.",
+        item.passage,
     )
-    assert verdict == "SUPPORTED"
-    assert agg["independent_support_groups"] == 2
+    item.supports = item.structured_entailment["relation"] == "entailment"
+    return item
 
-def test_same_family_duplicate_does_not_count_twice():
-    a = enrich(item("a", "Same Publisher", "primary_literature"), "metformin hypoglycemia", date.today())
-    b = enrich(item("b", "Same Publisher", "primary_literature"), "metformin hypoglycemia", date.today())
-    assessed, _, _ = assess_evidence([a, b], "metformin hypoglycemia")
-    agg = aggregate(assessed)
+
+def test_same_publisher_does_not_create_independent_support():
+    a = _item("1", "Publisher A")
+    b = _item("2", "Publisher A")
+    agg = aggregate([a, b])
     assert agg["independent_support_groups"] == 1
 
-def test_contradiction_blocks_strong_support():
-    a = enrich(item("a", "FDA", "regulatory", True), "metformin hypoglycemia", date.today())
-    b = enrich(item("b", "Other", "primary_literature", False), "metformin hypoglycemia", date.today())
-    assessed, _, _ = assess_evidence([a, b], "metformin hypoglycemia")
-    agg = aggregate(assessed)
-    verdict, _, _ = decide_verdict(
-        risk_level="moderate",
-        claim_type="drug_safety",
-        missing_context=[],
-        aggregate=agg,
-        evidence=assessed,
+
+def test_independent_publishers_create_independent_support():
+    a = _item("1", "Publisher A")
+    b = _item("2", "Publisher B")
+    agg = aggregate([a, b])
+    assert agg["independent_support_groups"] == 2
+
+
+def test_structured_conflict_is_visible_to_aggregator():
+    support = _item("1", "Publisher A")
+    contradiction = EvidenceItem(
+        id="2",
+        title="Statins decrease diabetes risk",
+        source_type="trial",
+        publisher="Publisher B",
+        passage="Statins decrease diabetes risk in adults.",
+        source_family="primary_literature",
+        independence_group="primary_literature:Publisher B",
+        quality_score=0.9,
     )
-    assert verdict in {"MIXED_EVIDENCE", "SUPPORTED"}
+    contradiction.structured_entailment = check_entailment(
+        "Statins increase diabetes risk in adults.",
+        contradiction.passage,
+    )
+    contradiction.supports = False
+    agg = aggregate([support, contradiction])
+    assert agg["conflict"] is True
+    assert agg["independent_contradiction_groups"] == 1
