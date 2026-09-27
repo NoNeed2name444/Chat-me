@@ -8,7 +8,8 @@ POLARITY_PAIRS = (
     ("high", "low"), ("higher", "lower"), ("increased", "decreased"),
     ("increase", "decrease"), ("increases", "decreases"), ("increasing", "decreasing"),
     ("greater", "less"), ("more", "less"), ("stronger", "weaker"),
-    ("minimal", "high"), ("rare", "common"), ("uncommon", "common"),
+    ("minimal", "high"), ("high", "rare"), ("higher", "rare"),
+    ("rare", "common"), ("uncommon", "common"),
     ("reduced", "increased"), ("lower", "higher"), ("decreased", "increased"),
     ("strengthens", "antagonizes"), ("strengthen", "antagonize"),
 )
