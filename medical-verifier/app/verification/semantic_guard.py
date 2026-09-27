@@ -3,21 +3,46 @@ import re
 CAUSAL_WORDS = ("causes", "caused", "leads to", "results in", "prevents", "reduces", "increases", "decreases")
 ASSOCIATION_WORDS = ("associated with", "association", "correlated with", "correlation", "linked to", "observational")
 NEGATION_WORDS = ("not", "no", "never", "without", "doesn't", "does not", "cannot", "can't")
+
+POLARITY_PAIRS = (
+    ("high", "low"), ("higher", "lower"), ("increased", "decreased"),
+    ("increase", "decrease"), ("increases", "decreases"), ("increasing", "decreasing"),
+    ("greater", "less"), ("more", "less"), ("stronger", "weaker"),
+    ("minimal", "high"), ("high", "rare"), ("higher", "rare"),
+    ("rare", "common"), ("uncommon", "common"),
+    ("reduced", "increased"), ("lower", "higher"), ("decreased", "increased"),
+    ("strengthens", "antagonizes"), ("strengthen", "antagonize"),
+)
 UNIT_SCALE = {"mg": 1.0, "g": 1000.0, "mcg": 0.001, "ug": 0.001, "ml": 1.0, "l": 1000.0}
 
 
 def _quantities(text):
-    return [(float(n), u.lower()) for n, u in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\\b", text, re.I)]
+    return [(float(n), u.lower()) for n, u in re.findall(r"\b(\d+(?:\.\d+)?)\s*(mg|mcg|ug|g|ml|l)\b", text, re.I)]
 
 
 def _percents(text):
-    return [float(x) for x in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\\b", text, re.I)]
+    return [float(x) for x in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:%|percent)\b", text, re.I)]
+
+
+def _polarity_mismatch(claim: str, evidence: str) -> bool:
+    for left, right in POLARITY_PAIRS:
+        if left in claim and right in evidence:
+            return True
+        if right in claim and left in evidence:
+            return True
+    if ("association" in claim or "associated" in claim) and "unfounded" in evidence:
+        return True
+    return False
 
 
 def semantic_guard(item, claim):
     evidence = f"{item.title} {item.passage}".lower()
     claim_l = claim.lower()
     warnings = []
+
+    if _polarity_mismatch(claim_l, evidence):
+        warnings.append("directional_polarity_mismatch")
+        item.supports = False
 
     if any(x in claim_l for x in CAUSAL_WORDS) and any(x in evidence for x in ASSOCIATION_WORDS) and not any(x in evidence for x in CAUSAL_WORDS):
         warnings.append("causal_claim_only_associative_evidence")
