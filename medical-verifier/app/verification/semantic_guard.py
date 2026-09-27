@@ -17,11 +17,11 @@ UNIT_SCALE = {"mg": 1.0, "g": 1000.0, "mcg": 0.001, "ug": 0.001, "ml": 1.0, "l":
 
 
 def _quantities(text):
-    return [(float(n), u.lower()) for n, u in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\\b", text, re.I)]
+    return [(float(n), u.lower()) for n, u in re.findall(r"\b(\d+(?:\.\d+)?)\s*(mg|mcg|ug|g|ml|l)\b", text, re.I)]
 
 
 def _percents(text):
-    return [float(x) for x in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\\b", text, re.I)]
+    return [float(x) for x in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:%|percent)\b", text, re.I)]
 
 
 def _polarity_mismatch(claim: str, evidence: str) -> bool:
