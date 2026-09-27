@@ -1,7 +1,11 @@
 import re
 from typing import Any
 
-STRONG_CAUSAL_PATTERNS = (\n    r"\\bcauses?\\b", r"\\bcaused by\\b", r"\\bleads? to\\b", r"\\bresults? in\\b",\n    r"\\bprevents?\\b",\n)\nCAUSAL_PATTERNS = (
+STRONG_CAUSAL_PATTERNS = (
+    r"\bcauses?\b", r"\bcaused by\b", r"\bleads? to\b", r"\bresults? in\b",
+    r"\bprevents?\b",
+)
+CAUSAL_PATTERNS = (
     r"\bcauses?\b", r"\bcaused by\b", r"\bleads? to\b", r"\bresults? in\b",
     r"\bprevents?\b", r"\breduces?\b", r"\bincreases?\b", r"\bdecreases?\b",
     r"\bimproves?\b", r"\bworsens?\b", r"\blowers?\b", r"\braises?\b",
