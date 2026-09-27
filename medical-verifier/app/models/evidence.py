@@ -10,13 +10,9 @@ class EvidenceItem(BaseModel):
     effective_date: date | None = None
     url: str | None = None
     passage: str = ""
-
-    # Provenance / independence
     source_family: str = ""
     canonical_id: str | None = None
     independence_group: str = ""
-
-    # Verification signals
     source_authority: float = 0.0
     relevance_score: float = 0.0
     temporal_score: float = 0.0
