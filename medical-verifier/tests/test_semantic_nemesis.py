@@ -34,8 +34,24 @@ def test_unit_mismatch_is_not_support():
     assert item.supports is None
 
 
+def test_percentage_mismatch_is_not_support():
+    item = evidence("Risk increased by 4 percent.")
+    item.supports = True
+    item.quality_score = 0.9
+    item, warnings = semantic_guard(item, "Risk increased by 40 percent.")
+    assert "percentage_not_matched" in warnings
+    assert item.supports is None
+
+
+def test_metadata_only_literature_is_not_entailment():
+    item = evidence("PubMed metadata record; consult source URL for the publication.", source_type="literature")
+    item, warnings = validate_provenance(item)
+    assert "metadata_record_not_clinical_entailment" in warnings
+    assert item.supports is None
+
+
 def test_missing_provenance_is_downgraded():
-    item = evidence("Evidence", id="",)
+    item = evidence("Evidence", id="")
     item.url = None
     item, warnings = validate_provenance(item)
     assert "missing_evidence_id" in warnings
