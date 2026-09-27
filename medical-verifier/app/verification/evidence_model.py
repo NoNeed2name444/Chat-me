@@ -1,7 +1,7 @@
 import re
 from typing import Any
 
-CAUSAL_PATTERNS = (
+STRONG_CAUSAL_PATTERNS = (\n    r"\\bcauses?\\b", r"\\bcaused by\\b", r"\\bleads? to\\b", r"\\bresults? in\\b",\n    r"\\bprevents?\\b",\n)\nCAUSAL_PATTERNS = (
     r"\bcauses?\b", r"\bcaused by\b", r"\bleads? to\b", r"\bresults? in\b",
     r"\bprevents?\b", r"\breduces?\b", r"\bincreases?\b", r"\bdecreases?\b",
     r"\bimproves?\b", r"\bworsens?\b", r"\blowers?\b", r"\braises?\b",
@@ -84,11 +84,12 @@ def _same_percent(claim, evidence):
     return not cp or (bool(ep) and any(abs(x - y) < 1e-9 for x in cp for y in ep))
 
 def _causal_kind(text):
-    causal = any(re.search(p, text, re.I) for p in CAUSAL_PATTERNS)
     associative = any(re.search(p, text, re.I) for p in ASSOCIATIVE_PATTERNS)
-    if causal and not associative: return "causal"
-    if associative and not causal: return "associational"
-    if causal and associative: return "mixed"
+    strong_causal = any(re.search(p, text, re.I) for p in STRONG_CAUSAL_PATTERNS)
+    directional = any(re.search(p, text, re.I) for p in CAUSAL_PATTERNS if p not in STRONG_CAUSAL_PATTERNS)
+    if strong_causal: return "causal"
+    if associative: return "associational"
+    if directional: return "causal"
     return "unspecified"
 
 def _polarity(text):
@@ -163,10 +164,14 @@ def check_entailment(claim: str, evidence: str) -> dict[str, Any]:
 
     if ck == "causal" and ek == "associational":
         mismatches.append("causal_meaning")
-    elif ck != "unspecified" and ek != "unspecified" and ck != ek and "mixed" not in {ck,ek}:
+    elif ck == "associational" and ek == "causal":
+        pass
+    elif ck != "unspecified" and ek != "unspecified" and ck != ek:
         mismatches.append("causal_meaning")
 
-    relevance = "insufficient" if subject_overlap < 0.34 else "relevant"
+    has_dose_in_both = bool(DOSE_RE.search(claim) and DOSE_RE.search(evidence))
+    has_percent_in_both = bool(PERCENT_RE.search(claim) and PERCENT_RE.search(evidence))
+    relevance = "insufficient" if subject_overlap < 0.34 and not (has_dose_in_both or has_percent_in_both) else "relevant"
     if relevance == "insufficient":
         relation = "insufficient"
     elif {"direction","polarity"} & set(mismatches):
