@@ -2,20 +2,20 @@ import re
 
 
 CAUSAL_PATTERNS = (
-    r"\\bcauses?\\b", r"\\bcaused by\\b", r"\\bleads? to\\b", r"\\bresults? in\\b",
-    r"\\bprevents?\\b", r"\\breduces?\\b", r"\\bincreases?\\b", r"\\bdecreases?\\b",
-    r"\\bimproves?\\b", r"\\bworsens?\\b",
+    r"\bcauses?\b", r"\bcaused by\b", r"\bleads? to\b", r"\bresults? in\b",
+    r"\bprevents?\b", r"\breduces?\b", r"\bincreases?\b", r"\bdecreases?\b",
+    r"\bimproves?\b", r"\bworsens?\b",
 )
 ASSOCIATIVE_PATTERNS = (
-    r"\\bassociated with\\b", r"\\bassociation\\b", r"\\bcorrelated with\\b",
-    r"\\bcorrelation\\b", r"\\blinked to\\b", r"\\bobservational\\b",
+    r"\bassociated with\b", r"\bassociation\b", r"\bcorrelated with\b",
+    r"\bcorrelation\b", r"\blinked to\b", r"\bobservational\b",
 )
 
 MODALITY = {
-    "necessary": (r"\\bmust\\b", r"\\brequires?\\b", r"\\bshould\\b"),
-    "possible": (r"\\bmay\\b", r"\\bmight\\b", r"\\bcan\\b", r"\\bcould\\b", r"\\bpossible\\b"),
-    "probable": (r"\\blikely\\b", r"\\bprobable\\b", r"\\bprobably\\b"),
-    "certain": (r"\\bdefinitely\\b", r"\\balways\\b", r"\\bclearly\\b"),
+    "necessary": (r"\bmust\b", r"\brequires?\b", r"\bshould\b"),
+    "possible": (r"\bmay\b", r"\bmight\b", r"\bcan\b", r"\bcould\b", r"\bpossible\b"),
+    "probable": (r"\blikely\b", r"\bprobable\b", r"\bprobably\b"),
+    "certain": (r"\bdefinitely\b", r"\balways\b", r"\bclearly\b"),
 }
 
 DIRECTION = {
@@ -25,20 +25,20 @@ DIRECTION = {
 }
 
 POPULATION_PATTERNS = (
-    r"\\b(adults?|children|pediatric|paediatric|adolescents?|elderly|older adults?)\\b",
-    r"\\b(pregnan(?:t|cy)|lactating|breastfeeding)\\b",
-    r"\\b(healthy volunteers?|healthy adults?)\\b",
-    r"\\b(patients? with [a-z0-9 /-]{2,50})\\b",
-    r"\\b(subjects? with [a-z0-9 /-]{2,50})\\b",
+    r"\b(adults?|children|pediatric|paediatric|adolescents?|elderly|older adults?)\b",
+    r"\b(pregnan(?:t|cy)|lactating|breastfeeding)\b",
+    r"\b(healthy volunteers?|healthy adults?)\b",
+    r"\b(patients? with [a-z0-9 /-]{2,50})\b",
+    r"\b(subjects? with [a-z0-9 /-]{2,50})\b",
 )
 
 TIME_PATTERNS = (
-    r"\\b(within|over|for|after|before|during)\\s+(\\d+(?:\\.\\d+)?)\\s*(hours?|days?|weeks?|months?|years?)\\b",
-    r"\\b(short[- ]term|long[- ]term|acute|chronic)\\b",
+    r"\b(within|over|for|after|before|during)\\s+(\\d+(?:\\.\\d+)?)\\s*(hours?|days?|weeks?|months?|years?)\b",
+    r"\b(short[- ]term|long[- ]term|acute|chronic)\b",
 )
 
-DOSE_RE = re.compile(r"\\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\\b", re.I)
-PERCENT_RE = re.compile(r"\\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\\b", re.I)
+DOSE_RE = re.compile(r"\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\b", re.I)
+PERCENT_RE = re.compile(r"\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\b", re.I)
 
 
 def _matches(patterns, text):
@@ -56,7 +56,7 @@ def _modality(text):
 def _directions(text):
     found = []
     for label, words in DIRECTION.items():
-        if any(re.search(r"\\b" + re.escape(w) + r"\\b", text, re.I) for w in words):
+        if any(re.search(r"\b" + re.escape(w) + r"\b", text, re.I) for w in words):
             found.append(label)
     return found
 
