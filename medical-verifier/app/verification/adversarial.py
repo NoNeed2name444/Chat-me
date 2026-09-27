@@ -16,24 +16,38 @@ _PATTERNS = [
     ("population_qualifier", "high", re.compile(r"\b(adults?|children|pediatric|elderly|pregnan\w*|breastfeed\w*|renal|kidney|hepatic|liver)\b")),
     ("causal_claim", "high", re.compile(r"\b(caus(?:e|es|ed|al)|leads? to|prevents?|reduces?|increases?|decreases?|results? in)\b")),
     ("diagnostic_claim", "high", re.compile(r"\b(diagnos(?:e|is|ed|tic)|rules? out|confirms?|definitively)\b")),
-    ("action_request", "critical", re.compile(r"\b(stop|start|change|double|halve|take|skip|replace)\b.{0,60}\b(medication|medicine|drug|dose|insulin|anticoagulant)\b", re.I)),
-    ("prompt_injection", "critical", re.compile(r"\b(ignore|disregard|override)\b.{0,80}\b(instructions?|rules?|policy|safety)\b", re.I)),
-    ("authority_pressure", "moderate", re.compile(r"\b(my doctor|doctor said|expert said|guideline says|you must trust)\b", re.I)),
-    ("citation_pressure", "moderate", re.compile(r"\b(without checking|don't verify|no need to verify|assume the citation)\b", re.I)),
+    ("action_request", "critical", re.compile(
+        r"\b(stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)\b"
+        r".{0,80}\b(medication|medicine|drug|dose|insulin|anticoagulant"
+        r"|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen"
+        r"|amoxicillin|prednisone|levothyroxine|lisinopril)\b",
+        re.I,
+    )),
+    ("prompt_injection", "critical", re.compile(
+        r"\b(ignore|disregard|override|bypass)\b.{0,100}"
+        r"\b(instructions?|rules?|policy|safety|guardrails?)\b",
+        re.I,
+    )),
+    ("authority_pressure", "moderate", re.compile(
+        r"\b(my doctor|doctor said|expert said|guideline says|you must trust)\b",
+        re.I,
+    )),
+    ("citation_pressure", "moderate", re.compile(
+        r"\b(without checking|don't verify|no need to verify|assume the citation)\b",
+        re.I,
+    )),
 ]
 
 def inspect_claim(claim: str) -> list[AttackFinding]:
-    findings = []
-    for code, severity, pattern in _PATTERNS:
-        if pattern.search(claim):
-            findings.append(
-                AttackFinding(
-                    code=code,
-                    severity=severity,
-                    description=f"Claim contains {code.replace('_', ' ')}.",
-                )
-            )
-    return findings
+    return [
+        AttackFinding(
+            code=code,
+            severity=severity,
+            description=f"Claim contains {code.replace('_', ' ')}.",
+        )
+        for code, severity, pattern in _PATTERNS
+        if pattern.search(claim)
+    ]
 
 def highest_severity(findings: list[AttackFinding]) -> str:
     order = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
