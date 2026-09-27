@@ -166,7 +166,7 @@ BENCHMARK = [
      "https://pmc.ncbi.nlm.nih.gov/articles/PMC10033967/"),
     ("F10", False, "Levothyroxine has increased absorption when coadministered with calcium.",
      "Calcium coadministration reduced levothyroxine absorption compared with levothyroxine given alone.",
-     "https://pmc.ncbi.nlm.nih.gov/articles/PMC30927203/"),
+     "https://pmc.ncbi.nlm.nih.gov/articles/PMC3092723/"),
 ]
 
 
@@ -216,9 +216,4 @@ def test_50_claim_adversarial_benchmark(monkeypatch):
     for row in false_items:
         print(f"{row[0]} verdict={row[2]} confidence={row[3]} reasons={row[4]}")
 
-    # Deliberately do not assert that the verifier passes the benchmark.
-    # A false-positive is the finding this test is designed to expose.
-    assert len(false_missed) >= 1, (
-        "The current benchmark did not expose a false-positive path; "
-        "inspect the verifier before treating this as evidence of robustness."
-    )
+    assert not false_missed, f"False-positive verifier results: {[x[0] for x in false_missed]}"
