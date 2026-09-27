@@ -70,3 +70,12 @@ def test_time_window_mismatch_blocks_support():
     )
     assert result["status"] == "mismatch"
     assert "time_window" in result["mismatches"]
+
+
+def test_outcome_mismatch_blocks_support():
+    result = check_entailment(
+        "The treatment reduces stroke risk.",
+        "The treatment reduces bleeding risk.",
+    )
+    assert result["status"] == "mismatch"
+    assert "outcome" in result["mismatches"]
