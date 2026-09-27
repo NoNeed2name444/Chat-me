@@ -68,3 +68,17 @@ No paid-license runtime dependency, proprietary SDK, commercial-only model, or p
 If a future retrieval provider, model, database, or hosted API is added, it must be audited before inclusion; a free tier does not by itself establish unrestricted commercial rights.
 
 Last audited: 2026-09-27.
+
+
+## New 2026 candidates for the audio + medical terminology stack
+
+| Component | Source | License / commercial status | Recommended use |
+|---|---|---|---|
+| Qwen3-ASR | https://github.com/QwenLM/Qwen3-ASR | Apache-2.0 repository code; verify exact model-weight terms before shipping a model revision | Primary multilingual ASR candidate; use forced alignment for word/segment timestamps |
+| QwenCleo-ASR | https://github.com/MohammedAly22/qwencleo-asr | Apache-2.0 repository/model claim; verify exact model revision and inherited weight terms before shipping | Egyptian Arabic + Arabic/English code-switching candidate; benchmark against Qwen3-ASR |
+| Common Voice | https://commonvoice.mozilla.org/ | CC0 for the dataset under Mozilla's current terms | General speech robustness and Egyptian Arabic coverage where the target locale is available |
+| MASC Arabic | https://huggingface.co/datasets/pain/MASC | CC BY 4.0 dataset card | Arabic dialect/acoustic diversity; retain attribution and audit source provenance |
+| LOINC | https://loinc.org/license | Free for commercial and non-commercial use under its open license, with conditions | Clinical observation/test terminology and spelling/alias normalization |
+| RxNorm | https://www.nlm.nih.gov/research/umls/licensedcontent/rxnormfiles.html | Release-dependent NLM terms; current prescribable content is explicitly marked no-license-required; audit the exact release before bundling | Drug names, ingredients, strengths, dose forms and normalized medication aliases |
+
+Do not automatically bundle every candidate. Model weights, datasets, repository code, and retrieved medical content can have different terms. Record the exact revision and license in the build manifest before commercial distribution.
