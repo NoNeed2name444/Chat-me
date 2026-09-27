@@ -32,13 +32,13 @@ POPULATION_PATTERNS = (
     r"\b(subjects? with [a-z0-9 /-]{2,50})\b",
 )
 
-OUTCOME_PATTERNS = (\n    r"\\b(?:risk|incidence|rate|odds|probability) of ([a-z0-9][a-z0-9 /-]{2,60})\\b",\n    r"\\b(?:mortality|morbidity|hypoglycemia|hyperglycemia|hospitalization|hospitalisation|death|infection|bleeding|stroke|diabetes)\\b",\n)\n\nTIME_PATTERNS = (
-    r"\b(within|over|for|after|before|during)\\s+(\\d+(?:\\.\\d+)?)\\s*(hours?|days?|weeks?|months?|years?)\b",
+OUTCOME_PATTERNS = (\n    r"\b(?:risk|incidence|rate|odds|probability) of ([a-z0-9][a-z0-9 /-]{2,60})\b",\n    r"\b(?:mortality|morbidity|hypoglycemia|hyperglycemia|hospitalization|hospitalisation|death|infection|bleeding|stroke|diabetes)\b",\n)\n\nTIME_PATTERNS = (
+    r"\b(within|over|for|after|before|during)\s+(\d+(?:\.\d+)?)\s*(hours?|days?|weeks?|months?|years?)\b",
     r"\b(short[- ]term|long[- ]term|acute|chronic)\b",
 )
 
-DOSE_RE = re.compile(r"\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\b", re.I)
-PERCENT_RE = re.compile(r"\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\b", re.I)
+DOSE_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(mg|mcg|ug|g|ml|l)\b", re.I)
+PERCENT_RE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:%|percent)\b", re.I)
 
 
 def _matches(patterns, text):
