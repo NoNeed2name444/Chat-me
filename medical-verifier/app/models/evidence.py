@@ -22,3 +22,4 @@ class EvidenceItem(BaseModel):
     temporal_score: float = 0.0
     quality_score: float = 0.0
     supports: bool | None = None
+    structured_entailment: dict = {}
