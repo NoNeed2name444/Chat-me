@@ -61,4 +61,10 @@ No root `LICENSE` or `LICENCE` file was found on branch verification-layer-adver
 
 If an external component is marked **UNKNOWN / DO NOT SHIP** or **RESTRICTED**, it should not be incorporated into a commercial distribution until its terms are verified and recorded here.
 
+## Paid-license / commercial-service status
+
+No paid-license runtime dependency, proprietary SDK, commercial-only model, or paid API integration was identified in the current `medical-verifier` dependency set or the audited verifier code. The runtime dependencies declared in `medical-verifier/pyproject.toml` are permissively licensed open-source packages; no paid license is required merely to install or use them. The restricted CC BY-NC evaluation dataset listed above is **not used or shipped**.
+
+If a future retrieval provider, model, database, or hosted API is added, it must be audited before inclusion; a free tier does not by itself establish unrestricted commercial rights.
+
 Last audited: 2026-09-27.
