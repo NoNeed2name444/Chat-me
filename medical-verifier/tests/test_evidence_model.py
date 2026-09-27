@@ -53,3 +53,12 @@ def test_critical_dimension_change_changes_relation():
 def test_insufficient_subject_overlap():
     result = check_entailment("Statins increase diabetes risk.","Aspirin reduces bleeding risk.")
     assert result["relation"] == "insufficient" and result["status"] == "insufficient"
+
+
+def test_negated_claim_does_not_match_positive_evidence():
+    result = check_entailment("Statins do not increase diabetes risk.","Statins increase diabetes risk.")
+    assert result["relation"] == "contradiction" and "polarity" in result["mismatches"]
+
+def test_dose_mismatch_remains_relevant_for_quantity_axis():
+    result = check_entailment("The dose is 1 g daily.","Participants received 500 mg daily.")
+    assert result["relevance"] == "relevant"
