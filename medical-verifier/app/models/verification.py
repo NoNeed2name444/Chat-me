@@ -15,11 +15,13 @@ class VerificationResponse(BaseModel):
     contradictions: list[dict] = []
 
     reliability: dict = {}
+    adversarial_findings: list[dict] = []
+
     limitations: list[str] = []
     decision_reasons: list[str] = []
     missing_context: list[str] = []
 
     requires_human_review: bool
-    verifier_version: str = "0.1.0"
+    verifier_version: str = "0.2.0"
     knowledge_snapshot: str = "LIVE-API"
     verification_id: str
