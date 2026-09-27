@@ -10,6 +10,10 @@ def _quantities(text):
     return [(float(n), u.lower()) for n, u in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(mg|mcg|ug|g|ml|l)\\b", text, re.I)]
 
 
+def _percents(text):
+    return [float(x) for x in re.findall(r"\\b(\\d+(?:\\.\\d+)?)\\s*(?:%|percent)\\b", text, re.I)]
+
+
 def semantic_guard(item, claim):
     evidence = f"{item.title} {item.passage}".lower()
     claim_l = claim.lower()
@@ -32,6 +36,12 @@ def semantic_guard(item, claim):
             warnings.append("dose_or_unit_not_matched")
             item.supports = None
             break
+
+    claim_p = _percents(claim_l)
+    evidence_p = _percents(evidence)
+    if claim_p and not any(abs(x - y) < 1e-9 for x in claim_p for y in evidence_p):
+        warnings.append("percentage_not_matched")
+        item.supports = None
 
     if warnings:
         item.quality_score = round(item.quality_score * 0.55, 4)
