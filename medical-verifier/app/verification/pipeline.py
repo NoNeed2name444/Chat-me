@@ -119,9 +119,22 @@ def verify(request):
             consistency_warnings.extend(semantic_warnings)
             entailment = check_entailment(assertion.text, f"{item.title} {item.passage}")
             item.structured_entailment = entailment
-            if entailment["status"] == "mismatch":
-                consistency_warnings.extend(f"structured_entailment_mismatch:{axis}" for axis in entailment["mismatches"])
+            relation = entailment["relation"]
+            if relation == "entailment":
+                item.supports = True
+            elif relation == "contradiction":
+                item.supports = False
+            else:
                 item.supports = None
+            if entailment["mismatches"]:
+                consistency_warnings.extend(
+                    f"structured_entailment_mismatch:{axis}"
+                    for axis in entailment["mismatches"]
+                )
+            if relation == "neutral":
+                consistency_warnings.append("structured_evidence_neutral")
+            elif relation == "insufficient":
+                consistency_warnings.append("structured_evidence_insufficient")
 
         classified, supersession_warnings = apply_temporal_supersession(classified)
         all_flags.extend(code for _, code in supersession_warnings)
@@ -202,6 +215,13 @@ def verify(request):
     reliability["policy_version"] = POLICY_VERSION
     reliability["atomic_assertions"] = assertion_results
     reliability["adversarial_severity"] = attack_severity
+    reliability["structured_evidence"] = {
+        "entailment_count": sum(1 for item in final_evidence if item.structured_entailment.get("relation") == "entailment"),
+        "contradiction_count": sum(1 for item in final_evidence if item.structured_entailment.get("relation") == "contradiction"),
+        "neutral_count": sum(1 for item in final_evidence if item.structured_entailment.get("relation") == "neutral"),
+        "insufficient_count": sum(1 for item in final_evidence if item.structured_entailment.get("relation") == "insufficient"),
+        "conflict": final_agg.get("conflict", False),
+    }
 
     limitations = sorted(set(all_flags))
     if adversarial_data:
