@@ -8,6 +8,7 @@ from app.retrieval.local import LocalEvidenceProvider
 from app.retrieval.ncbi import PubMedProvider
 from app.retrieval.openfda import OpenFDALabelProvider
 from app.terminology.normalize import normalize_claim
+from app.verification.adversarial import highest_severity, inspect_claim
 from app.verification.assertions import decompose_claim
 from app.verification.consistency import guard_specificity
 from app.verification.contradiction import assess_evidence
@@ -37,8 +38,6 @@ def _retrieve_for_assertion(assertion_text, request):
         except Exception as exc:
             flags.append(f"pubmed_provider_error:{type(exc).__name__}")
 
-    # Never guess the medication from arbitrary prose. Only query openFDA
-    # when the caller explicitly supplies medication context.
     if "openfda" in request.sources:
         for drug in _explicit_medications(request.context):
             try:
@@ -48,9 +47,7 @@ def _retrieve_for_assertion(assertion_text, request):
 
     if "local" in request.sources:
         try:
-            evidence.extend(
-                LocalEvidenceProvider().search(assertion_text, [], 6)
-            )
+            evidence.extend(LocalEvidenceProvider().search(assertion_text, [], 6))
         except Exception as exc:
             flags.append(f"local_provider_error:{type(exc).__name__}")
 
@@ -62,6 +59,10 @@ def verify(request):
     risk = classify_risk(request.claim, request.context)
     context_missing = set(missing_context(request.claim, request.context))
     flags = deterministic_checks(request.claim)
+
+    adversarial = inspect_claim(request.claim)
+    adversarial_data = [finding.__dict__ for finding in adversarial]
+    attack_severity = highest_severity(adversarial)
 
     if len(assertions) > 4:
         flags.append("compound_claim_truncated_to_four_assertions")
@@ -75,28 +76,33 @@ def verify(request):
     if "direct_treatment_action_request" in flags:
         risk = max(
             risk,
-            "moderate",
+            "high",
             key=lambda x: RISK_ORDER[x],
         )
 
-    if risk == "critical":
+    # The nemesis layer is a gate, not just telemetry.
+    if attack_severity == "critical":
         result = VerificationResponse(
             verdict="SAFETY_ESCALATION",
             confidence=0.0,
-            confidence_semantics="Critical-risk safety gate; not a probability.",
+            confidence_semantics="Critical adversarial/safety gate; not a probability.",
             claim=request.claim,
             normalized_claim=normalized.normalized,
             claim_type=normalized.claim_type,
-            risk_level=risk,
+            risk_level=max(risk, "high", key=lambda x: RISK_ORDER[x]),
             atomic_assertions=[a.__dict__ for a in assertions],
             evidence=[],
             contradictions=[],
-            reliability={"policy_version": POLICY_VERSION},
+            reliability={
+                "policy_version": POLICY_VERSION,
+                "adversarial_severity": attack_severity,
+            },
+            adversarial_findings=adversarial_data,
             limitations=flags + [
-                "Critical-risk content requires human/clinical escalation."
+                "Critical adversarial pattern requires human/clinical escalation."
             ],
             decision_reasons=[
-                "Critical-risk input cannot be auto-verified."
+                "Adversarial safety gate blocked autonomous verification."
             ],
             missing_context=sorted(context_missing),
             requires_human_review=True,
@@ -111,8 +117,6 @@ def verify(request):
     assertion_results = []
     all_flags = list(flags)
 
-    # Verify each atomic assertion independently. One supported clause cannot
-    # automatically validate a separate clause in the same compound claim.
     for assertion in assertions[:4]:
         evidence, retrieval_flags = _retrieve_for_assertion(
             assertion.text,
@@ -123,17 +127,11 @@ def verify(request):
         for item in evidence:
             enrich(item, assertion.text, date.today())
 
-        classified, _, _ = assess_evidence(
-            evidence,
-            assertion.text,
-        )
+        classified, _, _ = assess_evidence(evidence, assertion.text)
 
         consistency_warnings = []
         for item in classified:
-            item, warnings = guard_specificity(
-                item,
-                assertion.text,
-            )
+            item, warnings = guard_specificity(item, assertion.text)
             consistency_warnings.extend(warnings)
 
         agg = aggregate(classified)
@@ -159,24 +157,12 @@ def verify(request):
             "reasons": reasons,
         })
 
-    supported = [
-        x for x in assertion_results
-        if x["verdict"] == "SUPPORTED"
-    ]
-    contradicted = [
-        x for x in assertion_results
-        if x["verdict"] == "CONTRADICTED"
-    ]
-    mixed = [
-        x for x in assertion_results
-        if x["verdict"] == "MIXED_EVIDENCE"
-    ]
+    supported = [x for x in assertion_results if x["verdict"] == "SUPPORTED"]
+    contradicted = [x for x in assertion_results if x["verdict"] == "CONTRADICTED"]
+    mixed = [x for x in assertion_results if x["verdict"] == "MIXED_EVIDENCE"]
     insufficient = [
         x for x in assertion_results
-        if x["verdict"] in {
-            "INSUFFICIENT_EVIDENCE",
-            "CONTEXT_REQUIRED",
-        }
+        if x["verdict"] in {"INSUFFICIENT_EVIDENCE", "CONTEXT_REQUIRED"}
     ]
 
     if supported and contradicted:
@@ -202,16 +188,17 @@ def verify(request):
 
     final_agg = aggregate(final_evidence)
 
-    if request.requested_evidence_level in {
-        "authoritative",
-        "highest_available",
-    }:
+    if request.requested_evidence_level in {"authoritative", "highest_available"}:
         has_authoritative_support = any(
             item.supports is True and item.source_authority >= 0.85
             for item in final_evidence
         )
         if final_verdict == "SUPPORTED" and not has_authoritative_support:
             final_verdict = "INSUFFICIENT_EVIDENCE"
+
+    # High-severity semantic traps cannot become autonomous support.
+    if attack_severity == "high" and final_verdict == "SUPPORTED":
+        final_verdict = "INSUFFICIENT_EVIDENCE"
 
     confidence = 0.0
     if final_verdict == "SUPPORTED":
@@ -228,6 +215,11 @@ def verify(request):
     for assertion_result in assertion_results:
         report_reasons.extend(assertion_result["reasons"])
 
+    if attack_severity == "high":
+        report_reasons.append(
+            "High-severity adversarial claim pattern blocked automatic support."
+        )
+
     reliability = build_report(
         final_agg,
         final_evidence,
@@ -235,19 +227,19 @@ def verify(request):
     )
     reliability["policy_version"] = POLICY_VERSION
     reliability["atomic_assertions"] = assertion_results
+    reliability["adversarial_severity"] = attack_severity
 
     limitations = sorted(set(all_flags))
-
+    if adversarial_data:
+        limitations.append(
+            "Adversarial inspection found semantic or safety-sensitive claim patterns."
+        )
     if not final_evidence:
         limitations.append("No usable evidence was retrieved.")
     if final_verdict == "INSUFFICIENT_EVIDENCE":
-        limitations.append(
-            "Evidence did not meet the multi-axis verification threshold."
-        )
+        limitations.append("Evidence did not meet the multi-axis verification threshold.")
     if final_verdict == "MIXED_EVIDENCE":
-        limitations.append(
-            "Material disagreement remains; automatic verification is withheld."
-        )
+        limitations.append("Material disagreement remains; automatic verification is withheld.")
 
     limitations.append(
         "External evidence must be independently reviewed before clinical use."
@@ -255,35 +247,28 @@ def verify(request):
 
     requires_review = (
         risk in {"moderate", "high"}
-        or final_verdict in {
-            "MIXED_EVIDENCE",
-            "CONTEXT_REQUIRED",
-            "CONTRADICTED",
-        }
+        or attack_severity in {"moderate", "high"}
+        or final_verdict in {"MIXED_EVIDENCE", "CONTEXT_REQUIRED", "CONTRADICTED"}
         or bool(context_missing)
     )
 
     result = VerificationResponse(
         verdict=final_verdict,
         confidence=confidence,
-        confidence_semantics=(
-            "Policy score only; not a calibrated probability of clinical truth."
-        ),
+        confidence_semantics="Policy score only; not a calibrated probability of clinical truth.",
         claim=request.claim,
         normalized_claim=normalized.normalized,
         claim_type=normalized.claim_type,
         risk_level=risk,
         atomic_assertions=[a.__dict__ for a in assertions],
-        evidence=[
-            item.model_dump(mode="json")
-            for item in final_evidence
-        ],
+        evidence=[item.model_dump(mode="json") for item in final_evidence],
         contradictions=[
             item.model_dump(mode="json")
             for item in final_evidence
             if item.supports is False
         ],
         reliability=reliability,
+        adversarial_findings=adversarial_data,
         limitations=limitations,
         decision_reasons=sorted(set(report_reasons)),
         missing_context=sorted(context_missing),
