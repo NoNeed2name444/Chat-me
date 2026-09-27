@@ -1,5 +1,3 @@
-from datetime import date
-
 
 def validate_provenance(item):
     warnings = []
@@ -11,6 +9,9 @@ def validate_provenance(item):
         warnings.append("missing_source_passage")
     if not item.title.strip():
         warnings.append("missing_source_title")
+    metadata_only = item.source_type == "literature" and item.passage.lower().startswith("pubmed metadata record")
+    if metadata_only:
+        warnings.append("metadata_record_not_clinical_entailment")
     if warnings:
         item.supports = None
         item.quality_score = round(item.quality_score * 0.40, 4)
