@@ -1,5 +1,5 @@
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class EvidenceItem(BaseModel):
     id: str
@@ -22,4 +22,4 @@ class EvidenceItem(BaseModel):
     temporal_score: float = 0.0
     quality_score: float = 0.0
     supports: bool | None = None
-    structured_entailment: dict = {}
+    structured_entailment: dict = Field(default_factory=dict)
