@@ -1,0 +1,27 @@
+from pydantic import BaseModel, Field
+
+class VerificationResponse(BaseModel):
+    verdict: str
+    confidence: float = Field(ge=0, le=1)
+    confidence_semantics: str
+
+    claim: str
+    normalized_claim: str = ""
+    claim_type: str = "general_medical_claim"
+    risk_level: str
+
+    atomic_assertions: list[dict] = []
+    evidence: list[dict] = []
+    contradictions: list[dict] = []
+
+    reliability: dict = {}
+    adversarial_findings: list[dict] = []
+
+    limitations: list[str] = []
+    decision_reasons: list[str] = []
+    missing_context: list[str] = []
+
+    requires_human_review: bool
+    verifier_version: str = "0.2.0"
+    knowledge_snapshot: str = "LIVE-API"
+    verification_id: str

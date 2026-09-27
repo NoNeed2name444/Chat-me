@@ -1,0 +1,25 @@
+name: Verification Layer Tests
+
+on:
+  push:
+    branches:
+      - verification-layer-adversarial-50
+  pull_request:
+
+jobs:
+  verification-layer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: medical-verifier
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run verification-layer tests
+        run: pytest -q tests/test_evidence_model.py tests/test_reliability.py
