@@ -12,7 +12,8 @@ def classify_risk(claim, context):
         "anaphylaxis", "severe allergic reaction", "emergency",
         "insulin", "chemotherapy", "anticoagulant",
         "chest pain", "stroke", "seizure", "unconscious",
-        "severe bleeding",
+        "severe bleeding", "stop my medication", "change my medication",
+        "double my dose", "increase my dose", "decrease my dose",
     )):
         return "high"
 
@@ -34,7 +35,10 @@ def missing_context(claim, context):
         if key not in context and not any(alias in context for alias in aliases):
             out.append(key)
 
-    if any(x in t for x in ("dose", "safe", "interaction", "contraindication")):
+    if any(x in t for x in (
+        "dose", "safe", "interaction", "contraindication",
+        "stop", "start", "change", "double", "halve", "increase", "decrease",
+    )):
         need("current_medications", "medications")
         need("age")
 
