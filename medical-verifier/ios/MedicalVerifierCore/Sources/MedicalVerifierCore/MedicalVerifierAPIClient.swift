@@ -54,6 +54,11 @@ public indirect enum JSONValue: Codable, Sendable, Equatable {
     }
 }
 
+public enum ProvenanceMode: String, Codable, Sendable {
+    case permissive
+    case bound
+}
+
 public enum APIClientError: Error, Equatable {
     case insecureTransport
     case invalidResponse
@@ -70,6 +75,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
     public let verificationMode: VerificationMode
     public let curriculumSourceIDs: [String]
     public let curriculumSnapshot: String?
+    public let provenanceMode: ProvenanceMode
     public let verificationContractVersion: String
 
     public init(
@@ -81,7 +87,8 @@ public struct VerificationAPIRequest: Codable, Sendable {
         verificationMode: VerificationMode = .currentMedical,
         curriculumSourceIDs: [String] = [],
         curriculumSnapshot: String? = nil,
-        verificationContractVersion: String = "1.6"
+        provenanceMode: ProvenanceMode = .permissive,
+        verificationContractVersion: String = "1.8"
     ) {
         self.claim = claim
         self.questionContext = questionContext
@@ -91,6 +98,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
         self.verificationMode = verificationMode
         self.curriculumSourceIDs = curriculumSourceIDs
         self.curriculumSnapshot = curriculumSnapshot
+        self.provenanceMode = provenanceMode
         self.verificationContractVersion = verificationContractVersion
     }
 
@@ -103,6 +111,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
         case verificationMode = "verification_mode"
         case curriculumSourceIDs = "curriculum_source_ids"
         case curriculumSnapshot = "curriculum_snapshot"
+        case provenanceMode = "provenance_mode"
         case verificationContractVersion = "verification_contract_version"
     }
 }
@@ -144,7 +153,7 @@ public final class MedicalVerifierAPIClient: @unchecked Sendable {
     public init(
         baseURL: URL,
         bearerToken: String? = nil,
-        contractVersion: String = "1.6",
+        contractVersion: String = "1.8",
         session: URLSession = .shared
     ) throws {
         guard baseURL.scheme?.lowercased() == "https" else {
