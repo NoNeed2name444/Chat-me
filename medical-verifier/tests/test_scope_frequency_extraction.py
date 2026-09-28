@@ -182,3 +182,45 @@ def test_question_validation_uses_the_same_precedence_rule():
 
     assert result.status == "VALIDATED"
     assert result.requires_review is False
+
+
+def test_equal_precedence_tie_remains_a_conflict():
+    support = make_item(
+        "Drug X increases bleeding.",
+        id="tie-support",
+    ).model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 2,
+        }
+    )
+    contradiction = make_item(
+        "Drug X does not increase bleeding.",
+        id="tie-contradiction",
+    ).model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 2,
+        }
+    )
+
+    result = assess_curriculum_fidelity(
+        "Drug X increases bleeding.",
+        [support, contradiction],
+    )
+
+    assert result.status == "CONFLICTING_CURRICULUM_SOURCES"
+
+def test_concentration_arithmetic_mismatch_is_not_supported():
+    result = verify(
+        "The daily dose is 200 mg.",
+        "The concentration is 10 mg/mL. Take 10 mL once daily.",
+    )
+    assert result.label == "UNKNOWN"
+
+def test_weight_based_arithmetic_without_patient_weight_is_unknown():
+    result = verify(
+        "The daily dose is 100 mg.",
+        "Use 5 mg/kg/day.",
+    )
+    assert result.label == "UNKNOWN"
