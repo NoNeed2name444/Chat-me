@@ -701,7 +701,9 @@ private enum SemanticGuard {
             "regardless", "only", "exclusively",
             "previously", "previous", "prior", "currently",
             "current", "now", "at", "present", "will",
-            "planned", "plan", "expected", "future"
+            "planned", "plan", "expected", "future",
+            "no", "not", "never", "without", "does", "doesn't",
+            "cannot", "can't"
         ]
 
         let rawTokens = fragment
