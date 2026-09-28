@@ -285,9 +285,34 @@ private enum SemanticGuard {
         )
     }
 
-    private static func measurements(in text: String) -> Set<String> {
+    private struct Measurement: Hashable {
+        let value: Double
+        let unit: String
+    }
+
+    private static func normalizeMeasurement(
+        value: Double,
+        unit: String
+    ) -> Measurement {
+        switch unit.lowercased() {
+        case "mcg", "ug":
+            return Measurement(value: value * 0.001, unit: "mg")
+        case "g":
+            return Measurement(value: value * 1000.0, unit: "mg")
+        case "kg":
+            return Measurement(value: value * 1_000_000.0, unit: "mg")
+        case "l":
+            return Measurement(value: value * 1000.0, unit: "ml")
+        case "%", "percent":
+            return Measurement(value: value, unit: "percent")
+        default:
+            return Measurement(value: value, unit: unit.lowercased())
+        }
+    }
+
+    private static func measurements(in text: String) -> Set<Measurement> {
         let pattern = try? NSRegularExpression(
-            pattern: #"\b\d+(?:\.\d+)?\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b"#,
             options: [.caseInsensitive]
         )
 
@@ -299,12 +324,19 @@ private enum SemanticGuard {
         guard let pattern else { return [] }
 
         return Set(
-            pattern.matches(in: text, range: range).compactMap {
-                Range($0.range, in: text)
-            }.map {
-                $0
-                    .lowercased()
-                    .replacingOccurrences(of: "percent", with: "%")
+            pattern.matches(in: text, range: range).compactMap { match in
+                guard
+                    let valueRange = Range(match.range(at: 1), in: text),
+                    let unitRange = Range(match.range(at: 2), in: text),
+                    let value = Double(text[valueRange])
+                else {
+                    return nil
+                }
+
+                return normalizeMeasurement(
+                    value: value,
+                    unit: String(text[unitRange])
+                )
             }
         )
     }
