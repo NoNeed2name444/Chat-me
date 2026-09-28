@@ -6,14 +6,14 @@ from app.verification.temporal_normalization import extract_explicit_dates
 
 RELATION_PHRASES = {
     "causal": (
-        "causes", "caused", "lead to", "leads to",
-        "result in", "results in", "prevents",
+        "cause", "causes", "caused", "lead to", "leads to",
+        "result in", "results in", "prevent", "prevents",
     ),
     "risk_increase": (
-        "increases", "increased", "raises", "elevates",
+        "increase", "increases", "increased", "raises", "elevates",
     ),
     "risk_decrease": (
-        "reduces", "reduced", "lowers", "decreases",
+        "reduce", "reduces", "reduced", "lowers", "decrease", "decreases",
     ),
     "association": (
         "associated with", "correlated with",
@@ -81,6 +81,10 @@ _STOPWORDS = {
     "a", "an", "the", "and", "or", "but", "for", "with",
     "in", "on", "to", "of", "is", "are", "was", "were",
     "that", "this", "these", "those", "patients", "patient",
+    "all", "selected", "every", "everyone", "regardless", "only",
+    "exclusively", "previously", "previous", "prior", "currently",
+    "current", "now", "at", "present", "will", "planned", "plan",
+    "expected", "future",
 }
 
 def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]:
