@@ -10,6 +10,34 @@ from app.verification.curriculum import _apply_explicit_precedence
 
 EXTRACTION_THRESHOLD = 0.85
 
+_PROMPT_INTENTS = {
+    "compatible": "interaction",
+    "compatibility": "interaction",
+    "interact": "interaction",
+    "interactions": "interaction",
+    "interaction": "interaction",
+    "contraindicated": "contraindication",
+    "contraindication": "contraindication",
+    "contraindications": "contraindication",
+    "safe": "safety",
+    "safety": "safety",
+    "dangerous": "safety",
+    "effective": "effectiveness",
+    "efficacy": "effectiveness",
+    "works": "effectiveness",
+    "cause": "causal",
+    "causes": "causal",
+    "caused": "causal",
+    "reduce": "risk_decrease",
+    "reduces": "risk_decrease",
+    "decrease": "risk_decrease",
+    "decreases": "risk_decrease",
+    "increase": "risk_increase",
+    "increases": "risk_increase",
+    "dose": "dose",
+    "dosage": "dose",
+}
+
 @dataclass(frozen=True)
 class QuestionValidation:
     status: str
@@ -74,6 +102,11 @@ def validate_question(prompt: str, answer: str, source_items):
         for token in re.findall(r"[a-z0-9'-]+", answer.lower())
         if len(token) >= 4 and token not in prompt_stopwords
     }
+    prompt_intents = {
+        _PROMPT_INTENTS[token]
+        for token in prompt_terms
+        if token in _PROMPT_INTENTS
+    }
 
     for item in source_items:
         if (
@@ -104,6 +137,23 @@ def validate_question(prompt: str, answer: str, source_items):
         }
 
         if prompt_terms & (source_terms | answer_terms):
+            prompt_overlap = True
+
+        answer_atoms = __import__(
+            "app.verification.claim_reasoning",
+            fromlist=["decompose_claim"],
+        ).decompose_claim(answer)
+        answer_relations = {
+            atom.relation
+            for atom in answer_atoms
+            if atom.relation not in {"mixed", "unclassified"}
+        }
+        if prompt_intents & answer_relations:
+            prompt_overlap = True
+        if "dose" in prompt_intents and any(
+            re.search(r"\b(?:mg|g|mcg|ug|ml|l|kg)\b", token)
+            for token in answer_terms
+        ):
             prompt_overlap = True
 
         entailment = verify(
