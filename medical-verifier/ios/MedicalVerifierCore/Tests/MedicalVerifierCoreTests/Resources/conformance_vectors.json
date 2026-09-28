@@ -248,6 +248,17 @@
       "language": "fr",
       "expected_status": "VALIDATED",
       "requires_review": false
+    },
+    {
+      "id": "spanish_negation_flip",
+      "prompt": "¿Qué hace la insulina?",
+      "answer": "La insulina no aumenta la glucosa.",
+      "source_title": "Curso",
+      "source_passage": "La insulina aumenta la glucosa.",
+      "source_file_seed": "pdf-es",
+      "language": "es",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
     }
   ]
 }
