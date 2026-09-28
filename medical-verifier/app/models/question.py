@@ -13,6 +13,8 @@ class QuestionArtifact(BaseModel):
     source_pages: dict[str, int] = Field(default_factory=dict)
     source_sections: dict[str, str] = Field(default_factory=dict)
     source_block_types: dict[str, str] = Field(default_factory=dict)
+    source_related_block_ids: dict[str, list[str]] = Field(default_factory=dict)
+    source_languages: dict[str, str] = Field(default_factory=dict)
 
     validation_status: str = "SOURCE_UNCERTAIN"
     validation_warnings: list[str] = Field(default_factory=list)
