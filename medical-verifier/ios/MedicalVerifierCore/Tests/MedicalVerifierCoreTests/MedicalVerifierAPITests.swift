@@ -21,7 +21,7 @@ final class MedicalVerifierAPITests: XCTestCase {
             verificationMode: .curriculumUpdateAware,
             curriculumSnapshot: "snapshot-1",
             questionContext: "What does insulin do?",
-            verificationContractVersion: "1.3
+            verificationContractVersion: "1.8"
         )
 
         let data = try JSONEncoder().encode(request)
@@ -32,7 +32,7 @@ final class MedicalVerifierAPITests: XCTestCase {
 
         XCTAssertEqual(
             json["verification_contract_version"] as? String,
-            "1.3
+            "1.8"
         )
         XCTAssertEqual(
             json["verification_mode"] as? String,
@@ -41,6 +41,29 @@ final class MedicalVerifierAPITests: XCTestCase {
         XCTAssertEqual(
             json["question_context"] as? String,
             "What does insulin do?"
+        )
+    }
+
+    func testEncodesProvenanceBoundMode() throws {
+        let request = VerificationAPIRequest(
+            claim: "Drug A increases bleeding.",
+            provenanceMode: .bound,
+            verificationContractVersion: "1.8"
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data)
+                as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            json["provenance_mode"] as? String,
+            "bound"
+        )
+        XCTAssertEqual(
+            json["verification_contract_version"] as? String,
+            "1.8"
         )
     }
 }
