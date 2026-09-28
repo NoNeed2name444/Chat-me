@@ -10,13 +10,13 @@ from app.verification.claim_reasoning import (
 
 RELATION_CLASSES = {
     "causal": (
-        "causes", "caused", "leads to", "results in", "prevents",
+        "cause", "causes", "caused", "leads to", "result in", "results in", "prevent", "prevents",
     ),
     "risk_increase": (
-        "increases", "increased", "raises", "elevates", "higher",
+        "increase", "increases", "increased", "raises", "elevates", "higher",
     ),
     "risk_decrease": (
-        "reduces", "reduced", "lowers", "decreases", "decreased",
+        "reduce", "reduces", "reduced", "lowers", "decrease", "decreases", "decreased",
     ),
     "association": (
         "associated with", "association", "correlated with", "linked to",
