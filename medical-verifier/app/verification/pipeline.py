@@ -396,16 +396,35 @@ def verify(request):
         )
     ]
 
-    has_newer_evidence = bool(
+    relevant_current_items = [
+        item
+        for item in final_evidence
+        if (
+            item.supports is not None
+            and item.relevance_score >= 0.35
+            and (
+                item.effective_date
+                or item.publication_date
+            )
+        )
+    ]
+
+    relevant_current_dates = [
+        item.effective_date
+        or item.publication_date
+        for item in relevant_current_items
+    ]
+
+    has_relevant_newer_evidence = bool(
         newest_curriculum_date
-        and current_dates
-        and max(current_dates) > newest_curriculum_date
+        and relevant_current_dates
+        and max(relevant_current_dates) > newest_curriculum_date
     )
 
     divergence = determine_divergence(
         curriculum_status=curriculum_assessment.status,
         current_verdict=current_verdict,
-        has_newer_evidence=has_newer_evidence,
+        has_relevant_newer_evidence=has_relevant_newer_evidence,
     )
 
     if request.verification_mode == "current_medical":
@@ -564,7 +583,7 @@ def verify(request):
                 item.id
                 for item in final_evidence
             ],
-            "has_newer_evidence": has_newer_evidence,
+            "has_relevant_newer_evidence": has_relevant_newer_evidence,
         },
         knowledge_divergence=divergence,
         study_hint=study_hint,
