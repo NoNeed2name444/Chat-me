@@ -1131,7 +1131,7 @@ private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
 public struct CurriculumVerifier: Sendable {
     public let version: String
 
-    public init(version: String = "ios-core-0.4") {
+    public init(version: String = "ios-core-0.5") {
         self.version = version
     }
 
@@ -1379,7 +1379,7 @@ public struct SourceIntegrityChecker: Sendable {
 public struct QuestionArtifactFactory: Sendable {
     public let verifierVersion: String
 
-    public init(verifierVersion: String = "ios-core-0.4") {
+    public init(verifierVersion: String = "ios-core-0.5") {
         self.verifierVersion = verifierVersion
     }
 
