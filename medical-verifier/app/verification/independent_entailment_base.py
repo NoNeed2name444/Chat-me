@@ -405,7 +405,7 @@ def _atomic_alignment(claim: str, evidence: str):
                 / max(1, len(claim_tokens))
             )
 
-            if overlap < 0.55:
+            if overlap < 0.45:
                 continue
 
             relation_ok, relation_reason = relation_entailed(
