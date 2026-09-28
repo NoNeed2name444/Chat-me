@@ -385,9 +385,8 @@ def _atomic_alignment(claim: str, evidence: str):
     if not claim_atoms:
         return True, None
 
-    evidence_atoms = evidence_atoms or (
-        decompose_claim(evidence),
-    )
+    if not evidence_atoms:
+        return False, "no_atomic_evidence_claim"
 
     evidence_atoms = tuple(
         atom for atom in evidence_atoms
