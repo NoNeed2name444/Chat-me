@@ -21,7 +21,7 @@ final class MedicalVerifierAPITests: XCTestCase {
             verificationMode: .curriculumUpdateAware,
             curriculumSnapshot: "snapshot-1",
             questionContext: "What does insulin do?",
-            verificationContractVersion: "1.1"
+            verificationContractVersion: "1.2"
         )
 
         let data = try JSONEncoder().encode(request)
@@ -32,7 +32,7 @@ final class MedicalVerifierAPITests: XCTestCase {
 
         XCTAssertEqual(
             json["verification_contract_version"] as? String,
-            "1.1"
+            "1.2"
         )
         XCTAssertEqual(
             json["verification_mode"] as? String,
