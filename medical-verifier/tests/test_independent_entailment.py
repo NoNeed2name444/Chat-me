@@ -21,6 +21,13 @@ def test_measurement_type_mismatch_is_unknown():
     )
     assert result.label == "UNKNOWN"
 
+def test_property_mismatch_is_unknown():
+    result = verify(
+        "Drug X is safe.",
+        "Drug X is effective.",
+    )
+    assert result.label == "UNKNOWN"
+
 def test_matching_claim_can_support():
     result = verify(
         "Drug X increases bleeding.",
