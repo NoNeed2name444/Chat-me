@@ -501,6 +501,21 @@ def verify(request):
                 for warning in check.warnings
             )
 
+    revalidation_blocked = any(
+        details["status"] in {"CHANGED", "NOT_FOUND", "ERROR", "UNVERIFIABLE"}
+        for details in source_revalidation.values()
+    )
+
+    if revalidation_blocked:
+        current_verdict = "INSUFFICIENT_EVIDENCE"
+
+        if request.verification_mode == "current_medical":
+            final_verdict = "INSUFFICIENT_EVIDENCE"
+
+        all_flags.append(
+            "source_revalidation_blocked_automatic_support"
+        )
+
     report_reasons = []
 
     for result in assertion_results:
@@ -569,6 +584,7 @@ def verify(request):
         }
         or divergence == "curriculum_vs_current_conflict"
         or bool(context_missing)
+        or revalidation_blocked
     )
 
     result = VerificationResponse(
@@ -609,6 +625,7 @@ def verify(request):
                 for item in final_evidence
             ],
             "has_relevant_newer_evidence": has_relevant_newer_evidence,
+        "source_revalidation_blocked": revalidation_blocked,
         },
         knowledge_divergence=divergence,
         study_hint=study_hint,
