@@ -51,6 +51,16 @@ def _records_from_payload(rows: Iterable[dict[str, Any]]) -> tuple[BenchmarkReco
 
 def _manifest_for_cases(raw_manifest: dict[str, Any], cases: tuple[BenchmarkRecord, ...]) -> BenchmarkManifest:
     case_ids = tuple(case.case_id for case in cases)
+
+    raw_case_ids = raw_manifest.get("case_ids")
+    if not isinstance(raw_case_ids, list):
+        raise ValueError("missing_manifest_case_ids")
+    supplied_case_ids = tuple(str(value) for value in raw_case_ids)
+    if supplied_case_ids != tuple(sorted(supplied_case_ids)):
+        raise ValueError("manifest_case_ids_must_be_sorted")
+    if supplied_case_ids != case_ids:
+        raise ValueError("manifest_case_ids_mismatch")
+
     expected_digests = tuple(case_digest(case) for case in cases)
     supplied_digests = raw_manifest.get("case_digests")
     if not isinstance(supplied_digests, list):
