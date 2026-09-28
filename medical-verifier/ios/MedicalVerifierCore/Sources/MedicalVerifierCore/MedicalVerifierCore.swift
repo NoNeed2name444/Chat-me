@@ -290,12 +290,20 @@ private enum SafetyClassifier {
             interrogative + #".{0,100}"# + action
             + #".{0,100}"# + medication
 
+        let directInstruction =
+            #"(?:yous+should|yous+needs+to|yous+must|stop|start|change|double|halve|skip|replace|take).{0,100}"#
+            + medication
+
         let urgent =
             #"(?:overdose|poisoning|poisoned|severes+bleeding|chests+pain|difficultys+breathing|anaphylaxis).{0,120}"#
             + interrogative
 
         return lower.range(
             of: direct,
+            options: .regularExpression
+        ) != nil ||
+        lower.range(
+            of: directInstruction,
             options: .regularExpression
         ) != nil ||
         lower.range(
