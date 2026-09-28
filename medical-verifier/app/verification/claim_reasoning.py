@@ -111,22 +111,35 @@ def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]
         fragment = lower[start + len(phrase):]
 
     raw_tokens = re.findall(r"[a-z0-9'-]+", fragment)
+
     if before:
-        raw_tokens = raw_tokens[-4:]
+        candidates = reversed(raw_tokens)
     else:
-        raw_tokens = raw_tokens[:4]
+        candidates = iter(raw_tokens)
 
-    # Preserve a one-character discriminator such as the A/B in "Drug A".
-    filtered = [
-        token
-        for token in raw_tokens
-        if token not in _STOPWORDS or len(token) == 1
-    ]
+    selected = []
+    seen_substantive = False
 
-    if not filtered:
+    for token in candidates:
+        is_stopword = token in _STOPWORDS and len(token) != 1
+        if is_stopword:
+            if seen_substantive:
+                break
+            continue
+
+        selected.append(token)
+        seen_substantive = True
+
+        if len(selected) >= 3:
+            break
+
+    if not selected:
         return ()
 
-    return (" ".join(filtered),)
+    if before:
+        selected.reverse()
+
+    return (" ".join(selected),)
 
 
 def _relation_types(text: str) -> tuple[str, ...]:
