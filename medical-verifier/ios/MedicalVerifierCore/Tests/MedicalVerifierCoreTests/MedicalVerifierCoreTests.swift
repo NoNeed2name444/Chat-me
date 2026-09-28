@@ -637,4 +637,93 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .sourceUnsupported)
     }
 
+
+    func testSourceManifestIsDeterministicAndVerifiable() {
+        let source = SourceSnapshot(
+            snapshotID: "source-a",
+            title: "Course",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("file-a".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Dose"
+            ),
+            passage: "Dose",
+            pageNumber: 4,
+            section: "Dosing",
+            blockType: "table",
+            blockIndex: 2,
+            relatedBlockIDs: ["caption-1"],
+            language: "es",
+            precedenceGroup: "course-guideline",
+            precedenceRank: 2,
+            locator: "page:4",
+            version: "2025"
+        )
+
+        let manifest = SourceManifest.build(
+            manifestID: "manifest:1",
+            sources: [source]
+        )
+
+        XCTAssertTrue(manifest.verify())
+    }
+
+    func testSourceManifestParentChainIsVerified() {
+        let parentSource = source()
+        let childSource = SourceSnapshot(
+            snapshotID: "child",
+            title: "Course",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("child".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Dose"
+            ),
+            passage: "Dose"
+        )
+
+        let parent = SourceManifest.build(
+            manifestID: "parent",
+            sources: [parentSource]
+        )
+
+        let child = SourceManifest.build(
+            manifestID: "child",
+            sources: [childSource],
+            parentManifestSHA256: parent.manifestSHA256
+        )
+
+        XCTAssertTrue(child.verifiesParent(parent))
+        XCTAssertFalse(child.verifiesParent(nil))
+    }
+
+    func testSpanishSourceIsValidated() {
+        let source = self.source(
+            passage: "La insulina aumenta la glucosa."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "¿Qué hace la insulina?",
+            answer: "La insulina aumenta la glucosa.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testFrenchSourceIsValidated() {
+        let source = self.source(
+            passage: "Le traitement est efficace chez les adultes."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "Le traitement est-il efficace ?",
+            answer: "Le traitement est efficace chez les adultes.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
 }
