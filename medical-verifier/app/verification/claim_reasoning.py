@@ -69,6 +69,44 @@ class AtomicClaim:
     polarity: str
     temporal: tuple[str, ...]
     safety: str | None
+    subject_terms: tuple[str, ...]
+    object_terms: tuple[str, ...]
+
+
+
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "for", "with",
+    "in", "on", "to", "of", "is", "are", "was", "were",
+    "that", "this", "these", "those", "patients", "patient",
+}
+
+def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]:
+    if relation == "unclassified" or relation == "mixed":
+        return ()
+
+    lower = text.lower()
+    phrases = RELATION_PHRASES.get(relation, ())
+    matches = [
+        (lower.find(phrase), phrase)
+        for phrase in phrases
+        if lower.find(phrase) >= 0
+    ]
+    if not matches:
+        return ()
+
+    start, phrase = min(matches, key=lambda item: item[0])
+    if before:
+        fragment = lower[:start]
+    else:
+        fragment = lower[start + len(phrase):]
+
+    tokens = [
+        token
+        for token in re.findall(r"[a-z0-9'-]+", fragment)
+        if len(token) >= 3 and token not in _STOPWORDS
+    ]
+    return tuple(tokens[-3:] if before else tokens[:3])
+
 
 def _relation_types(text: str) -> tuple[str, ...]:
     lower = text.lower()
@@ -152,6 +190,16 @@ def decompose_claim(text: str) -> tuple[AtomicClaim, ...]:
                 polarity=_polarity(fragment),
                 temporal=temporal_signature(fragment),
                 safety=safety_relation(fragment),
+                subject_terms=_anchor_tokens(
+                    fragment,
+                    relation,
+                    before=True,
+                ),
+                object_terms=_anchor_tokens(
+                    fragment,
+                    relation,
+                    before=False,
+                ),
             )
         )
 
@@ -188,6 +236,22 @@ def relation_entailed(
     claim: AtomicClaim,
     evidence: AtomicClaim,
 ) -> tuple[bool, str | None]:
+    if claim.subject_terms and evidence.subject_terms:
+        subject_overlap = (
+            set(claim.subject_terms)
+            & set(evidence.subject_terms)
+        )
+        if not subject_overlap:
+            return False, "atomic_subject_mismatch"
+
+    if claim.object_terms and evidence.object_terms:
+        object_overlap = (
+            set(claim.object_terms)
+            & set(evidence.object_terms)
+        )
+        if not object_overlap:
+            return False, "atomic_object_mismatch"
+
     if claim.relation == "causal":
         if evidence.relation != "causal":
             return False, "causal_claim_requires_causal_evidence"
