@@ -1,33 +1,54 @@
-# Curriculum question-generation contract
+## Curriculum question-generation contract
 
-When a learner supplies a source such as a PDF, textbook, lecture note, or
-institutional handout:
+When a learner supplies a source such as a PDF, textbook, lecture note, or institutional handout:
 
-1. Create an immutable source snapshot.
-2. Assign a stable curriculum snapshot ID.
-3. Generate questions only from that snapshot in curriculum mode.
-4. Store question provenance to the source snapshot and, when available,
-   page/section/chunk locations.
-5. Verify the learner answer against the same curriculum snapshot.
-6. Independently run the current-medical evidence lane.
-7. Present the curriculum result and current-evidence status separately.
-8. Never silently rewrite the curriculum answer.
+1. Preserve the original file hash when available.
+2. Store an immutable source snapshot ID.
+3. Store extraction-level passage hashes.
+4. Store page, section, or equivalent source locators when available.
+5. Generate questions only from that curriculum snapshot in curriculum mode.
+6. Validate each generated question against the snapshot before automatic release.
+7. Store question provenance including source IDs, versions, locators, passage hashes, and source-file hashes.
+8. Verify the learner answer against the same curriculum snapshot.
+9. Independently run the current-medical evidence lane.
+10. Present curriculum correctness and current-evidence status separately.
+11. Never silently rewrite the curriculum answer.
+
+### Question validation states
+
+VALIDATED means the prompt is aligned to the curriculum material and the proposed answer is supported by the source.
+
+SOURCE_UNCERTAIN means some evidence is relevant, but semantic support is incomplete; keep the artifact traceable and route it to review.
+
+SOURCE_UNSUPPORTED means the answer cannot be supported by the supplied source; do not treat the question as curriculum-grounded without review.
+
+SOURCE_UNAVAILABLE means no curriculum snapshot was available; do not auto-release the question as source-grounded.
+
+### Current-evidence layer
+
+After curriculum validation, the medical verifier may separately report:
+- current and aligned;
+- potentially outdated;
+- material disagreement;
+- current evidence unavailable.
+
+A current-evidence result must never silently change the expected curriculum answer.
+
+For high-risk conflicts, require human review.
 
 ### Example
 
 Curriculum result:
-"Correct according to your supplied source."
+Correct according to your supplied source.
 
-Current-evidence status:
-"Newer evidence may differ."
+Current medical status:
+Newer relevant evidence may differ.
 
 Hint:
-"Review the cited newer evidence; the curriculum material is retained as the
-exam/study reference."
+Review the cited newer evidence; the curriculum material is retained as the study/exam reference.
 
-For high-risk medical topics, a current-vs-curriculum conflict should trigger
-an explicit warning and, where appropriate, human review.
+### Safety boundary
 
-This design lets an educational product remain faithful to the learner's actual
-curriculum while avoiding the unsafe implication that an outdated educational
-source is current clinical guidance.
+Curriculum correctness is an educational property.
+
+It does not authorize diagnosis, prescribing, dosage changes, or other clinical action.
