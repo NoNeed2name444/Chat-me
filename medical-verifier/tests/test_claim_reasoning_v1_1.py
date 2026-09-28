@@ -80,3 +80,86 @@ def test_matching_contraindication_is_supported():
         "Drug A is contraindicated in pregnancy.",
     )
     assert result.label == "SUPPORTS"
+
+
+"""Nemesis mutation tests for v1.2/v1.3."""
+
+from copy import deepcopy
+
+from app.verification.independent_entailment import verify
+
+
+def _assert_unknown(claim, evidence):
+    result = verify(claim, evidence)
+    assert result.label == "UNKNOWN"
+
+
+def test_negation_mutation():
+    _assert_unknown(
+        "Drug A increases bleeding.",
+        "Drug A does not increase bleeding.",
+    )
+
+
+def test_numeric_mutation():
+    _assert_unknown(
+        "Drug A increases bleeding by 10 percent.",
+        "Drug A increases bleeding by 20 percent.",
+    )
+
+
+def test_population_mutation():
+    _assert_unknown(
+        "Drug A is effective in children.",
+        "Drug A is effective in adults.",
+    )
+
+
+def test_temporal_mutation():
+    _assert_unknown(
+        "Drug A currently increases bleeding.",
+        "Drug A previously increased bleeding.",
+    )
+
+
+def test_causal_mutation():
+    _assert_unknown(
+        "Drug A causes bleeding.",
+        "Drug A is associated with bleeding.",
+    )
+
+
+def test_safety_relation_mutation():
+    _assert_unknown(
+        "Drug A is contraindicated in pregnancy.",
+        "Drug A is associated with pregnancy.",
+    )
+
+
+def test_interaction_mutation():
+    _assert_unknown(
+        "Drug A interacts with Drug B.",
+        "Drug A is associated with Drug B.",
+    )
+
+
+def test_subject_swap_mutation():
+    _assert_unknown(
+        "Drug A increases bleeding.",
+        "Drug B increases bleeding.",
+    )
+
+
+def test_object_swap_mutation():
+    _assert_unknown(
+        "Drug A increases bleeding.",
+        "Drug A increases blood pressure.",
+    )
+
+
+def test_mutation_does_not_modify_original_strings():
+    claim = "Drug A causes bleeding."
+    evidence = "Drug A is associated with bleeding."
+    before = deepcopy((claim, evidence))
+    _assert_unknown(claim, evidence)
+    assert (claim, evidence) == before
