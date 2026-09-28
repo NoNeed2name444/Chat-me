@@ -34,10 +34,22 @@ NEGATION = re.compile(
     re.I,
 )
 
+DOUBLE_NEGATION_EQUIVALENTS = {
+    "not uncommon": "common",
+    "not unlikely": "likely",
+    "not impossible": "possible",
+}
+
 @dataclass(frozen=True)
 class IndependentEntailment:
     label: str
     reasons: tuple[str, ...]
+
+def _normalize_double_negation(text):
+    result = text.lower()
+    for source, replacement in DOUBLE_NEGATION_EQUIVALENTS.items():
+        result = result.replace(source, replacement)
+    return result
 
 def _tokens(text):
     return {
@@ -47,7 +59,7 @@ def _tokens(text):
     }
 
 def _relation_class(text):
-    lower = text.lower()
+    lower = _normalize_double_negation(text)
     matches = [
         category
         for category, words in RELATION_CLASSES.items()
@@ -65,6 +77,7 @@ def _numbers(text):
 
 def _measurement_kind(text):
     lower = text.lower()
+
     if "percentage point" in lower:
         return "percentage_points"
     if "%" in lower or "percent" in lower:
@@ -77,15 +90,23 @@ def _measurement_kind(text):
         return "relative_risk"
     if "absolute risk" in lower:
         return "absolute_risk"
+
     return None
 
 def _populations(text):
     lower = text.lower()
-    return {term for term in POPULATION_TERMS if term in lower}
+    return {
+        term
+        for term in POPULATION_TERMS
+        if term in lower
+    }
 
 def verify(claim, evidence):
-    claim_tokens = _tokens(claim)
-    evidence_tokens = _tokens(evidence)
+    claim_for_logic = _normalize_double_negation(claim)
+    evidence_for_logic = _normalize_double_negation(evidence)
+
+    claim_tokens = _tokens(claim_for_logic)
+    evidence_tokens = _tokens(evidence_for_logic)
 
     if not claim_tokens:
         return IndependentEntailment(
@@ -94,14 +115,15 @@ def verify(claim, evidence):
         )
 
     overlap = len(claim_tokens & evidence_tokens) / len(claim_tokens)
+
     if overlap < 0.50:
         return IndependentEntailment(
             "UNKNOWN",
             ("insufficient_semantic_overlap",),
         )
 
-    claim_relation = _relation_class(claim)
-    evidence_relation = _relation_class(evidence)
+    claim_relation = _relation_class(claim_for_logic)
+    evidence_relation = _relation_class(evidence_for_logic)
 
     if claim_relation == "causal" and evidence_relation == "association":
         return IndependentEntailment(
@@ -118,8 +140,8 @@ def verify(claim, evidence):
             ("relation_class_mismatch",),
         )
 
-    claim_measure = _measurement_kind(claim)
-    evidence_measure = _measurement_kind(evidence)
+    claim_measure = _measurement_kind(claim_for_logic)
+    evidence_measure = _measurement_kind(evidence_for_logic)
 
     if (
         claim_measure
@@ -131,23 +153,26 @@ def verify(claim, evidence):
             ("risk_measurement_type_mismatch",),
         )
 
-    claim_numbers = _numbers(claim)
-    if claim_numbers and not claim_numbers.issubset(_numbers(evidence)):
+    claim_numbers = _numbers(claim_for_logic)
+    if claim_numbers and not claim_numbers.issubset(
+        _numbers(evidence_for_logic)
+    ):
         return IndependentEntailment(
             "UNKNOWN",
             ("numeric_values_not_entrailed",),
         )
 
-    claim_pop = _populations(claim)
-    evidence_pop = _populations(evidence)
+    claim_pop = _populations(claim_for_logic)
+    evidence_pop = _populations(evidence_for_logic)
+
     if claim_pop and not claim_pop.issubset(evidence_pop):
         return IndependentEntailment(
             "UNKNOWN",
             ("population_not_entrailed",),
         )
 
-    claim_neg = bool(NEGATION.search(claim))
-    evidence_neg = bool(NEGATION.search(evidence))
+    claim_neg = bool(NEGATION.search(claim_for_logic))
+    evidence_neg = bool(NEGATION.search(evidence_for_logic))
 
     if claim_neg != evidence_neg:
         return IndependentEntailment(
