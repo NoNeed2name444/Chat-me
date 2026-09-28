@@ -79,27 +79,32 @@ def _normalize_measurement(value, unit):
     unit = unit.lower()
 
     if unit in {"mcg", "ug"}:
-        return (round(float(value) * 0.001, 9), "mg")
+        return (float(value) * 0.001, "mg")
     if unit == "g":
-        return (round(float(value) * 1000.0, 9), "mg")
+        return (float(value) * 1000.0, "mg")
     if unit == "kg":
-        return (round(float(value) * 1000000.0, 9), "mg")
+        return (float(value) * 1000000.0, "mg")
     if unit == "l":
-        return (round(float(value) * 1000.0, 9), "ml")
+        return (float(value) * 1000.0, "ml")
     if unit in {"%", "percent"}:
-        return (round(float(value), 9), "percent")
+        return (float(value), "percent")
 
-    return (round(float(value), 9), unit)
+    return (float(value), unit)
 
 def _measurements(text):
     matches = re.findall(
         r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b",
         text.lower(),
     )
-
     return {
-        _normalize_measurement(value, unit)
-        for value, unit in matches
+        (
+            round(value, 9),
+            unit,
+        )
+        for value, unit in (
+            _normalize_measurement(number, unit)
+            for number, unit in matches
+        )
     }
 
 def _frequency_multiplier(text):
@@ -133,23 +138,90 @@ def _frequency_multiplier(text):
 
     return None
 
-def _mass_values(text):
-    matches = re.findall(
+def _daily_mass_dose(text):
+    values = re.findall(
         r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg)\b",
         text.lower(),
     )
-    return [
-        _normalize_measurement(value, unit)[0]
-        for value, unit in matches
-    ]
-
-def _daily_mass_dose(text):
-    values = _mass_values(text)
     multiplier = _frequency_multiplier(text)
 
-    if len(values) == 1 and multiplier is not None:
-        return round(values[0] * multiplier, 9)
+    if len(values) != 1 or multiplier is None:
+        return None
 
+    value, unit = _normalize_measurement(*values[0])
+    if unit != "mg":
+        return None
+
+    return round(value * multiplier, 9)
+
+def _concentration_daily_dose(text):
+    concentration = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*(?:/|per)\s*(ml|l)\b",
+        text.lower(),
+    )
+    volume = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*(ml|l)\b",
+        text.lower(),
+    )
+    multiplier = _frequency_multiplier(text)
+
+    if len(concentration) != 1 or len(volume) != 1 or multiplier is None:
+        return None
+
+    mass_value, mass_unit = _normalize_measurement(
+        concentration[0][0],
+        concentration[0][1],
+    )
+    volume_value, volume_unit = _normalize_measurement(
+        volume[0][0],
+        volume[0][1],
+    )
+
+    if mass_unit != "mg" or volume_unit != "ml":
+        return None
+
+    return round(
+        mass_value * volume_value * multiplier,
+        9,
+    )
+
+def _weight_based_daily_dose(text):
+    dose = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*/\s*kg(?:\s*/\s*day)?\b",
+        text.lower(),
+    )
+    weights = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*kg\b",
+        text.lower(),
+    )
+
+    if len(dose) != 1 or len(weights) != 1:
+        return None
+
+    dose_value, dose_unit = _normalize_measurement(
+        dose[0][0],
+        dose[0][1],
+    )
+    weight = float(weights[0])
+
+    if dose_unit != "mg":
+        return None
+
+    per_day = 1.0 if "/day" in dose[0][0] else _frequency_multiplier(text)
+    if per_day is None:
+        return None
+
+    return round(dose_value * weight * per_day, 9)
+
+def _daily_dose_equivalent(text):
+    for calculator in (
+        _daily_mass_dose,
+        _concentration_daily_dose,
+        _weight_based_daily_dose,
+    ):
+        value = calculator(text)
+        if value is not None:
+            return value
     return None
 
 def _measurement_kind(text):
@@ -178,38 +250,72 @@ def _populations(text):
         if term in lower
     }
 
+def _condition_signatures(text):
+    lower = " ".join(text.lower().split())
+    patterns = (
+        r"\bif\s+([^,.;:]+)",
+        r"\bonly if\s+([^,.;:]+)",
+        r"\bunless\s+([^,.;:]+)",
+        r"\bwhen\s+([^,.;:]+)",
+        r"\bprovided that\s+([^,.;:]+)",
+        r"\bin patients with\s+([^,.;:]+)",
+        r"\bfor patients with\s+([^,.;:]+)",
+    )
+
+    results = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, lower):
+            signature = set(
+                token
+                for token in re.findall(r"[a-z0-9'-]+", match.group(1))
+                if len(token) >= 4
+            )
+            if signature:
+                results.append(signature)
+
+    return results
+
 def _scope_strength(text):
     lower = text.lower()
 
-    universal = any(
-        marker in lower
-        for marker in (
-            "all patients", "all people", "everyone",
-            "every patient", "always", "never",
-            "regardless of",
-        )
-    )
-
-    exclusive = any(
-        marker in lower
-        for marker in (
-            "only", "exclusively", "only if",
-        )
-    )
-
-    conditional = any(
-        marker in lower
-        for marker in (
-            "if ", "unless ", "when ", "provided that",
-            "in patients with", "for patients with",
-        )
-    )
-
     return {
-        "universal": universal,
-        "exclusive": exclusive,
-        "conditional": conditional,
+        "universal": any(
+            marker in lower
+            for marker in (
+                "all patients", "all people", "everyone",
+                "every patient", "always", "never",
+                "regardless of",
+            )
+        ),
+        "exclusive": any(
+            marker in lower
+            for marker in ("only", "exclusively", "only if")
+        ),
     }
+
+def _condition_supported(claim, evidence):
+    claim_conditions = _condition_signatures(claim)
+    evidence_conditions = _condition_signatures(evidence)
+
+    if not evidence_conditions:
+        return True, None
+
+    if not claim_conditions:
+        return False, "conditional_scope_missing"
+
+    for source_condition in evidence_conditions:
+        best = max(
+            (
+                len(source_condition & claim_condition)
+                / max(1, len(source_condition))
+                for claim_condition in claim_conditions
+            ),
+            default=0.0,
+        )
+        if best < 0.70:
+            return False, "condition_not_entrailed"
+
+    return True, None
 
 def verify(claim, evidence):
     claim_for_logic = _normalize_double_negation(claim)
@@ -250,6 +356,17 @@ def verify(claim, evidence):
             ("relation_class_mismatch",),
         )
 
+    condition_ok, condition_reason = _condition_supported(
+        claim_for_logic,
+        evidence_for_logic,
+    )
+
+    if not condition_ok:
+        return IndependentEntailment(
+            "UNKNOWN",
+            (condition_reason,),
+        )
+
     claim_scope = _scope_strength(claim_for_logic)
     evidence_scope = _scope_strength(evidence_for_logic)
 
@@ -271,8 +388,8 @@ def verify(claim, evidence):
     claim_measurements = _measurements(claim_for_logic)
     evidence_measurements = _measurements(evidence_for_logic)
 
-    claim_daily_dose = _daily_mass_dose(claim_for_logic)
-    evidence_daily_dose = _daily_mass_dose(evidence_for_logic)
+    claim_daily_dose = _daily_dose_equivalent(claim_for_logic)
+    evidence_daily_dose = _daily_dose_equivalent(evidence_for_logic)
     daily_dose_equivalent = (
         claim_daily_dose is not None
         and evidence_daily_dose is not None
