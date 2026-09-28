@@ -56,6 +56,7 @@ public struct OnlineFirstVerifier: Sendable {
 
         let request = VerificationAPIRequest(
             claim: answer,
+            questionContext: prompt,
             context: context,
             verificationMode: verificationMode,
             curriculumSourceIDs: sources.map { $0.snapshotID },
