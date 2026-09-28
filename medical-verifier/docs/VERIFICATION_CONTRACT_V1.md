@@ -4,7 +4,7 @@ The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.5
+Current contract: `1.6`
 
 A client sends `verification_contract_version`.
 
@@ -86,3 +86,21 @@ The contract now includes a bounded PDF-ingestion lane with:
 
 PDF structure is never treated as native figure/table truth unless the extractor
 can establish that relationship explicitly.
+
+
+## v1.6 additions
+
+The reasoning contract now requires conservative atomic-claim alignment for:
+
+- subject and object anchors
+- causal versus associational relations
+- temporal scope
+- contraindication semantics
+- drug-drug interaction semantics
+- atomic polarity
+
+An answer that can only be assembled by combining unrelated source sentences is not
+treated as supported. Missing or mismatched temporal/safety relationships remain
+uncertain and require review.
+
+The contract still does not imply clinical validation or calibrated probability.
