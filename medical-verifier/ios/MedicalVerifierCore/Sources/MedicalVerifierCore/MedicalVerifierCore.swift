@@ -505,6 +505,13 @@ private enum SemanticGuard {
             return nil
         }
 
+        if text.range(
+            of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug)s*/s*kg"#,
+            options: [.regularExpression]
+        ) != nil {
+            return nil
+        }
+
         let pattern = try? NSRegularExpression(
             pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)"#,
             options: [.caseInsensitive]
