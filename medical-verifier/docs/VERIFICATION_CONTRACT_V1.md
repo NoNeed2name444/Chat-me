@@ -1,10 +1,10 @@
-# Verification contract v1.2
+# Verification contract v1.3
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.2`
+Current contract: `1.3`
 
 A client sends `verification_contract_version`.
 
@@ -48,3 +48,13 @@ but must label the current-medical result unavailable.
 
 It must never relabel a curriculum result as current medical truth merely
 because the server is unreachable.
+
+
+## v1.3 additions
+
+The contract now preserves:
+
+- explicit page, section, block-type, and block-index provenance for extracted curriculum evidence
+- explicit document precedence groups and ranks; conflicting versions are not silently resolved without an explicit precedence declaration
+- conditional scope across sentence boundaries
+- conservative equivalence for direct dose, concentration-volume dose, and weight-based dose arithmetic
