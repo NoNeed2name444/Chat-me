@@ -274,8 +274,6 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .sourceIntegrityFailed)
         XCTAssertTrue(result.requiresHumanReview)
     }
-}
-
 
     func testDailyDoseEquivalenceIsSupported() {
         let verifier = CurriculumVerifier()
@@ -376,3 +374,5 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .conflictingSources)
         XCTAssertTrue(result.requiresHumanReview)
     }
+
+}
