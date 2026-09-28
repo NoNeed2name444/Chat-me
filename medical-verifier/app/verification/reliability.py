@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import date
 
 from app.models.evidence import EvidenceItem
+from app.verification.correlation import collapse_correlated_groups
 
 SOURCE_FAMILY_DEFAULTS = {
     "regulatory": ("regulatory", 0.92),
@@ -36,12 +37,19 @@ def enrich(item: EvidenceItem, claim: str, today: date) -> EvidenceItem:
         ("other", 0.35),
     )
     item.source_family = item.source_family or family
+
     if item.source_authority <= 0:
         item.source_authority = default_authority
 
-    relevance = token_relevance(claim, f"{item.title} {item.passage}")
+    relevance = token_relevance(
+        claim,
+        f"{item.title} {item.passage}",
+    )
     item.relevance_score = round(relevance, 4)
-    item.temporal_score = round(recency_score(item, today, 365 * 3), 4)
+    item.temporal_score = round(
+        recency_score(item, today, 365 * 3),
+        4,
+    )
 
     item.quality_score = round(
         0.35 * item.source_authority
@@ -51,14 +59,22 @@ def enrich(item: EvidenceItem, claim: str, today: date) -> EvidenceItem:
         + 0.10 * (1.0 if item.url else 0.0),
         4,
     )
+
+    # Distinct canonical documents are independent by default. Correlation
+    # metadata can later collapse related works into the same group.
     item.independence_group = item.independence_group or (
-        f"{item.source_family}:{item.publisher.lower().strip()}"
+        f"study:{item.study_family_id}"
+        if item.study_family_id
+        else f"doc:{item.canonical_id}"
+        if item.canonical_id
+        else f"{item.source_family}:{item.publisher.lower().strip()}"
     )
     return item
 
 def deduplicate(items: list[EvidenceItem]) -> list[EvidenceItem]:
     seen = set()
     output = []
+
     for item in items:
         key = (
             item.source_family,
@@ -70,15 +86,23 @@ def deduplicate(items: list[EvidenceItem]) -> list[EvidenceItem]:
             continue
         seen.add(key)
         output.append(item)
+
     return output
 
 def aggregate(items: list[EvidenceItem]):
-    usable = [x for x in deduplicate(items) if x.passage and not x.id.startswith("error:")]
+    correlated = collapse_correlated_groups(list(items))
+    usable = [
+        x
+        for x in deduplicate(correlated)
+        if x.passage and not x.id.startswith("error:")
+    ]
 
     support_by_group = defaultdict(float)
     contradiction_by_group = defaultdict(float)
+
     for item in usable:
         weight = item.quality_score
+
         if item.supports is True:
             support_by_group[item.independence_group] += weight
         elif item.supports is False:
@@ -89,14 +113,25 @@ def aggregate(items: list[EvidenceItem]):
     total = support + contradiction
 
     support_ratio = support / total if total else 0.0
-    independent_support = sum(1 for x in support_by_group.values() if x > 0.35)
-    independent_contradiction = sum(1 for x in contradiction_by_group.values() if x > 0.35)
+
+    independent_support = sum(
+        1 for value in support_by_group.values()
+        if value > 0.35
+    )
+    independent_contradiction = sum(
+        1 for value in contradiction_by_group.values()
+        if value > 0.35
+    )
 
     families_support = len({
-        x.source_family for x in usable if x.supports is True
+        x.source_family
+        for x in usable
+        if x.supports is True
     })
     families_contra = len({
-        x.source_family for x in usable if x.supports is False
+        x.source_family
+        for x in usable
+        if x.supports is False
     })
 
     return {
