@@ -73,7 +73,8 @@ def build_manifest(
     evidence_items,
     parent_manifest_sha256: str | None = None,
 ) -> SourceManifest:
-    entries = tuple(
+    entries = tuple(sorted(
+        (
         ManifestEntry(
             evidence_id=item.id,
             source_snapshot_sha256=item.source_snapshot_sha256,
@@ -92,7 +93,9 @@ def build_manifest(
             precedence_rank=item.precedence_rank,
         )
         for item in evidence_items
-    )
+        ),
+        key=lambda item: item.evidence_id,
+    ))
 
     provisional = SourceManifest(
         manifest_id=manifest_id,
