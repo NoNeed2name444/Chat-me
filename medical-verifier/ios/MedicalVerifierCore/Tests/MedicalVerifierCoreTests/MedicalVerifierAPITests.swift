@@ -18,9 +18,9 @@ final class MedicalVerifierAPITests: XCTestCase {
     func testBuildsContractVersionedRequest() throws {
         let request = VerificationAPIRequest(
             claim: "Insulin lowers blood glucose.",
+            questionContext: "What does insulin do?",
             verificationMode: .curriculumUpdateAware,
             curriculumSnapshot: "snapshot-1",
-            questionContext: "What does insulin do?",
             verificationContractVersion: "1.8"
         )
 
