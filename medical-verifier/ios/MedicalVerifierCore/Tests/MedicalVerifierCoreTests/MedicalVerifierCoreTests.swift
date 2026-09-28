@@ -162,6 +162,14 @@ final class MedicalVerifierCoreTests: XCTestCase {
             artifact.sourceFileHashes["snapshot-1"],
             source.fileSHA256
         )
+        XCTAssertEqual(
+            artifact.sourcePages["snapshot-1"],
+            12
+        )
+        XCTAssertEqual(
+            artifact.sourceBlockTypes["snapshot-1"],
+            "text"
+        )
     }
 
     func testPromptInjectionInSourceIsNotExecuted() {
@@ -441,6 +449,120 @@ final class MedicalVerifierCoreTests: XCTestCase {
 
         XCTAssertEqual(result.status, .conflictingSources)
         XCTAssertTrue(result.requiresHumanReview)
+    }
+
+
+    func testCrossSentenceConditionCannotBeDropped() {
+        let source = self.source(
+            passage: "For patients with severe renal impairment, use 5 mg. The dose should be monitored."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What dose is used in severe renal impairment?",
+            answer: "The dose is 5 mg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertTrue(
+            result.warnings.contains {
+                $0.contains("conditional_scope_missing")
+            }
+        )
+    }
+
+    func testCrossSentenceConditionCanBePreserved() {
+        let source = self.source(
+            passage: "For patients with severe renal impairment, use 5 mg. The dose should be monitored."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What dose is used in severe renal impairment?",
+            answer: "For patients with severe renal impairment, use 5 mg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testConcentrationArithmeticIsEquivalent() {
+        let source = self.source(
+            passage: "The concentration is 10 mg/mL. Take 10 mL twice daily."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What is the daily dose?",
+            answer: "The daily dose is 200 mg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testWeightBasedArithmeticIsEquivalentOnlyWithExplicitWeight() {
+        let source = self.source(
+            passage: "Use 5 mg/kg/day for a 20 kg patient."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What daily dose is used for a 20 kg patient?",
+            answer: "The daily dose is 100 mg for a 20 kg patient.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testExplicitDocumentPrecedenceResolvesVersionConflict() {
+        let older = SourceSnapshot(
+            snapshotID: "older",
+            title: "Drug X guideline",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("older".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X increases bleeding."
+            ),
+            passage: "Drug X increases bleeding.",
+            precedenceGroup: "drug-x-guideline",
+            precedenceRank: 1,
+            locator: "page:2",
+            version: "2021"
+        )
+
+        let newer = SourceSnapshot(
+            snapshotID: "newer",
+            title: "Drug X guideline",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("newer".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X does not increase bleeding."
+            ),
+            passage: "Drug X does not increase bleeding.",
+            precedenceGroup: "drug-x-guideline",
+            precedenceRank: 2,
+            locator: "page:3",
+            version: "2024"
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "Does Drug X increase bleeding?",
+            answer: "Drug X increases bleeding.",
+            sources: [older, newer]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertFalse(
+            result.warnings.contains {
+                $0.contains("conflicting_curriculum_sources")
+            }
+        )
+        XCTAssertTrue(
+            result.warnings.contains {
+                $0.contains("explicit_precedence_excluded:older")
+            }
+        )
     }
 
 }
