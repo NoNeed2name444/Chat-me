@@ -565,4 +565,76 @@ final class MedicalVerifierCoreTests: XCTestCase {
         )
     }
 
+
+    func testEqualPrecedenceTieRemainsAConflict() {
+        let support = SourceSnapshot(
+            snapshotID: "tie-support",
+            title: "Drug X guideline",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("tie-support".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X increases bleeding."
+            ),
+            passage: "Drug X increases bleeding.",
+            precedenceGroup: "drug-x-guideline",
+            precedenceRank: 2,
+            locator: "page:2",
+            version: "2024"
+        )
+
+        let contradiction = SourceSnapshot(
+            snapshotID: "tie-contradiction",
+            title: "Drug X guideline",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("tie-contradiction".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X does not increase bleeding."
+            ),
+            passage: "Drug X does not increase bleeding.",
+            precedenceGroup: "drug-x-guideline",
+            precedenceRank: 2,
+            locator: "page:3",
+            version: "2024"
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "Does Drug X increase bleeding?",
+            answer: "Drug X increases bleeding.",
+            sources: [support, contradiction]
+        )
+
+        XCTAssertEqual(result.status, .conflictingSources)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
+    func testConcentrationArithmeticMismatchIsNotSupported() {
+        let source = self.source(
+            passage: "The concentration is 10 mg/mL. Take 10 mL once daily."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What is the daily dose?",
+            answer: "The daily dose is 200 mg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+    }
+
+    func testWeightBasedArithmeticWithoutWeightIsUnknown() {
+        let source = self.source(
+            passage: "Use 5 mg/kg/day."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What is the daily dose?",
+            answer: "The daily dose is 100 mg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+    }
+
 }
