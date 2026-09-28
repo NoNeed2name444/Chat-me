@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from urllib.parse import urlencode
 
 import httpx
 
@@ -87,15 +88,25 @@ class OpenFDALabelProvider:
                 or (of.get("spl_set_id") or [None])[0]
             )
 
+            canonical = set_id or str(spl_id)
+
+            exact_locator = (
+                "https://api.fda.gov/drug/label.json?"
+                + urlencode({
+                    "search": f'set_id:"{canonical}"',
+                    "limit": 1,
+                })
+            )
+
             item = EvidenceItem(
                 id=f"openfda:{spl_id}",
-                canonical_id=set_id or str(spl_id),
+                canonical_id=canonical,
                 title=f"FDA drug label: {generic or brand or drug}",
                 source_type="regulatory",
                 publisher="U.S. FDA / openFDA",
                 effective_date=effective_date,
                 url="https://open.fda.gov/apis/drug/label/",
-                source_locator=source_locator,
+                source_locator=exact_locator,
                 passage=passage,
                 source_family=self.source_family,
                 independence_group=f"openfda:{set_id or spl_id}",
@@ -116,7 +127,7 @@ class OpenFDALabelProvider:
                     ensure_ascii=False,
                 ),
                 source_passage_text=passage,
-                source_locator=source_locator,
+                source_locator=exact_locator,
                 document_version=item.document_version,
             )
 
