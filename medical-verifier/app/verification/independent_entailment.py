@@ -396,6 +396,7 @@ def _atomic_alignment(claim: str, evidence: str):
     for claim_atom in claim_atoms:
         claim_tokens = _tokens(claim_atom.text)
         matched = False
+        failure_reasons = []
 
         for evidence_atom in evidence_atoms:
             evidence_tokens = _tokens(evidence_atom.text)
@@ -412,6 +413,8 @@ def _atomic_alignment(claim: str, evidence: str):
                 evidence_atom,
             )
             if not relation_ok:
+                if relation_reason:
+                    failure_reasons.append(relation_reason)
                 continue
 
             temporal_ok, temporal_reason = temporal_entailed(
@@ -419,6 +422,8 @@ def _atomic_alignment(claim: str, evidence: str):
                 evidence_atom,
             )
             if not temporal_ok:
+                if temporal_reason:
+                    failure_reasons.append(temporal_reason)
                 continue
 
             safety_ok, safety_reason = safety_relation_entailed(
@@ -426,6 +431,8 @@ def _atomic_alignment(claim: str, evidence: str):
                 evidence_atom,
             )
             if not safety_ok:
+                if safety_reason:
+                    failure_reasons.append(safety_reason)
                 continue
 
             if claim_atom.polarity != evidence_atom.polarity:
@@ -435,16 +442,11 @@ def _atomic_alignment(claim: str, evidence: str):
             break
 
         if not matched:
-            reasons = [
-                relation_reason,
-                temporal_reason,
-                safety_reason,
-            ]
-            reason = next(
-                value for value in reasons
-                if value is not None
+            return False, (
+                failure_reasons[0]
+                if failure_reasons
+                else "atomic_claim_not_entailed"
             )
-            return False, reason
 
     return True, None
 
