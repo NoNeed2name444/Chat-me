@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     max_evidence_items: int = 12
     evidence_timeout_seconds: float = 10.0
     high_risk_requires_review: bool = True
+    max_pdf_bytes: int = 20_000_000
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
