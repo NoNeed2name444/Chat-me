@@ -423,11 +423,29 @@ private enum SemanticGuard {
             return 1
         }
 
-        if let match = lower.firstMatch(
-            of: #"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b"#
+        if let pattern = try? NSRegularExpression(
+            pattern: #"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b"#,
+            options: [.caseInsensitive]
         ) {
-            if let value = Int(match) {
-                return 24.0 / Double(value)
+            let range = NSRange(
+                lower.startIndex..<lower.endIndex,
+                in: lower
+            )
+
+            if let match = pattern.firstMatch(
+                in: lower,
+                options: [],
+                range: range
+            ) {
+                for index in 1..<match.numberOfRanges {
+                    if let valueRange = Range(
+                        match.range(at: index),
+                        in: lower
+                    ),
+                    let value = Int(lower[valueRange]) {
+                        return 24.0 / Double(value)
+                    }
+                }
             }
         }
 
