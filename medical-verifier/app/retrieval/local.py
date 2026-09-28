@@ -30,7 +30,8 @@ class LocalEvidenceProvider(EvidenceProvider):
                 "source_family,canonical_id,source_snapshot_sha256,"
                 "passage_sha256,document_version,study_family_id,"
                 "source_date,curriculum_snapshot_id,source_authority,"
-                "extraction_quality,extraction_warnings "
+                "page_number,section,block_type,block_index,precedence_group,"
+                "precedence_rank,extraction_quality,extraction_warnings "
                 "FROM evidence"
             )
 
@@ -85,7 +86,7 @@ class LocalEvidenceProvider(EvidenceProvider):
 
             try:
                 extraction_warnings = json.loads(
-                    row[17] or "[]"
+                    row[23] or "[]"
                 )
             except (TypeError, json.JSONDecodeError):
                 extraction_warnings = [
@@ -111,9 +112,15 @@ class LocalEvidenceProvider(EvidenceProvider):
                     curriculum_snapshot_id=row[14],
                     independence_group=row[12] or row[8] or row[0],
                     source_authority=row[15] or 0.40,
+                    page_number=row[16],
+                    section=row[17],
+                    block_type=row[18] or "text",
+                    block_index=row[19],
+                    precedence_group=row[20],
+                    precedence_rank=row[21] or 0,
                     extraction_quality=(
-                        row[16]
-                        if row[16] is not None
+                        row[22]
+                        if row[22] is not None
                         else 1.0
                     ),
                     extraction_warnings=extraction_warnings,
