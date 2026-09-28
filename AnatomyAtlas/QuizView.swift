@@ -3,40 +3,43 @@ import SwiftUI
 struct QuizView: View {
     @EnvironmentObject private var library: AnatomyLibrary
     @State private var prompt: AnatomyStructure?
-    @State private var result: String?
+    @State private var options: [AnatomyStructure] = []
+    @State private var selectedID: String?
 
     private var structures: [AnatomyStructure] { library.thorax.structures }
-    private var options: [AnatomyStructure] {
-        guard let prompt else { return [] }
-        return Array(([prompt] + structures.filter { $0.id != prompt.id }.shuffled().prefix(3)).shuffled())
+    private var answerState: String? {
+        guard let selectedID, let prompt else { return nil }
+        return selectedID == prompt.id ? "Correct — \(prompt.name)" : "Review the thorax explorer, then try another question."
     }
 
     var body: some View {
         NavigationStack { List {
-            Section("Identify the structure") {
+            Section("Identification") {
                 if let prompt {
-                    Text("Which structure has FMA ID \(prompt.fmaID)?").font(.title3.bold())
+                    Label("Review prompt", systemImage: "eye.fill").font(.caption).foregroundStyle(.secondary)
+                    Text("Which structure matches this terminology identifier?").font(.headline)
+                    Text(prompt.fmaID).font(.title2.monospaced().bold()).foregroundStyle(.teal)
                     ForEach(options) { option in
-                        Button(option.name) { submit(option) }.disabled(result != nil)
+                        Button { selectedID = option.id } label: {
+                            HStack { Text(option.name); Spacer(); if selectedID == option.id { Image(systemName: option.id == prompt.id ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(option.id == prompt.id ? .green : .red) } }
+                        }.disabled(selectedID != nil)
                     }
-                    if let result { Label(result, systemImage: result == "Correct" ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(result == "Correct" ? .green : .red) }
-                    Button("Next question") { begin() }.buttonStyle(.borderedProminent)
+                    if let answerState { Text(answerState).font(.subheadline).foregroundStyle(selectedID == prompt.id ? .green : .orange) }
+                    Button("Next question", action: begin).buttonStyle(.borderedProminent)
                 } else {
-                    Text("Download the thorax review pack, then start a four-choice identification question.")
-                    Button("Start quiz") { begin() }.buttonStyle(.borderedProminent).disabled(structures.isEmpty)
+                    ContentUnavailableView("Start a study question", systemImage: "graduationcap.fill", description: Text("Questions draw from the thorax review pack."))
+                    Button("Start identification", action: begin).buttonStyle(.borderedProminent).disabled(structures.count < 4)
                 }
             }
             Section("Locate mode") {
-                Text("Select a prompt, then use **Isolate in viewer** from its detail card to practise locating it. True mesh hit-testing activates only after approved USDZ assets replace this schematic build.")
+                Text("Choose a structure below, open its detail card, then select **Isolate in explorer**. Locate mode stays explicitly review-only until verified USDZ assets enable mesh hit testing.")
+                ForEach(structures.prefix(5)) { structure in Button(structure.name) { library.selectedStructure = structure } }
             }
-            Section("Bookmarks") {
-                let bookmarks = structures.filter { library.bookmarkedIDs.contains($0.id) }
-                if bookmarks.isEmpty { Text("Bookmarks you add from a structure card appear here.").foregroundStyle(.secondary) }
-                ForEach(bookmarks) { Text($0.name) }
+            Section("Bookmarked review") {
+                if library.bookmarks.isEmpty { Text("Bookmark structures from their detail cards to create a focused review set.").foregroundStyle(.secondary) }
+                ForEach(library.bookmarks) { Text($0.name) }
             }
-        }.navigationTitle("Quiz & review") }
+        }.navigationTitle("Quiz & review").sheet(item: $library.selectedStructure) { StructureCard(structure: $0) } }
     }
-
-    private func begin() { prompt = structures.randomElement(); result = nil }
-    private func submit(_ option: AnatomyStructure) { result = option.id == prompt?.id ? "Correct" : "Not quite — \(prompt?.name ?? "")" }
+    private func begin() { guard let newPrompt = structures.randomElement() else { return }; prompt = newPrompt; selectedID = nil; options = Array(([newPrompt] + structures.filter { $0.id != newPrompt.id }.shuffled().prefix(3)).shuffled()) }
 }

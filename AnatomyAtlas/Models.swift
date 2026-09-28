@@ -13,11 +13,15 @@ struct AnatomyStructure: Identifiable, Codable, Hashable {
     let asset: String?
     let limitations: String?
     let layer: AnatomyLayer
+    let studyNote: String
 }
 
 enum AnatomyLayer: String, Codable, CaseIterable, Identifiable {
     case skin = "Skin", muscle = "Muscle", organs = "Organs", bone = "Bone"
     var id: String { rawValue }
+    var icon: String {
+        switch self { case .skin: "hand.raised.fill"; case .muscle: "figure.strengthtraining.traditional"; case .organs: "heart.fill"; case .bone: "allergens" }
+    }
 }
 
 struct RegionPack: Identifiable, Codable, Hashable {
@@ -46,25 +50,24 @@ final class AnatomyLibrary: ObservableObject {
 
     func installThorax() { installedPacks.insert(thorax.id) }
     var thoraxInstalled: Bool { installedPacks.contains(thorax.id) }
+    var bookmarks: [AnatomyStructure] { thorax.structures.filter { bookmarkedIDs.contains($0.id) } }
 
     func toggleBookmark(_ structure: AnatomyStructure) {
         if bookmarkedIDs.contains(structure.id) { bookmarkedIDs.remove(structure.id) } else { bookmarkedIDs.insert(structure.id) }
         UserDefaults.standard.set(Array(bookmarkedIDs), forKey: "bookmarkedStructureIDs")
     }
-
     func saveNote(_ note: String, for structure: AnatomyStructure) {
         notes[structure.id] = note
         UserDefaults.standard.set(notes, forKey: "structureNotes")
     }
-
     func toggleHidden(_ structure: AnatomyStructure) {
         if hiddenStructureIDs.contains(structure.id) { hiddenStructureIDs.remove(structure.id) } else { hiddenStructureIDs.insert(structure.id) }
     }
-
     func isolate(_ structure: AnatomyStructure) { isolatedStructureID = isolatedStructureID == structure.id ? nil : structure.id }
+    func clearFilters() { hiddenStructureIDs = []; isolatedStructureID = nil }
 
     private static func loadThorax() throws -> RegionPack {
-        let url = Bundle.main.url(forResource: "thorax-manifest", withExtension: "json")!
+        guard let url = Bundle.main.url(forResource: "thorax-manifest", withExtension: "json") else { throw CocoaError(.fileNoSuchFile) }
         return try JSONDecoder().decode(RegionPack.self, from: Data(contentsOf: url))
     }
 }

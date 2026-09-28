@@ -3,39 +3,48 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         TabView {
-            ThoraxView()
-                .tabItem { Label("Viewer", systemImage: "view.3d") }
-            LibraryView()
-                .tabItem { Label("Packs", systemImage: "square.stack.3d.down.right") }
-            QuizView()
-                .tabItem { Label("Quiz", systemImage: "brain.head.profile") }
-            SourcesView()
-                .tabItem { Label("Sources", systemImage: "checklist") }
+            ThoraxView().tabItem { Label("Explore", systemImage: "view.3d") }
+            LibraryView().tabItem { Label("Library", systemImage: "square.stack.3d.down.right") }
+            QuizView().tabItem { Label("Quiz", systemImage: "graduationcap.fill") }
+            SourcesView().tabItem { Label("Sources", systemImage: "checklist") }
         }
-        .tint(.cyan)
+        .tint(.teal)
     }
 }
 
 struct LibraryView: View {
     @EnvironmentObject private var library: AnatomyLibrary
-
     var body: some View {
         NavigationStack {
             List {
-                Section("Region packs") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack { Label(library.thorax.title, systemImage: "lungs.fill"); Spacer(); Text(library.thorax.status).foregroundStyle(.orange) }
-                        Text("Thoracic cage, lungs, heart & mediastinum")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        Label("\(library.thorax.structures.count) structures · \(library.thorax.sizeMB) MB estimated", systemImage: "arrow.down.circle")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        Button(library.thoraxInstalled ? "Available offline" : "Download for review") { library.installThorax() }
-                            .buttonStyle(.borderedProminent).disabled(library.thoraxInstalled)
-                    }.padding(.vertical, 4)
+                Section("Continue studying") {
+                    HStack(spacing: 14) {
+                        Image(systemName: "lungs.fill").font(.title2).foregroundStyle(.teal).frame(width: 44, height: 44).background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Thorax review pack").fontWeight(.semibold)
+                            Text("\(library.thorax.structures.count) labelled structures · schematic review") .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
                 }
-                Section("Download policy") { Text("Region packs download on demand and remain available offline. Approved USDZ assets are stored in Git LFS; no full-body bundle is shipped.") }
-            }.navigationTitle("Study packs")
+                Section("Region pack") {
+                    LabeledContent("Download", value: library.thoraxInstalled ? "Available offline" : "\(library.thorax.sizeMB) MB estimated")
+                    Button { library.installThorax() } label: {
+                        Label(library.thoraxInstalled ? "Available offline" : "Make available offline", systemImage: library.thoraxInstalled ? "checkmark.icloud.fill" : "arrow.down.circle.fill")
+                    }.disabled(library.thoraxInstalled)
+                }
+                Section("Next packs") {
+                    lockedPack("Head & neck", detail: "Planned after thorax review")
+                    lockedPack("Upper limb", detail: "Planned")
+                    lockedPack("Abdomen & pelvis", detail: "Planned")
+                }
+                Section("Storage policy") { Text("Only the selected region is cached. Approved mesh LODs download on demand; the full body is never loaded into memory at once.") }
+            }.navigationTitle("Study library")
         }
+    }
+    private func lockedPack(_ title: String, detail: String) -> some View {
+        HStack { Image(systemName: "lock.fill").foregroundStyle(.secondary); VStack(alignment: .leading) { Text(title); Text(detail).font(.caption).foregroundStyle(.secondary) }; Spacer(); Text("Later").font(.caption).foregroundStyle(.secondary) }
     }
 }
 
@@ -44,19 +53,16 @@ struct SourcesView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Release gate") {
-                    Label("Asset pending anatomical review", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text("Every release asset needs a source URL, license, source hash, FMA identifier, transform, LOD counts, and smoothing log.")
+                Section("Release status") {
+                    Label("Educational schematic review build", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text("No placeholder is represented as a scan-derived anatomical asset. Each production asset must pass source, licence, FMA, transform, LOD, normal, and reviewer checks before release.")
                 }
-                Section("Thorax attribution") {
+                Section("Thorax provenance") {
                     ForEach(library.thorax.structures) { item in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item.name).fontWeight(.semibold)
-                            Text("\(item.source) · \(item.license)").font(.caption).foregroundStyle(.secondary)
-                        }
+                        VStack(alignment: .leading, spacing: 4) { Text(item.name).fontWeight(.semibold); Text("\(item.fmaID) · \(item.source)").font(.caption).foregroundStyle(.secondary); Text(item.license).font(.caption2).foregroundStyle(.orange) }
                     }
                 }
-                Section("Limits") { Text("Fine vessels, nerves, lymphatics, and membranes require dedicated detail views. Schematic content is labelled in the viewer and is never presented as scan-derived anatomy.") }
+                Section("Known limits") { Text("Peripheral nerves, small vessels, lymphatics, pleura, and fine cardiac anatomy need dedicated, verified detail packs. This build logs these limitations instead of implying false precision.") }
             }.navigationTitle("Sources & limits")
         }
     }

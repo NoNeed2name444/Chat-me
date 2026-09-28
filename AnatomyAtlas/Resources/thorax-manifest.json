@@ -1,12 +1,212 @@
 {
   "id": "thorax",
   "title": "Thorax",
-  "status": "Review — schematic placeholder",
+  "status": "Review \u2014 schematic placeholder",
   "sizeMB": 180,
   "structures": [
-    {"id":"FMA_7574","name":"Right lung","synonyms":["pulmo dexter"],"system":"Respiratory","region":"Thorax","parent":"thorax","fmaID":"FMA:7574","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Schematic placeholder only; not a scan-derived lung.","layer":"Organs"},
-    {"id":"FMA_7575","name":"Left lung","synonyms":["pulmo sinister"],"system":"Respiratory","region":"Thorax","parent":"thorax","fmaID":"FMA:7575","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Schematic placeholder only; not a scan-derived lung.","layer":"Organs"},
-    {"id":"FMA_7088","name":"Heart","synonyms":["cor"],"system":"Cardiovascular","region":"Thorax","parent":"mediastinum","fmaID":"FMA:7088","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"No anatomical heart mesh is included in this build.","layer":"Organs"},
-    {"id":"FMA_7480","name":"Thoracic cage","synonyms":["rib cage"],"system":"Skeletal","region":"Thorax","parent":"thorax","fmaID":"FMA:7480","source":"Asset intake pending","license":"Not yet distributable","asset":null,"limitations":"Placeholder bounds only; it is not a rib mesh.","layer":"Bone"}
+    {
+      "id": "FMA_7574",
+      "name": "Right lung",
+      "synonyms": [
+        "pulmo dexter"
+      ],
+      "system": "Respiratory",
+      "region": "Thorax",
+      "parent": "thorax",
+      "fmaID": "FMA:7574",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic placeholder only; not a scan-derived lung.",
+      "layer": "Organs",
+      "studyNote": "The right lung is the three-lobed lung in the right pleural cavity."
+    },
+    {
+      "id": "FMA_7575",
+      "name": "Left lung",
+      "synonyms": [
+        "pulmo sinister"
+      ],
+      "system": "Respiratory",
+      "region": "Thorax",
+      "parent": "thorax",
+      "fmaID": "FMA:7575",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic placeholder only; not a scan-derived lung.",
+      "layer": "Organs",
+      "studyNote": "The left lung accommodates the heart through its cardiac notch."
+    },
+    {
+      "id": "FMA_7088",
+      "name": "Heart",
+      "synonyms": [
+        "cor"
+      ],
+      "system": "Cardiovascular",
+      "region": "Thorax",
+      "parent": "middle mediastinum",
+      "fmaID": "FMA:7088",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "No anatomical heart mesh is included in this build.",
+      "layer": "Organs",
+      "studyNote": "The heart lies obliquely in the middle mediastinum."
+    },
+    {
+      "id": "FMA_7480",
+      "name": "Thoracic cage",
+      "synonyms": [
+        "rib cage"
+      ],
+      "system": "Skeletal",
+      "region": "Thorax",
+      "parent": "thorax",
+      "fmaID": "FMA:7480",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Placeholder bounds only; it is not a rib mesh.",
+      "layer": "Bone",
+      "studyNote": "The thoracic cage protects thoracic viscera and supports respiration."
+    },
+    {
+      "id": "FMA_7148",
+      "name": "Trachea",
+      "synonyms": [
+        "windpipe"
+      ],
+      "system": "Respiratory",
+      "region": "Thorax",
+      "parent": "superior mediastinum",
+      "fmaID": "FMA:7148",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Organs",
+      "studyNote": "The trachea bifurcates at the carina into the main bronchi."
+    },
+    {
+      "id": "FMA_7203",
+      "name": "Esophagus",
+      "synonyms": [
+        "oesophagus"
+      ],
+      "system": "Digestive",
+      "region": "Thorax",
+      "parent": "posterior mediastinum",
+      "fmaID": "FMA:7203",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Organs",
+      "studyNote": "The esophagus descends posterior to the trachea toward the diaphragm."
+    },
+    {
+      "id": "FMA_6668",
+      "name": "Diaphragm",
+      "synonyms": [
+        "thoracic diaphragm"
+      ],
+      "system": "Muscular",
+      "region": "Thorax",
+      "parent": "thorax",
+      "fmaID": "FMA:6668",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Muscle",
+      "studyNote": "The diaphragm forms the inferior boundary of the thoracic cavity."
+    },
+    {
+      "id": "FMA_13842",
+      "name": "Sternum",
+      "synonyms": [
+        "breastbone"
+      ],
+      "system": "Skeletal",
+      "region": "Thorax",
+      "parent": "thoracic cage",
+      "fmaID": "FMA:13842",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Bone",
+      "studyNote": "The sternum consists of manubrium, body, and xiphoid process."
+    },
+    {
+      "id": "FMA_7579",
+      "name": "Right main bronchus",
+      "synonyms": [
+        "right principal bronchus"
+      ],
+      "system": "Respiratory",
+      "region": "Thorax",
+      "parent": "tracheobronchial tree",
+      "fmaID": "FMA:7579",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Organs",
+      "studyNote": "The right main bronchus is wider, shorter, and more vertical than the left."
+    },
+    {
+      "id": "FMA_7580",
+      "name": "Left main bronchus",
+      "synonyms": [
+        "left principal bronchus"
+      ],
+      "system": "Respiratory",
+      "region": "Thorax",
+      "parent": "tracheobronchial tree",
+      "fmaID": "FMA:7580",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Schematic metadata entry only; a verified production mesh is not included in this build.",
+      "layer": "Organs",
+      "studyNote": "The left main bronchus passes inferior to the arch of the aorta."
+    },
+    {
+      "id": "FMA_3734",
+      "name": "Aortic arch",
+      "synonyms": [
+        "arcus aortae"
+      ],
+      "system": "Cardiovascular",
+      "region": "Thorax",
+      "parent": "superior mediastinum",
+      "fmaID": "FMA:3734",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Fine vessel geometry requires a dedicated verified detail mesh.",
+      "layer": "Organs",
+      "studyNote": "The aortic arch curves posteriorly and to the left over the left main bronchus."
+    },
+    {
+      "id": "FMA_4706",
+      "name": "Superior vena cava",
+      "synonyms": [
+        "SVC"
+      ],
+      "system": "Cardiovascular",
+      "region": "Thorax",
+      "parent": "superior mediastinum",
+      "fmaID": "FMA:4706",
+      "source": "Asset intake pending",
+      "license": "Not yet distributable",
+      "asset": null,
+      "limitations": "Fine vessel geometry requires a dedicated verified detail mesh.",
+      "layer": "Organs",
+      "studyNote": "The superior vena cava returns blood from the upper body to the right atrium."
+    }
   ]
 }

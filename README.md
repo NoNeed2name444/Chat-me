@@ -16,3 +16,9 @@ Native SwiftUI + RealityKit anatomy-study app, beginning with a **thorax** regio
 - `AnatomyAtlas/` — iOS application source and the shipped manifest.
 
 Large approved source archives, GLB/OBJ intermediates, USDZ files and preview renders belong in Git LFS; see `.gitattributes`.
+
+## Version 1 visual render
+
+![Thorax explorer version 1 render](docs/screenshots/thorax-explorer-v1.png)
+
+The render documents the intended iPhone Explore screen for this schematic-review build. It is a generated UI layout preview, not a device capture; the native RealityKit scene still needs cloud-macOS compilation and on-device review.
