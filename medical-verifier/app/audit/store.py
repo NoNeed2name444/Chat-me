@@ -263,6 +263,18 @@ def store_manifest(manifest):
     conn = _connect()
 
     try:
+        if manifest.parent_manifest_sha256:
+            parent = conn.execute(
+                "SELECT 1 FROM source_manifests "
+                "WHERE manifest_sha256 = ?",
+                (manifest.parent_manifest_sha256,),
+            ).fetchone()
+
+            if parent is None:
+                raise ValueError(
+                    "manifest_parent_not_found"
+                )
+
         conn.execute(
             "INSERT OR REPLACE INTO source_manifests "
             "(manifest_id,manifest_version,parent_manifest_sha256,"
