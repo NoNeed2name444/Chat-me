@@ -14,6 +14,8 @@ class DocumentIngestRequest(BaseModel):
     canonical_id: str | None = None
     document_version: str | None = None
     study_family_id: str | None = None
+    source_date: str | None = None
+    curriculum_snapshot_id: str | None = None
     source_authority: float = Field(default=0.40, ge=0, le=1)
 
 @router.post("/documents/ingest")
@@ -27,10 +29,16 @@ def ingest_document(request: DocumentIngestRequest):
         canonical_id=request.canonical_id,
         document_version=request.document_version,
         study_family_id=request.study_family_id,
+        source_date=request.source_date,
+        curriculum_snapshot_id=request.curriculum_snapshot_id,
         source_authority=request.source_authority,
     )
     return {
         "status": "stored",
         "evidence_id": evidence_id,
-        "warning": "Stored evidence remains untrusted until source provenance and clinical validation policy are satisfied.",
+        "curriculum_snapshot_id": request.curriculum_snapshot_id,
+        "warning": (
+            "Stored evidence can define curriculum fidelity, but does not "
+            "authorize clinical action."
+        ),
     }
