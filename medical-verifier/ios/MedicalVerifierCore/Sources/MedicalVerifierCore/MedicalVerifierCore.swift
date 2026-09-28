@@ -676,9 +676,15 @@ private enum SemanticGuard {
             return ""
         }
 
-        guard let phrase = phrases.first(where: {
+        let matchingPhrases = phrases.filter {
             lower.range(of: $0) != nil
-        }),
+        }
+        guard let phrase = matchingPhrases.sorted(by: {
+            if $0.count != $1.count {
+                return $0.count > $1.count
+            }
+            return $0 < $1
+        }).first,
         let range = lower.range(of: phrase) else {
             return ""
         }
