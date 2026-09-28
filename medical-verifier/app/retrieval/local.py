@@ -30,8 +30,9 @@ class LocalEvidenceProvider(EvidenceProvider):
                 "source_family,canonical_id,source_snapshot_sha256,"
                 "passage_sha256,document_version,study_family_id,"
                 "source_date,curriculum_snapshot_id,source_authority,"
-                "page_number,section,block_type,block_index,precedence_group,"
-                "precedence_rank,extraction_quality,extraction_warnings "
+                "page_number,section,block_type,block_index,related_block_ids,"
+                "language,precedence_group,precedence_rank,extraction_quality,"
+                "extraction_warnings "
                 "FROM evidence"
             )
 
@@ -116,10 +117,16 @@ class LocalEvidenceProvider(EvidenceProvider):
                     section=row[17],
                     block_type=row[18] or "text",
                     block_index=row[19],
-                    precedence_group=row[20],
-                    precedence_rank=row[21] or 0,
+                    related_block_ids=(
+                        json.loads(row[20] or "[]")
+                        if row[20]
+                        else []
+                    ),
+                    language=row[21] or "auto",
+                    precedence_group=row[22],
+                    precedence_rank=row[23] or 0,
                     extraction_quality=(
-                        row[22]
+                        row[24]
                         if row[22] is not None
                         else 1.0
                     ),
