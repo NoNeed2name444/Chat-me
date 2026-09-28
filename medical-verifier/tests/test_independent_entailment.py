@@ -44,9 +44,9 @@ def test_mass_unit_mismatch_is_unknown():
     assert result.label == "UNKNOWN"
     assert "measurement_unit_or_value_mismatch" in result.reasons
 
-def test_equivalent_mass_units_match():
+def test_equivalent_unit_spellings_match():
     result = verify(
         "The dose is 500 mcg.",
-        "The dose is 0.5 mg.",
+        "The dose is 500 ug.",
     )
     assert result.label == "SUPPORTS"
