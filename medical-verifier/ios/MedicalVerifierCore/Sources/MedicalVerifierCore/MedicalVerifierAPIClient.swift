@@ -81,7 +81,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
         verificationMode: VerificationMode = .currentMedical,
         curriculumSourceIDs: [String] = [],
         curriculumSnapshot: String? = nil,
-        verificationContractVersion: String = "1.3"
+        verificationContractVersion: String = "1.4"
     ) {
         self.claim = claim
         self.questionContext = questionContext
@@ -144,7 +144,7 @@ public final class MedicalVerifierAPIClient: @unchecked Sendable {
     public init(
         baseURL: URL,
         bearerToken: String? = nil,
-        contractVersion: String = "1.3",
+        contractVersion: String = "1.4",
         session: URLSession = .shared
     ) throws {
         guard baseURL.scheme?.lowercased() == "https" else {
