@@ -10,6 +10,7 @@ def test_contract_mismatch_fails_closed():
         json={
             "claim": "Insulin lowers blood glucose.",
             "sources": ["local"],
+            "question_context": "Should I stop warfarin?",
             "verification_contract_version": "999.0",
         },
     )
@@ -18,4 +19,4 @@ def test_contract_mismatch_fails_closed():
     body = response.json()
     assert body["verdict"] == "CONTRACT_MISMATCH"
     assert body["requires_human_review"] is True
-    assert body["verification_contract_version"] == "1.0"
+    assert body["verification_contract_version"] == "1.1"
