@@ -130,6 +130,7 @@ def _claim_reasoning_warnings(claim: str, evidence: str):
 
     for claim_atom in claim_atoms:
         matched = False
+        failure_reason = "atomic_claim_not_entailed"
 
         for evidence_atom in evidence_atoms:
             overlap = (
@@ -147,6 +148,7 @@ def _claim_reasoning_warnings(claim: str, evidence: str):
                 evidence_atom,
             )
             if not relation_ok:
+                failure_reason = relation_reason or failure_reason
                 continue
 
             temporal_ok, temporal_reason = temporal_entailed(
@@ -154,6 +156,7 @@ def _claim_reasoning_warnings(claim: str, evidence: str):
                 evidence_atom,
             )
             if not temporal_ok:
+                failure_reason = temporal_reason or failure_reason
                 continue
 
             safety_ok, safety_reason = safety_relation_entailed(
@@ -161,20 +164,14 @@ def _claim_reasoning_warnings(claim: str, evidence: str):
                 evidence_atom,
             )
             if not safety_ok:
+                failure_reason = safety_reason or failure_reason
                 continue
 
             matched = True
             break
 
         if not matched:
-            if relation_reason:
-                warnings.append(relation_reason)
-            elif temporal_reason:
-                warnings.append(temporal_reason)
-            elif safety_reason:
-                warnings.append(safety_reason)
-            else:
-                warnings.append("atomic_claim_not_entailed")
+            warnings.append(failure_reason)
 
     return sorted(set(warnings))
 
