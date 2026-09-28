@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "cases": [
     {
       "id": "valid_basic",
@@ -259,6 +259,86 @@
       "language": "es",
       "expected_status": "SOURCE_UNSUPPORTED",
       "requires_review": true
+    },
+    {
+      "id": "atomic_subject_mismatch",
+      "prompt": "What do the medicines do?",
+      "answer": "Drug A increases bleeding. Drug A reduces blood pressure.",
+      "source_title": "Course",
+      "source_passage": "Drug A increases bleeding. Drug B reduces blood pressure.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "atomic_object_mismatch",
+      "prompt": "What does Drug A increase?",
+      "answer": "Drug A increases bleeding.",
+      "source_title": "Course",
+      "source_passage": "Drug A increases blood pressure.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "causal_association_mismatch",
+      "prompt": "What causes bleeding?",
+      "answer": "Drug A causes bleeding.",
+      "source_title": "Course",
+      "source_passage": "Drug A is associated with bleeding.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "temporal_scope_missing",
+      "prompt": "What happened previously?",
+      "answer": "Drug A previously increased bleeding.",
+      "source_title": "Course",
+      "source_passage": "Drug A increases bleeding.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "temporal_scope_mismatch",
+      "prompt": "What happened?",
+      "answer": "Drug A previously increased bleeding.",
+      "source_title": "Course",
+      "source_passage": "Drug A currently increases bleeding.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "interaction_relation_mismatch",
+      "prompt": "Are these medicines compatible?",
+      "answer": "Drug A interacts with Drug B.",
+      "source_title": "Course",
+      "source_passage": "Drug A is associated with Drug B.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "contraindication_relation_mismatch",
+      "prompt": "Can this drug be used in pregnancy?",
+      "answer": "Drug A is contraindicated in pregnancy.",
+      "source_title": "Course",
+      "source_passage": "Drug A is associated with pregnancy.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "matching_interaction",
+      "prompt": "Are these medicines compatible?",
+      "answer": "Drug A interacts with Drug B.",
+      "source_title": "Course",
+      "source_passage": "Drug A has an interaction with Drug B.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
     }
   ]
 }
