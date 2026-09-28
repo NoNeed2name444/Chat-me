@@ -15,6 +15,7 @@ class VerificationResponse(BaseModel):
     contradictions: list[dict] = []
 
     verification_mode: str = "current_medical"
+    provenance_mode: str = "permissive"
 
     curriculum_assessment: dict = {}
     current_evidence_assessment: dict = {}
@@ -30,7 +31,7 @@ class VerificationResponse(BaseModel):
     missing_context: list[str] = []
 
     requires_human_review: bool
-    verifier_version: str = "1.5.0"
-    verification_contract_version: str = "1.7"
+    verifier_version: str = "1.6.0"
+    verification_contract_version: str = "1.8"
     knowledge_snapshot: str = "LIVE-API"
     verification_id: str
