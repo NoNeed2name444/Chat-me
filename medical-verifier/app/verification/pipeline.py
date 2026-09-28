@@ -497,7 +497,7 @@ def verify(request):
     reliability["policy_version"] = POLICY_VERSION
     reliability["atomic_assertions"] = assertion_results
     reliability["adversarial_severity"] = attack_severity
-    reliability["has_newer_evidence"] = has_newer_evidence
+    reliability["has_relevant_newer_evidence"] = has_relevant_newer_evidence
 
     limitations = sorted(set(all_flags))
 
