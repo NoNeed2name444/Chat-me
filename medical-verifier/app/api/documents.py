@@ -70,8 +70,6 @@ def ingest_document(request: DocumentIngestRequest):
         precedence_group=request.precedence_group,
         precedence_rank=request.precedence_rank,
     )
-    store_manifest(manifest)
-
     return {
         "status": "stored",
         "evidence_id": evidence_id,
@@ -143,6 +141,10 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
 
     evidence_ids = []
     manifest_items = []
+    block_to_evidence_id = {
+        block.block_id: f"local:{uuid4()}"
+        for block in extraction.blocks
+    }
 
     for block in extraction.blocks:
         warnings = list(extraction.warnings)
@@ -153,7 +155,9 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
             or f"page:{block.page_number}:block:{block.block_index}"
         )
 
-        item_id = store_evidence(
+        item_id = block_to_evidence_id[block.block_id]
+
+        store_evidence(
             title=f"{request.title} — page {block.page_number}",
             passage=block.text,
             source_type=request.source_type,
@@ -177,6 +181,7 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
             precedence_group=request.precedence_group,
             precedence_rank=request.precedence_rank,
             source_authority=request.source_authority,
+            evidence_id=item_id,
         )
         evidence_ids.append(item_id)
 
@@ -192,7 +197,11 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
                 page_number=block.page_number,
                 block_type=block.block_type,
                 block_index=block.block_index,
-                related_block_ids=list(block.related_block_ids),
+                related_block_ids=[
+                    block_to_evidence_id[related_id]
+                    for related_id in block.related_block_ids
+                    if related_id in block_to_evidence_id
+                ],
                 language=request.language,
                 document_version=request.document_version,
                 precedence_group=request.precedence_group,
