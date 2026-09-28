@@ -94,6 +94,18 @@ class LocalEvidenceProvider(EvidenceProvider):
                     "stored_extraction_warnings_invalid"
                 ]
 
+            try:
+                related_block_ids = json.loads(
+                    row[20] or "[]"
+                )
+                if not isinstance(related_block_ids, list):
+                    raise ValueError("related_block_ids_not_list")
+            except (TypeError, json.JSONDecodeError, ValueError):
+                related_block_ids = []
+                extraction_warnings.append(
+                    "stored_related_block_ids_invalid"
+                )
+
             results.append(
                 EvidenceItem(
                     id=row[0],
@@ -117,11 +129,7 @@ class LocalEvidenceProvider(EvidenceProvider):
                     section=row[17],
                     block_type=row[18] or "text",
                     block_index=row[19],
-                    related_block_ids=(
-                        json.loads(row[20] or "[]")
-                        if row[20]
-                        else []
-                    ),
+                    related_block_ids=related_block_ids,
                     language=row[21] or "auto",
                     precedence_group=row[22],
                     precedence_rank=row[23] or 0,
