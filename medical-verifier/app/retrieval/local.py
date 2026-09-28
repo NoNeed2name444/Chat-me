@@ -87,7 +87,7 @@ class LocalEvidenceProvider(EvidenceProvider):
 
             try:
                 extraction_warnings = json.loads(
-                    row[23] or "[]"
+                    row[25] or "[]"
                 )
             except (TypeError, json.JSONDecodeError):
                 extraction_warnings = [
@@ -127,7 +127,7 @@ class LocalEvidenceProvider(EvidenceProvider):
                     precedence_rank=row[23] or 0,
                     extraction_quality=(
                         row[24]
-                        if row[22] is not None
+                        if row[24] is not None
                         else 1.0
                     ),
                     extraction_warnings=extraction_warnings,
