@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.config import settings
+from app.verification.citation_integrity import normalize_source_text
 
 _EVIDENCE_COLUMNS = {
     "title": "TEXT",
@@ -17,6 +18,8 @@ _EVIDENCE_COLUMNS = {
     "passage_sha256": "TEXT",
     "document_version": "TEXT",
     "study_family_id": "TEXT",
+    "source_date": "TEXT",
+    "curriculum_snapshot_id": "TEXT",
     "source_authority": "REAL DEFAULT 0.4",
 }
 
@@ -49,6 +52,8 @@ def _connect():
             passage_sha256 TEXT,
             document_version TEXT,
             study_family_id TEXT,
+            source_date TEXT,
+            curriculum_snapshot_id TEXT,
             source_authority REAL DEFAULT 0.4,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -70,7 +75,6 @@ def _connect():
 
 def _sha256(text: str) -> str:
     import hashlib
-    from app.verification.citation_integrity import normalize_source_text
     return hashlib.sha256(
         normalize_source_text(text).encode("utf-8")
     ).hexdigest()
@@ -85,6 +89,8 @@ def store_evidence(
     canonical_id=None,
     document_version=None,
     study_family_id=None,
+    source_date=None,
+    curriculum_snapshot_id=None,
     source_authority=0.40,
 ):
     evidence_id = f"local:{uuid4()}"
@@ -97,8 +103,9 @@ def store_evidence(
             "INSERT INTO evidence "
             "(id,title,source_type,publisher,url,passage,source_family,"
             "canonical_id,source_snapshot_sha256,passage_sha256,"
-            "document_version,study_family_id,source_authority) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "document_version,study_family_id,source_date,"
+            "curriculum_snapshot_id,source_authority) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 evidence_id,
                 title,
@@ -112,6 +119,8 @@ def store_evidence(
                 passage_hash,
                 document_version,
                 study_family_id,
+                source_date,
+                curriculum_snapshot_id,
                 source_authority,
             ),
         )
@@ -132,9 +141,7 @@ def store_verification(result):
                 result.verification_id,
                 result.verdict,
                 result.risk_level,
-                json.dumps(
-                    result.model_dump(mode="json")
-                ),
+                json.dumps(result.model_dump(mode="json")),
             ),
         )
         conn.commit()
