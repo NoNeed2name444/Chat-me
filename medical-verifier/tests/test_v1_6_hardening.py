@@ -35,6 +35,24 @@ def _record(case_id="a", split="unspecified", source_family="family-a"):
     )
 
 
+def snapshot_case(case):
+    return {
+        "case_id": case.case_id,
+        "claim": case.claim,
+        "evidence": case.evidence,
+        "expected": case.expected,
+        "subgroup": case.subgroup,
+        "risk_level": case.risk_level,
+        "source_family": case.source_family,
+        "study_family_id": case.study_family_id,
+        "canonical_id": case.canonical_id,
+        "independence_group": case.independence_group,
+        "source_snapshot_sha256": case.source_snapshot_sha256,
+        "passage_sha256": case.passage_sha256,
+        "split": case.split,
+    }
+
+
 def test_snapshot_round_trip_and_hash_binding():
     snapshot = BenchmarkSnapshot.from_cases(
         dataset_id="demo",
