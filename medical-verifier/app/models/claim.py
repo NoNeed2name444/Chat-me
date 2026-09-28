@@ -20,6 +20,7 @@ class ClaimRequest(BaseModel):
     verification_mode: VerificationMode = "current_medical"
     curriculum_source_ids: list[str] = Field(default_factory=list)
     curriculum_snapshot: str | None = None
+    verification_contract_version: str = "1.0"
 
 class NormalizedClaim(BaseModel):
     original: str
