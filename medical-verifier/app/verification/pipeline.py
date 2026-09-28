@@ -675,6 +675,7 @@ def verify(request):
         missing_context=sorted(context_missing),
         requires_human_review=requires_review,
         verifier_version=settings.verifier_version,
+        verification_contract_version=settings.verification_contract_version,
         knowledge_snapshot=settings.knowledge_snapshot,
         verification_id=str(uuid4()),
     )
