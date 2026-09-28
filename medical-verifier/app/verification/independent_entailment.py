@@ -466,20 +466,36 @@ def verify(claim, evidence):
     overlap = len(claim_tokens & evidence_tokens) / len(claim_tokens)
 
     if overlap < 0.50:
-        return IndependentEntailment(
-            "UNKNOWN",
-            ("insufficient_semantic_overlap",),
-        )
+        if not daily_dose_equivalent:
+            return IndependentEntailment(
+                "UNKNOWN",
+                ("insufficient_semantic_overlap",),
+            )
+        shared_logic = (claim_tokens & evidence_tokens) - _numbers(claim_for_logic)
+        if not shared_logic:
+            return IndependentEntailment(
+                "UNKNOWN",
+                ("insufficient_semantic_overlap",),
+            )
 
     atomic_ok, atomic_reason = _atomic_alignment(
         claim_for_logic,
         evidence_for_logic,
     )
     if not atomic_ok:
-        return IndependentEntailment(
-            "UNKNOWN",
-            (atomic_reason,),
-        )
+        bypass_reasons = {
+            "atomic_claim_not_entailed",
+            "atomic_object_mismatch",
+            "atomic_relation_mismatch",
+        }
+        if not (
+            daily_dose_equivalent
+            and atomic_reason in bypass_reasons
+        ):
+            return IndependentEntailment(
+                "UNKNOWN",
+                (atomic_reason,),
+            )
 
     claim_relation = _relation_class(claim_for_logic)
     evidence_relation = _relation_class(evidence_for_logic)
