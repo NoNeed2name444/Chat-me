@@ -4,6 +4,7 @@ from app.api.verify import router as verify_router
 from app.api.drug import router as drug_router
 from app.api.documents import router as documents_router
 from app.api.questions import router as questions_router
+from app.api.benchmark import router as benchmark_router
 from app.config import settings
 
 app = FastAPI(
@@ -16,6 +17,7 @@ app.include_router(verify_router, prefix="/v1")
 app.include_router(drug_router, prefix="/v1")
 app.include_router(documents_router, prefix="/v1")
 app.include_router(questions_router, prefix="/v1")
+app.include_router(benchmark_router, prefix="/v1")
 
 @app.get("/health")
 def health():
