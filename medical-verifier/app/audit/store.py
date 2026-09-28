@@ -22,6 +22,8 @@ _EVIDENCE_COLUMNS = {
     "source_date": "TEXT",
     "curriculum_snapshot_id": "TEXT",
     "source_authority": "REAL DEFAULT 0.4",
+    "extraction_quality": "REAL DEFAULT 1.0",
+    "extraction_warnings": "TEXT DEFAULT []",
 }
 
 def _connect():
@@ -66,6 +68,8 @@ def _connect():
             source_date TEXT,
             curriculum_snapshot_id TEXT,
             source_authority REAL DEFAULT 0.4,
+            extraction_quality REAL DEFAULT 1.0,
+            extraction_warnings TEXT DEFAULT "[]",
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -105,10 +109,13 @@ def store_evidence(
     source_authority=0.40,
     source_locator=None,
     source_snapshot_sha256=None,
+    extraction_quality=1.0,
+    extraction_warnings=None,
 ):
     evidence_id = f"local:{uuid4()}"
     passage_hash = _sha256(passage)
     snapshot_hash = source_snapshot_sha256 or passage_hash
+    extraction_warnings = extraction_warnings or []
 
     conn = _connect()
 
@@ -118,8 +125,8 @@ def store_evidence(
             "(id,title,source_type,publisher,url,source_locator,passage,source_family,"
             "canonical_id,source_snapshot_sha256,passage_sha256,"
             "document_version,study_family_id,source_date,"
-            "curriculum_snapshot_id,source_authority) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "curriculum_snapshot_id,source_authority,extraction_quality,extraction_warnings) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 evidence_id,
                 title,
@@ -137,6 +144,8 @@ def store_evidence(
                 source_date,
                 curriculum_snapshot_id,
                 source_authority,
+                extraction_quality,
+                json.dumps(extraction_warnings),
             ),
         )
         conn.commit()
