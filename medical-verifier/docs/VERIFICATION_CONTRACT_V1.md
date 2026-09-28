@@ -1,14 +1,14 @@
-# Verification contract v1.0
+# Verification contract v1.1
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.0`
+Current contract: `1.1`
 
 A client sends `verification_contract_version`.
 
-The server echoes its supported contract version.
+The client also sends explicit question context when an answer is being evaluated. This prevents a dangerous treatment question from becoming invisible to the server safety gate.
 
 A mismatch produces:
 
