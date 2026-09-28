@@ -89,3 +89,96 @@ def test_question_validation_does_not_grade_conflicting_sources_as_correct():
     )
     assert result.status == "SOURCE_CONFLICT"
     assert result.requires_review is True
+
+
+def test_cross_sentence_condition_cannot_be_dropped():
+    result = verify(
+        "The dose is 5 mg.",
+        "For patients with severe renal impairment, use 5 mg. The dose should be monitored.",
+    )
+    assert result.label == "UNKNOWN"
+    assert "conditional_scope_missing" in result.reasons
+
+def test_cross_sentence_condition_can_be_preserved():
+    result = verify(
+        "For patients with severe renal impairment, use 5 mg.",
+        "For patients with severe renal impairment, use 5 mg. The dose should be monitored.",
+    )
+    assert result.label == "SUPPORTS"
+
+def test_concentration_arithmetic_is_conservative_and_equivalent():
+    result = verify(
+        "The daily dose is 200 mg.",
+        "The concentration is 10 mg/mL. Take 10 mL twice daily.",
+    )
+    assert result.label == "SUPPORTS"
+
+def test_weight_based_arithmetic_requires_explicit_weight():
+    result = verify(
+        "The daily dose is 100 mg for a 20 kg patient.",
+        "Use 5 mg/kg/day for a 20 kg patient.",
+    )
+    assert result.label == "SUPPORTS"
+
+def test_document_precedence_selects_only_explicit_higher_rank():
+    support = make_item(
+        "Drug X increases bleeding.",
+        id="old",
+    )
+    support = support.model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 1,
+        }
+    )
+    newer = make_item(
+        "Drug X does not increase bleeding.",
+        id="new",
+    ).model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 2,
+        }
+    )
+
+    result = assess_curriculum_fidelity(
+        "Drug X increases bleeding.",
+        [support, newer],
+    )
+
+    assert result.status == "UNCERTAIN"
+    assert "old" not in result.matched_source_ids
+    assert "new" in result.matched_source_ids
+    assert any(
+        "explicit precedence excluded" in reason.lower()
+        for reason in result.reasons
+    )
+
+def test_question_validation_uses_the_same_precedence_rule():
+    old = make_item(
+        "Drug X increases bleeding.",
+        id="old",
+    ).model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 1,
+        }
+    )
+    newer = make_item(
+        "Drug X does not increase bleeding.",
+        id="new",
+    ).model_copy(
+        update={
+            "precedence_group": "drug-x-guideline",
+            "precedence_rank": 2,
+        }
+    )
+
+    result = validate_question(
+        "Does Drug X increase bleeding?",
+        "Drug X does not increase bleeding.",
+        [old, newer],
+    )
+
+    assert result.status == "VALIDATED"
+    assert result.requires_review is False
