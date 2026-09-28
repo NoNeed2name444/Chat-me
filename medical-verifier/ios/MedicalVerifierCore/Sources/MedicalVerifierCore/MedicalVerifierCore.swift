@@ -306,6 +306,16 @@ private enum SafetyClassifier {
     }
 }
 
+private struct AtomicClaim {
+    let text: String
+    let relation: String?
+    let polarity: Bool
+    let temporal: Set<String>
+    let safety: String?
+    let subjectAnchor: String
+    let objectAnchor: String
+}
+
 private enum SemanticGuard {
     static func validate(
         claim: String,
@@ -317,7 +327,11 @@ private enum SemanticGuard {
         let normalizedSource = normalizeDoubleNegation(
             normalizeMultilingualTerms(source)
         )
-        var warnings: [String] = []
+        var warnings: [String] =
+            atomicReasoningWarnings(
+                claim: normalizedClaim,
+                source: normalizedSource
+            )
 
         let dailyClaim = dailyDoseEquivalent(in: normalizedClaim)
         let dailySource = dailyDoseEquivalent(in: normalizedSource)
@@ -399,6 +413,305 @@ private enum SemanticGuard {
         }
 
         return warnings
+    }
+
+    private static func atomicReasoningWarnings(
+        claim: String,
+        source: String
+    ) -> [String] {
+        let claimAtoms = atomicClaims(in: claim)
+        let sourceAtoms = atomicClaims(in: source)
+
+        guard !claimAtoms.isEmpty else {
+            return []
+        }
+
+        var warnings: [String] = []
+
+        for claimAtom in claimAtoms {
+            var matched = false
+            var failureReason = "atomic_claim_not_entailed"
+
+            for sourceAtom in sourceAtoms {
+                let overlapValue = tokenOverlap(
+                    claimAtom.text,
+                    sourceAtom.text
+                )
+
+                guard overlapValue >= 0.55 else {
+                    continue
+                }
+
+                if !claimAtom.subjectAnchor.isEmpty &&
+                    !sourceAtom.subjectAnchor.isEmpty &&
+                    claimAtom.subjectAnchor != sourceAtom.subjectAnchor {
+                    failureReason = "atomic_subject_mismatch"
+                    continue
+                }
+
+                if !claimAtom.objectAnchor.isEmpty &&
+                    !sourceAtom.objectAnchor.isEmpty &&
+                    claimAtom.objectAnchor != sourceAtom.objectAnchor {
+                    failureReason = "atomic_object_mismatch"
+                    continue
+                }
+
+                if claimAtom.relation == "causal" &&
+                    sourceAtom.relation != "causal" {
+                    failureReason =
+                        "causal_claim_requires_causal_evidence"
+                    continue
+                }
+
+                if claimAtom.relation == "interaction" &&
+                    sourceAtom.relation != "interaction" {
+                    failureReason =
+                        "interaction_claim_requires_interaction_evidence"
+                    continue
+                }
+
+                if claimAtom.relation == "contraindication" &&
+                    sourceAtom.relation != "contraindication" {
+                    failureReason =
+                        "contraindication_claim_requires_contraindication_evidence"
+                    continue
+                }
+
+                if let relation = claimAtom.relation,
+                    relation != "mixed",
+                    relation != "unclassified",
+                    sourceAtom.relation != relation &&
+                    sourceAtom.relation != "mixed" {
+                    failureReason = "atomic_relation_mismatch"
+                    continue
+                }
+
+                if !claimAtom.temporal.isEmpty &&
+                    claimAtom.temporal != sourceAtom.temporal {
+                    failureReason = sourceAtom.temporal.isEmpty
+                        ? "temporal_scope_missing"
+                        : "temporal_scope_mismatch"
+                    continue
+                }
+
+                if claimAtom.safety != nil &&
+                    claimAtom.safety != sourceAtom.safety {
+                    failureReason = "safety_relation_mismatch"
+                    continue
+                }
+
+                if claimAtom.polarity != sourceAtom.polarity {
+                    failureReason = "atomic_polarity_mismatch"
+                    continue
+                }
+
+                matched = true
+                break
+            }
+
+            if !matched {
+                warnings.append(failureReason)
+            }
+        }
+
+        return Array(Set(warnings)).sorted()
+    }
+
+    private static func atomicClaims(
+        in text: String
+    ) -> [AtomicClaim] {
+        let fragments = text
+            .split { character in
+                character == "." ||
+                character == ";" ||
+                character == "!" ||
+                character == "?"
+            }
+            .map(String.init)
+            .map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty }
+
+        return fragments.map { fragment in
+            let lower = fragment.lowercased()
+            let relationValue = relation(in: fragment)
+            let relationName = relationValue ?? "unclassified"
+
+            return AtomicClaim(
+                text: fragment,
+                relation: relationValue,
+                polarity: polarity(of: fragment),
+                temporal: temporalSignature(in: fragment),
+                safety: safetyRelation(in: fragment),
+                subjectAnchor: anchor(
+                    in: fragment,
+                    relation: relationName,
+                    before: true
+                ),
+                objectAnchor: anchor(
+                    in: fragment,
+                    relation: relationName,
+                    before: false
+                )
+            )
+        }
+    }
+
+    private static func temporalSignature(
+        in text: String
+    ) -> Set<String> {
+        let lower = text.lowercased()
+        var result: Set<String> = []
+
+        if [
+            "previously", "prior", "history of",
+            "in the past", "was", "were"
+        ].contains(where: { lower.contains($0) }) {
+            result.insert("past")
+        }
+
+        if [
+            "currently", "at present", "now",
+            "is taking", "are taking"
+        ].contains(where: { lower.contains($0) }) {
+            result.insert("current")
+        }
+
+        if [
+            "will", "planned", "plan to",
+            "expected to", "intends to", "future"
+        ].contains(where: { lower.contains($0) }) {
+            result.insert("future")
+        }
+
+        if ["before", "prior to"].contains(where: {
+            lower.contains($0)
+        }) {
+            result.insert("before_event")
+        }
+
+        if ["after", "following"].contains(where: {
+            lower.contains($0)
+        }) {
+            result.insert("after_event")
+        }
+
+        return result
+    }
+
+    private static func safetyRelation(
+        in text: String
+    ) -> String? {
+        let lower = text.lowercased()
+
+        if lower.contains("interacts with")
+            || lower.contains("interaction")
+            || lower.contains("do not combine")
+            || lower.contains("should not be combined")
+            || lower.contains("concomitant use") {
+            return "interaction"
+        }
+
+        if lower.contains("contraindicated")
+            || lower.contains("contraindication")
+            || lower.contains("should not use")
+            || lower.contains("do not use")
+            || lower.contains("avoid") {
+            return "contraindication"
+        }
+
+        return nil
+    }
+
+    private static func anchor(
+        in text: String,
+        relation: String,
+        before: Bool
+    ) -> String {
+        let lower = text.lowercased()
+        let phrases: [String]
+
+        switch relation {
+        case "causal":
+            phrases = [
+                "causes", "caused", "leads to",
+                "results in", "prevents"
+            ]
+        case "risk_increase":
+            phrases = ["increases", "raises", "elevates", "higher"]
+        case "risk_decrease":
+            phrases = ["reduces", "lowers", "decreases"]
+        case "association":
+            phrases = [
+                "associated with",
+                "correlated with",
+                "linked to"
+            ]
+        case "effectiveness":
+            phrases = ["effective", "effectiveness", "efficacy"]
+        case "interaction":
+            phrases = [
+                "interacts with",
+                "interaction",
+                "do not combine",
+                "concomitant use"
+            ]
+        case "contraindication":
+            phrases = [
+                "contraindicated",
+                "contraindication",
+                "should not use",
+                "do not use",
+                "avoid"
+            ]
+        default:
+            return ""
+        }
+
+        guard let phrase = phrases.first(where: {
+            lower.range(of: $0) != nil
+        }),
+        let range = lower.range(of: phrase) else {
+            return ""
+        }
+
+        let fragment = before
+            ? String(lower[..<range.lowerBound])
+            : String(lower[range.upperBound...])
+
+        let tokens = fragment
+            .split {
+                !$0.isLetter && !$0.isNumber
+            }
+            .map(String.init)
+            .filter {
+                ![
+                    "a", "an", "the", "and", "or", "but",
+                    "for", "with", "in", "on", "to", "of",
+                    "is", "are", "was", "were"
+                ].contains($0)
+            }
+
+        if before {
+            return tokens.suffix(2).joined(separator: " ")
+        }
+
+        return tokens.prefix(2).joined(separator: " ")
+    }
+
+    private static func tokenOverlap(
+        _ lhs: String,
+        _ rhs: String
+    ) -> Double {
+        let left = normalizedTokens(lhs)
+        guard !left.isEmpty else {
+            return 0
+        }
+
+        let right = normalizedTokens(rhs)
+        return Double(left.intersection(right).count)
+            / Double(left.count)
     }
 
     private struct ScopeStrength {
@@ -1060,6 +1373,20 @@ private enum SemanticGuard {
         in text: String
     ) -> String? {
         let lower = text.lowercased()
+
+        if lower.contains("interacts with")
+            || lower.contains("interaction")
+            || lower.contains("do not combine") {
+            return "interaction"
+        }
+
+        if lower.contains("contraindicated")
+            || lower.contains("contraindication")
+            || lower.contains("should not use")
+            || lower.contains("do not use")
+            || lower.contains("avoid") {
+            return "contraindication"
+        }
 
         if lower.contains("associated with")
             || lower.contains("correlated with")
