@@ -7,6 +7,11 @@ VerificationMode = Literal[
     "curriculum_update_aware",
 ]
 
+ProvenanceMode = Literal[
+    "permissive",
+    "bound",
+]
+
 class ClaimRequest(BaseModel):
     claim: str = Field(min_length=3, max_length=5000)
     context: dict[str, Any] = Field(default_factory=dict)
@@ -21,7 +26,8 @@ class ClaimRequest(BaseModel):
     curriculum_source_ids: list[str] = Field(default_factory=list)
     curriculum_snapshot: str | None = None
     question_context: str | None = None
-    verification_contract_version: str = "1.7"
+    provenance_mode: ProvenanceMode = "permissive"
+    verification_contract_version: str = "1.8"
 
 class NormalizedClaim(BaseModel):
     original: str
