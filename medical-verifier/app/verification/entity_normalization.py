@@ -22,7 +22,7 @@ class NormalizedEntity:
 
 
 def normalize_entity(name: str, aliases: dict[str, str] | None = None) -> NormalizedEntity:
-    table = aliases or DEFAULT_ALIASES
+    table = aliases if aliases is not None else DEFAULT_ALIASES
     original = " ".join(name.lower().split())
     canonical = table.get(original)
     return NormalizedEntity(original, canonical, canonical is not None)
