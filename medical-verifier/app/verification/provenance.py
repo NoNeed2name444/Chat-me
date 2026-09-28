@@ -13,23 +13,30 @@ def evidence_provenance_warnings(item, *, mode: str = "permissive") -> tuple[str
         return ()
 
     warnings: list[str] = []
+    source_family = str(getattr(item, "source_family", "") or "")
+    canonical_id = getattr(item, "canonical_id", None)
+    source_snapshot_sha256 = getattr(item, "source_snapshot_sha256", None)
+    passage_sha256 = getattr(item, "passage_sha256", None)
+    passage = getattr(item, "passage", None)
+    if passage is None:
+        passage = getattr(item, "evidence", "")
 
-    if not item.source_family.strip():
+    if not source_family.strip():
         warnings.append("missing_source_family")
 
-    if not item.canonical_id or not item.canonical_id.strip():
+    if not canonical_id or not str(canonical_id).strip():
         warnings.append("missing_canonical_id")
 
-    if not item.source_snapshot_sha256:
+    if not source_snapshot_sha256:
         warnings.append("missing_source_snapshot_sha256")
-    elif not SHA256_RE.fullmatch(item.source_snapshot_sha256.lower()):
+    elif not SHA256_RE.fullmatch(str(source_snapshot_sha256).lower()):
         warnings.append("invalid_source_snapshot_sha256")
 
-    if not item.passage_sha256:
+    if not passage_sha256:
         warnings.append("missing_passage_sha256")
-    elif not SHA256_RE.fullmatch(item.passage_sha256.lower()):
+    elif not SHA256_RE.fullmatch(str(passage_sha256).lower()):
         warnings.append("invalid_passage_sha256")
-    elif item.passage_sha256 != sha256_text(item.passage):
+    elif str(passage_sha256).lower() != sha256_text(str(passage)):
         warnings.append("passage_hash_mismatch")
 
     return tuple(sorted(set(warnings)))
