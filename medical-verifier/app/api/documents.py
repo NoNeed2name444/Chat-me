@@ -20,6 +20,12 @@ class DocumentIngestRequest(BaseModel):
     curriculum_snapshot_id: str | None = None
     extraction_quality: float = Field(default=1.0, ge=0, le=1)
     extraction_warnings: list[str] = Field(default_factory=list)
+    page_number: int | None = Field(default=None, ge=1)
+    section: str | None = Field(default=None, max_length=500)
+    block_type: str = "text"
+    block_index: int | None = Field(default=None, ge=0)
+    precedence_group: str | None = Field(default=None, max_length=200)
+    precedence_rank: int = Field(default=0, ge=0)
     source_authority: float = Field(default=0.40, ge=0, le=1)
 
 @router.post("/documents/ingest")
@@ -40,12 +46,21 @@ def ingest_document(request: DocumentIngestRequest):
         extraction_quality=request.extraction_quality,
         extraction_warnings=request.extraction_warnings,
         source_authority=request.source_authority,
+        page_number=request.page_number,
+        section=request.section,
+        block_type=request.block_type,
+        block_index=request.block_index,
+        precedence_group=request.precedence_group,
+        precedence_rank=request.precedence_rank,
     )
     return {
         "status": "stored",
         "evidence_id": evidence_id,
         "curriculum_snapshot_id": request.curriculum_snapshot_id,
         "extraction_quality": request.extraction_quality,
+        "page_number": request.page_number,
+        "section": request.section,
+        "block_type": request.block_type,
         "warning": (
             "Stored evidence can define curriculum fidelity, but does not "
             "authorize clinical action."
