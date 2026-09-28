@@ -25,7 +25,7 @@ class LocalEvidenceProvider(EvidenceProvider):
 
         try:
             query = (
-                "SELECT id,title,source_type,publisher,url,passage,"
+                "SELECT id,title,source_type,publisher,url,source_locator,passage,"
                 "source_family,canonical_id,source_snapshot_sha256,"
                 "passage_sha256,document_version,study_family_id,"
                 "source_date,curriculum_snapshot_id,source_authority "
@@ -64,7 +64,7 @@ class LocalEvidenceProvider(EvidenceProvider):
         results = []
 
         for row in rows:
-            text = f"{row[1]} {row[5]}".lower()
+            text = f"{row[1]} {row[6]}".lower()
             overlap = sum(
                 1
                 for term in terms
@@ -77,7 +77,7 @@ class LocalEvidenceProvider(EvidenceProvider):
             source_date = None
             if row[12]:
                 try:
-                    source_date = date.fromisoformat(row[12])
+                    source_date = date.fromisoformat(row[13])
                 except ValueError:
                     pass
 
@@ -89,17 +89,17 @@ class LocalEvidenceProvider(EvidenceProvider):
                     source_type=row[2],
                     publisher=row[3],
                     url=row[4],
-                    source_locator=row[4],
-                    passage=row[5],
-                    source_family=row[6] or "",
-                    source_snapshot_sha256=row[8],
-                    passage_sha256=row[9],
-                    document_version=row[10],
-                    study_family_id=row[11],
+                    source_locator=row[5],
+                    passage=row[6],
+                    source_family=row[7] or "",
+                    source_snapshot_sha256=row[9],
+                    passage_sha256=row[10],
+                    document_version=row[11],
+                    study_family_id=row[12],
                     source_date=source_date,
-                    curriculum_snapshot_id=row[13],
-                    independence_group=row[11] or row[7] or row[0],
-                    source_authority=row[14] or 0.40,
+                    curriculum_snapshot_id=row[14],
+                    independence_group=row[12] or row[8] or row[0],
+                    source_authority=row[15] or 0.40,
                     retrieval_score=float(overlap),
                 )
             )
