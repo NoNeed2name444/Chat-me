@@ -44,6 +44,7 @@ def make_source(case):
             document_version="2022",
             extraction_quality=case.get("extraction_quality", 1.0),
             extraction_warnings=case.get("extraction_warnings", []),
+            language=case.get("language", "auto"),
         )
     ]
 
