@@ -1,3 +1,5 @@
+import re
+
 from dataclasses import dataclass
 
 from app.verification.adversarial import highest_severity, inspect_claim
