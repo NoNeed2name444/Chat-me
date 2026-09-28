@@ -86,7 +86,7 @@ _STOPWORDS = {
     "current", "now", "at", "present", "will", "planned", "plan",
     "expected", "future",
     "no", "not", "never", "without", "does", "doesn't",
-    "cannot", "can't",
+    "cannot", "can't", "has", "have", "had",
 }
 
 def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]:
