@@ -227,3 +227,24 @@ def test_custom_empty_alias_map_does_not_fall_back_to_defaults():
         "acetaminophen",
         aliases={},
     )
+
+
+def test_provenance_bound_mode_rejects_malformed_hash():
+    payload = {
+        "dataset_id": "demo",
+        "snapshot_id": "snapshot-1",
+        "provenance_bound": True,
+        "cases": [{
+            "case_id": "a",
+            "claim": "Drug A increases bleeding.",
+            "evidence": "Drug A increases bleeding.",
+            "expected": "SUPPORTS",
+            "source_family": "family-a",
+            "canonical_id": "source-1",
+            "source_snapshot_sha256": "not-a-hash",
+            "passage_sha256": "0" * 64,
+        }],
+    }
+    response = client.post("/v1/benchmark/integrity", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "provenance_bound_requires_complete_case_provenance"
