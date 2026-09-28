@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from app.verification.adversarial import highest_severity, inspect_claim
 from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify
+from app.verification.curriculum import _apply_explicit_precedence
 
 EXTRACTION_THRESHOLD = 0.85
 
@@ -39,10 +40,20 @@ def validate_question(prompt: str, answer: str, source_items):
             requires_review=True,
         )
 
+    source_items, precedence_excluded = _apply_explicit_precedence(
+        source_items
+    )
+
     answer_support = []
     answer_contradictions = []
     prompt_overlap = False
-    warnings = []
+    warnings = (
+        [
+            "explicit_precedence_excluded:" + ",".join(precedence_excluded)
+        ]
+        if precedence_excluded
+        else []
+    )
     extraction_uncertain = False
 
     prompt_terms = {
