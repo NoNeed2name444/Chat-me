@@ -473,7 +473,7 @@ public struct CurriculumVerifier: Sendable {
                 supportingSourceIDs: supported,
                 warnings: Array(Set(warnings)).sorted(),
                 requiresHumanReview: risk != .low || !warnings.isEmpty,
-                snapshotIDs: sources.map(.snapshotID)
+                snapshotIDs: sources.map { $0.snapshotID }
             )
         }
 
@@ -484,7 +484,7 @@ public struct CurriculumVerifier: Sendable {
                 supportingSourceIDs: supported,
                 warnings: Array(Set(warnings)).sorted(),
                 requiresHumanReview: true,
-                snapshotIDs: sources.map(.snapshotID)
+                snapshotIDs: sources.map { $0.snapshotID }
             )
         }
 
@@ -496,7 +496,7 @@ public struct CurriculumVerifier: Sendable {
                 warnings + ["answer_not_supported_by_curriculum"]
             )).sorted(),
             requiresHumanReview: true,
-            snapshotIDs: sources.map(.snapshotID)
+            snapshotIDs: sources.map { $0.snapshotID }
         )
     }
 }
