@@ -1,10 +1,10 @@
-# Verification contract v1.6
+# Verification contract v1.7
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.6`
+Current contract: `1.7`
 
 A client sends `verification_contract_version`.
 
@@ -104,3 +104,20 @@ treated as supported. Missing or mismatched temporal/safety relationships remain
 uncertain and require review.
 
 The contract still does not imply clinical validation or calibrated probability.
+
+
+## v1.7 additions
+
+The benchmark contract now supports:
+
+- versioned benchmark records with explicit expected verdict labels
+- deterministic benchmark snapshot manifests with parent-hash lineage
+- exact duplicate and train/test duplicate detection
+- descriptive subgroup and abstention summaries
+- supplied-confidence bin diagnostics without a calibration claim
+- conservative explicit date normalization requiring a reference date for relative windows
+- explicit alias-only entity normalization with unknown/near-spelling entities left unresolved
+- an API integrity-validation lane that returns the snapshot digest and deterministic findings
+
+Benchmark integrity is an engineering control, not evidence of clinical validity, dataset
+representativeness, independence, safety, or regulatory compliance.
