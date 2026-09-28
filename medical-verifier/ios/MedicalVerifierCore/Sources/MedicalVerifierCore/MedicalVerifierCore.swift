@@ -732,7 +732,7 @@ private enum SemanticGuard {
             selected.append(token)
             seenSubstantive = true
 
-            if selected.count >= 3 {
+            if selected.count >= 2 {
                 break
             }
         }
