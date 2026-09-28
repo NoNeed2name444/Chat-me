@@ -4,7 +4,7 @@ The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.4
+Current contract: `1.5
 
 A client sends `verification_contract_version`.
 
