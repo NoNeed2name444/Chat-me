@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from app.audit.store import store_evidence
 
@@ -22,7 +23,10 @@ class DocumentIngestRequest(BaseModel):
     extraction_warnings: list[str] = Field(default_factory=list)
     page_number: int | None = Field(default=None, ge=1)
     section: str | None = Field(default=None, max_length=500)
-    block_type: str = "text"
+    block_type: Literal[
+        "text", "table", "figure", "caption",
+        "footnote", "header", "unknown"
+    ] = "text"
     block_index: int | None = Field(default=None, ge=0)
     precedence_group: str | None = Field(default=None, max_length=200)
     precedence_rank: int = Field(default=0, ge=0)
