@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from app.audit.store import fetch_question, store_question
 from app.config import settings
 from app.models.question import QuestionArtifact
 from app.retrieval.local import LocalEvidenceProvider
@@ -33,7 +34,7 @@ def create_question(request: QuestionCreateRequest):
         evidence,
     )
 
-    return QuestionArtifact(
+    artifact = QuestionArtifact(
         question_id=f"question:{uuid4()}",
         prompt=request.prompt,
         answer=request.answer,
@@ -56,3 +57,14 @@ def create_question(request: QuestionCreateRequest):
         generated_at=datetime.now(timezone.utc).isoformat(),
         generator_version=settings.verifier_version,
     )
+
+    store_question(artifact)
+    return artifact
+
+@router.get("/questions/{question_id}", response_model=QuestionArtifact)
+def get_question(question_id: str):
+    data = fetch_question(question_id)
+    if data is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="question_not_found")
+    return QuestionArtifact.model_validate(data)
