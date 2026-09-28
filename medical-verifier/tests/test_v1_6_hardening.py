@@ -36,60 +36,56 @@ def _record(case_id="a", split="unspecified", source_family="family-a"):
 
 
 def test_snapshot_round_trip_and_hash_binding():
-    manifest = BenchmarkManifest(
-        "1.6",
-        "demo",
-        "snapshot-1",
-        ("a",),
-    )
-    snapshot = BenchmarkSnapshot(
-        schema_version=SNAPSHOT_SCHEMA_VERSION,
-        manifest=manifest,
+    snapshot = BenchmarkSnapshot.from_cases(
+        dataset_id="demo",
+        snapshot_id="snapshot-1",
         cases=(_record(),),
     )
     payload = snapshot.export_dict()
     loaded = BenchmarkSnapshot.from_dict(payload)
 
     assert loaded.export_json() == snapshot.export_json()
-    assert loaded.manifest.digest() == manifest.digest()
+    assert loaded.manifest.digest() == snapshot.manifest.digest()
 
 
 def test_tampered_manifest_hash_is_rejected():
-    manifest = BenchmarkManifest(
-        "1.6",
-        "demo",
-        "snapshot-1",
-        ("a",),
+    snapshot = BenchmarkSnapshot.from_cases(
+        dataset_id="demo",
+        snapshot_id="snapshot-1",
+        cases=(_record(),),
     )
-    payload = {
-        "schema_version": "1.6",
-        "manifest": {
-            **manifest.to_dict(),
-            "snapshot_sha256": "f" * 64,
-        },
-        "cases": [snapshot_case(_record())],
-    }
+    payload = snapshot.export_dict()
+    payload["manifest"]["snapshot_sha256"] = "f" * 64
 
     with pytest.raises(ValueError, match="manifest_hash_mismatch"):
         BenchmarkSnapshot.from_dict(payload)
 
 
-def snapshot_case(case):
-    return {
-        "case_id": case.case_id,
-        "claim": case.claim,
-        "evidence": case.evidence,
-        "expected": case.expected,
-        "subgroup": case.subgroup,
-        "risk_level": case.risk_level,
-        "source_family": case.source_family,
-        "study_family_id": case.study_family_id,
-        "canonical_id": case.canonical_id,
-        "independence_group": case.independence_group,
-        "source_snapshot_sha256": case.source_snapshot_sha256,
-        "passage_sha256": case.passage_sha256,
-        "split": case.split,
-    }
+def test_snapshot_rejects_unsorted_manifest_case_ids():
+    snapshot = BenchmarkSnapshot.from_cases(
+        dataset_id="demo",
+        snapshot_id="snapshot-1",
+        cases=(_record("a"), _record("b")),
+    )
+    payload = snapshot.export_dict()
+    payload["manifest"]["case_ids"] = ["b", "a"]
+
+    with pytest.raises(ValueError, match="manifest_case_ids_must_be_sorted"):
+        BenchmarkSnapshot.from_dict(payload)
+
+
+def test_snapshot_rejects_missing_manifest_hash():
+    snapshot = BenchmarkSnapshot.from_cases(
+        dataset_id="demo",
+        snapshot_id="snapshot-1",
+        cases=(_record(),),
+    )
+    payload = snapshot.export_dict()
+    payload["manifest"].pop("snapshot_sha256")
+
+    with pytest.raises(ValueError, match="missing_or_invalid_manifest_hash"):
+        BenchmarkSnapshot.from_dict(payload)
+
 
 
 def test_duplicate_case_ids_are_explicit():
