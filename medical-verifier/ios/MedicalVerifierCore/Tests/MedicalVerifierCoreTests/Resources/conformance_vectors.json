@@ -42,6 +42,16 @@
       "requires_review": true
     },
     {
+      "id": "equivalent_units",
+      "prompt": "What is the dose?",
+      "answer": "The dose is 500 mcg.",
+      "source_title": "Course",
+      "source_passage": "The dose is 0.5 mg.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
       "id": "population_widening",
       "prompt": "Who benefits from Treatment A?",
       "answer": "Treatment A is effective in children.",
