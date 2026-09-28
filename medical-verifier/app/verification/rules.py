@@ -24,4 +24,21 @@ def deterministic_checks(claim):
     )):
         flags.append("direct_treatment_action_request")
 
+    if (
+        any(term in t for term in (
+            "overdose", "poisoning", "poisoned",
+            "severe bleeding", "chest pain",
+            "difficulty breathing", "anaphylaxis",
+        ))
+        and any(
+            phrase in t
+            for phrase in (
+                "what should i do", "what do i do",
+                "should i", "can i", "may i",
+            )
+        )
+    ):
+        flags.append("urgent_safety_action_request")
+
     return flags
+
