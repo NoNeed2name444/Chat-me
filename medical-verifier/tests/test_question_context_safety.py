@@ -11,7 +11,7 @@ def test_treatment_question_context_cannot_be_hidden_by_benign_answer():
             "claim": "Yes.",
             "question_context": "Should I stop warfarin immediately?",
             "sources": ["pubmed"],
-            "verification_contract_version": "1.1",
+            "verification_contract_version": "1.8",
         },
     )
 
