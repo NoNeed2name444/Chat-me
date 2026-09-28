@@ -1,6 +1,12 @@
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
+VerificationMode = Literal[
+    "current_medical",
+    "curriculum_faithful",
+    "curriculum_update_aware",
+]
+
 class ClaimRequest(BaseModel):
     claim: str = Field(min_length=3, max_length=5000)
     context: dict[str, Any] = Field(default_factory=dict)
@@ -10,6 +16,10 @@ class ClaimRequest(BaseModel):
     requested_evidence_level: Literal[
         "any", "authoritative", "highest_available"
     ] = "authoritative"
+
+    verification_mode: VerificationMode = "current_medical"
+    curriculum_source_ids: list[str] = Field(default_factory=list)
+    curriculum_snapshot: str | None = None
 
 class NormalizedClaim(BaseModel):
     original: str
