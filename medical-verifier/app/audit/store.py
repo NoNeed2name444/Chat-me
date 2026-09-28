@@ -16,7 +16,6 @@ _EVIDENCE_COLUMNS = {
     "passage": "TEXT",
     "source_family": "TEXT",
     "canonical_id": "TEXT",
-    "source_snapshot_sha256": "TEXT",
     "passage_sha256": "TEXT",
     "document_version": "TEXT",
     "study_family_id": "TEXT",
@@ -120,7 +119,7 @@ def store_evidence(
             "canonical_id,source_snapshot_sha256,passage_sha256,"
             "document_version,study_family_id,source_date,"
             "curriculum_snapshot_id,source_authority) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 evidence_id,
                 title,
