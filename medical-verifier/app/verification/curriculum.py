@@ -84,9 +84,7 @@ def assess_curriculum_fidelity(claim: str, source_items):
             extraction_uncertain.append(item.id)
             continue
 
-        source_text = " ".join(
-            f"{item.title} {item.passage}".lower().split()
-        )
+        source_text = " ".join(item.passage.lower().split())
 
         overlap = sum(
             1 for term in terms if term in source_text
