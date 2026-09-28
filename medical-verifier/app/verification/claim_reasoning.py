@@ -100,12 +100,27 @@ def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]
     else:
         fragment = lower[start + len(phrase):]
 
+    raw_tokens = re.findall(r"[a-z0-9'-]+", fragment)
     tokens = [
         token
-        for token in re.findall(r"[a-z0-9'-]+", fragment)
-        if len(token) >= 3 and token not in _STOPWORDS
+        for token in raw_tokens
+        if token not in _STOPWORDS and len(token) >= 2
     ]
-    return tuple(tokens[-3:] if before else tokens[:3])
+
+    compounds = []
+    for index in range(len(raw_tokens) - 1):
+        left, right = raw_tokens[index:index + 2]
+        if left in _STOPWORDS and right in _STOPWORDS:
+            continue
+        if len(left) >= 2 or len(right) >= 1:
+            compounds.append(f"{left} {right}")
+
+    selected = (
+        tokens[-3:] + compounds[-2:]
+        if before
+        else tokens[:3] + compounds[:2]
+    )
+    return tuple(dict.fromkeys(selected))
 
 
 def _relation_types(text: str) -> tuple[str, ...]:
