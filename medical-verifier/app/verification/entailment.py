@@ -3,7 +3,7 @@ from datetime import date
 
 from app.verification.citation_integrity import verify_citation
 from app.verification.consistency import guard_specificity
-from app.verification.independent_entailment import verify as independent_verify
+from app.verification.entailment_provider import AgreementGate, StructuredProvider
 from app.verification.semantic_guard import semantic_guard
 from app.verification.temporal_guard import guard_temporal_specificity
 
@@ -18,7 +18,9 @@ def assess_entailment(item, claim):
     item, citation_warnings = verify_citation(item)
     warnings.extend(citation_warnings)
 
-    independent = independent_verify(
+    independent = AgreementGate(
+        [StructuredProvider()]
+    ).assess(
         claim,
         f"{item.title} {item.passage}",
     )
