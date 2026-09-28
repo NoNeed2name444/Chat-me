@@ -248,3 +248,13 @@ def test_provenance_bound_mode_rejects_malformed_hash():
     response = client.post("/v1/benchmark/integrity", json=payload)
     assert response.status_code == 422
     assert response.json()["detail"] == "provenance_bound_requires_complete_case_provenance"
+
+
+def test_generic_drug_anchor_cannot_cross_subjects():
+    from app.verification.independent_entailment import verify
+    result = verify(
+        "Drug A increases bleeding.",
+        "Drug B increases bleeding.",
+    )
+    assert result.label == "UNKNOWN"
+    assert "atomic_subject_mismatch" in result.reasons
