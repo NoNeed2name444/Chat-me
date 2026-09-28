@@ -1,15 +1,11 @@
-"""Versioned benchmark snapshot import/export and manifest verification.
-
-Snapshot checks are deterministic engineering controls. They do not establish
-clinical validity, representativeness, independence, or calibration.
-"""
+"""Versioned benchmark snapshots with content-bound manifest verification."""
 
 from dataclasses import dataclass
 import json
 from typing import Any, Iterable
 
 from app.verification.benchmark_dataset import BenchmarkRecord
-from app.verification.benchmark_manifest import BenchmarkManifest
+from app.verification.benchmark_manifest import BenchmarkManifest, case_digest
 
 SNAPSHOT_SCHEMA_VERSION = "1.6"
 
@@ -53,87 +49,86 @@ def _records_from_payload(rows: Iterable[dict[str, Any]]) -> tuple[BenchmarkReco
     )
 
 
+def _manifest_for_cases(raw_manifest: dict[str, Any], cases: tuple[BenchmarkRecord, ...]) -> BenchmarkManifest:
+    case_ids = tuple(case.case_id for case in cases)
+    expected_digests = tuple(case_digest(case) for case in cases)
+    supplied_digests = raw_manifest.get("case_digests")
+    if not isinstance(supplied_digests, list):
+        raise ValueError("missing_case_digests")
+    if tuple(supplied_digests) != expected_digests:
+        raise ValueError("case_digest_mismatch")
+
+    return BenchmarkManifest(
+        manifest_version=str(raw_manifest.get("manifest_version", "")),
+        dataset_id=str(raw_manifest.get("dataset_id", "")),
+        snapshot_id=str(raw_manifest.get("snapshot_id", "")),
+        case_ids=case_ids,
+        parent_snapshot_sha256=raw_manifest.get("parent_snapshot_sha256"),
+        case_digests=expected_digests,
+    )
+
+
 @dataclass(frozen=True)
 class BenchmarkSnapshot:
     schema_version: str
     manifest: BenchmarkManifest
     cases: tuple[BenchmarkRecord, ...]
 
+    @classmethod
+    def from_cases(
+        cls,
+        *,
+        dataset_id: str,
+        snapshot_id: str,
+        cases: Iterable[BenchmarkRecord],
+        parent_snapshot_sha256: str | None = None,
+    ) -> "BenchmarkSnapshot":
+        ordered = tuple(sorted(cases, key=lambda item: item.case_id))
+        manifest = BenchmarkManifest(
+            manifest_version=SNAPSHOT_SCHEMA_VERSION,
+            dataset_id=dataset_id,
+            snapshot_id=snapshot_id,
+            case_ids=tuple(case.case_id for case in ordered),
+            parent_snapshot_sha256=parent_snapshot_sha256,
+            case_digests=tuple(case_digest(case) for case in ordered),
+        )
+        return cls(SNAPSHOT_SCHEMA_VERSION, manifest, ordered)
+
     def export_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "manifest": self.manifest.to_dict(),
-            "cases": [
-                _record_to_dict(case)
-                for case in sorted(self.cases, key=lambda item: item.case_id)
-            ],
+            "cases": [_record_to_dict(case) for case in self.cases],
         }
 
     def export_json(self) -> str:
-        return json.dumps(
-            self.export_dict(),
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        return json.dumps(self.export_dict(), sort_keys=True, separators=(",", ":"))
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "BenchmarkSnapshot":
         if not isinstance(payload, dict):
             raise ValueError("snapshot_payload_must_be_object")
-
-        version = str(payload.get("schema_version", ""))
-        if version != SNAPSHOT_SCHEMA_VERSION:
+        if str(payload.get("schema_version", "")) != SNAPSHOT_SCHEMA_VERSION:
             raise ValueError("unsupported_snapshot_schema_version")
 
         raw_manifest = payload.get("manifest")
+        raw_cases = payload.get("cases")
         if not isinstance(raw_manifest, dict):
             raise ValueError("missing_snapshot_manifest")
-
-        manifest_version = str(raw_manifest.get("manifest_version", ""))
-        if manifest_version != SNAPSHOT_SCHEMA_VERSION:
-            raise ValueError("unsupported_manifest_version")
-
-        raw_case_ids = raw_manifest.get("case_ids")
-        if not isinstance(raw_case_ids, list):
-            raise ValueError("manifest_case_ids_must_be_array")
-
-        raw_cases = payload.get("cases")
         if not isinstance(raw_cases, list):
             raise ValueError("snapshot_cases_must_be_array")
 
-        case_ids = tuple(str(value) for value in raw_case_ids)
-        cases = tuple(sorted(
-            _records_from_payload(raw_cases),
-            key=lambda item: item.case_id,
-        ))
-        actual_case_ids = tuple(case.case_id for case in cases)
-
-        if len(actual_case_ids) != len(set(actual_case_ids)):
-            raise ValueError("duplicate_case_id")
-        if case_ids != tuple(sorted(case_ids)):
-            raise ValueError("manifest_case_ids_must_be_sorted")
-        if case_ids != actual_case_ids:
-            raise ValueError("manifest_case_ids_mismatch")
-
-        manifest = BenchmarkManifest(
-            manifest_version=manifest_version,
-            dataset_id=str(raw_manifest.get("dataset_id", "")),
-            snapshot_id=str(raw_manifest.get("snapshot_id", "")),
-            case_ids=case_ids,
-            parent_snapshot_sha256=raw_manifest.get("parent_snapshot_sha256"),
-        )
-
+        cases = tuple(sorted(_records_from_payload(raw_cases), key=lambda item: item.case_id))
+        manifest = _manifest_for_cases(raw_manifest, cases)
         supplied_hash = raw_manifest.get("snapshot_sha256")
         if not isinstance(supplied_hash, str) or len(supplied_hash) != 64:
             raise ValueError("missing_or_invalid_manifest_hash")
         if supplied_hash != manifest.digest():
             raise ValueError("manifest_hash_mismatch")
+        if manifest.validate():
+            raise ValueError("invalid_manifest")
 
-        return cls(
-            schema_version=version,
-            manifest=manifest,
-            cases=cases,
-        )
+        return cls(SNAPSHOT_SCHEMA_VERSION, manifest, cases)
 
 
 def verify_snapshot_manifest(
@@ -141,23 +136,18 @@ def verify_snapshot_manifest(
     *,
     expected_snapshot_sha256: str | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
-    recomputed = snapshot.manifest.digest()
     problems: list[str] = []
+    expected_digests = tuple(case_digest(case) for case in snapshot.cases)
 
     if snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION:
         problems.append("unsupported_snapshot_schema_version")
     if snapshot.manifest.manifest_version != SNAPSHOT_SCHEMA_VERSION:
         problems.append("unsupported_manifest_version")
-
-    case_ids = [case.case_id for case in snapshot.cases]
-    if len(case_ids) != len(set(case_ids)):
-        problems.append("duplicate_case_id")
-
-    manifest_ids = list(snapshot.manifest.case_ids)
-    if manifest_ids != case_ids:
+    if snapshot.manifest.case_digests != expected_digests:
+        problems.append("case_digest_mismatch")
+    if snapshot.manifest.case_ids != tuple(case.case_id for case in snapshot.cases):
         problems.append("manifest_case_ids_mismatch")
-
-    if expected_snapshot_sha256 is not None and expected_snapshot_sha256 != recomputed:
+    if expected_snapshot_sha256 is not None and expected_snapshot_sha256 != snapshot.manifest.digest():
         problems.append("manifest_hash_mismatch")
 
     return not problems, tuple(sorted(set(problems)))
