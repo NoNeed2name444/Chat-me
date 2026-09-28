@@ -4,6 +4,8 @@ from app.models.benchmark import (
     BenchmarkCaseRequest,
     BenchmarkIntegrityRequest,
     BenchmarkIntegrityResponse,
+    BenchmarkSnapshotVerifyRequest,
+    BenchmarkSnapshotVerifyResponse,
 )
 from app.verification.benchmark_dataset import ALLOWED_LABELS, BenchmarkRecord
 from app.verification.benchmark_manifest import (
@@ -11,6 +13,7 @@ from app.verification.benchmark_manifest import (
     BenchmarkManifest,
     case_digest,
 )
+from app.verification.benchmark_snapshot import BenchmarkSnapshot
 from app.verification.dataset_integrity import (
     IntegrityFinding,
     find_cross_split_duplicates,
@@ -146,5 +149,106 @@ def benchmark_integrity(request: BenchmarkIntegrityRequest):
             "A clean result does not establish clinical validity or dataset independence.",
             "The snapshot digest binds manifest metadata and canonicalized case content; it is not a digital signature.",
             "Source-family/study-family overlap is a leakage warning and is not a clinical quality measure.",
+        ],
+    )
+
+
+@router.post(
+    "/benchmark/snapshot/verify",
+    response_model=BenchmarkSnapshotVerifyResponse,
+)
+def verify_benchmark_snapshot(request: BenchmarkSnapshotVerifyRequest):
+    try:
+        snapshot = BenchmarkSnapshot.from_dict(request.snapshot)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"invalid_benchmark_snapshot:{exc}",
+        ) from exc
+
+    if request.expected_snapshot_sha256 is not None:
+        valid_hash, hash_problems = snapshot.manifest.digest() == request.expected_snapshot_sha256, ()
+        if not valid_hash:
+            hash_problems = ("manifest_hash_mismatch",)
+    else:
+        hash_problems = ()
+
+    records = snapshot.cases
+    findings = []
+
+    train_records = tuple(
+        case for case in records if case.split == "train"
+    )
+    test_records = tuple(
+        case for case in records if case.split == "test"
+    )
+
+    if train_records or test_records:
+        findings.extend(
+            find_cross_split_duplicates(train_records, test_records)
+        )
+        findings.extend(
+            find_cross_split_provenance_leakage(
+                train_records,
+                test_records,
+            )
+        )
+
+    if request.provenance_bound:
+        findings.extend(find_missing_provenance(records))
+        findings.extend(find_invalid_provenance(records))
+
+    findings.extend(
+        IntegrityFinding(
+            snapshot.snapshot_id,
+            problem,
+            "snapshot_validation",
+        )
+        for problem in hash_problems
+    )
+
+    enforcement_kinds = {
+        "train_test_duplicate",
+        "train_test_source_family_overlap",
+        "train_test_study_family_overlap",
+        "train_test_canonical_id_overlap",
+    }
+    provenance_kinds = {
+        "missing_provenance",
+        "invalid_source_snapshot_sha256",
+        "invalid_passage_sha256",
+        "passage_sha256_mismatch",
+    }
+
+    if request.enforce_split_separation and any(
+        finding.kind in enforcement_kinds
+        for finding in findings
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="train_test_separation_violation",
+        )
+
+    if request.provenance_bound and any(
+        finding.kind in provenance_kinds
+        for finding in findings
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="provenance_bound_requires_complete_case_provenance",
+        )
+
+    summary = summarize_integrity(findings)
+    return BenchmarkSnapshotVerifyResponse(
+        valid=not summary["finding_count"],
+        snapshot_sha256=snapshot.manifest.digest(),
+        dataset_id=snapshot.manifest.dataset_id,
+        snapshot_id=snapshot.manifest.snapshot_id,
+        case_count=len(records),
+        integrity_findings=summary,
+        limitations=[
+            "Serialized snapshot validation is deterministic and content-bound.",
+            "A valid snapshot is not evidence of clinical validity or dataset independence.",
+            "Split/provenance enforcement is an engineering control, not a clinical quality measure.",
         ],
     )
