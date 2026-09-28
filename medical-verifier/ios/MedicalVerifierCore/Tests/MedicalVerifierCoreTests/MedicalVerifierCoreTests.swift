@@ -192,3 +192,86 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertTrue(result.requiresHumanReview)
     }
 }
+
+
+    func testUnsafeActionInAnswerEscalatesEvenWithInnocentPrompt() {
+        let verifier = CurriculumVerifier()
+
+        let result = verifier.verify(
+            prompt: "Summarize the treatment options.",
+            answer: "You should stop warfarin immediately.",
+            sources: [source()]
+        )
+
+        XCTAssertEqual(result.status, .safetyEscalation)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
+    func testSafetyAndEffectivenessPropertiesDoNotCollapse() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Treatment A is effective for the condition."
+        )
+
+        let result = verifier.verify(
+            prompt: "Is Treatment A safe?",
+            answer: "Treatment A is safe.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+    }
+
+    func testDoubleNegationIsHandledWithoutPolarityFlip() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "The adverse event is common."
+        )
+
+        let result = verifier.verify(
+            prompt: "How frequent is the adverse event?",
+            answer: "The adverse event is not uncommon.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testUnitMismatchIsRejected() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "The dose is 500 mg."
+        )
+
+        let result = verifier.verify(
+            prompt: "What is the dose?",
+            answer: "The dose is 500 mcg.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+    }
+
+    func testTamperedSourceAbstainsAtVerifierBoundary() {
+        let original = source()
+        let tampered = SourceSnapshot(
+            snapshotID: original.snapshotID,
+            title: original.title,
+            fileSHA256: original.fileSHA256,
+            passageSHA256: original.passageSHA256,
+            passage: "Insulin raises blood pressure.",
+            locator: original.locator,
+            version: original.version
+        )
+
+        let verifier = CurriculumVerifier()
+
+        let result = verifier.verify(
+            prompt: "What does insulin do?",
+            answer: "Insulin lowers blood glucose.",
+            sources: [tampered]
+        )
+
+        XCTAssertEqual(result.status, .sourceIntegrityFailed)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
