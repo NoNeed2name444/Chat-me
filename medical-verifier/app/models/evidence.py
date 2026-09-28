@@ -24,6 +24,10 @@ class EvidenceItem(BaseModel):
     document_version: str | None = None
     curriculum_snapshot_id: str | None = None
 
+    # Extraction quality
+    extraction_quality: float = Field(default=1.0, ge=0.0, le=1.0)
+    extraction_warnings: list[str] = Field(default_factory=list)
+
     retrieved_at: datetime | None = None
     source_snapshot_sha256: str | None = None
     passage_sha256: str | None = None
