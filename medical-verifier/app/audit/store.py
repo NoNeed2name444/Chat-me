@@ -22,6 +22,12 @@ _EVIDENCE_COLUMNS = {
     "source_date": "TEXT",
     "curriculum_snapshot_id": "TEXT",
     "source_authority": "REAL DEFAULT 0.4",
+    "page_number": "INTEGER",
+    "section": "TEXT",
+    "block_type": "TEXT DEFAULT 'text'",
+    "block_index": "INTEGER",
+    "precedence_group": "TEXT",
+    "precedence_rank": "INTEGER DEFAULT 0",
     "extraction_quality": "REAL DEFAULT 1.0",
     "extraction_warnings": "TEXT DEFAULT '[]'",
 }
@@ -68,6 +74,12 @@ def _connect():
             source_date TEXT,
             curriculum_snapshot_id TEXT,
             source_authority REAL DEFAULT 0.4,
+            page_number INTEGER,
+            section TEXT,
+            block_type TEXT DEFAULT "text",
+            block_index INTEGER,
+            precedence_group TEXT,
+            precedence_rank INTEGER DEFAULT 0,
             extraction_quality REAL DEFAULT 1.0,
             extraction_warnings TEXT DEFAULT "[]",
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -111,6 +123,12 @@ def store_evidence(
     source_snapshot_sha256=None,
     extraction_quality=1.0,
     extraction_warnings=None,
+    page_number=None,
+    section=None,
+    block_type="text",
+    block_index=None,
+    precedence_group=None,
+    precedence_rank=0,
 ):
     evidence_id = f"local:{uuid4()}"
     passage_hash = _sha256(passage)
@@ -125,8 +143,10 @@ def store_evidence(
             "(id,title,source_type,publisher,url,source_locator,passage,source_family,"
             "canonical_id,source_snapshot_sha256,passage_sha256,"
             "document_version,study_family_id,source_date,"
-            "curriculum_snapshot_id,source_authority,extraction_quality,extraction_warnings) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "curriculum_snapshot_id,source_authority,page_number,section,block_type,"
+            "block_index,precedence_group,precedence_rank,extraction_quality,"
+            "extraction_warnings) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 evidence_id,
                 title,
@@ -144,6 +164,12 @@ def store_evidence(
                 source_date,
                 curriculum_snapshot_id,
                 source_authority,
+                page_number,
+                section,
+                block_type,
+                block_index,
+                precedence_group,
+                precedence_rank,
                 extraction_quality,
                 json.dumps(extraction_warnings),
             ),
