@@ -130,7 +130,7 @@ def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]
         selected.append(token)
         seen_substantive = True
 
-        if len(selected) >= 3:
+        if len(selected) >= 2:
             break
 
     if not selected:
