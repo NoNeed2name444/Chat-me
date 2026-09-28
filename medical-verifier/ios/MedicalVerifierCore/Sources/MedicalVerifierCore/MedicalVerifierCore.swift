@@ -204,11 +204,11 @@ private enum SemanticGuard {
         let normalizedSource = normalizeDoubleNegation(source)
         var warnings: [String] = []
 
-        let dailyEquivalent = dailyMassDose(in: normalizedClaim) != nil &&
-            dailyMassDose(in: normalizedSource) != nil &&
+        let dailyEquivalent = dailyDoseEquivalent(in: normalizedClaim) != nil &&
+            dailyDoseEquivalent(in: normalizedSource) != nil &&
             abs(
-                dailyMassDose(in: normalizedClaim)! -
-                dailyMassDose(in: normalizedSource)!
+                dailyDoseEquivalent(in: normalizedClaim)! -
+                dailyDoseEquivalent(in: normalizedSource)!
             ) < 1e-9
 
         let claimNumbers = numbers(in: normalizedClaim)
@@ -237,6 +237,15 @@ private enum SemanticGuard {
             abs(claimFrequency! - sourceFrequency!) > 1e-9 &&
             !dailyEquivalent {
             warnings.append("dose_frequency_mismatch")
+        }
+
+        let conditionResult = conditionSupported(
+            claim: normalizedClaim,
+            source: normalizedSource
+        )
+
+        if let reason = conditionResult {
+            warnings.append(reason)
         }
 
         let claimPopulations = populations(in: normalizedClaim)
@@ -351,7 +360,7 @@ private enum SemanticGuard {
 
     private static func numbers(in text: String) -> Set<String> {
         let pattern = try? NSRegularExpression(
-            pattern: #"\b\d+(?:\.\d+)?\b"#
+            pattern: #"d+(?:.d+)?"#
         )
 
         let range = NSRange(
@@ -397,7 +406,7 @@ private enum SemanticGuard {
 
     private static func measurements(in text: String) -> Set<Measurement> {
         let pattern = try? NSRegularExpression(
-            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b"#,
+            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)"#,
             options: [.caseInsensitive]
         )
 
@@ -429,24 +438,24 @@ private enum SemanticGuard {
     private static func frequencyMultiplier(in text: String) -> Double? {
         let lower = text.lowercased()
 
-        if lower.range(of: #"\b(twice|2\s+times)(?:\s+a)?\s+(?:day|daily)\b|\bbid\b"#, options: .regularExpression) != nil {
+        if lower.range(of: #"(twice|2s+times)(?:s+a)?s+(?:day|daily)|bid"#, options: .regularExpression) != nil {
             return 2
         }
 
-        if lower.range(of: #"\bthree\s+times(?:\s+a)?\s+(?:day|daily)\b|\btid\b"#, options: .regularExpression) != nil {
+        if lower.range(of: #"threes+times(?:s+a)?s+(?:day|daily)|tid"#, options: .regularExpression) != nil {
             return 3
         }
 
-        if lower.range(of: #"\bfour\s+times(?:\s+a)?\s+(?:day|daily)\b|\bqid\b"#, options: .regularExpression) != nil {
+        if lower.range(of: #"fours+times(?:s+a)?s+(?:day|daily)|qid"#, options: .regularExpression) != nil {
             return 4
         }
 
-        if lower.range(of: #"\bonce(?:\s+a)?\s+(?:day|daily)\b|\bdaily\b|\bqd\b"#, options: .regularExpression) != nil {
+        if lower.range(of: #"once(?:s+a)?s+(?:day|daily)|daily|qd"#, options: .regularExpression) != nil {
             return 1
         }
 
         if let pattern = try? NSRegularExpression(
-            pattern: #"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b"#,
+            pattern: #"everys+(d+)s*(?:hours?|h)|q(d+)h"#,
             options: [.caseInsensitive]
         ) {
             let range = NSRange(
@@ -472,14 +481,14 @@ private enum SemanticGuard {
         }
 
         if lower.range(
-            of: #"\b(?:once\s+a\s+week|weekly)\b"#,
+            of: #"(?:onces+as+week|weekly)"#,
             options: .regularExpression
         ) != nil {
             return 1.0 / 7.0
         }
 
         if lower.range(
-            of: #"\btwice\s+(?:a\s+)?week\b"#,
+            of: #"twices+(?:as+)?week"#,
             options: .regularExpression
         ) != nil {
             return 2.0 / 7.0
@@ -490,7 +499,7 @@ private enum SemanticGuard {
 
     private static func dailyMassDose(in text: String) -> Double? {
         let pattern = try? NSRegularExpression(
-            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg)\b"#,
+            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug|kg)"#,
             options: [.caseInsensitive]
         )
 
@@ -516,7 +525,243 @@ private enum SemanticGuard {
             unit: String(text[unitRange])
         )
 
+        guard normalized.unit == "mg" else {
+            return nil
+        }
+
         return normalized.value * multiplier
+    }
+
+    private static func concentrationDailyDose(in text: String) -> Double? {
+        let concentrationPattern = try? NSRegularExpression(
+            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)s*(?:/|per)s*(ml|l)"#,
+            options: [.caseInsensitive]
+        )
+
+        let volumePattern = try? NSRegularExpression(
+            pattern: #"(d+(?:.d+)?)s*(ml|l)"#,
+            options: [.caseInsensitive]
+        )
+
+        guard
+            let concentrationPattern,
+            let volumePattern
+        else {
+            return nil
+        }
+
+        let range = NSRange(
+            text.startIndex..<text.endIndex,
+            in: text
+        )
+
+        let concentrations = concentrationPattern.matches(
+            in: text,
+            range: range
+        )
+        let volumes = volumePattern.matches(
+            in: text,
+            range: range
+        )
+
+        guard concentrations.count == 1,
+              volumes.count == 1,
+              let multiplier = frequencyMultiplier(in: text),
+              let massRange = Range(
+                concentrations[0].range(at: 1),
+                in: text
+              ),
+              let massUnitRange = Range(
+                concentrations[0].range(at: 2),
+                in: text
+              ),
+              let volumeRange = Range(
+                volumes[0].range(at: 1),
+                in: text
+              ),
+              let volumeUnitRange = Range(
+                volumes[0].range(at: 2),
+                in: text
+              ),
+              let mass = Double(text[massRange]),
+              let volume = Double(text[volumeRange])
+        else {
+            return nil
+        }
+
+        let massNormalized = normalizeMeasurement(
+            value: mass,
+            unit: String(text[massUnitRange])
+        )
+        let volumeNormalized = normalizeMeasurement(
+            value: volume,
+            unit: String(text[volumeUnitRange])
+        )
+
+        guard massNormalized.unit == "mg",
+              volumeNormalized.unit == "ml"
+        else {
+            return nil
+        }
+
+        return massNormalized.value *
+            volumeNormalized.value *
+            multiplier
+    }
+
+    private static func weightBasedDailyDose(in text: String) -> Double? {
+        let dosePattern = try? NSRegularExpression(
+            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)s*/s*kg(s*/s*day)?"#,
+            options: [.caseInsensitive]
+        )
+
+        let weightPattern = try? NSRegularExpression(
+            pattern: #"(d+(?:.d+)?)s*kg"#,
+            options: [.caseInsensitive]
+        )
+
+        guard
+            let dosePattern,
+            let weightPattern
+        else {
+            return nil
+        }
+
+        let range = NSRange(
+            text.startIndex..<text.endIndex,
+            in: text
+        )
+
+        let doses = dosePattern.matches(in: text, range: range)
+        let weights = weightPattern.matches(in: text, range: range)
+
+        guard doses.count == 1,
+              weights.count == 1,
+              let valueRange = Range(doses[0].range(at: 1), in: text),
+              let unitRange = Range(doses[0].range(at: 2), in: text),
+              let weightValueRange = Range(weights[0].range(at: 1), in: text),
+              let value = Double(text[valueRange]),
+              let weight = Double(text[weightValueRange])
+        else {
+            return nil
+        }
+
+        let normalized = normalizeMeasurement(
+            value: value,
+            unit: String(text[unitRange])
+        )
+
+        guard normalized.unit == "mg" else {
+            return nil
+        }
+
+        let multiplier: Double
+
+        if doses[0].range(at: 3).location != NSNotFound {
+            multiplier = 1.0
+        } else if let frequency = frequencyMultiplier(in: text) {
+            multiplier = frequency
+        } else {
+            return nil
+        }
+
+        return normalized.value * weight * multiplier
+    }
+
+    private static func dailyDoseEquivalent(in text: String) -> Double? {
+        for calculator in [
+            dailyMassDose,
+            concentrationDailyDose,
+            weightBasedDailyDose
+        ] {
+            if let value = calculator(text) {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    private static func conditionSignatures(in text: String) -> [Set<String>] {
+        let lower = " " + text.lowercased() + " "
+        let patterns = [
+            #"\bif\s+([^,.;:]+)"#,
+            #"\bonly if\s+([^,.;:]+)"#,
+            #"\bunless\s+([^,.;:]+)"#,
+            #"\bwhen\s+([^,.;:]+)"#,
+            #"\bprovided that\s+([^,.;:]+)"#,
+            #"\bin patients with\s+([^,.;:]+)"#,
+            #"\bfor patients with\s+([^,.;:]+)"#
+        ]
+
+        var signatures: [Set<String>] = []
+
+        for patternText in patterns {
+            guard let pattern = try? NSRegularExpression(
+                pattern: patternText,
+                options: [.caseInsensitive]
+            ) else {
+                continue
+            }
+
+            let range = NSRange(
+                lower.startIndex..<lower.endIndex,
+                in: lower
+            )
+
+            for match in pattern.matches(
+                in: lower,
+                range: range
+            ) {
+                guard let captured = Range(
+                    match.range(at: 1),
+                    in: lower
+                ) else {
+                    continue
+                }
+
+                let tokens = lower[captured]
+                    .split {
+                        !$0.isLetter && !$0.isNumber && $0 != "'"
+                    }
+                    .map(String.init)
+                    .filter { $0.count >= 4 }
+
+                if !tokens.isEmpty {
+                    signatures.append(Set(tokens))
+                }
+            }
+        }
+
+        return signatures
+    }
+
+    private static func conditionSupported(
+        claim: String,
+        source: String
+    ) -> String? {
+        let sourceConditions = conditionSignatures(in: source)
+        guard !sourceConditions.isEmpty else {
+            return nil
+        }
+
+        let claimConditions = conditionSignatures(in: claim)
+        guard !claimConditions.isEmpty else {
+            return "conditional_scope_missing"
+        }
+
+        for sourceCondition in sourceConditions {
+            let best = claimConditions.map { claimCondition in
+                Double(sourceCondition.intersection(claimCondition).count) /
+                    Double(max(1, sourceCondition.count))
+            }.max() ?? 0
+
+            if best < 0.70 {
+                return "condition_not_entrailed"
+            }
+        }
+
+        return nil
     }
 
     private static func populations(in text: String) -> Set<String> {
