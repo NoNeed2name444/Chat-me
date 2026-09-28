@@ -176,7 +176,11 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
             section=None,
             block_type=block.block_type,
             block_index=block.block_index,
-            related_block_ids=list(block.related_block_ids),
+            related_block_ids=[
+                block_to_evidence_id[related_id]
+                for related_id in block.related_block_ids
+                if related_id in block_to_evidence_id
+            ],
             language=request.language,
             precedence_group=request.precedence_group,
             precedence_rank=request.precedence_rank,
