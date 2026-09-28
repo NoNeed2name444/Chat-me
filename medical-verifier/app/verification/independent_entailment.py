@@ -102,6 +102,56 @@ def _measurements(text):
         for value, unit in matches
     }
 
+def _frequency_multiplier(text):
+    lower = text.lower()
+
+    if re.search(r"\b(twice|2\s+times)(?:\s+a)?\s+(?:day|daily)\b|\bbid\b", lower):
+        return 2.0
+    if re.search(r"\bthree\s+times(?:\s+a)?\s+(?:day|daily)\b|\btid\b", lower):
+        return 3.0
+    if re.search(r"\bfour\s+times(?:\s+a)?\s+(?:day|daily)\b|\bqid\b", lower):
+        return 4.0
+    if re.search(r"\bonce(?:\s+a)?\s+(?:day|daily)\b|\bdaily\b|\bqd\b", lower):
+        return 1.0
+
+    every_hours = re.search(
+        r"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b",
+        lower,
+    )
+    if every_hours:
+        hours = int(next(
+            value for value in every_hours.groups()
+            if value is not None
+        ))
+        if 0 < hours <= 24:
+            return 24.0 / hours
+
+    if re.search(r"\b(?:once\s+a\s+week|weekly)\b", lower):
+        return 1.0 / 7.0
+    if re.search(r"\btwice\s+(?:a\s+)?week\b", lower):
+        return 2.0 / 7.0
+
+    return None
+
+def _mass_values(text):
+    matches = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg)\b",
+        text.lower(),
+    )
+    return [
+        _normalize_measurement(value, unit)[0]
+        for value, unit in matches
+    ]
+
+def _daily_mass_dose(text):
+    values = _mass_values(text)
+    multiplier = _frequency_multiplier(text)
+
+    if len(values) == 1 and multiplier is not None:
+        return round(values[0] * multiplier, 9)
+
+    return None
+
 def _measurement_kind(text):
     lower = text.lower()
 
@@ -126,6 +176,39 @@ def _populations(text):
         term
         for term in POPULATION_TERMS
         if term in lower
+    }
+
+def _scope_strength(text):
+    lower = text.lower()
+
+    universal = any(
+        marker in lower
+        for marker in (
+            "all patients", "all people", "everyone",
+            "every patient", "always", "never",
+            "regardless of",
+        )
+    )
+
+    exclusive = any(
+        marker in lower
+        for marker in (
+            "only", "exclusively", "only if",
+        )
+    )
+
+    conditional = any(
+        marker in lower
+        for marker in (
+            "if ", "unless ", "when ", "provided that",
+            "in patients with", "for patients with",
+        )
+    )
+
+    return {
+        "universal": universal,
+        "exclusive": exclusive,
+        "conditional": conditional,
     }
 
 def verify(claim, evidence):
@@ -167,20 +250,58 @@ def verify(claim, evidence):
             ("relation_class_mismatch",),
         )
 
+    claim_scope = _scope_strength(claim_for_logic)
+    evidence_scope = _scope_strength(evidence_for_logic)
+
+    if claim_scope["universal"] and not evidence_scope["universal"]:
+        return IndependentEntailment(
+            "UNKNOWN",
+            ("universal_scope_not_entrailed",),
+        )
+
+    if claim_scope["exclusive"] and not evidence_scope["exclusive"]:
+        return IndependentEntailment(
+            "UNKNOWN",
+            ("exclusive_scope_not_entrailed",),
+        )
+
     claim_measure = _measurement_kind(claim_for_logic)
     evidence_measure = _measurement_kind(evidence_for_logic)
+
     claim_measurements = _measurements(claim_for_logic)
     evidence_measurements = _measurements(evidence_for_logic)
+
+    claim_daily_dose = _daily_mass_dose(claim_for_logic)
+    evidence_daily_dose = _daily_mass_dose(evidence_for_logic)
+    daily_dose_equivalent = (
+        claim_daily_dose is not None
+        and evidence_daily_dose is not None
+        and abs(claim_daily_dose - evidence_daily_dose) < 1e-9
+    )
 
     if (
         claim_measurements
         and not claim_measurements.issubset(evidence_measurements)
+        and not daily_dose_equivalent
     ):
         return IndependentEntailment(
             "UNKNOWN",
             ("measurement_unit_or_value_mismatch",),
         )
 
+    claim_frequency = _frequency_multiplier(claim_for_logic)
+    evidence_frequency = _frequency_multiplier(evidence_for_logic)
+
+    if (
+        claim_frequency is not None
+        and evidence_frequency is not None
+        and abs(claim_frequency - evidence_frequency) > 1e-9
+        and not daily_dose_equivalent
+    ):
+        return IndependentEntailment(
+            "UNKNOWN",
+            ("dose_frequency_mismatch",),
+        )
 
     if (
         claim_measure
@@ -193,8 +314,11 @@ def verify(claim, evidence):
         )
 
     claim_numbers = _numbers(claim_for_logic)
-    if claim_numbers and not claim_numbers.issubset(
-        _numbers(evidence_for_logic)
+
+    if (
+        claim_numbers
+        and not claim_numbers.issubset(_numbers(evidence_for_logic))
+        and not daily_dose_equivalent
     ):
         return IndependentEntailment(
             "UNKNOWN",
