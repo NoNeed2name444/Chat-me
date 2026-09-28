@@ -579,7 +579,7 @@ private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
 public struct CurriculumVerifier: Sendable {
     public let version: String
 
-    public init(version: String = "ios-core-0.2") {
+    public init(version: String = "ios-core-0.3") {
         self.version = version
     }
 
@@ -588,10 +588,26 @@ public struct CurriculumVerifier: Sendable {
         answer: String,
         sources: [SourceSnapshot]
     ) -> CurriculumVerificationResult {
-        let risk = maxRisk(SafetyClassifier.risk(for: prompt), SafetyClassifier.risk(for: answer))
+        let risk = maxRisk(
+            SafetyClassifier.risk(for: prompt),
+            SafetyClassifier.risk(for: answer)
+        )
+
+        guard !sources.isEmpty else {
+            return CurriculumVerificationResult(
+                status: .sourceUnavailable,
+                riskLevel: risk,
+                supportingSourceIDs: [],
+                warnings: ["no_curriculum_sources"],
+                requiresHumanReview: true,
+                snapshotIDs: []
+            )
+        }
 
         let integrityChecker = SourceIntegrityChecker()
-        let integrityFailures = sources.filter { !integrityChecker.verify($0) }
+        let integrityFailures = sources.filter {
+            !integrityChecker.verify($0)
+        }
 
         if !integrityFailures.isEmpty {
             return CurriculumVerificationResult(
@@ -600,6 +616,28 @@ public struct CurriculumVerifier: Sendable {
                 supportingSourceIDs: [],
                 warnings: integrityFailures.map {
                     "source_integrity_failed:\($0.snapshotID)"
+                },
+                requiresHumanReview: true,
+                snapshotIDs: sources.map { $0.snapshotID }
+            )
+        }
+
+        let extractionFailures = sources.filter {
+            $0.extractionQuality < 0.85
+            || !$0.extractionWarnings.isEmpty
+        }
+
+        if !extractionFailures.isEmpty {
+            return CurriculumVerificationResult(
+                status: .sourceExtractionUncertain,
+                riskLevel: risk,
+                supportingSourceIDs: [],
+                warnings: extractionFailures.flatMap { source in
+                    [
+                        "source_extraction_uncertain:\(source.snapshotID)"
+                    ] + source.extractionWarnings.map {
+                        "\($0):\(source.snapshotID)"
+                    }
                 },
                 requiresHumanReview: true,
                 snapshotIDs: sources.map { $0.snapshotID }
@@ -617,18 +655,8 @@ public struct CurriculumVerifier: Sendable {
             )
         }
 
-        guard !sources.isEmpty else {
-            return CurriculumVerificationResult(
-                status: .sourceUnavailable,
-                riskLevel: risk,
-                supportingSourceIDs: [],
-                warnings: ["no_curriculum_sources"],
-                requiresHumanReview: true,
-                snapshotIDs: []
-            )
-        }
-
         var supported: [String] = []
+        var contradicted: [String] = []
         var warnings: [String] = []
 
         for source in sources {
@@ -653,7 +681,29 @@ public struct CurriculumVerifier: Sendable {
                 warnings.append(contentsOf: semanticWarnings.map {
                     $0 + ":" + source.snapshotID
                 })
+
+                if semanticWarnings.contains(
+                    "claim_source_polarity_mismatch"
+                ) {
+                    contradicted.append(source.snapshotID)
+                }
             }
+        }
+
+        if !supported.isEmpty && !contradicted.isEmpty {
+            return CurriculumVerificationResult(
+                status: .conflictingSources,
+                riskLevel: risk,
+                supportingSourceIDs: supported,
+                warnings: Array(
+                    Set(
+                        warnings
+                        + ["conflicting_curriculum_sources"]
+                    )
+                ).sorted(),
+                requiresHumanReview: true,
+                snapshotIDs: sources.map { $0.snapshotID }
+            )
         }
 
         let promptOverlap = sources.contains {
@@ -664,7 +714,9 @@ public struct CurriculumVerifier: Sendable {
         }
 
         if !promptOverlap {
-            warnings.append("question_prompt_not_aligned_to_curriculum")
+            warnings.append(
+                "question_prompt_not_aligned_to_curriculum"
+            )
         }
 
         if !supported.isEmpty && promptOverlap {
@@ -693,9 +745,12 @@ public struct CurriculumVerifier: Sendable {
             status: .sourceUnsupported,
             riskLevel: risk,
             supportingSourceIDs: [],
-            warnings: Array(Set(
-                warnings + ["answer_not_supported_by_curriculum"]
-            )).sorted(),
+            warnings: Array(
+                Set(
+                    warnings
+                    + ["answer_not_supported_by_curriculum"]
+                )
+            ).sorted(),
             requiresHumanReview: true,
             snapshotIDs: sources.map { $0.snapshotID }
         )
