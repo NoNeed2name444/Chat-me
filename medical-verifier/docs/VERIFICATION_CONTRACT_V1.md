@@ -1,4 +1,4 @@
-# Verification contract v1.5
+# Verification contract v1.6
 
 The Python server and iOS client share a versioned verification contract.
 
