@@ -13,6 +13,8 @@ public enum CurriculumStatus: String, Codable, Sendable {
     case sourceUnsupported = "SOURCE_UNSUPPORTED"
     case sourceUnavailable = "SOURCE_UNAVAILABLE"
     case sourceIntegrityFailed = "SOURCE_INTEGRITY_FAILED"
+    case sourceExtractionUncertain = "SOURCE_EXTRACTION_UNCERTAIN"
+    case conflictingSources = "CONFLICTING_CURRICULUM_SOURCES"
     case safetyEscalation = "SAFETY_ESCALATION"
 }
 
@@ -29,6 +31,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
     public let fileSHA256: String
     public let passageSHA256: String
     public let passage: String
+    public let extractionQuality: Double
+    public let extractionWarnings: [String]
     public let locator: String?
     public let version: String?
 
@@ -38,6 +42,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         fileSHA256: String,
         passageSHA256: String,
         passage: String,
+        extractionQuality: Double = 1.0,
+        extractionWarnings: [String] = [],
         locator: String? = nil,
         version: String? = nil
     ) {
@@ -46,6 +52,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         self.fileSHA256 = fileSHA256
         self.passageSHA256 = passageSHA256
         self.passage = passage
+        self.extractionQuality = extractionQuality
+        self.extractionWarnings = extractionWarnings
         self.locator = locator
         self.version = version
     }
