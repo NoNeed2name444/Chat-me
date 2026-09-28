@@ -949,7 +949,7 @@ public struct CurriculumVerifier: Sendable {
                 status: .sourceExtractionUncertain,
                 riskLevel: risk,
                 supportingSourceIDs: [],
-                warnings: extractionFailures.flatMap { source in
+                warnings: precedenceWarnings + extractionFailures.flatMap { source in
                     [
                         "source_extraction_uncertain:\(source.snapshotID)"
                     ] + source.extractionWarnings.map {
@@ -974,8 +974,6 @@ public struct CurriculumVerifier: Sendable {
 
         var supported: [String] = []
         var contradicted: [String] = []
-        var warnings: [String] = []
-
         var warnings: [String] = precedenceWarnings
 
         for source in selectedSources {
@@ -1025,7 +1023,7 @@ public struct CurriculumVerifier: Sendable {
             )
         }
 
-        let promptOverlap = sources.contains {
+        let promptOverlap = selectedSources.contains {
             SemanticGuard.overlap(
                 claim: prompt,
                 source: $0.passage
