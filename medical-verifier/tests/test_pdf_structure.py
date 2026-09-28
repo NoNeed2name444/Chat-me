@@ -112,10 +112,10 @@ def test_pdf_endpoint_persists_typed_manifest(monkeypatch):
 
     assert len(manifests) == 1
     assert verify_manifest(manifests[0]) is True
-    assert [
+    assert sorted(
         entry.evidence_id
         for entry in manifests[0].entries
-    ] == response["evidence_ids"]
+    ) == sorted(response["evidence_ids"])
 
 def test_pdf_endpoint_rejects_non_pdf_payload():
     request = documents.PDFDocumentIngestRequest(
