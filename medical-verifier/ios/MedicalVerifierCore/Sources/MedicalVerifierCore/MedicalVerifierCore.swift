@@ -183,23 +183,24 @@ private enum SemanticGuard {
         let normalizedSource = normalizeDoubleNegation(source)
         var warnings: [String] = []
 
-        let claimNumbers = numbers(in: normalizedClaim)
-        let sourceNumbers = numbers(in: normalizedSource)
-
-        if !claimNumbers.isEmpty &&
-            !claimNumbers.isSubset(of: sourceNumbers) {
-            warnings.append("numeric_values_not_found_in_curriculum")
-        }
-
-        let claimMeasurements = measurements(in: normalizedClaim)
-        let sourceMeasurements = measurements(in: normalizedSource)
-
         let dailyEquivalent = dailyMassDose(in: normalizedClaim) != nil &&
             dailyMassDose(in: normalizedSource) != nil &&
             abs(
                 dailyMassDose(in: normalizedClaim)! -
                 dailyMassDose(in: normalizedSource)!
             ) < 1e-9
+
+        let claimNumbers = numbers(in: normalizedClaim)
+        let sourceNumbers = numbers(in: normalizedSource)
+
+        if !claimNumbers.isEmpty &&
+            !claimNumbers.isSubset(of: sourceNumbers) &&
+            !dailyEquivalent {
+            warnings.append("numeric_values_not_found_in_curriculum")
+        }
+
+        let claimMeasurements = measurements(in: normalizedClaim)
+        let sourceMeasurements = measurements(in: normalizedSource)
 
         if !claimMeasurements.isEmpty &&
             !claimMeasurements.isSubset(of: sourceMeasurements) &&
