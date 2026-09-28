@@ -375,4 +375,72 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertTrue(result.requiresHumanReview)
     }
 
+
+    func testExtractionWarningBlocksAutomaticValidation() {
+        let source = SourceSnapshot(
+            snapshotID: "ocr-uncertain",
+            title: "OCR course",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("pdf-bytes".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Insulin lowers blood glucose."
+            ),
+            passage: "Insulin lowers blood glucose.",
+            extractionQuality: 0.60,
+            extractionWarnings: ["ocr_uncertain"],
+            locator: "page:1",
+            version: "2022"
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What does insulin do?",
+            answer: "Insulin lowers blood glucose.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(
+            result.status,
+            .sourceExtractionUncertain
+        )
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
+    func testConflictingSourcesDoNotAutoValidate() {
+        let sourceA = SourceSnapshot(
+            snapshotID: "source-a",
+            title: "Course A",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("a".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X increases bleeding."
+            ),
+            passage: "Drug X increases bleeding.",
+            version: "2022"
+        )
+
+        let sourceB = SourceSnapshot(
+            snapshotID: "source-b",
+            title: "Course B",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("b".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Drug X does not increase bleeding."
+            ),
+            passage: "Drug X does not increase bleeding.",
+            version: "2021"
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "Does Drug X increase bleeding?",
+            answer: "Drug X increases bleeding.",
+            sources: [sourceA, sourceB]
+        )
+
+        XCTAssertEqual(result.status, .conflictingSources)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
 }
