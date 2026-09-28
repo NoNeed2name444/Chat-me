@@ -28,6 +28,8 @@ class DocumentIngestRequest(BaseModel):
         "footnote", "header", "unknown"
     ] = "text"
     block_index: int | None = Field(default=None, ge=0)
+    related_block_ids: list[str] = Field(default_factory=list)
+    language: str = Field(default="auto", max_length=20)
     precedence_group: str | None = Field(default=None, max_length=200)
     precedence_rank: int = Field(default=0, ge=0)
     source_authority: float = Field(default=0.40, ge=0, le=1)
@@ -54,6 +56,8 @@ def ingest_document(request: DocumentIngestRequest):
         section=request.section,
         block_type=request.block_type,
         block_index=request.block_index,
+        related_block_ids=request.related_block_ids,
+        language=request.language,
         precedence_group=request.precedence_group,
         precedence_rank=request.precedence_rank,
     )
@@ -65,6 +69,8 @@ def ingest_document(request: DocumentIngestRequest):
         "page_number": request.page_number,
         "section": request.section,
         "block_type": request.block_type,
+        "related_block_ids": request.related_block_ids,
+        "language": request.language,
         "warning": (
             "Stored evidence can define curriculum fidelity, but does not "
             "authorize clinical action."
