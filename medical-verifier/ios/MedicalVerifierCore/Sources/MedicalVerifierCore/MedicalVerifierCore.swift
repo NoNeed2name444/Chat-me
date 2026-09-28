@@ -853,7 +853,7 @@ private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
 public struct CurriculumVerifier: Sendable {
     public let version: String
 
-    public init(version: String = "ios-core-0.3") {
+    public init(version: String = "ios-core-0.4") {
         self.version = version
     }
 
