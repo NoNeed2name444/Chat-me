@@ -441,7 +441,7 @@ private enum SemanticGuard {
                     sourceAtom.text
                 )
 
-                guard overlapValue >= 0.55 else {
+                guard overlapValue >= 0.45 else {
                     continue
                 }
 
@@ -703,7 +703,7 @@ private enum SemanticGuard {
             "current", "now", "at", "present", "will",
             "planned", "plan", "expected", "future",
             "no", "not", "never", "without", "does", "doesn't",
-            "cannot", "can't"
+            "cannot", "can't", "has", "have", "had"
         ]
 
         let rawTokens = fragment
