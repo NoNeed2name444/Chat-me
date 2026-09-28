@@ -11,6 +11,8 @@ class DocumentIngestRequest(BaseModel):
     source_type: str = "reference"
     publisher: str = "internal"
     url: str | None = None
+    source_locator: str | None = None
+    source_snapshot_sha256: str | None = None
     canonical_id: str | None = None
     document_version: str | None = None
     study_family_id: str | None = None
@@ -26,6 +28,8 @@ def ingest_document(request: DocumentIngestRequest):
         source_type=request.source_type,
         publisher=request.publisher,
         url=request.url,
+        source_locator=request.source_locator,
+        source_snapshot_sha256=request.source_snapshot_sha256,
         canonical_id=request.canonical_id,
         document_version=request.document_version,
         study_family_id=request.study_family_id,
