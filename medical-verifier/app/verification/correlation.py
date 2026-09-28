@@ -28,13 +28,16 @@ def collapse_correlated_groups(items):
 
     groups = {}
     for item in items:
-        group = find(item.id)
-        groups.setdefault(group, []).append(item)
+        groups.setdefault(find(item.id), []).append(item)
 
     for group_items in groups.values():
-        stable = min(x.id for x in group_items)
+        if len(group_items) <= 1:
+            continue
+
+        stable = min(item.id for item in group_items)
+        group_name = f"correlated:{stable}"
+
         for item in group_items:
-            if not item.independence_group:
-                item.independence_group = f"correlated:{stable}"
+            item.independence_group = group_name
 
     return items
