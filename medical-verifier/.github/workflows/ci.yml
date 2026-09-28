@@ -1,0 +1,37 @@
+name: Medical Verifier CI
+
+on:
+  push:
+    paths:
+      - "medical-verifier/**"
+  pull_request:
+    paths:
+      - "medical-verifier/**"
+
+jobs:
+  python-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: medical-verifier
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[dev]"
+      - run: python -m compileall app
+      - run: pytest -q
+
+  swift-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: medical-verifier/ios/MedicalVerifierCore
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: swift --version
+      - run: swift test
