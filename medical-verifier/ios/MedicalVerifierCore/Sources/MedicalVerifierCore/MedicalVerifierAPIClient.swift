@@ -81,7 +81,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
         verificationMode: VerificationMode = .currentMedical,
         curriculumSourceIDs: [String] = [],
         curriculumSnapshot: String? = nil,
-        verificationContractVersion: String = "1.1"
+        verificationContractVersion: String = "1.2"
     ) {
         self.claim = claim
         self.questionContext = questionContext
