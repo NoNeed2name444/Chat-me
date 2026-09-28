@@ -59,3 +59,22 @@ class BenchmarkIntegrityResponse(BaseModel):
     case_count: int
     integrity_findings: dict
     limitations: list[str] = Field(default_factory=list)
+
+
+class BenchmarkSnapshotVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot: dict
+    expected_snapshot_sha256: str | None = None
+    enforce_split_separation: bool = False
+    provenance_bound: bool = False
+
+
+class BenchmarkSnapshotVerifyResponse(BaseModel):
+    valid: bool
+    snapshot_sha256: str
+    dataset_id: str
+    snapshot_id: str
+    case_count: int
+    integrity_findings: dict = {}
+    limitations: list[str] = Field(default_factory=list)
