@@ -1765,7 +1765,7 @@ public struct CurriculumVerifier: Sendable {
 
             if lower.contains("dose") || lower.contains("dosage") {
                 return answerLower.range(
-                    of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug|ml|l|kg)"#,
+                    of: #"\bd+(?:.d+)?s*(?:mg|g|mcg|ug|ml|l|kg)\b"#,
                     options: .regularExpression
                 ) != nil
             }
