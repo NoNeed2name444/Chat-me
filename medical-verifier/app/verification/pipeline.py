@@ -486,13 +486,16 @@ def verify(request):
     if request.verification_mode == "current_medical":
         final_verdict = current_verdict
     elif request.verification_mode == "curriculum_faithful":
-        final_verdict = (
-            "CURRICULUM_ALIGNED"
-            if curriculum_assessment.status == "ALIGNED"
-            else "CURRICULUM_NOT_ALIGNED"
-        )
+        if curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED":
+            final_verdict = "CURRICULUM_SOURCE_INTEGRITY_FAILED"
+        elif curriculum_assessment.status == "ALIGNED":
+            final_verdict = "CURRICULUM_ALIGNED"
+        else:
+            final_verdict = "CURRICULUM_NOT_ALIGNED"
     else:
-        if (
+        if curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED":
+            final_verdict = "CURRICULUM_SOURCE_INTEGRITY_FAILED"
+        elif (
             curriculum_assessment.status == "ALIGNED"
             and divergence == "curriculum_vs_current_conflict"
         ):
@@ -625,6 +628,11 @@ def verify(request):
             "Material current-evidence disagreement remains."
         )
 
+    if curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED":
+        limitations.append(
+            "Stored curriculum evidence failed integrity validation."
+        )
+
     limitations.append(
         "Curriculum material does not authorize clinical action."
     )
@@ -638,6 +646,7 @@ def verify(request):
             "CONTRADICTED",
         }
         or divergence == "curriculum_vs_current_conflict"
+        or curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED"
         or bool(context_missing)
         or revalidation_blocked
     )
