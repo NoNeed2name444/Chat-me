@@ -21,6 +21,7 @@ from app.verification.policy import POLICY_VERSION, decide_verdict
 from app.verification.provenance import apply_temporal_supersession
 from app.verification.reliability import aggregate, enrich
 from app.verification.reliability_report import build_report
+from app.verification.revalidation import revalidate
 from app.verification.risk import classify_risk, missing_context
 from app.verification.rules import deterministic_checks
 
@@ -476,6 +477,30 @@ def verify(request):
     elif final_verdict == "CURRICULUM_ALIGNED_CURRENT_CONFLICT":
         confidence = 0.85
 
+    source_revalidation = {}
+
+    should_revalidate = (
+        risk in {"high", "critical"}
+        or (
+            request.verification_mode != "current_medical"
+            and divergence == "curriculum_vs_current_conflict"
+        )
+    )
+
+    if should_revalidate:
+        for item in final_evidence:
+            check = revalidate(item)
+            source_revalidation[item.id] = {
+                "status": check.status,
+                "checked_at": check.checked_at,
+                "warnings": check.warnings,
+                "remote_snapshot_sha256": check.remote_snapshot_sha256,
+            }
+            all_flags.extend(
+                f"{item.id}:{warning}"
+                for warning in check.warnings
+            )
+
     report_reasons = []
 
     for result in assertion_results:
@@ -587,6 +612,7 @@ def verify(request):
         },
         knowledge_divergence=divergence,
         study_hint=study_hint,
+        source_revalidation=source_revalidation,
         reliability=reliability,
         adversarial_findings=adversarial_data,
         limitations=limitations,
