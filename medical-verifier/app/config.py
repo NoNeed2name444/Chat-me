@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     verifier_version: str = "1.0.0"
-    verification_contract_version: str = "1.4"
+    verification_contract_version: str = "1.5"
     knowledge_snapshot: str = "LIVE-API"
     database_path: str = "./data/medical_verifier.db"
 
