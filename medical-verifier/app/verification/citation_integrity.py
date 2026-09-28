@@ -42,6 +42,9 @@ def verify_citation(item, source_text: str | None = None):
     if not item.id:
         warnings.append("missing_evidence_id")
 
+    if not item.url:
+        warnings.append("missing_source_url")
+
     if not item.url and not item.source_locator:
         warnings.append("missing_source_locator")
 
