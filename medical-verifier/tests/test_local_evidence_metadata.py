@@ -18,6 +18,12 @@ def test_local_provider_preserves_extraction_metadata(monkeypatch, tmp_path):
         curriculum_snapshot_id="snapshot:ocr",
         extraction_quality=0.60,
         extraction_warnings=["ocr_uncertain"],
+        page_number=8,
+        section="Dosing",
+        block_type="table",
+        block_index=2,
+        precedence_group="drug-x-guideline",
+        precedence_rank=3,
     )
 
     results = LocalEvidenceProvider().search(
@@ -32,4 +38,10 @@ def test_local_provider_preserves_extraction_metadata(monkeypatch, tmp_path):
     assert results[0].extraction_quality == 0.60
     assert results[0].extraction_warnings == ["ocr_uncertain"]
     assert results[0].source_locator == "page:8"
+    assert results[0].page_number == 8
+    assert results[0].section == "Dosing"
+    assert results[0].block_type == "table"
+    assert results[0].block_index == 2
+    assert results[0].precedence_group == "drug-x-guideline"
+    assert results[0].precedence_rank == 3
     assert results[0].canonical_id is None
