@@ -14,6 +14,13 @@ class VerificationResponse(BaseModel):
     evidence: list[dict] = []
     contradictions: list[dict] = []
 
+    verification_mode: str = "current_medical"
+
+    curriculum_assessment: dict = {}
+    current_evidence_assessment: dict = {}
+    knowledge_divergence: str = "none"
+    study_hint: str | None = None
+
     reliability: dict = {}
     adversarial_findings: list[dict] = []
 
@@ -22,6 +29,6 @@ class VerificationResponse(BaseModel):
     missing_context: list[str] = []
 
     requires_human_review: bool
-    verifier_version: str = "0.2.0"
+    verifier_version: str = "0.3.0"
     knowledge_snapshot: str = "LIVE-API"
     verification_id: str
