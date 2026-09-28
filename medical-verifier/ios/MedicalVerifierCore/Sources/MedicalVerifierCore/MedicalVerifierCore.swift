@@ -243,11 +243,6 @@ private enum SafetyClassifier {
         "prednisone", "levothyroxine", "lisinopril"
     ]
 
-    static let actionTerms = [
-        "stop", "start", "change", "double", "halve", "take",
-        "skip", "replace", "increase", "decrease", "reduce"
-    ]
-
     static func risk(for text: String) -> RiskLevel {
         let lower = text.lowercased()
 
@@ -278,31 +273,39 @@ private enum SafetyClassifier {
     }
 
     static func containsActionRequest(_ lower: String) -> Bool {
-        for medication in medicationTerms {
-            guard let medicationRange = lower.range(of: medication) else {
-                continue
-            }
+        let action =
+            #"(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)"#
 
-            let start = lower.index(
-                medicationRange.lowerBound,
-                offsetBy: -100,
-                limitedBy: lower.startIndex
-            ) ?? lower.startIndex
+        let medication =
+            #"(?:medication|medicine|drug|dose|insulin|anticoagulant|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen|amoxicillin|prednisone|levothyroxine|lisinopril)"#
 
-            let end = lower.index(
-                medicationRange.upperBound,
-                offsetBy: 100,
-                limitedBy: lower.endIndex
-            ) ?? lower.endIndex
+        let interrogative =
+            #"(?:shoulds+i|shoulds+we|cans+i|mays+i|whats+shoulds+i|whats+dos+is+do|hows+shoulds+i|dos+i)"#
 
-            let window = lower[start..<end]
+        let direct =
+            #"^s*(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce).{0,100}"#
+            + medication
 
-            if actionTerms.contains(where: { window.contains($0) }) {
-                return true
-            }
-        }
+        let contextual =
+            interrogative + #".{0,100}"# + action
+            + #".{0,100}"# + medication
 
-        return false
+        let urgent =
+            #"(?:overdose|poisoning|poisoned|severes+bleeding|chests+pain|difficultys+breathing|anaphylaxis).{0,120}"#
+            + interrogative
+
+        return lower.range(
+            of: direct,
+            options: .regularExpression
+        ) != nil ||
+        lower.range(
+            of: contextual,
+            options: .regularExpression
+        ) != nil ||
+        lower.range(
+            of: urgent,
+            options: .regularExpression
+        ) != nil
     }
 }
 
@@ -638,13 +641,14 @@ private enum SemanticGuard {
         switch relation {
         case "causal":
             phrases = [
-                "causes", "caused", "leads to",
-                "results in", "prevents"
+                "cause", "causes", "caused", "lead to",
+                "leads to", "result in", "results in",
+                "prevent", "prevents"
             ]
         case "risk_increase":
-            phrases = ["increases", "raises", "elevates", "higher"]
+            phrases = ["increase", "increases", "raises", "elevates", "higher"]
         case "risk_decrease":
-            phrases = ["reduces", "lowers", "decreases"]
+            phrases = ["reduce", "reduces", "lowers", "decrease", "decreases"]
         case "association":
             phrases = [
                 "associated with",
@@ -686,7 +690,12 @@ private enum SemanticGuard {
         let stopwords: Set<String> = [
             "a", "an", "the", "and", "or", "but",
             "for", "with", "in", "on", "to", "of",
-            "is", "are", "was", "were"
+            "is", "are", "was", "were",
+            "all", "selected", "every", "everyone",
+            "regardless", "only", "exclusively",
+            "previously", "previous", "prior", "currently",
+            "current", "now", "at", "present", "will",
+            "planned", "plan", "expected", "future"
         ]
 
         let rawTokens = fragment
@@ -1424,21 +1433,29 @@ private enum SemanticGuard {
             return "association"
         }
 
-        if lower.contains("causes")
+        if lower.contains("cause")
+            || lower.contains("causes")
             || lower.contains("caused")
+            || lower.contains("lead to")
             || lower.contains("leads to")
-            || lower.contains("results in") {
+            || lower.contains("result in")
+            || lower.contains("results in")
+            || lower.contains("prevent")
+            || lower.contains("prevents") {
             return "causal"
         }
 
-        if lower.contains("increases")
+        if lower.contains("increase")
+            || lower.contains("increases")
             || lower.contains("raises")
             || lower.contains("higher") {
             return "risk_increase"
         }
 
-        if lower.contains("reduces")
+        if lower.contains("reduce")
+            || lower.contains("reduces")
             || lower.contains("lowers")
+            || lower.contains("decrease")
             || lower.contains("decreases") {
             return "risk_decrease"
         }
