@@ -23,7 +23,7 @@ _EVIDENCE_COLUMNS = {
     "curriculum_snapshot_id": "TEXT",
     "source_authority": "REAL DEFAULT 0.4",
     "extraction_quality": "REAL DEFAULT 1.0",
-    "extraction_warnings": "TEXT DEFAULT []",
+    "extraction_warnings": "TEXT DEFAULT '[]'",
 }
 
 def _connect():
