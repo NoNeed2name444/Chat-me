@@ -98,6 +98,7 @@ def _anchor_tokens(text: str, relation: str, *, before: bool) -> tuple[str, ...]
         for phrase in phrases
         if lower.find(phrase) >= 0
     ]
+    matches.sort(key=lambda item: (item[0], -len(item[1])))
     if not matches:
         return ()
 
