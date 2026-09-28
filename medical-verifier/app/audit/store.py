@@ -39,6 +39,15 @@ def _connect():
     """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            question_id TEXT PRIMARY KEY,
+            question_json TEXT NOT NULL,
+            curriculum_snapshot_id TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS evidence (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -147,3 +156,37 @@ def store_verification(result):
         conn.commit()
     finally:
         conn.close()
+
+
+def store_question(question):
+    conn = _connect()
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO questions "
+            "(question_id,question_json,curriculum_snapshot_id) VALUES (?,?,?)",
+            (
+                question.question_id,
+                json.dumps(question.model_dump(mode="json")),
+                question.curriculum_snapshot_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def fetch_question(question_id):
+    conn = _connect()
+
+    try:
+        row = conn.execute(
+            "SELECT question_json FROM questions WHERE question_id = ?",
+            (question_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return None
+
+    return json.loads(row[0])
