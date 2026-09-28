@@ -375,6 +375,20 @@ private enum SemanticGuard {
     }
 }
 
+
+private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
+    let order: [RiskLevel: Int] = [
+        .low: 0,
+        .moderate: 1,
+        .high: 2,
+        .critical: 3
+    ]
+
+    return (order[lhs] ?? 0) >= (order[rhs] ?? 0)
+        ? lhs
+        : rhs
+}
+
 public struct CurriculumVerifier: Sendable {
     public let version: String
 
@@ -387,7 +401,7 @@ public struct CurriculumVerifier: Sendable {
         answer: String,
         sources: [SourceSnapshot]
     ) -> CurriculumVerificationResult {
-        let risk = SafetyClassifier.risk(for: prompt)
+        let risk = maxRisk(SafetyClassifier.risk(for: prompt), SafetyClassifier.risk(for: answer))
 
         let integrityChecker = SourceIntegrityChecker()
         let integrityFailures = sources.filter { !integrityChecker.verify($0) }
