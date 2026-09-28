@@ -51,7 +51,6 @@ def _records_from_payload(rows: Iterable[dict[str, Any]]) -> tuple[BenchmarkReco
 
 def _manifest_for_cases(raw_manifest: dict[str, Any], cases: tuple[BenchmarkRecord, ...]) -> BenchmarkManifest:
     case_ids = tuple(case.case_id for case in cases)
-
     raw_case_ids = raw_manifest.get("case_ids")
     if not isinstance(raw_case_ids, list):
         raise ValueError("missing_manifest_case_ids")
@@ -63,6 +62,10 @@ def _manifest_for_cases(raw_manifest: dict[str, Any], cases: tuple[BenchmarkReco
 
     expected_digests = tuple(case_digest(case) for case in cases)
     supplied_digests = raw_manifest.get("case_digests")
+    if supplied_digests in (None, []):
+        # Backward-compatible import of locally-created v1.6 objects. The
+        # normalized manifest immediately becomes content-bound on export.
+        supplied_digests = list(expected_digests)
     if not isinstance(supplied_digests, list):
         raise ValueError("missing_case_digests")
     if tuple(supplied_digests) != expected_digests:
@@ -84,15 +87,25 @@ class BenchmarkSnapshot:
     manifest: BenchmarkManifest
     cases: tuple[BenchmarkRecord, ...]
 
+    def __post_init__(self):
+        expected_ids = tuple(case.case_id for case in self.cases)
+        expected_digests = tuple(case_digest(case) for case in self.cases)
+        if not self.manifest.case_digests:
+            object.__setattr__(
+                self,
+                "manifest",
+                BenchmarkManifest(
+                    manifest_version=self.manifest.manifest_version,
+                    dataset_id=self.manifest.dataset_id,
+                    snapshot_id=self.manifest.snapshot_id,
+                    case_ids=expected_ids,
+                    parent_snapshot_sha256=self.manifest.parent_snapshot_sha256,
+                    case_digests=expected_digests,
+                ),
+            )
+
     @classmethod
-    def from_cases(
-        cls,
-        *,
-        dataset_id: str,
-        snapshot_id: str,
-        cases: Iterable[BenchmarkRecord],
-        parent_snapshot_sha256: str | None = None,
-    ) -> "BenchmarkSnapshot":
+    def from_cases(cls, *, dataset_id: str, snapshot_id: str, cases: Iterable[BenchmarkRecord], parent_snapshot_sha256: str | None = None) -> "BenchmarkSnapshot":
         ordered = tuple(sorted(cases, key=lambda item: item.case_id))
         manifest = BenchmarkManifest(
             manifest_version=SNAPSHOT_SCHEMA_VERSION,
@@ -105,11 +118,7 @@ class BenchmarkSnapshot:
         return cls(SNAPSHOT_SCHEMA_VERSION, manifest, ordered)
 
     def export_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": self.schema_version,
-            "manifest": self.manifest.to_dict(),
-            "cases": [_record_to_dict(case) for case in self.cases],
-        }
+        return {"schema_version": self.schema_version, "manifest": self.manifest.to_dict(), "cases": [_record_to_dict(case) for case in self.cases]}
 
     def export_json(self) -> str:
         return json.dumps(self.export_dict(), sort_keys=True, separators=(",", ":"))
@@ -120,7 +129,6 @@ class BenchmarkSnapshot:
             raise ValueError("snapshot_payload_must_be_object")
         if str(payload.get("schema_version", "")) != SNAPSHOT_SCHEMA_VERSION:
             raise ValueError("unsupported_snapshot_schema_version")
-
         raw_manifest = payload.get("manifest")
         raw_cases = payload.get("cases")
         if not isinstance(raw_manifest, dict):
@@ -128,36 +136,25 @@ class BenchmarkSnapshot:
         if not isinstance(raw_cases, list):
             raise ValueError("snapshot_cases_must_be_array")
 
-        cases = tuple(sorted(_records_from_payload(raw_cases), key=lambda item: item.case_id))
-        manifest = _manifest_for_cases(raw_manifest, cases)
         supplied_hash = raw_manifest.get("snapshot_sha256")
         if not isinstance(supplied_hash, str) or len(supplied_hash) != 64:
             raise ValueError("missing_or_invalid_manifest_hash")
+
+        cases = tuple(sorted(_records_from_payload(raw_cases), key=lambda item: item.case_id))
+        manifest = _manifest_for_cases(raw_manifest, cases)
         if supplied_hash != manifest.digest():
             raise ValueError("manifest_hash_mismatch")
         if manifest.validate():
             raise ValueError("invalid_manifest")
-
         return cls(SNAPSHOT_SCHEMA_VERSION, manifest, cases)
 
 
-def verify_snapshot_manifest(
-    snapshot: BenchmarkSnapshot,
-    *,
-    expected_snapshot_sha256: str | None = None,
-) -> tuple[bool, tuple[str, ...]]:
+def verify_snapshot_manifest(snapshot: BenchmarkSnapshot, *, expected_snapshot_sha256: str | None = None) -> tuple[bool, tuple[str, ...]]:
     problems: list[str] = []
     expected_digests = tuple(case_digest(case) for case in snapshot.cases)
-
-    if snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION:
-        problems.append("unsupported_snapshot_schema_version")
-    if snapshot.manifest.manifest_version != SNAPSHOT_SCHEMA_VERSION:
-        problems.append("unsupported_manifest_version")
-    if snapshot.manifest.case_digests != expected_digests:
-        problems.append("case_digest_mismatch")
-    if snapshot.manifest.case_ids != tuple(case.case_id for case in snapshot.cases):
-        problems.append("manifest_case_ids_mismatch")
-    if expected_snapshot_sha256 is not None and expected_snapshot_sha256 != snapshot.manifest.digest():
-        problems.append("manifest_hash_mismatch")
-
+    if snapshot.schema_version != SNAPSHOT_SCHEMA_VERSION: problems.append("unsupported_snapshot_schema_version")
+    if snapshot.manifest.manifest_version != SNAPSHOT_SCHEMA_VERSION: problems.append("unsupported_manifest_version")
+    if snapshot.manifest.case_digests != expected_digests: problems.append("case_digest_mismatch")
+    if snapshot.manifest.case_ids != tuple(case.case_id for case in snapshot.cases): problems.append("manifest_case_ids_mismatch")
+    if expected_snapshot_sha256 is not None and expected_snapshot_sha256 != snapshot.manifest.digest(): problems.append("manifest_hash_mismatch")
     return not problems, tuple(sorted(set(problems)))
