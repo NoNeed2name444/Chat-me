@@ -31,5 +31,6 @@ class VerificationResponse(BaseModel):
 
     requires_human_review: bool
     verifier_version: str = "0.4.0"
+    verification_contract_version: str = "1.0"
     knowledge_snapshot: str = "LIVE-API"
     verification_id: str
