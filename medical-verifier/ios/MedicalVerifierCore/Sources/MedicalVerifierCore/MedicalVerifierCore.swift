@@ -683,24 +683,27 @@ private enum SemanticGuard {
             ? String(lower[..<range.lowerBound])
             : String(lower[range.upperBound...])
 
-        let tokens = fragment
+        let stopwords: Set<String> = [
+            "a", "an", "the", "and", "or", "but",
+            "for", "with", "in", "on", "to", "of",
+            "is", "are", "was", "were"
+        ]
+
+        let rawTokens = fragment
             .split {
                 !$0.isLetter && !$0.isNumber
             }
             .map(String.init)
-            .filter {
-                ![
-                    "a", "an", "the", "and", "or", "but",
-                    "for", "with", "in", "on", "to", "of",
-                    "is", "are", "was", "were"
-                ].contains($0)
-            }
 
-        if before {
-            return tokens.suffix(2).joined(separator: " ")
+        let window = before
+            ? Array(rawTokens.suffix(4))
+            : Array(rawTokens.prefix(4))
+
+        let tokens = window.filter {
+            !stopwords.contains($0) || $0.count == 1
         }
 
-        return tokens.prefix(2).joined(separator: " ")
+        return tokens.joined(separator: " ")
     }
 
     private static func anchorsEquivalent(
