@@ -8,6 +8,11 @@ class QuestionArtifact(BaseModel):
     source_evidence_ids: list[str] = Field(default_factory=list)
     source_locators: list[str] = Field(default_factory=list)
     source_versions: list[str] = Field(default_factory=list)
+
+    validation_status: str = "SOURCE_UNCERTAIN"
+    validation_warnings: list[str] = Field(default_factory=list)
+    supporting_source_ids: list[str] = Field(default_factory=list)
+    requires_human_review: bool = True
     generated_at: str
     generator_version: str
     verification_mode: str = "curriculum_faithful"
