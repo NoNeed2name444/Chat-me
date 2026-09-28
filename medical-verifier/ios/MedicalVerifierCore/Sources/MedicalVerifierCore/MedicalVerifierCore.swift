@@ -291,7 +291,11 @@ private enum SafetyClassifier {
             + #".{0,100}"# + medication
 
         let directInstruction =
-            #"(?:yous+should|yous+needs+to|yous+must|stop|start|change|double|halve|skip|replace|take).{0,100}"#
+            #"(?:^|[.!?]s+)(?:stop|start|change|double|halve|skip|replace|take).{0,100}"#
+            + medication
+
+        let contextualInstruction =
+            #"(?:yous+should|yous+needs+to|yous+must).{0,100}"#
             + medication
 
         let urgent =
@@ -304,6 +308,10 @@ private enum SafetyClassifier {
         ) != nil ||
         lower.range(
             of: directInstruction,
+            options: .regularExpression
+        ) != nil ||
+        lower.range(
+            of: contextualInstruction,
             options: .regularExpression
         ) != nil ||
         lower.range(
