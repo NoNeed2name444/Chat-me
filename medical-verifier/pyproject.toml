@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "medical-verifier"
-version = "0.2.0"
+version = "0.4.0"
 description = "Safety-first medical verification framework"
 requires-python = ">=3.11"
 dependencies = [
