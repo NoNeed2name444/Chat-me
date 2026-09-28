@@ -1,4 +1,5 @@
 from app.models.evidence import EvidenceItem
+from app.verification.citation_integrity import sha256_text
 from app.verification.question_validation import validate_question
 
 def source():
@@ -11,7 +12,7 @@ def source():
             passage="Insulin lowers blood glucose.",
             curriculum_snapshot_id="snapshot:1",
             source_snapshot_sha256="bound",
-            passage_sha256="bound",
+            passage_sha256=sha256_text("Insulin lowers blood glucose."),
         )
     ]
 
