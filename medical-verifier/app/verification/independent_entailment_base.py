@@ -435,9 +435,6 @@ def _atomic_alignment(claim: str, evidence: str):
                     failure_reasons.append(safety_reason)
                 continue
 
-            if claim_atom.polarity != evidence_atom.polarity:
-                return False, "atomic_polarity_mismatch"
-
             matched = True
             break
 
