@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.verification.adversarial import highest_severity, inspect_claim
 from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify
+from app.verification.claim_reasoning import opposite_polarity_entailed
 from app.verification.curriculum import _apply_explicit_precedence
 
 EXTRACTION_THRESHOLD = 0.85
@@ -58,10 +59,20 @@ def validate_question(prompt: str, answer: str, source_items):
     )
     extraction_uncertain = False
 
+    prompt_stopwords = {
+        "what", "does", "do", "is", "the", "a", "an", "how",
+        "who", "which", "are", "can", "may", "should", "from",
+        "for", "in", "on", "to", "about", "and", "or",
+    }
     prompt_terms = {
         token
         for token in re.findall(r"[a-z0-9'-]+", prompt.lower())
-        if len(token) >= 5
+        if len(token) >= 4 and token not in prompt_stopwords
+    }
+    answer_terms = {
+        token
+        for token in re.findall(r"[a-z0-9'-]+", answer.lower())
+        if len(token) >= 4 and token not in prompt_stopwords
     }
 
     for item in source_items:
@@ -92,17 +103,21 @@ def validate_question(prompt: str, answer: str, source_items):
             if len(token) >= 5
         }
 
-        if prompt_terms & source_terms:
+        if prompt_terms & (source_terms | answer_terms):
             prompt_overlap = True
 
         entailment = verify(
             answer,
             source_text,
         )
+        opposite_polarity = opposite_polarity_entailed(
+            answer,
+            source_text,
+        )
 
         if entailment.label == "SUPPORTS":
             answer_support.append(item.id)
-        elif entailment.label == "CONTRADICTS":
+        elif entailment.label == "CONTRADICTS" or opposite_polarity:
             answer_contradictions.append(item.id)
             warnings.extend(entailment.reasons)
         else:
