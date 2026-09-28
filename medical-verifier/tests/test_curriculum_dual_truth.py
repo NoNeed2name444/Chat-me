@@ -47,3 +47,18 @@ def test_newer_conflicting_relevant_evidence_triggers_conflict():
         has_relevant_newer_evidence=True,
     )
     assert divergence == "curriculum_vs_current_conflict"
+
+
+def test_curriculum_fidelity_rejects_tampered_stored_passage():
+    from app.verification.citation_integrity import sha256_text
+    from app.verification.curriculum import assess_curriculum_fidelity
+
+    item = make_source("Insulin lowers blood glucose.")
+    item.passage = "Insulin raises blood pressure."
+
+    result = assess_curriculum_fidelity(
+        "What does insulin do?",
+        [item],
+    )
+
+    assert result.status == "SOURCE_INTEGRITY_FAILED"
