@@ -54,6 +54,6 @@ def temporal_signature(text: str) -> dict[str, object]:
         "currently", "currently active", "previously", "historically",
         "before", "after", "within", "during", "until", "since",
     ):
-        if marker in lower:
+        if re.search(r"\b" + re.escape(marker) + r"\b", lower):
             markers.append(marker)
     return {"dates": tuple(d.isoformat() for d in dates), "markers": tuple(markers)}
