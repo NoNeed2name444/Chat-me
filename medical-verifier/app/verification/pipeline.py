@@ -54,6 +54,14 @@ def _retrieve_current_for_assertion(assertion_text, request):
     evidence = []
     flags = []
 
+    retrieval_query = assertion_text
+
+    question_context = request.question_context
+    if question_context:
+        retrieval_query = (
+            f"{question_context} {assertion_text}"
+        )
+
     current_sources = [
         source
         for source in request.sources
@@ -67,7 +75,7 @@ def _retrieve_current_for_assertion(assertion_text, request):
         try:
             evidence.extend(
                 PubMedProvider().search(
-                    assertion_text,
+                    retrieval_query,
                     limit=6,
                 )
             )
@@ -207,8 +215,17 @@ def verify(request):
     normalized = normalize_claim(request.claim)
     assertions = decompose_claim(normalized.normalized)
 
+    verification_context = " ".join(
+        item
+        for item in [
+            request.question_context,
+            request.claim,
+        ]
+        if item
+    )
+
     risk = classify_risk(
-        request.claim,
+        verification_context,
         request.context,
     )
 
@@ -219,8 +236,8 @@ def verify(request):
         )
     )
 
-    flags = deterministic_checks(request.claim)
-    adversarial = inspect_claim(request.claim)
+    flags = deterministic_checks(verification_context)
+    adversarial = inspect_claim(verification_context)
     adversarial_data = [
         finding.__dict__
         for finding in adversarial
