@@ -24,6 +24,8 @@ def test_local_provider_preserves_extraction_metadata(monkeypatch, tmp_path):
         block_index=2,
         precedence_group="drug-x-guideline",
         precedence_rank=3,
+        related_block_ids=["caption:1"],
+        language="es",
     )
 
     results = LocalEvidenceProvider().search(
@@ -44,4 +46,6 @@ def test_local_provider_preserves_extraction_metadata(monkeypatch, tmp_path):
     assert results[0].block_index == 2
     assert results[0].precedence_group == "drug-x-guideline"
     assert results[0].precedence_rank == 3
+    assert results[0].related_block_ids == ["caption:1"]
+    assert results[0].language == "es"
     assert results[0].canonical_id is None
