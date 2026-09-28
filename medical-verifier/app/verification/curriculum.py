@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify as independent_verify
+from app.verification.claim_reasoning import opposite_polarity_entailed
 
 EXTRACTION_THRESHOLD = 0.85
 
@@ -98,6 +99,11 @@ def assess_curriculum_fidelity(claim: str, source_items):
             source_text,
         )
 
+        opposite_polarity = opposite_polarity_entailed(
+            normalized,
+            source_text,
+        )
+
         observed = (
             item.source_date
             or item.effective_date
@@ -109,7 +115,7 @@ def assess_curriculum_fidelity(claim: str, source_items):
 
         if entailment.label == "SUPPORTS":
             aligned.append(item.id)
-        elif entailment.label == "CONTRADICTS":
+        elif entailment.label == "CONTRADICTS" or opposite_polarity:
             contradicted.append(item.id)
         else:
             uncertain.append(item.id)
