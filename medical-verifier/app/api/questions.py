@@ -50,6 +50,16 @@ def create_question(request: QuestionCreateRequest):
             for item in evidence
             if item.document_version
         ],
+        source_passage_hashes={
+            item.id: item.passage_sha256
+            for item in evidence
+            if item.passage_sha256
+        },
+        source_snapshot_hashes={
+            item.id: item.source_snapshot_sha256
+            for item in evidence
+            if item.source_snapshot_sha256
+        },
         validation_status=validation.status,
         validation_warnings=list(validation.warnings),
         supporting_source_ids=list(validation.supporting_source_ids),
