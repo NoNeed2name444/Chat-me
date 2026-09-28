@@ -11,6 +11,11 @@ from app.terminology.normalize import normalize_claim
 from app.verification.adversarial import highest_severity, inspect_claim
 from app.verification.assertions import decompose_claim
 from app.verification.contradiction import assess_evidence
+from app.verification.curriculum import (
+    assess_curriculum_fidelity,
+    build_study_hint,
+    determine_divergence,
+)
 from app.verification.entailment import assess_entailment
 from app.verification.policy import POLICY_VERSION, decide_verdict
 from app.verification.provenance import apply_temporal_supersession
@@ -44,11 +49,20 @@ def _explicit_medications(context):
         if str(x).strip()
     ][:2]
 
-def _retrieve_for_assertion(assertion_text, request):
+def _retrieve_current_for_assertion(assertion_text, request):
     evidence = []
     flags = []
 
-    if "pubmed" in request.sources:
+    current_sources = [
+        source
+        for source in request.sources
+        if source != "local"
+    ]
+
+    if request.verification_mode != "current_medical" and not current_sources:
+        current_sources = ["pubmed"]
+
+    if "pubmed" in current_sources:
         try:
             evidence.extend(
                 PubMedProvider().search(
@@ -61,7 +75,7 @@ def _retrieve_for_assertion(assertion_text, request):
                 f"pubmed_provider_error:{type(exc).__name__}"
             )
 
-    if "openfda" in request.sources:
+    if "openfda" in current_sources:
         for drug in _explicit_medications(request.context):
             try:
                 evidence.extend(
@@ -75,21 +89,81 @@ def _retrieve_for_assertion(assertion_text, request):
                     f"openfda_provider_error:{type(exc).__name__}"
                 )
 
-    if "local" in request.sources:
-        try:
-            evidence.extend(
-                LocalEvidenceProvider().search(
-                    assertion_text,
-                    [],
-                    6,
-                )
-            )
-        except Exception as exc:
-            flags.append(
-                f"local_provider_error:{type(exc).__name__}"
-            )
-
     return evidence, flags
+
+def _retrieve_curriculum_sources(assertion_text, request):
+    if not request.curriculum_source_ids and not request.curriculum_snapshot:
+        return [], []
+
+    try:
+        items = LocalEvidenceProvider().search(
+            assertion_text,
+            [],
+            max(8, len(request.curriculum_source_ids)),
+            source_ids=request.curriculum_source_ids or None,
+            curriculum_snapshot_id=request.curriculum_snapshot,
+        )
+        return items, []
+    except Exception as exc:
+        return [], [
+            f"curriculum_provider_error:{type(exc).__name__}"
+        ]
+
+def _evaluate_evidence(assertion_text, evidence, risk, context_missing):
+    for item in evidence:
+        enrich(
+            item,
+            assertion_text,
+            date.today(),
+        )
+
+    evidence, temporal_warnings = apply_temporal_supersession(
+        evidence
+    )
+
+    classified, _, _ = assess_evidence(
+        evidence,
+        assertion_text,
+    )
+
+    entailment_warnings = []
+
+    for item in classified:
+        item, entailment = assess_entailment(
+            item,
+            assertion_text,
+        )
+
+        entailment_warnings.extend(
+            entailment.warnings
+        )
+
+        if entailment.label == "SUPPORTS":
+            item.supports = True
+        elif entailment.label == "CONTRADICTS":
+            item.supports = False
+        else:
+            item.supports = None
+
+    agg = aggregate(classified)
+
+    verdict, confidence, reasons = decide_verdict(
+        risk_level=risk,
+        claim_type="medical_claim",
+        missing_context=context_missing,
+        aggregate=agg,
+        evidence=classified,
+    )
+
+    return {
+        "evidence": classified,
+        "temporal_warnings": temporal_warnings,
+        "entailment_warnings": entailment_warnings,
+        "aggregate": agg,
+        "verdict": verdict,
+        "confidence": confidence,
+        "reasons": reasons,
+    }
 
 def verify(request):
     normalized = normalize_claim(request.claim)
@@ -108,7 +182,6 @@ def verify(request):
     )
 
     flags = deterministic_checks(request.claim)
-
     adversarial = inspect_claim(request.claim)
     adversarial_data = [
         finding.__dict__
@@ -150,12 +223,17 @@ def verify(request):
                 "high",
                 key=lambda x: RISK_ORDER[x],
             ),
+            verification_mode=request.verification_mode,
             atomic_assertions=[
                 a.__dict__
                 for a in assertions
             ],
             evidence=[],
             contradictions=[],
+            curriculum_assessment={},
+            current_evidence_assessment={},
+            knowledge_divergence="unknown",
+            study_hint=None,
             reliability={
                 "policy_version": POLICY_VERSION,
                 "adversarial_severity": attack_severity,
@@ -173,113 +251,64 @@ def verify(request):
             knowledge_snapshot=settings.knowledge_snapshot,
             verification_id=str(uuid4()),
         )
-
         store_verification(result)
         return result
 
-    all_evidence = []
+    all_current_evidence = []
     assertion_results = []
     all_flags = list(flags)
 
     for assertion in assertions[:4]:
-        evidence, retrieval_flags = _retrieve_for_assertion(
+        current_evidence, retrieval_flags = _retrieve_current_for_assertion(
             assertion.text,
             request,
         )
         all_flags.extend(retrieval_flags)
 
-        for item in evidence:
-            enrich(
-                item,
-                assertion.text,
-                date.today(),
-            )
-
-        evidence, temporal_warnings = apply_temporal_supersession(
-            evidence
-        )
-        all_flags.extend(
-            f"{item_id}:{warning}"
-            for item_id, warning in temporal_warnings
-        )
-
-        classified, _, _ = assess_evidence(
-            evidence,
+        evaluated = _evaluate_evidence(
             assertion.text,
+            current_evidence,
+            risk,
+            sorted(context_missing),
         )
-
-        entailment_warnings = []
-
-        for item in classified:
-            item, entailment = assess_entailment(
-                item,
-                assertion.text,
-            )
-
-            entailment_warnings.extend(
-                entailment.warnings
-            )
-
-            if entailment.label == "SUPPORTS":
-                item.supports = True
-            elif entailment.label == "CONTRADICTS":
-                item.supports = False
-            else:
-                item.supports = None
 
         all_flags.extend(
             f"{assertion.id}:{warning}"
-            for warning in sorted(set(entailment_warnings))
+            for warning in evaluated["entailment_warnings"]
         )
 
-        agg = aggregate(classified)
-
-        verdict, confidence, reasons = decide_verdict(
-            risk_level=risk,
-            claim_type=normalized.claim_type,
-            missing_context=sorted(context_missing),
-            aggregate=agg,
-            evidence=classified,
+        all_flags.extend(
+            f"{assertion.id}:{item_id}:{warning}"
+            for item_id, warning in evaluated["temporal_warnings"]
         )
 
-        if entailment_warnings:
-            reasons += [
-                "Citation/semantic entailment checks downgraded "
-                "one or more evidence items."
-            ]
-
-        all_evidence.extend(classified)
+        all_current_evidence.extend(
+            evaluated["evidence"]
+        )
 
         assertion_results.append({
             "id": assertion.id,
             "text": assertion.text,
-            "verdict": verdict,
-            "confidence": confidence,
-            "reliability": agg,
-            "reasons": reasons,
+            "verdict": evaluated["verdict"],
+            "confidence": evaluated["confidence"],
+            "reliability": evaluated["aggregate"],
+            "reasons": evaluated["reasons"],
         })
 
     supported = [
-        x
-        for x in assertion_results
+        x for x in assertion_results
         if x["verdict"] == "SUPPORTED"
     ]
-
     contradicted = [
-        x
-        for x in assertion_results
+        x for x in assertion_results
         if x["verdict"] == "CONTRADICTED"
     ]
-
     mixed = [
-        x
-        for x in assertion_results
+        x for x in assertion_results
         if x["verdict"] == "MIXED_EVIDENCE"
     ]
-
     insufficient = [
-        x
-        for x in assertion_results
+        x for x in assertion_results
         if x["verdict"] in {
             "INSUFFICIENT_EVIDENCE",
             "CONTEXT_REQUIRED",
@@ -287,28 +316,28 @@ def verify(request):
     ]
 
     if supported and contradicted:
-        final_verdict = "MIXED_EVIDENCE"
+        current_verdict = "MIXED_EVIDENCE"
     elif mixed:
-        final_verdict = "MIXED_EVIDENCE"
+        current_verdict = "MIXED_EVIDENCE"
     elif contradicted and not supported and not insufficient:
-        final_verdict = "CONTRADICTED"
+        current_verdict = "CONTRADICTED"
     elif insufficient:
-        final_verdict = "INSUFFICIENT_EVIDENCE"
+        current_verdict = "INSUFFICIENT_EVIDENCE"
     elif supported and len(supported) == len(assertion_results):
-        final_verdict = "SUPPORTED"
+        current_verdict = "SUPPORTED"
     else:
-        final_verdict = "INSUFFICIENT_EVIDENCE"
+        current_verdict = "INSUFFICIENT_EVIDENCE"
 
     final_evidence = []
     seen = set()
 
-    for item in all_evidence:
+    for item in all_current_evidence:
         if item.id in seen:
             continue
         seen.add(item.id)
         final_evidence.append(item)
 
-    final_agg = aggregate(final_evidence)
+    current_agg = aggregate(final_evidence)
 
     if request.requested_evidence_level in {
         "authoritative",
@@ -320,20 +349,104 @@ def verify(request):
             for item in final_evidence
         )
 
-        if final_verdict == "SUPPORTED" and not has_authoritative_support:
-            final_verdict = "INSUFFICIENT_EVIDENCE"
+        if (
+            current_verdict == "SUPPORTED"
+            and not has_authoritative_support
+        ):
+            current_verdict = "INSUFFICIENT_EVIDENCE"
 
-    if attack_severity == "high" and final_verdict == "SUPPORTED":
-        final_verdict = "INSUFFICIENT_EVIDENCE"
+    if attack_severity == "high" and current_verdict == "SUPPORTED":
+        current_verdict = "INSUFFICIENT_EVIDENCE"
+
+    curriculum_items, curriculum_flags = _retrieve_curriculum_sources(
+        normalized.normalized,
+        request,
+    )
+    all_flags.extend(curriculum_flags)
+
+    curriculum_assessment = assess_curriculum_fidelity(
+        normalized.normalized,
+        curriculum_items,
+    )
+
+    curriculum_source_dates = []
+
+    for item in curriculum_items:
+        observed = (
+            item.source_date
+            or item.effective_date
+            or item.publication_date
+        )
+        if observed:
+            curriculum_source_dates.append(observed)
+
+    newest_curriculum_date = (
+        max(curriculum_source_dates)
+        if curriculum_source_dates
+        else None
+    )
+
+    current_dates = [
+        item.effective_date
+        or item.publication_date
+        for item in final_evidence
+        if (
+            item.effective_date
+            or item.publication_date
+        )
+    ]
+
+    has_newer_evidence = bool(
+        newest_curriculum_date
+        and current_dates
+        and max(current_dates) > newest_curriculum_date
+    )
+
+    divergence = determine_divergence(
+        curriculum_status=curriculum_assessment.status,
+        current_verdict=current_verdict,
+        has_newer_evidence=has_newer_evidence,
+    )
+
+    if request.verification_mode == "current_medical":
+        final_verdict = current_verdict
+    elif request.verification_mode == "curriculum_faithful":
+        final_verdict = (
+            "CURRICULUM_ALIGNED"
+            if curriculum_assessment.status == "ALIGNED"
+            else "CURRICULUM_NOT_ALIGNED"
+        )
+    else:
+        if (
+            curriculum_assessment.status == "ALIGNED"
+            and divergence == "curriculum_vs_current_conflict"
+        ):
+            final_verdict = "CURRICULUM_ALIGNED_CURRENT_CONFLICT"
+        elif curriculum_assessment.status == "ALIGNED":
+            final_verdict = "CURRICULUM_ALIGNED"
+        else:
+            final_verdict = "CURRICULUM_NOT_ALIGNED"
+
+    study_hint = build_study_hint(
+        divergence,
+        final_evidence,
+    )
 
     confidence = 0.0
 
-    if final_verdict == "SUPPORTED":
+    if final_verdict in {
+        "SUPPORTED",
+        "CURRICULUM_ALIGNED",
+    }:
         confidence = min(
             0.96,
             round(
                 0.55
-                + 0.41 * final_agg["support_ratio"],
+                + 0.41 * (
+                    current_agg["support_ratio"]
+                    if final_verdict == "SUPPORTED"
+                    else 0.90
+                ),
                 3,
             ),
         )
@@ -341,22 +454,23 @@ def verify(request):
         confidence = 0.40
     elif final_verdict == "CONTRADICTED":
         confidence = 0.72
+    elif final_verdict == "CURRICULUM_ALIGNED_CURRENT_CONFLICT":
+        confidence = 0.85
 
     report_reasons = []
 
-    for assertion_result in assertion_results:
+    for result in assertion_results:
         report_reasons.extend(
-            assertion_result["reasons"]
+            result["reasons"]
         )
 
-    if attack_severity == "high":
-        report_reasons.append(
-            "High-severity adversarial claim pattern "
-            "blocked automatic support."
+    if request.verification_mode != "current_medical":
+        report_reasons.extend(
+            curriculum_assessment.reasons
         )
 
     reliability = build_report(
-        final_agg,
+        current_agg,
         final_evidence,
         sorted(set(report_reasons)),
     )
@@ -364,45 +478,52 @@ def verify(request):
     reliability["policy_version"] = POLICY_VERSION
     reliability["atomic_assertions"] = assertion_results
     reliability["adversarial_severity"] = attack_severity
+    reliability["has_newer_evidence"] = has_newer_evidence
 
     limitations = sorted(set(all_flags))
 
-    if adversarial_data:
+    if request.verification_mode != "current_medical":
         limitations.append(
-            "Adversarial inspection found semantic or "
-            "safety-sensitive claim patterns."
+            "Curriculum mode preserves source-faithful correctness separately "
+            "from current medical evidence."
+        )
+
+    if divergence == "curriculum_vs_current_conflict":
+        limitations.append(
+            "Supplied curriculum and current evidence are in material disagreement."
         )
 
     if not final_evidence:
+        limitations.append("No current external evidence was retrieved.")
+
+    if request.verification_mode != "current_medical" and not curriculum_items:
         limitations.append(
-            "No usable evidence was retrieved."
+            "No curriculum source snapshot was available for source-faithful verification."
         )
 
-    if final_verdict == "INSUFFICIENT_EVIDENCE":
+    if current_verdict == "INSUFFICIENT_EVIDENCE":
         limitations.append(
-            "Evidence did not meet the multi-axis "
-            "verification threshold."
+            "Current evidence did not meet the multi-axis verification threshold."
         )
 
-    if final_verdict == "MIXED_EVIDENCE":
+    if current_verdict == "MIXED_EVIDENCE":
         limitations.append(
-            "Material disagreement remains; automatic "
-            "verification is withheld."
+            "Material current-evidence disagreement remains."
         )
 
     limitations.append(
-        "External evidence must be independently reviewed "
-        "before clinical use."
+        "Curriculum material does not authorize clinical action."
     )
 
     requires_review = (
         risk in {"moderate", "high"}
         or attack_severity in {"moderate", "high"}
-        or final_verdict in {
+        or current_verdict in {
             "MIXED_EVIDENCE",
             "CONTEXT_REQUIRED",
             "CONTRADICTED",
         }
+        or divergence == "curriculum_vs_current_conflict"
         or bool(context_missing)
     )
 
@@ -410,13 +531,13 @@ def verify(request):
         verdict=final_verdict,
         confidence=confidence,
         confidence_semantics=(
-            "Policy score only; not a calibrated probability "
-            "of clinical truth."
+            "Policy score only; not a calibrated probability of clinical truth."
         ),
         claim=request.claim,
         normalized_claim=normalized.normalized,
         claim_type=normalized.claim_type,
         risk_level=risk,
+        verification_mode=request.verification_mode,
         atomic_assertions=[
             a.__dict__
             for a in assertions
@@ -430,6 +551,23 @@ def verify(request):
             for item in final_evidence
             if item.supports is False
         ],
+        curriculum_assessment={
+            "status": curriculum_assessment.status,
+            "matched_source_ids": curriculum_assessment.matched_source_ids,
+            "reasons": curriculum_assessment.reasons,
+            "source_dates": curriculum_assessment.source_dates,
+        },
+        current_evidence_assessment={
+            "verdict": current_verdict,
+            "reliability": current_agg,
+            "evidence_ids": [
+                item.id
+                for item in final_evidence
+            ],
+            "has_newer_evidence": has_newer_evidence,
+        },
+        knowledge_divergence=divergence,
+        study_hint=study_hint,
         reliability=reliability,
         adversarial_findings=adversarial_data,
         limitations=limitations,
