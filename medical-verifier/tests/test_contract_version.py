@@ -19,4 +19,4 @@ def test_contract_mismatch_fails_closed():
     body = response.json()
     assert body["verdict"] == "CONTRACT_MISMATCH"
     assert body["requires_human_review"] is True
-    assert body["verification_contract_version"] == "1.2"
+    assert body["verification_contract_version"] == "1.3
