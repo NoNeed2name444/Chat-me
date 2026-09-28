@@ -1,6 +1,7 @@
 from datetime import date
 
 from app.models.evidence import EvidenceItem
+from app.verification.citation_integrity import sha256_text
 from app.verification.curriculum import (
     assess_curriculum_fidelity,
     determine_divergence,
@@ -15,7 +16,7 @@ def make_source(text, source_id="curriculum-1", source_date=date(2022,1,1)):
         passage=text,
         source_date=source_date,
         source_snapshot_sha256="bound",
-        passage_sha256="bound",
+        passage_sha256=sha256_text(text),
     )
 
 def test_curriculum_source_can_define_fidelity():
