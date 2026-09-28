@@ -181,22 +181,40 @@ private enum SemanticGuard {
     ) -> [String] {
         let normalizedClaim = normalizeDoubleNegation(claim)
         let normalizedSource = normalizeDoubleNegation(source)
-
         var warnings: [String] = []
 
         let claimNumbers = numbers(in: normalizedClaim)
         let sourceNumbers = numbers(in: normalizedSource)
 
-        if !claimNumbers.isEmpty && !claimNumbers.isSubset(of: sourceNumbers) {
+        if !claimNumbers.isEmpty &&
+            !claimNumbers.isSubset(of: sourceNumbers) {
             warnings.append("numeric_values_not_found_in_curriculum")
         }
 
         let claimMeasurements = measurements(in: normalizedClaim)
         let sourceMeasurements = measurements(in: normalizedSource)
 
+        let dailyEquivalent = dailyMassDose(in: normalizedClaim) != nil &&
+            dailyMassDose(in: normalizedSource) != nil &&
+            abs(
+                dailyMassDose(in: normalizedClaim)! -
+                dailyMassDose(in: normalizedSource)!
+            ) < 1e-9
+
         if !claimMeasurements.isEmpty &&
-            !claimMeasurements.isSubset(of: sourceMeasurements) {
+            !claimMeasurements.isSubset(of: sourceMeasurements) &&
+            !dailyEquivalent {
             warnings.append("measurement_units_or_values_not_supported")
+        }
+
+        let claimFrequency = frequencyMultiplier(in: normalizedClaim)
+        let sourceFrequency = frequencyMultiplier(in: normalizedSource)
+
+        if claimFrequency != nil &&
+            sourceFrequency != nil &&
+            abs(claimFrequency! - sourceFrequency!) > 1e-9 &&
+            !dailyEquivalent {
+            warnings.append("dose_frequency_mismatch")
         }
 
         let claimPopulations = populations(in: normalizedClaim)
@@ -226,7 +244,44 @@ private enum SemanticGuard {
             warnings.append("certainty_strength_not_supported")
         }
 
+        let claimScope = scopeStrength(in: normalizedClaim)
+        let sourceScope = scopeStrength(in: normalizedSource)
+
+        if claimScope.universal && !sourceScope.universal {
+            warnings.append("universal_scope_not_supported")
+        }
+
+        if claimScope.exclusive && !sourceScope.exclusive {
+            warnings.append("exclusive_scope_not_supported")
+        }
+
         return warnings
+    }
+
+    private struct ScopeStrength {
+        let universal: Bool
+        let exclusive: Bool
+    }
+
+    private static func scopeStrength(in text: String) -> ScopeStrength {
+        let lower = text.lowercased()
+
+        return ScopeStrength(
+            universal: [
+                "all patients",
+                "all people",
+                "everyone",
+                "every patient",
+                "always",
+                "never",
+                "regardless of"
+            ].contains { lower.contains($0) },
+            exclusive: [
+                "only",
+                "exclusively",
+                "only if"
+            ].contains { lower.contains($0) }
+        )
     }
 
     private static func normalizedTokens(_ text: String) -> Set<String> {
@@ -349,6 +404,81 @@ private enum SemanticGuard {
         )
     }
 
+    private static func frequencyMultiplier(in text: String) -> Double? {
+        let lower = text.lowercased()
+
+        if lower.range(of: #"\b(twice|2\s+times)(?:\s+a)?\s+(?:day|daily)\b|\bbid\b"#, options: .regularExpression) != nil {
+            return 2
+        }
+
+        if lower.range(of: #"\bthree\s+times(?:\s+a)?\s+(?:day|daily)\b|\btid\b"#, options: .regularExpression) != nil {
+            return 3
+        }
+
+        if lower.range(of: #"\bfour\s+times(?:\s+a)?\s+(?:day|daily)\b|\bqid\b"#, options: .regularExpression) != nil {
+            return 4
+        }
+
+        if lower.range(of: #"\bonce(?:\s+a)?\s+(?:day|daily)\b|\bdaily\b|\bqd\b"#, options: .regularExpression) != nil {
+            return 1
+        }
+
+        if let match = lower.firstMatch(
+            of: #"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b"#
+        ) {
+            if let value = Int(match) {
+                return 24.0 / Double(value)
+            }
+        }
+
+        if lower.range(
+            of: #"\b(?:once\s+a\s+week|weekly)\b"#,
+            options: .regularExpression
+        ) != nil {
+            return 1.0 / 7.0
+        }
+
+        if lower.range(
+            of: #"\btwice\s+(?:a\s+)?week\b"#,
+            options: .regularExpression
+        ) != nil {
+            return 2.0 / 7.0
+        }
+
+        return nil
+    }
+
+    private static func dailyMassDose(in text: String) -> Double? {
+        let pattern = try? NSRegularExpression(
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg)\b"#,
+            options: [.caseInsensitive]
+        )
+
+        guard let pattern else { return nil }
+
+        let matches = pattern.matches(
+            in: text,
+            range: NSRange(text.startIndex..<text.endIndex, in: text)
+        )
+
+        guard matches.count == 1,
+              let match = matches.first,
+              let valueRange = Range(match.range(at: 1), in: text),
+              let unitRange = Range(match.range(at: 2), in: text),
+              let value = Double(text[valueRange]),
+              let multiplier = frequencyMultiplier(in: text)
+        else {
+            return nil
+        }
+
+        let normalized = normalizeMeasurement(
+            value: value,
+            unit: String(text[unitRange])
+        )
+
+        return normalized.value * multiplier
+    }
+
     private static func populations(in text: String) -> Set<String> {
         let lower = text.lowercased()
 
@@ -414,7 +544,6 @@ private enum SemanticGuard {
         }
     }
 }
-
 
 private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
     let order: [RiskLevel: Int] = [
