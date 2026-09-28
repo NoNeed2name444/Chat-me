@@ -226,6 +226,28 @@
       "source_file_seed": "pdf-bytes",
       "expected_status": "VALIDATED",
       "requires_review": false
+    },
+    {
+      "id": "spanish_basic",
+      "prompt": "¿Qué hace la insulina?",
+      "answer": "La insulina aumenta la glucosa.",
+      "source_title": "Curso",
+      "source_passage": "La insulina aumenta la glucosa.",
+      "source_file_seed": "pdf-es",
+      "language": "es",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
+      "id": "french_basic",
+      "prompt": "Le traitement est-il efficace ?",
+      "answer": "Le traitement est efficace chez les adultes.",
+      "source_title": "Cours",
+      "source_passage": "Le traitement est efficace chez les adultes.",
+      "source_file_seed": "pdf-fr",
+      "language": "fr",
+      "expected_status": "VALIDATED",
+      "requires_review": false
     }
   ]
 }
