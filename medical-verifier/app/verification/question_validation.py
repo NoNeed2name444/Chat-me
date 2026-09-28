@@ -98,7 +98,7 @@ def validate_question(prompt: str, answer: str, source_items):
     if any(
         warning.startswith("source_integrity_failed:")
         for warning in warnings
-    ) and not answer_support:
+    ):
         return QuestionValidation(
             status="SOURCE_INTEGRITY_FAILED",
             warnings=tuple(sorted(set(warnings))),
