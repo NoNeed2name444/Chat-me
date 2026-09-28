@@ -1,6 +1,13 @@
 import re
 from dataclasses import dataclass
 
+from app.verification.claim_reasoning import (
+    decompose_claim,
+    relation_entailed,
+    safety_relation_entailed,
+    temporal_entailed,
+)
+
 RELATION_CLASSES = {
     "causal": (
         "causes", "caused", "leads to", "results in", "prevents",
@@ -371,6 +378,77 @@ def _condition_supported(claim, evidence):
 
     return True, None
 
+def _atomic_alignment(claim: str, evidence: str):
+    claim_atoms = decompose_claim(claim)
+    evidence_atoms = decompose_claim(evidence)
+
+    if not claim_atoms:
+        return True, None
+
+    evidence_atoms = evidence_atoms or (
+        decompose_claim(evidence),
+    )
+
+    evidence_atoms = tuple(
+        atom for atom in evidence_atoms
+        if atom.text
+    )
+
+    for claim_atom in claim_atoms:
+        claim_tokens = _tokens(claim_atom.text)
+        matched = False
+
+        for evidence_atom in evidence_atoms:
+            evidence_tokens = _tokens(evidence_atom.text)
+            overlap = (
+                len(claim_tokens & evidence_tokens)
+                / max(1, len(claim_tokens))
+            )
+
+            if overlap < 0.55:
+                continue
+
+            relation_ok, relation_reason = relation_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not relation_ok:
+                continue
+
+            temporal_ok, temporal_reason = temporal_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not temporal_ok:
+                continue
+
+            safety_ok, safety_reason = safety_relation_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not safety_ok:
+                continue
+
+            if claim_atom.polarity != evidence_atom.polarity:
+                return False, "atomic_polarity_mismatch"
+
+            matched = True
+            break
+
+        if not matched:
+            reasons = [
+                relation_reason,
+                temporal_reason,
+                safety_reason,
+            ]
+            reason = next(
+                value for value in reasons
+                if value is not None
+            )
+            return False, reason
+
+    return True, None
+
 def verify(claim, evidence):
     claim_for_logic = _normalize_double_negation(claim)
     evidence_for_logic = _normalize_double_negation(evidence)
@@ -390,6 +468,16 @@ def verify(claim, evidence):
         return IndependentEntailment(
             "UNKNOWN",
             ("insufficient_semantic_overlap",),
+        )
+
+    atomic_ok, atomic_reason = _atomic_alignment(
+        claim_for_logic,
+        evidence_for_logic,
+    )
+    if not atomic_ok:
+        return IndependentEntailment(
+            "UNKNOWN",
+            (atomic_reason,),
         )
 
     claim_relation = _relation_class(claim_for_logic)
