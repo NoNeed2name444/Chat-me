@@ -712,15 +712,36 @@ private enum SemanticGuard {
             }
             .map(String.init)
 
-        let window = before
-            ? Array(rawTokens.suffix(4))
-            : Array(rawTokens.prefix(4))
+        let sequence = before
+            ? Array(rawTokens.reversed())
+            : rawTokens
 
-        let tokens = window.filter {
-            !stopwords.contains($0) || $0.count == 1
+        var selected: [String] = []
+        var seenSubstantive = false
+
+        for token in sequence {
+            let isStopword = stopwords.contains(token) && token.count != 1
+
+            if isStopword {
+                if seenSubstantive {
+                    break
+                }
+                continue
+            }
+
+            selected.append(token)
+            seenSubstantive = true
+
+            if selected.count >= 3 {
+                break
+            }
         }
 
-        return tokens.joined(separator: " ")
+        if before {
+            selected.reverse()
+        }
+
+        return selected.joined(separator: " ")
     }
 
     private static func anchorsEquivalent(
