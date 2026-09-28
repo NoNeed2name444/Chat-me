@@ -141,7 +141,7 @@ def _claim_reasoning_warnings(claim: str, evidence: str):
                 )
                 / max(1, len(_tokens(claim_atom.text)))
             )
-            if overlap < 0.55:
+            if overlap < 0.45:
                 continue
 
             relation_ok, relation_reason = relation_entailed(
