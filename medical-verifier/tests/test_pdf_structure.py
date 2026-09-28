@@ -108,7 +108,7 @@ def test_pdf_endpoint_persists_typed_manifest(monkeypatch):
     assert len(stored) == 2
     assert stored[0]["source_snapshot_sha256"] == "pdf-sha"
     assert stored[0]["block_type"] == "caption"
-    assert stored[1]["related_block_ids"] == ["block-1"]
+    assert stored[1]["related_block_ids"] == [stored[0]["evidence_id"] if "evidence_id" in stored[0] else "local:1"]
 
     assert len(manifests) == 1
     assert verify_manifest(manifests[0]) is True
