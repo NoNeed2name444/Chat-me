@@ -18,7 +18,10 @@ from app.verification.curriculum import (
 )
 from app.verification.entailment import assess_entailment
 from app.verification.policy import POLICY_VERSION, decide_verdict
-from app.verification.provenance import apply_temporal_supersession
+from app.verification.provenance import (
+    apply_temporal_supersession,
+    evidence_provenance_warnings,
+)
 from app.verification.reliability import aggregate, enrich
 from app.verification.reliability_report import build_report
 from app.verification.revalidation import revalidate
@@ -118,7 +121,13 @@ def _retrieve_curriculum_sources(assertion_text, request):
             f"curriculum_provider_error:{type(exc).__name__}"
         ]
 
-def _evaluate_evidence(assertion_text, evidence, risk, context_missing):
+def _evaluate_evidence(
+    assertion_text,
+    evidence,
+    risk,
+    context_missing,
+    provenance_mode="permissive",
+):
     for item in evidence:
         enrich(
             item,
@@ -126,8 +135,24 @@ def _evaluate_evidence(assertion_text, evidence, risk, context_missing):
             date.today(),
         )
 
+    provenance_warnings = []
+    provenance_checked = []
+    for item in evidence:
+        warnings = evidence_provenance_warnings(
+            item,
+            mode=provenance_mode,
+        )
+        if warnings:
+            provenance_warnings.extend(
+                f"{item.id}:{warning}"
+                for warning in warnings
+            )
+            item.supports = None
+            continue
+        provenance_checked.append(item)
+
     evidence, temporal_warnings = apply_temporal_supersession(
-        evidence
+        provenance_checked
     )
 
     classified, _, _ = assess_evidence(
@@ -167,7 +192,7 @@ def _evaluate_evidence(assertion_text, evidence, risk, context_missing):
     return {
         "evidence": classified,
         "temporal_warnings": temporal_warnings,
-        "entailment_warnings": entailment_warnings,
+        "entailment_warnings": entailment_warnings + provenance_warnings,
         "aggregate": agg,
         "verdict": verdict,
         "confidence": confidence,
@@ -326,6 +351,7 @@ def verify(request):
             current_evidence,
             risk,
             sorted(context_missing),
+            request.provenance_mode,
         )
 
         all_flags.extend(
@@ -419,6 +445,22 @@ def verify(request):
         request,
     )
     all_flags.extend(curriculum_flags)
+
+    if request.provenance_mode == "bound":
+        retained_curriculum = []
+        for item in curriculum_items:
+            warnings = evidence_provenance_warnings(
+                item,
+                mode=request.provenance_mode,
+            )
+            if warnings:
+                all_flags.extend(
+                    f"{item.id}:{warning}"
+                    for warning in warnings
+                )
+                continue
+            retained_curriculum.append(item)
+        curriculum_items = retained_curriculum
 
     curriculum_assessment = assess_curriculum_fidelity(
         normalized.normalized,
@@ -674,6 +716,7 @@ def verify(request):
         claim_type=normalized.claim_type,
         risk_level=risk,
         verification_mode=request.verification_mode,
+        provenance_mode=request.provenance_mode,
         atomic_assertions=[
             a.__dict__
             for a in assertions
