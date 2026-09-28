@@ -15,6 +15,7 @@ final class MedicalVerifierCoreTests: XCTestCase {
                 passage
             ),
             passage: passage,
+            pageNumber: 12,
             locator: "page:12",
             version: "2022"
         )
