@@ -142,6 +142,50 @@
       "source_file_seed": "pdf-bytes",
       "expected_status": "SOURCE_INTEGRITY_FAILED",
       "requires_review": true
+    },
+    {
+      "id": "daily_dose_equivalent",
+      "prompt": "How should the dose be taken?",
+      "answer": "Take 500 mg twice daily.",
+      "source_title": "Course",
+      "source_passage": "Take 1000 mg daily.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
+      "id": "dose_frequency_mismatch",
+      "prompt": "How should the dose be taken?",
+      "answer": "Take 500 mg twice daily.",
+      "source_title": "Course",
+      "source_passage": "Take 500 mg once daily.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "universal_scope",
+      "prompt": "Who does Treatment A work for?",
+      "answer": "Treatment A works in all patients.",
+      "source_title": "Course",
+      "source_passage": "Treatment A works in selected patients.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "extraction_uncertain",
+      "prompt": "What does insulin do?",
+      "answer": "Insulin lowers blood glucose.",
+      "source_title": "OCR course",
+      "source_passage": "Insulin lowers blood glucose.",
+      "source_file_seed": "pdf-bytes",
+      "extraction_quality": 0.6,
+      "extraction_warnings": [
+        "ocr_uncertain"
+      ],
+      "expected_status": "SOURCE_EXTRACTION_UNCERTAIN",
+      "requires_review": true
     }
   ]
 }
