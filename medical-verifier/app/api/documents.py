@@ -89,7 +89,7 @@ def ingest_document(request: DocumentIngestRequest):
 
 class PDFDocumentIngestRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
-    pdf_base64: str = Field(min_length=20, max_length=27_000_000)
+    pdf_base64: str = Field(min_length=1, max_length=27_000_000)
     source_type: str = "reference"
     publisher: str = "internal"
     url: str | None = None
