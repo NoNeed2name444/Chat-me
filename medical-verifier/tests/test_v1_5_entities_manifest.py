@@ -11,15 +11,15 @@ def test_unknown_entity_is_not_fuzzily_equivalent():
 
 
 def test_manifest_digest_is_deterministic():
-    manifest = BenchmarkManifest("1.5", "demo", "snapshot-1", ("a", "b"))
+    manifest = BenchmarkManifest("1.6", "demo", "snapshot-1", ("a", "b"))
     assert manifest.digest() == manifest.digest()
     assert manifest.to_dict()["snapshot_sha256"] == manifest.digest()
 
 
 def test_manifest_parent_hash_is_bound():
-    first = BenchmarkManifest("1.5", "demo", "snapshot-1", ("a",))
+    first = BenchmarkManifest("1.6", "demo", "snapshot-1", ("a",))
     second = BenchmarkManifest(
-        "1.5", "demo", "snapshot-2", ("b",), first.digest()
+        "1.6", "demo", "snapshot-2", ("b",), first.digest()
     )
     assert second.to_dict()["parent_snapshot_sha256"] == first.digest()
     assert second.digest() != first.digest()
