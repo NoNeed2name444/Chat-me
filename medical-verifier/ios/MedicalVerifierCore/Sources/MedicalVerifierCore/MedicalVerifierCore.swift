@@ -274,16 +274,16 @@ private enum SafetyClassifier {
 
     static func containsActionRequest(_ lower: String) -> Bool {
         let action =
-            #"(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)"#
+            #"\b(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)\b"#
 
         let medication =
-            #"(?:medication|medicine|drug|dose|insulin|anticoagulant|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen|amoxicillin|prednisone|levothyroxine|lisinopril)"#
+            #"\b(?:medication|medicine|drug|dose|insulin|anticoagulant|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen|amoxicillin|prednisone|levothyroxine|lisinopril)\b"#
 
         let interrogative =
-            #"(?:shoulds+i|shoulds+we|cans+i|mays+i|whats+shoulds+i|whats+dos+is+do|hows+shoulds+i|dos+i)"#
+            #"\b(?:should\s+i|should\s+we|can\s+i|may\s+i|what\s+should\s+i|what\s+do\s+i\s+do|how\s+should\s+i|do\s+i)\b"#
 
         let direct =
-            #"^s*(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce).{0,100}"#
+            #"^\s*(?:stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)\b.{0,100}"#
             + medication
 
         let contextual =
@@ -291,15 +291,15 @@ private enum SafetyClassifier {
             + #".{0,100}"# + medication
 
         let directInstruction =
-            #"(?:^|[.!?]s+)(?:stop|start|change|double|halve|skip|replace|take).{0,100}"#
+            #"(?:^|[.!?]\s+)(?:stop|start|change|double|halve|skip|replace|take)\b.{0,100}"#
             + medication
 
         let contextualInstruction =
-            #"(?:yous+should|yous+needs+to|yous+must).{0,100}"#
+            #"\b(?:you\s+should|you\s+need\s+to|you\s+must)\b.{0,100}"#
             + medication
 
         let urgent =
-            #"(?:overdose|poisoning|poisoned|severes+bleeding|chests+pain|difficultys+breathing|anaphylaxis).{0,120}"#
+            #"\b(?:overdose|poisoning|poisoned|severe\s+bleeding|chest\s+pain|difficulty\s+breathing|anaphylaxis)\b.{0,120}"#
             + interrogative
 
         return lower.range(
@@ -1341,7 +1341,7 @@ private enum SemanticGuard {
             concentrationDailyDose,
             weightBasedDailyDose
         ] {
-            if let value = calculator(in: text) {
+            if let value = calculator(text) {
                 return value
             }
         }
