@@ -191,7 +191,6 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .sourceUnavailable)
         XCTAssertTrue(result.requiresHumanReview)
     }
-}
 
 
     func testUnsafeActionInAnswerEscalatesEvenWithInnocentPrompt() {
@@ -275,3 +274,4 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .sourceIntegrityFailed)
         XCTAssertTrue(result.requiresHumanReview)
     }
+}
