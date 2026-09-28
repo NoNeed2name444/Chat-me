@@ -167,6 +167,43 @@ def _evaluate_evidence(assertion_text, evidence, risk, context_missing):
     }
 
 def verify(request):
+    if request.verification_contract_version != settings.verification_contract_version:
+        result = VerificationResponse(
+            verdict="CONTRACT_MISMATCH",
+            confidence=0.0,
+            confidence_semantics="Contract mismatch; no verification decision was made.",
+            claim=request.claim,
+            normalized_claim=request.claim,
+            claim_type="contract_mismatch",
+            risk_level="high",
+            verification_mode=request.verification_mode,
+            evidence=[],
+            contradictions=[],
+            curriculum_assessment={},
+            current_evidence_assessment={},
+            knowledge_divergence="unknown",
+            study_hint=None,
+            source_revalidation={},
+            reliability={
+                "policy_version": POLICY_VERSION,
+                "verification_contract_version": settings.verification_contract_version,
+                "client_contract_version": request.verification_contract_version,
+            },
+            adversarial_findings=[],
+            limitations=["client_server_verification_contract_mismatch"],
+            decision_reasons=[
+                "Client and server verification contracts differ."
+            ],
+            missing_context=[],
+            requires_human_review=True,
+            verifier_version=settings.verifier_version,
+            verification_contract_version=settings.verification_contract_version,
+            knowledge_snapshot=settings.knowledge_snapshot,
+            verification_id=str(uuid4()),
+        )
+        store_verification(result)
+        return result
+
     normalized = normalize_claim(request.claim)
     assertions = decompose_claim(normalized.normalized)
 
@@ -249,6 +286,7 @@ def verify(request):
             missing_context=sorted(context_missing),
             requires_human_review=True,
             verifier_version=settings.verifier_version,
+            verification_contract_version=settings.verification_contract_version,
             knowledge_snapshot=settings.knowledge_snapshot,
             verification_id=str(uuid4()),
         )
