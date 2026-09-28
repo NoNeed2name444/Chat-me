@@ -145,6 +145,12 @@ def _daily_mass_dose(text):
     ):
         return None
 
+    if re.search(
+        r"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug)\s*/\s*kg\b",
+        text.lower(),
+    ):
+        return None
+
     values = re.findall(
         r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\b",
         text.lower(),
