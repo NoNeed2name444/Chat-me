@@ -1,10 +1,10 @@
-# Verification contract v1.7
+# Verification contract v1.8
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.7`
+Current contract: `1.8`
 
 A client sends `verification_contract_version`.
 
@@ -106,7 +106,7 @@ uncertain and require review.
 The contract still does not imply clinical validation or calibrated probability.
 
 
-## v1.7 additions
+## v1.8 additions
 
 The benchmark contract now supports:
 
@@ -119,5 +119,19 @@ The benchmark contract now supports:
 - explicit alias-only entity normalization with unknown/near-spelling entities left unresolved
 - an API integrity-validation lane that returns the snapshot digest and deterministic findings
 
-Benchmark integrity is an engineering control, not evidence of clinical validity, dataset
-representativeness, independence, safety, or regulatory compliance.
+## v1.8 additions
+
+The benchmark/provenance boundary now supports:
+
+- snapshot schema enforcement with deterministic JSON import/export
+- manifest case-ID binding and recomputed digest verification
+- duplicate case-ID detection
+- optional train/test separation enforcement
+- train/test source-family, study-family, and canonical-ID overlap detection
+- provenance-bound benchmark mode requiring source family, canonical source ID, source snapshot hash, and passage hash
+- optional provenance-bound production verification that refuses evidence lacking those bindings
+- conservative explicit-date entailment: a dated claim requires matching dated evidence
+- explicit alias-only entity equivalence in atomic subject/object alignment
+
+These controls remain deterministic engineering checks. They do not establish clinical validity,
+representativeness, independence, calibration, or regulatory compliance.
