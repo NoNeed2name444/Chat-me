@@ -18,7 +18,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MedicalVerifierCoreTests",
-            dependencies: ["MedicalVerifierCore"]
+            dependencies: ["MedicalVerifierCore"],
+            resources: [
+                .copy("Resources")
+            ]
         )
     ]
 )
