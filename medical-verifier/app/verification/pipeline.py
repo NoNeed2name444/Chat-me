@@ -488,6 +488,10 @@ def verify(request):
     elif request.verification_mode == "curriculum_faithful":
         if curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED":
             final_verdict = "CURRICULUM_SOURCE_INTEGRITY_FAILED"
+        elif curriculum_assessment.status == "SOURCE_EXTRACTION_UNCERTAIN":
+            final_verdict = "CURRICULUM_SOURCE_EXTRACTION_UNCERTAIN"
+        elif curriculum_assessment.status == "CONFLICTING_CURRICULUM_SOURCES":
+            final_verdict = "CURRICULUM_SOURCE_CONFLICT"
         elif curriculum_assessment.status == "ALIGNED":
             final_verdict = "CURRICULUM_ALIGNED"
         else:
@@ -495,6 +499,10 @@ def verify(request):
     else:
         if curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED":
             final_verdict = "CURRICULUM_SOURCE_INTEGRITY_FAILED"
+        elif curriculum_assessment.status == "SOURCE_EXTRACTION_UNCERTAIN":
+            final_verdict = "CURRICULUM_SOURCE_EXTRACTION_UNCERTAIN"
+        elif curriculum_assessment.status == "CONFLICTING_CURRICULUM_SOURCES":
+            final_verdict = "CURRICULUM_SOURCE_CONFLICT"
         elif (
             curriculum_assessment.status == "ALIGNED"
             and divergence == "curriculum_vs_current_conflict"
@@ -646,7 +654,11 @@ def verify(request):
             "CONTRADICTED",
         }
         or divergence == "curriculum_vs_current_conflict"
-        or curriculum_assessment.status == "SOURCE_INTEGRITY_FAILED"
+        or curriculum_assessment.status in {
+            "SOURCE_INTEGRITY_FAILED",
+            "SOURCE_EXTRACTION_UNCERTAIN",
+            "CONFLICTING_CURRICULUM_SOURCES",
+        }
         or bool(context_missing)
         or revalidation_blocked
     )
