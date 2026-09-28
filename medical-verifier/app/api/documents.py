@@ -208,6 +208,7 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
         evidence_items=manifest_items,
         parent_manifest_sha256=request.parent_manifest_sha256,
     )
+    store_manifest(manifest)
 
     return {
         "status": "stored",
