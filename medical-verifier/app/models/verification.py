@@ -30,6 +30,6 @@ class VerificationResponse(BaseModel):
     missing_context: list[str] = []
 
     requires_human_review: bool
-    verifier_version: str = "0.3.0"
+    verifier_version: str = "0.4.0"
     knowledge_snapshot: str = "LIVE-API"
     verification_id: str
