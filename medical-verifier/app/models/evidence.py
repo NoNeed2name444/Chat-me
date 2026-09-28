@@ -1,5 +1,16 @@
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, Field
+
+DocumentPartType = Literal[
+    "text",
+    "table",
+    "figure",
+    "caption",
+    "footnote",
+    "header",
+    "unknown",
+]
 
 class EvidenceItem(BaseModel):
     id: str
@@ -13,7 +24,16 @@ class EvidenceItem(BaseModel):
 
     url: str | None = None
     source_locator: str | None = None
+    page_number: int | None = Field(default=None, ge=1)
+    section: str | None = None
+    block_type: DocumentPartType = "text"
+    block_index: int | None = Field(default=None, ge=0)
     passage: str = ""
+
+    # Explicit version precedence. Only sources sharing a precedence_group
+    # participate in deterministic rank resolution.
+    precedence_group: str | None = None
+    precedence_rank: int = Field(default=0, ge=0)
 
     # Provenance / independence
     source_family: str = ""
