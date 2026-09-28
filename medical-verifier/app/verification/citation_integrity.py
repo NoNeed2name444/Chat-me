@@ -6,7 +6,9 @@ def normalize_source_text(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 def sha256_text(text: str) -> str:
-    return hashlib.sha256(normalize_source_text(text).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        normalize_source_text(text).encode("utf-8")
+    ).hexdigest()
 
 def bind_evidence(
     item,
@@ -51,20 +53,18 @@ def verify_citation(item, source_text: str | None = None):
     ):
         warnings.append("metadata_record_not_clinical_entailment")
 
+    if item.passage_sha256 and item.passage_sha256 != sha256_text(item.passage):
+        warnings.append("passage_hash_mismatch")
+
     if item.source_snapshot_sha256 is None:
         warnings.append("source_snapshot_unverified")
 
     if source_text is not None and item.passage.strip():
         source_norm = normalize_source_text(source_text)
         passage_norm = normalize_source_text(item.passage)
+
         if passage_norm not in source_norm:
             warnings.append("citation_passage_not_found_in_source")
-
-        if (
-            item.passage_sha256
-            and item.passage_sha256 != sha256_text(item.passage)
-        ):
-            warnings.append("passage_hash_mismatch")
 
         if (
             item.source_snapshot_sha256
