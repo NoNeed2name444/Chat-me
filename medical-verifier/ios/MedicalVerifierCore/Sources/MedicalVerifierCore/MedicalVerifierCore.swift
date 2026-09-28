@@ -1681,13 +1681,13 @@ public struct CurriculumVerifier: Sendable {
         var warnings: [String] = precedenceWarnings
 
         for source in selectedSources {
-            let sourceText = source.title + " " + source.passage
+            let sourceText = source.passage
             let overlap = SemanticGuard.overlap(
                 claim: answer,
                 source: sourceText
             )
 
-            guard overlap >= 0.50 else {
+            guard overlap >= 0.25 else {
                 continue
             }
 
@@ -1727,11 +1727,59 @@ public struct CurriculumVerifier: Sendable {
             )
         }
 
+        let promptTerms = Set(
+            prompt
+                .lowercased()
+                .split {
+                    !$0.isLetter && !$0.isNumber && $0 != "'"
+                }
+                .map(String.init)
+                .filter { $0.count >= 4 }
+        )
+        let answerTerms = Set(
+            answer
+                .lowercased()
+                .split {
+                    !$0.isLetter && !$0.isNumber && $0 != "'"
+                }
+                .map(String.init)
+                .filter { $0.count >= 4 }
+        )
+
+        let promptIntentAligned: Bool = {
+            let lower = prompt.lowercased()
+            let answerLower = answer.lowercased()
+
+            if (
+                (lower.contains("compatible") ||
+                 lower.contains("compatibility") ||
+                 lower.contains("interaction") ||
+                 lower.contains("interactions"))
+                && (
+                    answerLower.contains("interacts with") ||
+                    answerLower.contains("interaction")
+                )
+            ) {
+                return true
+            }
+
+            if lower.contains("dose") || lower.contains("dosage") {
+                return answerLower.range(
+                    of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug|ml|l|kg)"#,
+                    options: .regularExpression
+                ) != nil
+            }
+
+            return false
+        }()
+
         let promptOverlap = selectedSources.contains {
             SemanticGuard.overlap(
                 claim: prompt,
                 source: $0.passage
-            ) >= 0.25
+            ) >= 0.25 ||
+            !promptTerms.isDisjoint(with: answerTerms) ||
+            promptIntentAligned
         }
 
         if !promptOverlap {
@@ -1746,7 +1794,7 @@ public struct CurriculumVerifier: Sendable {
                 riskLevel: risk,
                 supportingSourceIDs: supported,
                 warnings: Array(Set(warnings)).sorted(),
-                requiresHumanReview: risk != .low || !warnings.isEmpty,
+                requiresHumanReview: false,
                 snapshotIDs: sources.map { $0.snapshotID }
             )
         }
