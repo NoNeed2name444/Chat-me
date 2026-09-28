@@ -13,8 +13,9 @@ from app.verification.claim_reasoning import (
 )
 
 CAUSAL_WORDS = (
-    "causes", "caused", "leads to", "results in",
-    "prevents", "reduces", "increases", "decreases",
+    "cause", "causes", "caused", "leads to", "result in", "results in",
+    "prevent", "prevents", "reduce", "reduces", "increase", "increases",
+    "decrease", "decreases",
 )
 ASSOCIATION_WORDS = (
     "associated with", "association", "correlated with",
