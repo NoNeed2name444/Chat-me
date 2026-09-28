@@ -20,6 +20,7 @@ class VerificationResponse(BaseModel):
     current_evidence_assessment: dict = {}
     knowledge_divergence: str = "none"
     study_hint: str | None = None
+    source_revalidation: dict = {}
 
     reliability: dict = {}
     adversarial_findings: list[dict] = []
