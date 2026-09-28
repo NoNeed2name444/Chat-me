@@ -30,7 +30,6 @@ def validate_question(prompt: str, answer: str, source_items):
         )
 
     if not source_items:
-    if not source_items:
         return QuestionValidation(
             status="SOURCE_UNAVAILABLE",
             warnings=("no_curriculum_sources",),
