@@ -128,3 +128,36 @@ def test_pdf_endpoint_rejects_non_pdf_payload():
         assert getattr(exc, "detail", None) == "invalid_pdf_header"
     else:
         raise AssertionError("expected invalid_pdf_header")
+
+
+def test_multiple_captions_do_not_cross_link(monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return (
+                "Figure 1: First\n"
+                "First figure text\n"
+                "Figure 2: Second\n"
+                "Second figure text"
+            )
+
+    class FakeReader:
+        def __init__(self, _stream):
+            self.pages = [FakePage()]
+
+    monkeypatch.setattr(
+        pdf_structure,
+        "PdfReader",
+        FakeReader,
+    )
+
+    result = pdf_structure.extract_pdf(b"%PDF-fake")
+
+    assert result.blocks[1].related_block_ids == (
+        result.blocks[0].block_id,
+    )
+    assert result.blocks[3].related_block_ids == (
+        result.blocks[2].block_id,
+    )
+    assert result.blocks[1].related_block_ids != (
+        result.blocks[2].block_id,
+    )
