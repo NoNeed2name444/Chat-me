@@ -2,10 +2,25 @@ import re
 from dataclasses import dataclass
 
 RELATION_CLASSES = {
-    "causal": ("causes", "caused", "leads to", "results in", "prevents"),
-    "risk_increase": ("increases", "increased", "raises", "elevates", "higher"),
-    "risk_decrease": ("reduces", "reduced", "lowers", "decreases", "decreased"),
-    "association": ("associated with", "association", "correlated with", "linked to"),
+    "causal": (
+        "causes", "caused", "leads to", "results in", "prevents",
+    ),
+    "risk_increase": (
+        "increases", "increased", "raises", "elevates", "higher",
+    ),
+    "risk_decrease": (
+        "reduces", "reduced", "lowers", "decreases", "decreased",
+    ),
+    "association": (
+        "associated with", "association", "correlated with", "linked to",
+    ),
+    "safety": (
+        "safe", "safely", "dangerous", "harmful", "harm", "adverse",
+        "contraindicated", "contraindication",
+    ),
+    "effectiveness": (
+        "effective", "effectiveness", "efficacy", "works",
+    ),
 }
 
 POPULATION_TERMS = (
@@ -79,7 +94,7 @@ def verify(claim, evidence):
         )
 
     overlap = len(claim_tokens & evidence_tokens) / len(claim_tokens)
-    if overlap < 0.35:
+    if overlap < 0.50:
         return IndependentEntailment(
             "UNKNOWN",
             ("insufficient_semantic_overlap",),
@@ -105,13 +120,19 @@ def verify(claim, evidence):
 
     claim_measure = _measurement_kind(claim)
     evidence_measure = _measurement_kind(evidence)
-    if claim_measure and evidence_measure and claim_measure != evidence_measure:
+
+    if (
+        claim_measure
+        and evidence_measure
+        and claim_measure != evidence_measure
+    ):
         return IndependentEntailment(
             "UNKNOWN",
             ("risk_measurement_type_mismatch",),
         )
 
-    if _numbers(claim) and not _numbers(claim).issubset(_numbers(evidence)):
+    claim_numbers = _numbers(claim)
+    if claim_numbers and not claim_numbers.issubset(_numbers(evidence)):
         return IndependentEntailment(
             "UNKNOWN",
             ("numeric_values_not_entrailed",),
@@ -127,6 +148,7 @@ def verify(claim, evidence):
 
     claim_neg = bool(NEGATION.search(claim))
     evidence_neg = bool(NEGATION.search(evidence))
+
     if claim_neg != evidence_neg:
         return IndependentEntailment(
             "CONTRADICTS",
