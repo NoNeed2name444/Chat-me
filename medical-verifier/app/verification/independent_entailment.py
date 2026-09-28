@@ -75,6 +75,33 @@ def _numbers(text):
         )
     )
 
+def _normalize_measurement(value, unit):
+    unit = unit.lower()
+
+    if unit in {"mcg", "ug"}:
+        return (round(float(value) * 0.001, 9), "mg")
+    if unit == "g":
+        return (round(float(value) * 1000.0, 9), "mg")
+    if unit == "kg":
+        return (round(float(value) * 1000000.0, 9), "mg")
+    if unit == "l":
+        return (round(float(value) * 1000.0, 9), "ml")
+    if unit in {"%", "percent"}:
+        return (round(float(value), 9), "percent")
+
+    return (round(float(value), 9), unit)
+
+def _measurements(text):
+    matches = re.findall(
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b",
+        text.lower(),
+    )
+
+    return {
+        _normalize_measurement(value, unit)
+        for value, unit in matches
+    }
+
 def _measurement_kind(text):
     lower = text.lower()
 
@@ -142,6 +169,18 @@ def verify(claim, evidence):
 
     claim_measure = _measurement_kind(claim_for_logic)
     evidence_measure = _measurement_kind(evidence_for_logic)
+    claim_measurements = _measurements(claim_for_logic)
+    evidence_measurements = _measurements(evidence_for_logic)
+
+    if (
+        claim_measurements
+        and not claim_measurements.issubset(evidence_measurements)
+    ):
+        return IndependentEntailment(
+            "UNKNOWN",
+            ("measurement_unit_or_value_mismatch",),
+        )
+
 
     if (
         claim_measure
