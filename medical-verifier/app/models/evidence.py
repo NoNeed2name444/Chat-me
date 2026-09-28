@@ -28,6 +28,8 @@ class EvidenceItem(BaseModel):
     section: str | None = None
     block_type: DocumentPartType = "text"
     block_index: int | None = Field(default=None, ge=0)
+    related_block_ids: list[str] = Field(default_factory=list)
+    language: str = "auto"
     passage: str = ""
 
     # Explicit version precedence. Only sources sharing a precedence_group
