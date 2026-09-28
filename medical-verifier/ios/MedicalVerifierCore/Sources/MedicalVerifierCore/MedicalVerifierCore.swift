@@ -1379,7 +1379,7 @@ public struct SourceIntegrityChecker: Sendable {
 public struct QuestionArtifactFactory: Sendable {
     public let verifierVersion: String
 
-    public init(verifierVersion: String = "ios-core-0.2") {
+    public init(verifierVersion: String = "ios-core-0.4") {
         self.verifierVersion = verifierVersion
     }
 
