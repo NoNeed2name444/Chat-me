@@ -5,6 +5,9 @@ import hashlib
 import json
 
 
+EXPECTED_MANIFEST_VERSION = "1.6"
+
+
 @dataclass(frozen=True)
 class BenchmarkManifest:
     manifest_version: str
@@ -21,7 +24,11 @@ class BenchmarkManifest:
             "case_ids": list(self.case_ids),
             "parent_snapshot_sha256": self.parent_snapshot_sha256,
         }
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
         return hashlib.sha256(encoded).hexdigest()
 
     def to_dict(self) -> dict[str, object]:
@@ -33,3 +40,15 @@ class BenchmarkManifest:
             "parent_snapshot_sha256": self.parent_snapshot_sha256,
             "snapshot_sha256": self.digest(),
         }
+
+    def validate(self) -> tuple[str, ...]:
+        errors = []
+        if self.manifest_version != EXPECTED_MANIFEST_VERSION:
+            errors.append("unsupported_manifest_version")
+        if not self.dataset_id.strip():
+            errors.append("empty_dataset_id")
+        if not self.snapshot_id.strip():
+            errors.append("empty_snapshot_id")
+        if len(self.case_ids) != len(set(self.case_ids)):
+            errors.append("duplicate_case_id")
+        return tuple(sorted(set(errors)))
