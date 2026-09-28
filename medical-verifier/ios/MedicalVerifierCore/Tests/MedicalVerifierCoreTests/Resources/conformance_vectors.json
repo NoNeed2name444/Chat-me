@@ -145,7 +145,7 @@
     },
     {
       "id": "daily_dose_equivalent",
-      "prompt": "How should the dose be taken?",
+      "prompt": "How should you take the medicine daily?",
       "answer": "Take 500 mg twice daily.",
       "source_title": "Course",
       "source_passage": "Take 1000 mg daily.",
@@ -155,7 +155,7 @@
     },
     {
       "id": "dose_frequency_mismatch",
-      "prompt": "How should the dose be taken?",
+      "prompt": "How should you take the medicine daily?",
       "answer": "Take 500 mg twice daily.",
       "source_title": "Course",
       "source_passage": "Take 500 mg once daily.",
