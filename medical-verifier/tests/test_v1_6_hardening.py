@@ -186,7 +186,7 @@ def test_explicit_valid_provenance_is_accepted():
         canonical_id="source-1",
         source_snapshot_sha256="0" * 64,
         passage_sha256=(
-            "b7f537cf1b0d3f3b7b10b0b8f8b2e3dfac2a2b6f5a7a2f2e64a8c6f0e6e7f75"
+            "08d3bac20cd27c8c0e7a71b8a7e55fe485f47ba5aabaac2cd21c898ec372a2bd"
         ),
     )
     warnings = evidence_provenance_warnings(item, mode="bound")
