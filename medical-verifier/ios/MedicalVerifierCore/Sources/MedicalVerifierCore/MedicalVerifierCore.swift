@@ -33,6 +33,12 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
     public let passage: String
     public let extractionQuality: Double
     public let extractionWarnings: [String]
+    public let pageNumber: Int?
+    public let section: String?
+    public let blockType: String
+    public let blockIndex: Int?
+    public let precedenceGroup: String?
+    public let precedenceRank: Int
     public let locator: String?
     public let version: String?
 
@@ -44,6 +50,12 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         passage: String,
         extractionQuality: Double = 1.0,
         extractionWarnings: [String] = [],
+        pageNumber: Int? = nil,
+        section: String? = nil,
+        blockType: String = "text",
+        blockIndex: Int? = nil,
+        precedenceGroup: String? = nil,
+        precedenceRank: Int = 0,
         locator: String? = nil,
         version: String? = nil
     ) {
@@ -54,6 +66,12 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         self.passage = passage
         self.extractionQuality = extractionQuality
         self.extractionWarnings = extractionWarnings
+        self.pageNumber = pageNumber
+        self.section = section
+        self.blockType = blockType
+        self.blockIndex = blockIndex
+        self.precedenceGroup = precedenceGroup
+        self.precedenceRank = precedenceRank
         self.locator = locator
         self.version = version
     }
@@ -69,6 +87,9 @@ public struct QuestionArtifact: Codable, Sendable {
     public let sourceVersions: [String]
     public let sourceFileHashes: [String: String]
     public let sourcePassageHashes: [String: String]
+    public let sourcePages: [String: Int]
+    public let sourceSections: [String: String]
+    public let sourceBlockTypes: [String: String]
     public let validationStatus: CurriculumStatus
     public let warnings: [String]
     public let requiresHumanReview: Bool
@@ -801,6 +822,15 @@ public struct QuestionArtifactFactory: Sendable {
             ],
             sourcePassageHashes: [
                 source.snapshotID: source.passageSHA256
+            ],
+            sourcePages: source.pageNumber.map {
+                [source.snapshotID: $0]
+            } ?? [:],
+            sourceSections: source.section.map {
+                [source.snapshotID: $0]
+            } ?? [:],
+            sourceBlockTypes: [
+                source.snapshotID: source.blockType
             ],
             validationStatus: validation.status,
             warnings: validation.warnings,
