@@ -144,7 +144,7 @@ public final class MedicalVerifierAPIClient: @unchecked Sendable {
     public init(
         baseURL: URL,
         bearerToken: String? = nil,
-        contractVersion: String = "1.0",
+        contractVersion: String = "1.2",
         session: URLSession = .shared
     ) throws {
         guard baseURL.scheme?.lowercased() == "https" else {
