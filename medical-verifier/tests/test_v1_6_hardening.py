@@ -194,3 +194,36 @@ def test_explicit_valid_provenance_is_accepted():
     assert "missing_canonical_id" not in warnings
     assert "missing_source_snapshot_sha256" not in warnings
     assert "missing_passage_sha256" not in warnings
+
+
+def test_snapshot_rejects_unsorted_manifest_case_ids():
+    manifest = BenchmarkManifest("1.6", "demo", "snapshot-1", ("a", "b"))
+    payload = {
+        "schema_version": "1.6",
+        "manifest": {**manifest.to_dict(), "case_ids": ["b", "a"]},
+        "cases": [snapshot_case(_record("a")), snapshot_case(_record("b"))],
+    }
+    import pytest
+    with pytest.raises(ValueError, match="manifest_case_ids_must_be_sorted"):
+        BenchmarkSnapshot.from_dict(payload)
+
+
+def test_snapshot_rejects_missing_manifest_hash():
+    manifest = BenchmarkManifest("1.6", "demo", "snapshot-1", ("a",))
+    payload = {
+        "schema_version": "1.6",
+        "manifest": {k: v for k, v in manifest.to_dict().items() if k != "snapshot_sha256"},
+        "cases": [snapshot_case(_record())],
+    }
+    import pytest
+    with pytest.raises(ValueError, match="missing_or_invalid_manifest_hash"):
+        BenchmarkSnapshot.from_dict(payload)
+
+
+def test_custom_empty_alias_map_does_not_fall_back_to_defaults():
+    from app.verification.entity_normalization import entities_equivalent
+    assert not entities_equivalent(
+        "paracetamol",
+        "acetaminophen",
+        aliases={},
+    )
