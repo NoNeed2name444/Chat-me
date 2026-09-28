@@ -75,6 +75,16 @@ def create_question(request: QuestionCreateRequest):
             for item in evidence
             if item.block_type
         },
+        source_related_block_ids={
+            item.id: item.related_block_ids
+            for item in evidence
+            if item.related_block_ids
+        },
+        source_languages={
+            item.id: item.language
+            for item in evidence
+            if item.language
+        },
         validation_status=validation.status,
         validation_warnings=list(validation.warnings),
         supporting_source_ids=list(validation.supporting_source_ids),
