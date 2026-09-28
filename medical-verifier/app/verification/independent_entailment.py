@@ -100,7 +100,7 @@ def _tokens(text):
     return {
         token
         for token in re.findall(r"[a-z0-9'-]+", text.lower())
-        if len(token) >= 5
+        if len(token) >= 4
     }
 
 def _relation_class(text):
