@@ -275,3 +275,104 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertTrue(result.requiresHumanReview)
     }
 }
+
+
+    func testDailyDoseEquivalenceIsSupported() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Take 1000 mg daily."
+        )
+
+        let result = verifier.verify(
+            prompt: "How should the dose be taken?",
+            answer: "Take 500 mg twice daily.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testDoseFrequencyMismatchIsRejected() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Take 500 mg once daily."
+        )
+
+        let result = verifier.verify(
+            prompt: "How should the dose be taken?",
+            answer: "Take 500 mg twice daily.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertTrue(
+            result.warnings.contains {
+                $0.contains("dose_frequency_mismatch")
+            }
+        )
+    }
+
+    func testUniversalScopeCannotBeInvented() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Treatment A works in selected patients."
+        )
+
+        let result = verifier.verify(
+            prompt: "Who does Treatment A work for?",
+            answer: "Treatment A works in all patients.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+    }
+
+    func testExtractionQualityForcesReview() {
+        let source = SourceSnapshot(
+            snapshotID: "low-quality",
+            title: "OCR course",
+            fileSHA256: SourceHasher.sha256Hex(
+                Data("pdf-bytes".utf8)
+            ),
+            passageSHA256: SourceHasher.normalizedTextSHA256(
+                "Insulin lowers blood glucose."
+            ),
+            passage: "Insulin lowers blood glucose.",
+            extractionQuality: 0.60,
+            extractionWarnings: ["ocr_uncertain"],
+            locator: "page:1",
+            version: "2022"
+        )
+
+        let verifier = CurriculumVerifier()
+
+        let result = verifier.verify(
+            prompt: "What does insulin do?",
+            answer: "Insulin lowers blood glucose.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceExtractionUncertain)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
+    func testConflictingCurriculumSourcesRequireReview() {
+        let sourceA = source(
+            passage: "Drug X increases bleeding."
+        )
+
+        let sourceB = source(
+            passage: "Drug X does not increase bleeding."
+        )
+
+        let verifier = CurriculumVerifier()
+
+        let result = verifier.verify(
+            prompt: "Does Drug X increase bleeding?",
+            answer: "Drug X increases bleeding.",
+            sources: [sourceA, sourceB]
+        )
+
+        XCTAssertEqual(result.status, .conflictingSources)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
