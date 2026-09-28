@@ -146,8 +146,9 @@ def store_evidence(
     language="auto",
     precedence_group=None,
     precedence_rank=0,
+    evidence_id=None,
 ):
-    evidence_id = f"local:{uuid4()}"
+    evidence_id = evidence_id or f"local:{uuid4()}"
     passage_hash = _sha256(passage)
     snapshot_hash = source_snapshot_sha256 or passage_hash
     extraction_warnings = extraction_warnings or []
