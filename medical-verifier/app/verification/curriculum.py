@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify as independent_verify
 
 @dataclass(frozen=True)
@@ -26,9 +27,17 @@ def assess_curriculum_fidelity(claim: str, source_items):
 
     aligned = []
     uncertain = []
+    integrity_failures = []
     dates = []
 
     for item in source_items:
+        if (
+            item.passage_sha256
+            and item.passage_sha256 != sha256_text(item.passage)
+        ):
+            integrity_failures.append(item.id)
+            continue
+
         source_text = " ".join(
             f"{item.title} {item.passage}".lower().split()
         )
@@ -57,6 +66,16 @@ def assess_curriculum_fidelity(claim: str, source_items):
             aligned.append(item.id)
         elif entailment.label == "UNKNOWN":
             uncertain.append(item.id)
+
+    if integrity_failures:
+        return CurriculumAssessment(
+            status="SOURCE_INTEGRITY_FAILED",
+            matched_source_ids=(),
+            reasons=(
+                "Stored curriculum passage failed its cryptographic integrity check.",
+            ),
+            source_dates=tuple(sorted(set(dates))),
+        )
 
     if aligned:
         reasons = [
