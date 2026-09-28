@@ -45,8 +45,46 @@ class IndependentEntailment:
     label: str
     reasons: tuple[str, ...]
 
-def _normalize_double_negation(text):
+def _normalize_multilingual_terms(text):
     result = text.lower()
+    replacements = {
+        "no aumenta": "does not increase",
+        "ne augmente pas": "does not increase",
+        "n'augmente pas": "does not increase",
+        "no causa": "does not cause",
+        "ne cause pas": "does not cause",
+        "n'est pas sûr": "is not safe",
+        "no es seguro": "is not safe",
+        "aumenta": "increases",
+        "augmente": "increases",
+        "reduce": "reduces",
+        "réduit": "reduces",
+        "causa": "causes",
+        "causado": "caused",
+        "asociado con": "associated with",
+        "associé à": "associated with",
+        "asociado a": "associated with",
+        "seguro": "safe",
+        "sûr": "safe",
+        "efectivo": "effective",
+        "efficace": "effective",
+        "pacientes": "patients",
+        "patients": "patients",
+        "niños": "children",
+        "enfants": "children",
+        "adultos": "adults",
+        "adultes": "adults",
+        "glucosa": "glucose",
+        "glucose": "glucose",
+    }
+
+    for source, replacement in replacements.items():
+        result = result.replace(source, replacement)
+
+    return result
+
+def _normalize_double_negation(text):
+    result = _normalize_multilingual_terms(text)
     for source, replacement in DOUBLE_NEGATION_EQUIVALENTS.items():
         result = result.replace(source, replacement)
     return result
