@@ -21,7 +21,7 @@ class ClaimRequest(BaseModel):
     curriculum_source_ids: list[str] = Field(default_factory=list)
     curriculum_snapshot: str | None = None
     question_context: str | None = None
-    verification_contract_version: str = "1.5"
+    verification_contract_version: str = "1.6"
 
 class NormalizedClaim(BaseModel):
     original: str
