@@ -457,6 +457,14 @@ def verify(claim, evidence):
     claim_tokens = _tokens(claim_for_logic)
     evidence_tokens = _tokens(evidence_for_logic)
 
+    claim_daily_dose = _daily_dose_equivalent(claim_for_logic)
+    evidence_daily_dose = _daily_dose_equivalent(evidence_for_logic)
+    daily_dose_equivalent = (
+        claim_daily_dose is not None
+        and evidence_daily_dose is not None
+        and abs(claim_daily_dose - evidence_daily_dose) < 1e-9
+    )
+
     if not claim_tokens:
         return IndependentEntailment(
             "UNKNOWN",
