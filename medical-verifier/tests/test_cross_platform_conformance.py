@@ -58,3 +58,8 @@ def test_shared_conformance_vectors():
 
         assert result.status == case["expected_status"], case["id"]
         assert result.requires_review is case["requires_review"], case["id"]
+
+
+def test_shared_conformance_corpus_version():
+    corpus = json.loads(VECTORS.read_text())
+    assert corpus["version"] == "1.2"
