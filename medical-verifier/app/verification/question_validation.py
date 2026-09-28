@@ -84,7 +84,7 @@ def validate_question(prompt: str, answer: str, source_items):
             )
             continue
 
-        source_text = f"{item.title} {item.passage}"
+        source_text = item.passage
 
         source_terms = {
             token
