@@ -63,6 +63,7 @@ public enum APIClientError: Error, Equatable {
 
 public struct VerificationAPIRequest: Codable, Sendable {
     public let claim: String
+    public let questionContext: String?
     public let context: [String: JSONValue]
     public let sources: [String]
     public let requestedEvidenceLevel: String
@@ -73,15 +74,17 @@ public struct VerificationAPIRequest: Codable, Sendable {
 
     public init(
         claim: String,
+        questionContext: String? = nil,
         context: [String: JSONValue] = [:],
         sources: [String] = ["pubmed", "openfda", "local"],
         requestedEvidenceLevel: String = "authoritative",
         verificationMode: VerificationMode = .currentMedical,
         curriculumSourceIDs: [String] = [],
         curriculumSnapshot: String? = nil,
-        verificationContractVersion: String = "1.0"
+        verificationContractVersion: String = "1.1"
     ) {
         self.claim = claim
+        self.questionContext = questionContext
         self.context = context
         self.sources = sources
         self.requestedEvidenceLevel = requestedEvidenceLevel
@@ -93,6 +96,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case claim
+        case questionContext = "question_context"
         case context
         case sources
         case requestedEvidenceLevel = "requested_evidence_level"
