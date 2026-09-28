@@ -319,3 +319,36 @@ def relation_entailed(
             return False, "atomic_relation_mismatch"
 
     return True, None
+
+
+def opposite_polarity_entailed(claim: str, evidence: str) -> bool:
+    """Detect a structurally matching atomic statement with opposite polarity."""
+    claim_atoms = decompose_claim(claim)
+    evidence_atoms = decompose_claim(evidence)
+
+    for claim_atom in claim_atoms:
+        claim_tokens = _tokens(claim_atom.text)
+        if not claim_tokens:
+            continue
+
+        for evidence_atom in evidence_atoms:
+            evidence_tokens = _tokens(evidence_atom.text)
+            overlap = len(claim_tokens & evidence_tokens) / max(1, len(claim_tokens))
+            if overlap < 0.45:
+                continue
+
+            relation_ok, _ = relation_entailed(claim_atom, evidence_atom)
+            if not relation_ok:
+                continue
+
+            temporal_ok, _ = temporal_entailed(claim_atom, evidence_atom)
+            if not temporal_ok:
+                continue
+
+            if claim_atom.safety != evidence_atom.safety:
+                continue
+
+            if claim_atom.polarity != evidence_atom.polarity:
+                return True
+
+    return False
