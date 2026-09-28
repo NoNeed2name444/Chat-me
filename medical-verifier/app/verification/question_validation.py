@@ -57,8 +57,8 @@ def validate_question(prompt: str, answer: str, source_items):
     extraction_uncertain = False
 
     prompt_terms = {
-        token.lower()
-        for token in prompt.split()
+        token
+        for token in re.findall(r"[a-z0-9'-]+", prompt.lower())
         if len(token) >= 5
     }
 
@@ -85,8 +85,8 @@ def validate_question(prompt: str, answer: str, source_items):
         source_text = f"{item.title} {item.passage}"
 
         source_terms = {
-            token.lower()
-            for token in source_text.split()
+            token
+            for token in re.findall(r"[a-z0-9'-]+", source_text.lower())
             if len(token) >= 5
         }
 
