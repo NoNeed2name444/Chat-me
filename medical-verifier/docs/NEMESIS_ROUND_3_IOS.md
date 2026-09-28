@@ -1,52 +1,55 @@
-# iOS Nemesis Round
+# iOS Nemesis Round 3
 
-Adversarial cases exercised against the initial iOS core:
+The online-first iOS architecture was attacked as an adversary trying to make
+the app produce a false or unsafe result.
 
-1. Tampered passage with unchanged stored hash.
-   Defense: SourceIntegrityChecker recomputes the passage hash.
+## Findings and fixes
 
-2. Tampered original file with unchanged extracted passage.
-   Defense: source file SHA-256 is stored separately and verified separately.
+1. **Tampered passage with unchanged stored hash**
+   - Fixed: the local verifier now performs source-integrity validation at the
+     verifier boundary, not only in a separate helper.
 
-3. Negation flip.
-   Example: source says "reduces"; answer says "does not reduce".
-   Defense: polarity/relation guards abstain.
+2. **Unsafe action hidden in the answer**
+   - Fixed: risk classification now examines both prompt and answer.
+   - Example: an innocent prompt paired with "stop warfarin immediately" escalates.
 
-4. Numeric escalation.
-   Example: source says 20 percent; answer says 50 percent.
-   Defense: claim numbers must occur in the source.
+3. **Reversed medication/action wording**
+   - Fixed: the action detector scans around the medication term in both
+     directions rather than only after the action verb.
 
-5. Population widening/narrowing.
-   Example: source says adults; answer says children.
-   Defense: population qualifiers must be supported.
+4. **Safety vs effectiveness property confusion**
+   - Fixed: local relation classes distinguish safety from effectiveness.
 
-6. Clinical-action bypass.
-   Example: "Should I stop warfarin?"
-   Defense: critical safety escalation, never curriculum auto-validation.
+5. **Double negation**
+   - Fixed: common forms such as "not uncommon" normalize before semantic
+     polarity comparison.
 
-7. Prompt injection inside uploaded source.
-   Defense: source text is treated as data only; no instruction execution path
-   exists in the local verifier.
+6. **Numeric/unit substitution**
+   - Fixed: exact measurement tokens are compared, not merely bare numbers.
+   - Example: 500 mg vs 500 mcg is rejected.
 
-8. Missing curriculum.
-   Defense: SOURCE_UNAVAILABLE and human review.
+7. **Certainty escalation**
+   - Fixed: stronger certainty words must be present in the source before they
+     can be asserted by a curriculum answer.
 
-9. Provenance loss.
-   Defense: QuestionArtifactFactory stores snapshot, file hash, passage hash,
-   locator, and version.
+8. **Client/server semantic drift**
+   - Fixed structurally: iOS requests and server responses carry contract
+     version 1.0, and mismatches fail closed.
 
-10. Server/device semantic drift.
-    Remaining gap: the Swift core and Python verifier are separate
-    implementations and need conformance-vector testing.
+9. **Unsafe transport**
+   - Fixed: the reference iOS network client rejects non-HTTPS endpoints.
 
-11. Linguistic edge cases.
-    Remaining gap: the deterministic local semantic guard can still miss
-    complex scope, cross-sentence negation, tables, figures, and arithmetic.
+10. **Network outage confusion**
+    - Fixed structurally: online verification is optional only for the current
+      medical lane. A network failure cannot be relabeled as current medical
+      support.
 
-12. Medical-currentness gap.
-    Remaining by design: offline curriculum verification cannot prove current
-    medical knowledge.
+## Remaining gaps
 
-The next hardening milestone should be cross-platform conformance vectors plus
-a signed/versioned verifier contract so iOS and server cannot silently disagree
-on verdict semantics.
+- Swift and Python still need true cross-platform conformance vectors executed
+  in CI.
+- The local semantic engine is heuristic and can miss complex cross-sentence
+  scope, tables, figures, arithmetic, and clinical context.
+- Current medical truth still depends on network evidence and source freshness.
+- No claim of clinical validation is made until the clinician-labeled
+  benchmark is populated and measured.
