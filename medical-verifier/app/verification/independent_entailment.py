@@ -187,7 +187,7 @@ def _concentration_daily_dose(text):
 
 def _weight_based_daily_dose(text):
     dose = re.findall(
-        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*/\s*kg(?:\s*/\s*day)?\b",
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*/\s*kg(\s*/\s*day)?\b",
         text.lower(),
     )
     weights = re.findall(
@@ -207,7 +207,11 @@ def _weight_based_daily_dose(text):
     if dose_unit != "mg":
         return None
 
-    per_day = 1.0 if "/day" in dose[0][0] else _frequency_multiplier(text)
+    per_day = (
+        1.0
+        if dose[0][2]
+        else _frequency_multiplier(text)
+    )
     if per_day is None:
         return None
 
