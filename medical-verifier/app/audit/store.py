@@ -11,6 +11,8 @@ _EVIDENCE_COLUMNS = {
     "source_type": "TEXT",
     "publisher": "TEXT",
     "url": "TEXT",
+    "source_locator": "TEXT",
+    "source_snapshot_sha256": "TEXT",
     "passage": "TEXT",
     "source_family": "TEXT",
     "canonical_id": "TEXT",
@@ -54,6 +56,7 @@ def _connect():
             source_type TEXT NOT NULL,
             publisher TEXT NOT NULL,
             url TEXT,
+            source_locator TEXT,
             passage TEXT NOT NULL,
             source_family TEXT,
             canonical_id TEXT,
@@ -101,16 +104,19 @@ def store_evidence(
     source_date=None,
     curriculum_snapshot_id=None,
     source_authority=0.40,
+    source_locator=None,
+    source_snapshot_sha256=None,
 ):
     evidence_id = f"local:{uuid4()}"
     passage_hash = _sha256(passage)
+    snapshot_hash = source_snapshot_sha256 or passage_hash
 
     conn = _connect()
 
     try:
         conn.execute(
             "INSERT INTO evidence "
-            "(id,title,source_type,publisher,url,passage,source_family,"
+            "(id,title,source_type,publisher,url,source_locator,passage,source_family,"
             "canonical_id,source_snapshot_sha256,passage_sha256,"
             "document_version,study_family_id,source_date,"
             "curriculum_snapshot_id,source_authority) "
@@ -121,10 +127,11 @@ def store_evidence(
                 source_type,
                 publisher,
                 url,
+                source_locator,
                 passage,
                 source_type,
                 canonical_id,
-                passage_hash,
+                snapshot_hash,
                 passage_hash,
                 document_version,
                 study_family_id,
