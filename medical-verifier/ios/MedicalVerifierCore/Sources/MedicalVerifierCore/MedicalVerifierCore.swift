@@ -37,6 +37,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
     public let section: String?
     public let blockType: String
     public let blockIndex: Int?
+    public let relatedBlockIDs: [String]
+    public let language: String
     public let precedenceGroup: String?
     public let precedenceRank: Int
     public let locator: String?
@@ -54,6 +56,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         section: String? = nil,
         blockType: String = "text",
         blockIndex: Int? = nil,
+        relatedBlockIDs: [String] = [],
+        language: String = "auto",
         precedenceGroup: String? = nil,
         precedenceRank: Int = 0,
         locator: String? = nil,
@@ -70,6 +74,8 @@ public struct SourceSnapshot: Codable, Sendable, Hashable {
         self.section = section
         self.blockType = blockType
         self.blockIndex = blockIndex
+        self.relatedBlockIDs = relatedBlockIDs
+        self.language = language
         self.precedenceGroup = precedenceGroup
         self.precedenceRank = precedenceRank
         self.locator = locator
@@ -90,6 +96,8 @@ public struct QuestionArtifact: Codable, Sendable {
     public let sourcePages: [String: Int]
     public let sourceSections: [String: String]
     public let sourceBlockTypes: [String: String]
+    public let sourceRelatedBlockIDs: [String: [String]]
+    public let sourceLanguages: [String: String]
     public let validationStatus: CurriculumStatus
     public let warnings: [String]
     public let requiresHumanReview: Bool
@@ -123,6 +131,109 @@ public enum SourceHasher {
         sha256Hex(Data(normalizedText(text).utf8))
     }
 }
+public struct SourceManifestEntry: Codable, Sendable, Hashable {
+    public let evidenceID: String
+    public let sourceSnapshotSHA256: String?
+    public let passageSHA256: String?
+    public let locator: String?
+    public let pageNumber: Int?
+    public let section: String?
+    public let blockType: String
+    public let blockIndex: Int?
+    public let relatedBlockIDs: [String]
+    public let language: String
+    public let version: String?
+    public let precedenceGroup: String?
+    public let precedenceRank: Int
+}
+
+public struct SourceManifest: Codable, Sendable, Hashable {
+    public let manifestID: String
+    public let manifestVersion: String
+    public let parentManifestSHA256: String?
+    public let entries: [SourceManifestEntry]
+    public let manifestSHA256: String
+
+    public static func build(
+        manifestID: String,
+        sources: [SourceSnapshot],
+        parentManifestSHA256: String? = nil
+    ) -> SourceManifest {
+        let entries = sources
+            .map {
+                SourceManifestEntry(
+                    evidenceID: $0.snapshotID,
+                    sourceSnapshotSHA256: $0.fileSHA256,
+                    passageSHA256: $0.passageSHA256,
+                    locator: $0.locator,
+                    pageNumber: $0.pageNumber,
+                    section: $0.section,
+                    blockType: $0.blockType,
+                    blockIndex: $0.blockIndex,
+                    relatedBlockIDs: $0.relatedBlockIDs.sorted(),
+                    language: $0.language,
+                    version: $0.version,
+                    precedenceGroup: $0.precedenceGroup,
+                    precedenceRank: $0.precedenceRank
+                )
+            }
+            .sorted {
+                $0.evidenceID < $1.evidenceID
+            }
+
+        let provisional = SourceManifest(
+            manifestID: manifestID,
+            manifestVersion: "1",
+            parentManifestSHA256: parentManifestSHA256,
+            entries: entries,
+            manifestSHA256: ""
+        )
+
+        return SourceManifest(
+            manifestID: manifestID,
+            manifestVersion: provisional.manifestVersion,
+            parentManifestSHA256: parentManifestSHA256,
+            entries: entries,
+            manifestSHA256: provisional.digest()
+        )
+    }
+
+    public func verify() -> Bool {
+        digest() == manifestSHA256
+    }
+
+    public func verifiesParent(_ parent: SourceManifest?) -> Bool {
+        guard let parentManifestSHA256 else {
+            return parent == nil
+        }
+
+        guard let parent else {
+            return false
+        }
+
+        return parent.verify() &&
+            parent.manifestSHA256 == parentManifestSHA256
+    }
+
+    private func digest() -> String {
+        var encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let provisional = SourceManifest(
+            manifestID: manifestID,
+            manifestVersion: manifestVersion,
+            parentManifestSHA256: parentManifestSHA256,
+            entries: entries,
+            manifestSHA256: ""
+        )
+
+        guard let data = try? encoder.encode(provisional) else {
+            return ""
+        }
+
+        return SourceHasher.sha256Hex(data)
+    }
+}
+
 
 private enum SafetyClassifier {
     static let medicationTerms = [
@@ -1300,6 +1411,12 @@ public struct QuestionArtifactFactory: Sendable {
             } ?? [:],
             sourceBlockTypes: [
                 source.snapshotID: source.blockType
+            ],
+            sourceRelatedBlockIDs: [
+                source.snapshotID: source.relatedBlockIDs
+            ],
+            sourceLanguages: [
+                source.snapshotID: source.language
             ],
             validationStatus: validation.status,
             warnings: validation.warnings,
