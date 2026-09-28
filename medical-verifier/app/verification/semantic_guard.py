@@ -1,5 +1,10 @@
 import re
 
+from app.verification.independent_entailment import (
+    _condition_supported,
+    _daily_dose_equivalent,
+)
+
 CAUSAL_WORDS = (
     "causes", "caused", "leads to", "results in",
     "prevents", "reduces", "increases", "decreases",
@@ -76,16 +81,6 @@ def _frequency_multiplier(text):
 
     return None
 
-def _daily_mass_dose(text):
-    quantities = _quantities(text)
-    multiplier = _frequency_multiplier(text)
-
-    if len(quantities) != 1 or multiplier is None:
-        return None
-
-    value, unit = quantities[0]
-    return round(value * UNIT_SCALE[unit] * multiplier, 9)
-
 def _scope_strength(text):
     lower = text.lower()
 
@@ -155,12 +150,8 @@ def semantic_guard(item, claim):
         warnings.append("negation_scope_mismatch")
         item.supports = None
 
-    claim_q = _quantities(claim_l)
-    evidence_q = _quantities(evidence)
-
-    claim_daily = _daily_mass_dose(claim_l)
-    evidence_daily = _daily_mass_dose(evidence)
-
+    claim_daily = _daily_dose_equivalent(claim_l)
+    evidence_daily = _daily_dose_equivalent(evidence)
     daily_equivalent = (
         claim_daily is not None
         and evidence_daily is not None
@@ -168,6 +159,9 @@ def semantic_guard(item, claim):
     )
 
     if not daily_equivalent:
+        claim_q = _quantities(claim_l)
+        evidence_q = _quantities(evidence)
+
         for value, unit in claim_q:
             if not any(
                 abs(
@@ -211,6 +205,15 @@ def semantic_guard(item, claim):
 
     if claim_scope["exclusive"] and not evidence_scope["exclusive"]:
         warnings.append("exclusive_scope_not_supported")
+        item.supports = None
+
+    condition_ok, condition_reason = _condition_supported(
+        claim_l,
+        evidence,
+    )
+
+    if not condition_ok:
+        warnings.append(condition_reason)
         item.supports = None
 
     if warnings:
