@@ -1,50 +1,225 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models.benchmark import (
+    BenchmarkCaseRequest,
     BenchmarkIntegrityRequest,
     BenchmarkIntegrityResponse,
 )
-from app.verification.benchmark_dataset import BenchmarkRecord
-from app.verification.benchmark_manifest import BenchmarkManifest
+from app.verification.benchmark_dataset import (
+    ALLOWED_LABELS,
+    BenchmarkRecord,
+)
+from app.verification.benchmark_manifest import (
+    EXPECTED_MANIFEST_VERSION,
+    BenchmarkManifest,
+)
 from app.verification.dataset_integrity import (
+    find_cross_split_duplicates,
+    find_cross_split_provenance_leakage,
+    find_duplicate_case_ids,
     find_duplicate_cases,
+    find_missing_provenance,
     summarize_integrity,
 )
 
 router = APIRouter(tags=["benchmark"])
 
 
+def _record(case: BenchmarkCaseRequest) -> BenchmarkRecord:
+    if case.expected not in ALLOWED_LABELS:
+        raise HTTPException(
+            status_code=422,
+            detail="unsupported_expected_label",
+        )
+
+    try:
+        return BenchmarkRecord(
+            case_id=case.case_id,
+            claim=case.claim,
+            evidence=case.evidence,
+            expected=case.expected,
+            subgroup=case.subgroup,
+            risk_level=case.risk_level,
+            source_family=case.source_family,
+            study_family_id=case.study_family_id,
+            canonical_id=case.canonical_id,
+            independence_group=case.independence_group,
+            source_snapshot_sha256=case.source_snapshot_sha256,
+            passage_sha256=case.passage_sha256,
+            split=case.split,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/benchmark/integrity", response_model=BenchmarkIntegrityResponse)
 def benchmark_integrity(request: BenchmarkIntegrityRequest):
-    records = [
-        BenchmarkRecord(
-            case.case_id,
-            case.claim,
-            case.evidence,
-            case.expected,
-            case.subgroup,
-            case.risk_level,
-            case.source_family,
+    train_records = tuple(_record(case) for case in request.train_cases)
+    test_records = tuple(_record(case) for case in request.test_cases)
+    inline_records = tuple(_record(case) for case in request.cases)
+
+    records = inline_records + train_records + test_records
+
+    findings = []
+    findings.extend(find_duplicate_case_ids(records))
+    findings.extend(find_duplicate_cases(records))
+
+    if train_records or test_records:
+        findings.extend(
+            find_cross_split_duplicates(
+                train_records,
+                test_records,
+            )
         )
-        for case in request.cases
-    ]
-    findings = find_duplicate_cases(records)
+        findings.extend(
+            find_cross_split_provenance_leakage(
+                train_records,
+                test_records,
+            )
+        )
+
+    if request.provenance_bound:
+        findings.extend(find_missing_provenance(records))
+
+    case_ids = tuple(sorted(case.case_id for case in records))
+
     manifest = BenchmarkManifest(
-        "1.5",
-        request.dataset_id,
-        request.snapshot_id,
-        tuple(case.case_id for case in records),
-        request.parent_snapshot_sha256,
+        manifest_version=(
+            request.manifest.manifest_version
+            if request.manifest
+            else EXPECTED_MANIFEST_VERSION
+        ),
+        dataset_id=request.dataset_id,
+        snapshot_id=request.snapshot_id,
+        case_ids=case_ids,
+        parent_snapshot_sha256=(
+            request.manifest.parent_snapshot_sha256
+            if request.manifest
+            else request.parent_snapshot_sha256
+        ),
     )
+
+    if manifest.validate():
+        findings.extend(
+            {
+                "case_id": manifest.snapshot_id,
+                "kind": error,
+                "detail": "manifest_validation",
+            }
+            for error in manifest.validate()
+        )
+
+    if request.manifest:
+        if request.manifest.dataset_id != request.dataset_id:
+            findings.append(
+                {
+                    "case_id": manifest.snapshot_id,
+                    "kind": "manifest_dataset_id_mismatch",
+                    "detail": "manifest_dataset_id_differs_from_request",
+                }
+            )
+        if request.manifest.snapshot_id != request.snapshot_id:
+            findings.append(
+                {
+                    "case_id": manifest.snapshot_id,
+                    "kind": "manifest_snapshot_id_mismatch",
+                    "detail": "manifest_snapshot_id_differs_from_request",
+                }
+            )
+        if tuple(sorted(request.manifest.case_ids)) != case_ids:
+            findings.append(
+                {
+                    "case_id": manifest.snapshot_id,
+                    "kind": "manifest_case_ids_mismatch",
+                    "detail": "manifest_case_ids_differs_from_records",
+                }
+            )
+        if (
+            request.manifest.snapshot_sha256
+            and request.manifest.snapshot_sha256 != manifest.digest()
+        ):
+            findings.append(
+                {
+                    "case_id": manifest.snapshot_id,
+                    "kind": "manifest_hash_mismatch",
+                    "detail": "supplied_manifest_hash_differs_from_recomputed",
+                }
+            )
+
+    if (
+        request.expected_snapshot_sha256
+        and request.expected_snapshot_sha256 != manifest.digest()
+    ):
+        findings.append(
+            {
+                "case_id": manifest.snapshot_id,
+                "kind": "manifest_hash_mismatch",
+                "detail": "expected_snapshot_hash_differs_from_recomputed",
+            }
+        )
+
+    if request.enforce_split_separation:
+        enforcement_kinds = {
+            "train_test_duplicate",
+            "train_test_source_family_overlap",
+            "train_test_study_family_overlap",
+            "train_test_canonical_id_overlap",
+        }
+        if any(
+            (
+                finding.kind
+                if hasattr(finding, "kind")
+                else finding.get("kind")
+            ) in enforcement_kinds
+            for finding in findings
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="train_test_separation_violation",
+            )
+
+    if request.provenance_bound and any(
+        (
+            finding.kind
+            if hasattr(finding, "kind")
+            else finding.get("kind")
+        ) == "missing_provenance"
+        for finding in findings
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="provenance_bound_requires_complete_case_provenance",
+        )
+
+    from app.verification.dataset_integrity import IntegrityFinding
+
+    normalized_findings = []
+    for finding in findings:
+        if isinstance(finding, IntegrityFinding):
+            normalized_findings.append(finding)
+        else:
+            normalized_findings.append(
+                IntegrityFinding(
+                    str(finding["case_id"]),
+                    str(finding["kind"]),
+                    str(finding["detail"]),
+                )
+            )
+
+    finding_summary = summarize_integrity(normalized_findings)
+
     return BenchmarkIntegrityResponse(
         dataset_id=request.dataset_id,
         snapshot_id=request.snapshot_id,
+        manifest_schema_version=manifest.manifest_version,
         snapshot_sha256=manifest.digest(),
+        valid=not finding_summary["finding_count"],
         case_count=len(records),
-        integrity_findings=summarize_integrity(findings),
+        integrity_findings=finding_summary,
         limitations=[
             "Integrity checks detect only the implemented deterministic conditions.",
             "A clean result does not establish clinical validity or dataset independence.",
             "The snapshot hash is an integrity digest, not a digital signature.",
+            "Source-family/study-family overlap is a leakage warning and is not a clinical quality measure.",
         ],
     )
