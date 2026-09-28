@@ -19,44 +19,28 @@ _PATTERNS = [
     ("action_request", "critical", re.compile(
         r"\b(?:should\s+i|should\s+we|can\s+i|may\s+i|what\s+should\s+i|how\s+should\s+i|do\s+i)\b"
         r".{0,100}\b(stop|start|change|double|halve|take|skip|replace|increase|decrease|reduce)\b"
-        r".{0,100}\b(medication|medicine|drug|dose|insulin|anticoagulant"
-        r"|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen"
-        r"|amoxicillin|prednisone|levothyroxine|lisinopril)\b",
+        r".{0,100}\b(medication|medicine|drug|dose|insulin|anticoagulant|metformin|warfarin|heparin|aspirin|ibuprofen|acetaminophen|amoxicillin|prednisone|levothyroxine|lisinopril)\b",
         re.I,
     )),
     ("urgent_safety_action", "critical", re.compile(
-        r"\b(overdose|poisoning|poisoned|severe\s+bleeding|chest\s+pain|difficulty\s+breathing|anaphylaxis)\b"
-        r".{0,120}\b(what\s+should\s+i|what\s+do\s+i\s+do|should\s+i|can\s+i|may\s+i)\b",
+        r"(?:\b(overdose|poisoning|poisoned|severe\s+bleeding|chest\s+pain|difficulty\s+breathing|anaphylaxis)\b"
+        r".{0,160}\b(what\s+should\s+i|what\s+do\s+i\s+do|should\s+i|can\s+i|may\s+i)\b)"
+        r"|(?:\b(what\s+should\s+i|what\s+do\s+i\s+do|should\s+i|can\s+i|may\s+i)\b"
+        r".{0,160}\b(overdose|poisoning|poisoned|severe\s+bleeding|chest\s+pain|difficulty\s+breathing|anaphylaxis)\b)",
         re.I,
     )),
     ("prompt_injection", "critical", re.compile(
-        r"\b(ignore|disregard|override|bypass)\b.{0,100}"
-        r"\b(instructions?|rules?|policy|safety|guardrails?)\b",
+        r"\b(ignore|disregard|override|bypass)\b.{0,100}\b(instructions?|rules?|policy|safety|guardrails?)\b",
         re.I,
     )),
-    ("authority_pressure", "moderate", re.compile(
-        r"\b(my doctor|doctor said|expert said|guideline says|you must trust)\b",
-        re.I,
-    )),
-    ("citation_pressure", "moderate", re.compile(
-        r"\b(without checking|don't verify|no need to verify|assume the citation)\b",
-        re.I,
-    )),
+    ("authority_pressure", "moderate", re.compile(r"\b(my doctor|doctor said|expert said|guideline says|you must trust)\b", re.I)),
+    ("citation_pressure", "moderate", re.compile(r"\b(without checking|don't verify|no need to verify|assume the citation)\b", re.I)),
 ]
 
 def inspect_claim(claim: str) -> list[AttackFinding]:
-    return [
-        AttackFinding(
-            code=code,
-            severity=severity,
-            description=f"Claim contains {code.replace('_', ' ')}.",
-        )
-        for code, severity, pattern in _PATTERNS
-        if pattern.search(claim)
-    ]
+    return [AttackFinding(code=code, severity=severity, description=f"Claim contains {code.replace('_', ' )}.") for code, severity, pattern in _PATTERNS if pattern.search(claim)]
 
 def highest_severity(findings: list[AttackFinding]) -> str:
     order = {"low": 0, "moderate": 1, "high": 2, "critical": 3}
-    if not findings:
-        return "low"
+    if not findings: return "low"
     return max(findings, key=lambda x: order[x.severity]).severity
