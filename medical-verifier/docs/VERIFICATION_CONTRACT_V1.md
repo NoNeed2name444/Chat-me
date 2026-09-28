@@ -1,10 +1,10 @@
-# Verification contract v1.1
+# Verification contract v1.2
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.1`
+Current contract: `1.2`
 
 A client sends `verification_contract_version`.
 
