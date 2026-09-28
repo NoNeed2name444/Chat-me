@@ -50,6 +50,17 @@ def _connect():
     """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS source_manifests (
+            manifest_id TEXT PRIMARY KEY,
+            manifest_version TEXT NOT NULL,
+            parent_manifest_sha256 TEXT,
+            manifest_sha256 TEXT NOT NULL,
+            manifest_json TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS questions (
             question_id TEXT PRIMARY KEY,
             question_json TEXT NOT NULL,
@@ -240,3 +251,41 @@ def fetch_question(question_id):
         return None
 
     return json.loads(row[0])
+
+
+def store_manifest(manifest):
+    from app.verification.source_manifest import verify_manifest
+
+    if not verify_manifest(manifest):
+        raise ValueError("manifest_integrity_failed")
+
+    conn = _connect()
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO source_manifests "
+            "(manifest_id,manifest_version,parent_manifest_sha256,"
+            "manifest_sha256,manifest_json) VALUES (?,?,?,?,?)",
+            (
+                manifest.manifest_id,
+                manifest.manifest_version,
+                manifest.parent_manifest_sha256,
+                manifest.manifest_sha256,
+                json.dumps(
+                    {
+                        "manifest_id": manifest.manifest_id,
+                        "manifest_version": manifest.manifest_version,
+                        "parent_manifest_sha256": manifest.parent_manifest_sha256,
+                        "entries": [
+                            entry.canonical()
+                            for entry in manifest.entries
+                        ],
+                        "manifest_sha256": manifest.manifest_sha256,
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
