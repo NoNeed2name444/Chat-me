@@ -1,6 +1,9 @@
 import re
 from dataclasses import dataclass
 
+from app.verification.entity_normalization import entities_equivalent
+from app.verification.temporal_normalization import extract_explicit_dates
+
 RELATION_PHRASES = {
     "causal": (
         "causes", "caused", "lead to", "leads to",
@@ -221,6 +224,15 @@ def decompose_claim(text: str) -> tuple[AtomicClaim, ...]:
     return tuple(claims)
 
 def temporal_entailed(claim: AtomicClaim, evidence: AtomicClaim) -> tuple[bool, str | None]:
+    claim_dates = extract_explicit_dates(claim.text)
+    evidence_dates = extract_explicit_dates(evidence.text)
+
+    if claim_dates:
+        if not evidence_dates:
+            return False, "temporal_date_missing"
+        if not set(claim_dates).issubset(set(evidence_dates)):
+            return False, "temporal_date_mismatch"
+
     if not claim.temporal:
         return True, None
 
@@ -247,24 +259,31 @@ def safety_relation_entailed(
 
     return True, None
 
+def _term_sets_overlap(
+    left: tuple[str, ...],
+    right: tuple[str, ...],
+) -> bool:
+    if set(left) & set(right):
+        return True
+
+    for left_term in left:
+        for right_term in right:
+            if entities_equivalent(left_term, right_term):
+                return True
+
+    return False
+
+
 def relation_entailed(
     claim: AtomicClaim,
     evidence: AtomicClaim,
 ) -> tuple[bool, str | None]:
     if claim.subject_terms and evidence.subject_terms:
-        subject_overlap = (
-            set(claim.subject_terms)
-            & set(evidence.subject_terms)
-        )
-        if not subject_overlap:
+        if not _term_sets_overlap(claim.subject_terms, evidence.subject_terms):
             return False, "atomic_subject_mismatch"
 
     if claim.object_terms and evidence.object_terms:
-        object_overlap = (
-            set(claim.object_terms)
-            & set(evidence.object_terms)
-        )
-        if not object_overlap:
+        if not _term_sets_overlap(claim.object_terms, evidence.object_terms):
             return False, "atomic_object_mismatch"
 
     if claim.relation == "causal":
