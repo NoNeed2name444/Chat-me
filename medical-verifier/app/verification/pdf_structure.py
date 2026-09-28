@@ -33,6 +33,9 @@ def _classify_line(line: str):
     if match:
         return "caption", match.group(2)
 
+    if "	" in line or " | " in line:
+        return "table", None
+
     if line.isupper() and 3 <= len(line.split()) <= 12:
         return "header", None
 
@@ -82,8 +85,7 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
                 )
 
             if "	" in line or " | " in line:
-                if block_type == "text":
-                    block_type = "table"
+                if "table_detected_from_text_delimiters" not in block_warnings:
                     block_warnings.append(
                         "table_detected_from_text_delimiters"
                     )
