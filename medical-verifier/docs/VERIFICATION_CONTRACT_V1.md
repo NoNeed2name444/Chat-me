@@ -20,10 +20,7 @@ with zero confidence and human review required.
 
 Both implementations must preserve:
 
-- curriculum modes:
-  - current_medical
-  - curriculum_faithful
-  - curriculum_update_aware
+- curriculum modes: `current_medical`, `curriculum_faithful`, `curriculum_update_aware`
 - explicit source provenance
 - abstention when evidence is insufficient
 - safety escalation for direct treatment actions
@@ -34,104 +31,33 @@ Both implementations must preserve:
 
 ## Online-first iOS contract
 
-The iOS app should treat the server verifier as the authoritative current-medical
-lane.
+The iOS app should treat the server verifier as the authoritative current-medical lane.
 
-The local iOS core is responsible for:
-- source integrity checks
-- curriculum fidelity checks
-- immediate safety gates
-- question provenance
+The local iOS core is responsible for source integrity checks, curriculum fidelity checks, immediate safety gates, and question provenance.
 
-If network verification fails, the app may still report the curriculum result,
-but must label the current-medical result unavailable.
+If network verification fails, the app may still report the curriculum result, but must label the current-medical result unavailable.
 
-It must never relabel a curriculum result as current medical truth merely
-because the server is unreachable.
-
-
-## v1.5 additions
-
-The contract now preserves:
-
-- explicit page, section, block-type, and block-index provenance for extracted curriculum evidence
-- explicit document precedence groups and ranks; conflicting versions are not silently resolved without an explicit precedence declaration
-- conditional scope across sentence boundaries
-- conservative equivalence for direct dose, concentration-volume dose, and weight-based dose arithmetic
-
-
-## v1.5 additions
-
-The contract now supports:
-- language metadata for extracted source blocks
-- explicit table/figure/caption linkage metadata
-- deterministic source manifests containing source/passage hashes and structural provenance
-- parent-linked manifest lineage verification
-- conservative supported Spanish and French semantic normalization
-
-Manifest verification is cryptographic hash verification. No detached digital
-signature is claimed unless an external signing/trust system is configured.
-
-
-## v1.5 additions
-
-The contract now includes a bounded PDF-ingestion lane with:
-
-- raw PDF SHA-256 provenance
-- page and extracted-block evidence records
-- conservative caption/table heuristics
-- explicit extraction-quality warnings
-- source-manifest persistence and parent-manifest continuity
-- parser-local block relationships rewritten to persisted evidence IDs
-
-PDF structure is never treated as native figure/table truth unless the extractor
-can establish that relationship explicitly.
-
-
-## v1.6 additions
-
-The reasoning contract now requires conservative atomic-claim alignment for:
-
-- subject and object anchors
-- causal versus associational relations
-- temporal scope
-- contraindication semantics
-- drug-drug interaction semantics
-- atomic polarity
-
-An answer that can only be assembled by combining unrelated source sentences is not
-treated as supported. Missing or mismatched temporal/safety relationships remain
-uncertain and require review.
-
-The contract still does not imply clinical validation or calibrated probability.
-
+It must never relabel a curriculum result as current medical truth merely because the server is unreachable.
 
 ## v1.8 additions
 
-The benchmark contract now supports:
+The contract preserves the earlier v1.5/v1.6 ingestion, provenance, temporal, safety, and atomic-claim guarantees, and adds a hardened benchmark boundary:
 
-- versioned benchmark records with explicit expected verdict labels
-- deterministic benchmark snapshot manifests with parent-hash lineage
-- exact duplicate and train/test duplicate detection
-- descriptive subgroup and abstention summaries
-- supplied-confidence bin diagnostics without a calibration claim
-- conservative explicit date normalization requiring a reference date for relative windows
-- explicit alias-only entity normalization with unknown/near-spelling entities left unresolved
-- an API integrity-validation lane that returns the snapshot digest and deterministic findings
-
-## v1.8 additions
-
-The benchmark/provenance boundary now supports:
-
-- snapshot schema enforcement with deterministic JSON import/export
+- versioned benchmark records with expected verdict labels
+- deterministic benchmark snapshots with parent-hash lineage
 - manifest case-ID binding and recomputed digest verification
-- duplicate case-ID detection
+- duplicate case-ID and exact duplicate detection
 - optional train/test separation enforcement
 - train/test source-family, study-family, and canonical-ID overlap detection
 - provenance-bound benchmark mode requiring source family, canonical source ID, source snapshot hash, and passage hash
 - optional provenance-bound production verification that refuses evidence lacking those bindings
 - conservative explicit-date entailment: a dated claim requires matching dated evidence
 - explicit alias-only entity equivalence in atomic subject/object alignment
+- descriptive subgroup and abstention summaries without claiming clinical validity
+- supplied-confidence bin diagnostics without claiming calibration
 
-These controls remain deterministic engineering checks. They do not establish clinical validity,
-representativeness, independence, calibration, or regulatory compliance.
+These controls are deterministic engineering checks. They do not establish clinical validity, representativeness, independence, calibration, or regulatory compliance.
+
+## Non-goals
+
+A clean verifier result is not a diagnosis, treatment recommendation, medical-device authorization, or guarantee of correctness. High-risk or unresolved cases must remain reviewable.
