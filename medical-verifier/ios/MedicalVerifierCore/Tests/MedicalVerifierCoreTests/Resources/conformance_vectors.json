@@ -46,7 +46,7 @@
       "prompt": "What is the dose?",
       "answer": "The dose is 500 mcg.",
       "source_title": "Course",
-      "source_passage": "The dose is 0.5 mg.",
+      "source_passage": "The dose is 500 ug.",
       "source_file_seed": "pdf-bytes",
       "expected_status": "VALIDATED",
       "requires_review": false
