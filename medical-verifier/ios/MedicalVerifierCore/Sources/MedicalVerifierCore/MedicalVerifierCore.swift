@@ -12,6 +12,7 @@ public enum CurriculumStatus: String, Codable, Sendable {
     case sourceUncertain = "SOURCE_UNCERTAIN"
     case sourceUnsupported = "SOURCE_UNSUPPORTED"
     case sourceUnavailable = "SOURCE_UNAVAILABLE"
+    case sourceIntegrityFailed = "SOURCE_INTEGRITY_FAILED"
     case safetyEscalation = "SAFETY_ESCALATION"
 }
 
@@ -137,50 +138,68 @@ private enum SafetyClassifier {
     }
 
     static func containsActionRequest(_ lower: String) -> Bool {
-        actionTerms.contains { action in
-            guard let range = lower.range(of: action) else {
-                return false
+        for medication in medicationTerms {
+            guard let medicationRange = lower.range(of: medication) else {
+                continue
             }
 
-            let suffix = lower[range.upperBound...]
-            let window = suffix.prefix(100)
-            return medicationTerms.contains {
-                window.contains($0)
+            let start = lower.index(
+                medicationRange.lowerBound,
+                offsetBy: -100,
+                limitedBy: lower.startIndex
+            ) ?? lower.startIndex
+
+            let end = lower.index(
+                medicationRange.upperBound,
+                offsetBy: 100,
+                limitedBy: lower.endIndex
+            ) ?? lower.endIndex
+
+            let window = lower[start..<end]
+
+            if actionTerms.contains(where: { window.contains($0) }) {
+                return true
             }
         }
+
+        return false
     }
 }
 
 private enum SemanticGuard {
-    static let relationTerms = [
-        "causes", "caused", "leads to", "results in",
-        "increases", "raises", "higher", "reduces",
-        "lowers", "decreases", "associated with",
-        "correlated with", "linked to", "safe", "effective"
-    ]
-
     static func validate(
         claim: String,
         source: String
     ) -> [String] {
-        let claimNumbers = numbers(in: claim)
-        let sourceNumbers = numbers(in: source)
+        let normalizedClaim = normalizeDoubleNegation(claim)
+        let normalizedSource = normalizeDoubleNegation(source)
 
         var warnings: [String] = []
+
+        let claimNumbers = numbers(in: normalizedClaim)
+        let sourceNumbers = numbers(in: normalizedSource)
 
         if !claimNumbers.isEmpty && !claimNumbers.isSubset(of: sourceNumbers) {
             warnings.append("numeric_values_not_found_in_curriculum")
         }
 
-        let claimPopulations = populations(in: claim)
-        let sourcePopulations = populations(in: source)
+        let claimMeasurements = measurements(in: normalizedClaim)
+        let sourceMeasurements = measurements(in: normalizedSource)
+
+        if !claimMeasurements.isEmpty &&
+            !claimMeasurements.isSubset(of: sourceMeasurements) {
+            warnings.append("measurement_units_or_values_not_supported")
+        }
+
+        let claimPopulations = populations(in: normalizedClaim)
+        let sourcePopulations = populations(in: normalizedSource)
 
         if !claimPopulations.isSubset(of: sourcePopulations) {
             warnings.append("population_not_supported_by_curriculum")
         }
 
-        let claimRelation = relation(in: claim)
-        let sourceRelation = relation(in: source)
+        let claimRelation = relation(in: normalizedClaim)
+        let sourceRelation = relation(in: normalizedSource)
 
         if claimRelation != nil &&
             sourceRelation != nil &&
@@ -188,12 +207,15 @@ private enum SemanticGuard {
             warnings.append("relation_class_mismatch")
         }
 
-        if polarity(of: claim) != polarity(of: source) {
+        if polarity(of: normalizedClaim) != polarity(of: normalizedSource) {
             warnings.append("claim_source_polarity_mismatch")
         }
 
-        if claim.contains("%") && !source.contains("%") {
-            warnings.append("percentage_measurement_not_supported")
+        let claimCertainty = certaintyEscalators(in: normalizedClaim)
+        let sourceCertainty = certaintyEscalators(in: normalizedSource)
+
+        if !claimCertainty.isSubset(of: sourceCertainty) {
+            warnings.append("certainty_strength_not_supported")
         }
 
         return warnings
@@ -212,12 +234,34 @@ private enum SemanticGuard {
     }
 
     static func overlap(claim: String, source: String) -> Double {
-        let claimTokens = normalizedTokens(claim)
+        let normalizedClaim = normalizeDoubleNegation(claim)
+        let normalizedSource = normalizeDoubleNegation(source)
+        let claimTokens = normalizedTokens(normalizedClaim)
+
         guard !claimTokens.isEmpty else { return 0 }
 
-        let sourceTokens = normalizedTokens(source)
-        return Double(claimTokens.intersection(sourceTokens).count)
-            / Double(claimTokens.count)
+        let sourceTokens = normalizedTokens(normalizedSource)
+
+        return Double(
+            claimTokens.intersection(sourceTokens).count
+        ) / Double(claimTokens.count)
+    }
+
+    private static func normalizeDoubleNegation(_ text: String) -> String {
+        text
+            .lowercased()
+            .replacingOccurrences(of: "not uncommon", with: "common")
+            .replacingOccurrences(of: "not unlikely", with: "likely")
+            .replacingOccurrences(of: "not impossible", with: "possible")
+    }
+
+    private static func certaintyEscalators(in text: String) -> Set<String> {
+        let lower = text.lowercased()
+
+        return Set([
+            "always", "never", "all", "none",
+            "only", "guaranteed", "certain", "definitively"
+        ].filter { lower.contains($0) })
     }
 
     private static func numbers(in text: String) -> Set<String> {
@@ -233,10 +277,7 @@ private enum SemanticGuard {
         guard let pattern else { return [] }
 
         return Set(
-            pattern.matches(
-                in: text,
-                range: range
-            ).compactMap {
+            pattern.matches(in: text, range: range).compactMap {
                 Range($0.range, in: text)
             }.map {
                 String(text[$0])
@@ -244,8 +285,33 @@ private enum SemanticGuard {
         )
     }
 
+    private static func measurements(in text: String) -> Set<String> {
+        let pattern = try? NSRegularExpression(
+            pattern: #"\b\d+(?:\.\d+)?\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b"#,
+            options: [.caseInsensitive]
+        )
+
+        let range = NSRange(
+            text.startIndex..<text.endIndex,
+            in: text
+        )
+
+        guard let pattern else { return [] }
+
+        return Set(
+            pattern.matches(in: text, range: range).compactMap {
+                Range($0.range, in: text)
+            }.map {
+                $0
+                    .lowercased()
+                    .replacingOccurrences(of: "percent", with: "%")
+            }
+        )
+    }
+
     private static func populations(in text: String) -> Set<String> {
         let lower = text.lowercased()
+
         return Set([
             "adult", "adults", "child", "children",
             "pediatric", "elderly", "pregnancy",
@@ -282,18 +348,24 @@ private enum SemanticGuard {
             return "risk_decrease"
         }
 
-        if lower.contains("safe")
-            || lower.contains("effective") {
-            return "property"
+        if lower.contains("safe") {
+            return "safety"
+        }
+
+        if lower.contains("effective")
+            || lower.contains("effectiveness")
+            || lower.contains("efficacy") {
+            return "effectiveness"
         }
 
         return nil
     }
 
     private static func polarity(of text: String) -> Bool {
-        let lower = text.lowercased()
+        let lower = " " + text.lowercased() + " "
+
         let negatives = [
-            " not ", "never ", "no ", "without ",
+            " not ", "never ", " no ", " without ",
             "doesn't", "does not", "cannot", "can't"
         ]
 
@@ -317,6 +389,22 @@ public struct CurriculumVerifier: Sendable {
     ) -> CurriculumVerificationResult {
         let risk = SafetyClassifier.risk(for: prompt)
 
+        let integrityChecker = SourceIntegrityChecker()
+        let integrityFailures = sources.filter { !integrityChecker.verify($0) }
+
+        if !integrityFailures.isEmpty {
+            return CurriculumVerificationResult(
+                status: .sourceIntegrityFailed,
+                riskLevel: risk,
+                supportingSourceIDs: [],
+                warnings: integrityFailures.map {
+                    "source_integrity_failed:\($0.snapshotID)"
+                },
+                requiresHumanReview: true,
+                snapshotIDs: sources.map { $0.snapshotID }
+            )
+        }
+
         if risk == .critical {
             return CurriculumVerificationResult(
                 status: .safetyEscalation,
@@ -324,7 +412,7 @@ public struct CurriculumVerifier: Sendable {
                 supportingSourceIDs: [],
                 warnings: ["clinical_action_request_requires_human_review"],
                 requiresHumanReview: true,
-                snapshotIDs: sources.map(.snapshotID)
+                snapshotIDs: sources.map { $0.snapshotID }
             )
         }
 
@@ -343,7 +431,7 @@ public struct CurriculumVerifier: Sendable {
         var warnings: [String] = []
 
         for source in sources {
-            let sourceText = "(source.title) (source.passage)"
+            let sourceText = source.title + " " + source.passage
             let overlap = SemanticGuard.overlap(
                 claim: answer,
                 source: sourceText
@@ -362,7 +450,7 @@ public struct CurriculumVerifier: Sendable {
                 supported.append(source.snapshotID)
             } else {
                 warnings.append(contentsOf: semanticWarnings.map {
-                    "($0):(source.snapshotID)"
+                    $0 + ":" + source.snapshotID
                 })
             }
         }
