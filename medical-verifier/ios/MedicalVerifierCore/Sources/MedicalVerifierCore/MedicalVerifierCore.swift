@@ -200,16 +200,19 @@ private enum SemanticGuard {
         claim: String,
         source: String
     ) -> [String] {
-        let normalizedClaim = normalizeDoubleNegation(claim)
-        let normalizedSource = normalizeDoubleNegation(source)
+        let normalizedClaim = normalizeDoubleNegation(
+            normalizeMultilingualTerms(claim)
+        )
+        let normalizedSource = normalizeDoubleNegation(
+            normalizeMultilingualTerms(source)
+        )
         var warnings: [String] = []
 
-        let dailyEquivalent = dailyDoseEquivalent(in: normalizedClaim) != nil &&
-            dailyDoseEquivalent(in: normalizedSource) != nil &&
-            abs(
-                dailyDoseEquivalent(in: normalizedClaim)! -
-                dailyDoseEquivalent(in: normalizedSource)!
-            ) < 1e-9
+        let dailyClaim = dailyDoseEquivalent(in: normalizedClaim)
+        let dailySource = dailyDoseEquivalent(in: normalizedSource)
+        let dailyEquivalent = dailyClaim != nil &&
+            dailySource != nil &&
+            abs(dailyClaim! - dailySource!) < 1e-9
 
         let claimNumbers = numbers(in: normalizedClaim)
         let sourceNumbers = numbers(in: normalizedSource)
@@ -239,13 +242,11 @@ private enum SemanticGuard {
             warnings.append("dose_frequency_mismatch")
         }
 
-        let conditionResult = conditionSupported(
+        if let conditionReason = conditionSupported(
             claim: normalizedClaim,
             source: normalizedSource
-        )
-
-        if let reason = conditionResult {
-            warnings.append(reason)
+        ) {
+            warnings.append(conditionReason)
         }
 
         let claimPopulations = populations(in: normalizedClaim)
@@ -328,11 +329,17 @@ private enum SemanticGuard {
     }
 
     static func overlap(claim: String, source: String) -> Double {
-        let normalizedClaim = normalizeDoubleNegation(claim)
-        let normalizedSource = normalizeDoubleNegation(source)
+        let normalizedClaim = normalizeDoubleNegation(
+            normalizeMultilingualTerms(claim)
+        )
+        let normalizedSource = normalizeDoubleNegation(
+            normalizeMultilingualTerms(source)
+        )
         let claimTokens = normalizedTokens(normalizedClaim)
 
-        guard !claimTokens.isEmpty else { return 0 }
+        guard !claimTokens.isEmpty else {
+            return 0
+        }
 
         let sourceTokens = normalizedTokens(normalizedSource)
 
@@ -341,7 +348,53 @@ private enum SemanticGuard {
         ) / Double(claimTokens.count)
     }
 
-    private static func normalizeDoubleNegation(_ text: String) -> String {
+    private static func normalizeMultilingualTerms(
+        _ text: String
+    ) -> String {
+        var lower = text.lowercased()
+
+        let replacements: [String: String] = [
+            "no es": "does not",
+            "no": "no",
+            "non": "not",
+            "ne": "not",
+            "pas": "not",
+            "causa": "causes",
+            "causas": "causes",
+            "causé": "caused",
+            "causado": "caused",
+            "asociado con": "associated with",
+            "associé à": "associated with",
+            "associé a": "associated with",
+            "aumenta": "increases",
+            "augmente": "increases",
+            "reduce": "reduces",
+            "réduit": "reduces",
+            "seguro": "safe",
+            "sûr": "safe",
+            "efectivo": "effective",
+            "efficace": "effective",
+            "pacientes": "patients",
+            "patients": "patients",
+            "niños": "children",
+            "enfants": "children",
+            "adultos": "adults",
+            "adultes": "adults"
+        ]
+
+        for (source, replacement) in replacements {
+            lower = lower.replacingOccurrences(
+                of: source,
+                with: replacement
+            )
+        }
+
+        return lower
+    }
+
+    private static func normalizeDoubleNegation(
+        _ text: String
+    ) -> String {
         text
             .lowercased()
             .replacingOccurrences(of: "not uncommon", with: "common")
@@ -349,7 +402,9 @@ private enum SemanticGuard {
             .replacingOccurrences(of: "not impossible", with: "possible")
     }
 
-    private static func certaintyEscalators(in text: String) -> Set<String> {
+    private static func certaintyEscalators(
+        in text: String
+    ) -> Set<String> {
         let lower = text.lowercased()
 
         return Set([
@@ -358,9 +413,11 @@ private enum SemanticGuard {
         ].filter { lower.contains($0) })
     }
 
-    private static func numbers(in text: String) -> Set<String> {
+    private static func numbers(
+        in text: String
+    ) -> Set<String> {
         let pattern = try? NSRegularExpression(
-            pattern: #"d+(?:.d+)?"#
+            pattern: #"\b\d+(?:\.\d+)?\b"#
         )
 
         let range = NSRange(
@@ -368,10 +425,15 @@ private enum SemanticGuard {
             in: text
         )
 
-        guard let pattern else { return [] }
+        guard let pattern else {
+            return []
+        }
 
         return Set(
-            pattern.matches(in: text, range: range).compactMap {
+            pattern.matches(
+                in: text,
+                range: range
+            ).compactMap {
                 Range($0.range, in: text)
             }.map {
                 String(text[$0])
@@ -390,23 +452,43 @@ private enum SemanticGuard {
     ) -> Measurement {
         switch unit.lowercased() {
         case "mcg", "ug":
-            return Measurement(value: value * 0.001, unit: "mg")
+            return Measurement(
+                value: value * 0.001,
+                unit: "mg"
+            )
         case "g":
-            return Measurement(value: value * 1000.0, unit: "mg")
+            return Measurement(
+                value: value * 1000.0,
+                unit: "mg"
+            )
         case "kg":
-            return Measurement(value: value * 1_000_000.0, unit: "mg")
+            return Measurement(
+                value: value * 1_000_000.0,
+                unit: "mg"
+            )
         case "l":
-            return Measurement(value: value * 1000.0, unit: "ml")
+            return Measurement(
+                value: value * 1000.0,
+                unit: "ml"
+            )
         case "%", "percent":
-            return Measurement(value: value, unit: "percent")
+            return Measurement(
+                value: value,
+                unit: "percent"
+            )
         default:
-            return Measurement(value: value, unit: unit.lowercased())
+            return Measurement(
+                value: value,
+                unit: unit.lowercased()
+            )
         }
     }
 
-    private static func measurements(in text: String) -> Set<Measurement> {
+    private static func measurements(
+        in text: String
+    ) -> Set<Measurement> {
         let pattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg|ml|l|mmol|mmhg|%|percent)\b"#,
             options: [.caseInsensitive]
         )
 
@@ -415,13 +497,24 @@ private enum SemanticGuard {
             in: text
         )
 
-        guard let pattern else { return [] }
+        guard let pattern else {
+            return []
+        }
 
         return Set(
-            pattern.matches(in: text, range: range).compactMap { match in
+            pattern.matches(
+                in: text,
+                range: range
+            ).compactMap { match in
                 guard
-                    let valueRange = Range(match.range(at: 1), in: text),
-                    let unitRange = Range(match.range(at: 2), in: text),
+                    let valueRange = Range(
+                        match.range(at: 1),
+                        in: text
+                    ),
+                    let unitRange = Range(
+                        match.range(at: 2),
+                        in: text
+                    ),
                     let value = Double(text[valueRange])
                 else {
                     return nil
@@ -435,27 +528,41 @@ private enum SemanticGuard {
         )
     }
 
-    private static func frequencyMultiplier(in text: String) -> Double? {
+    private static func frequencyMultiplier(
+        in text: String
+    ) -> Double? {
         let lower = text.lowercased()
 
-        if lower.range(of: #"(twice|2s+times)(?:s+a)?s+(?:day|daily)|bid"#, options: .regularExpression) != nil {
+        if lower.range(
+            of: #"\b(twice|2\s+times)(?:\s+a)?\s+(?:day|daily)\b|\bbid\b"#,
+            options: .regularExpression
+        ) != nil {
             return 2
         }
 
-        if lower.range(of: #"threes+times(?:s+a)?s+(?:day|daily)|tid"#, options: .regularExpression) != nil {
+        if lower.range(
+            of: #"\bthree\s+times(?:\s+a)?\s+(?:day|daily)\b|\btid\b"#,
+            options: .regularExpression
+        ) != nil {
             return 3
         }
 
-        if lower.range(of: #"fours+times(?:s+a)?s+(?:day|daily)|qid"#, options: .regularExpression) != nil {
+        if lower.range(
+            of: #"\bfour\s+times(?:\s+a)?\s+(?:day|daily)\b|\bqid\b"#,
+            options: .regularExpression
+        ) != nil {
             return 4
         }
 
-        if lower.range(of: #"once(?:s+a)?s+(?:day|daily)|daily|qd"#, options: .regularExpression) != nil {
+        if lower.range(
+            of: #"\bonce(?:\s+a)?\s+(?:day|daily)\b|\bdaily\b|\bqd\b"#,
+            options: .regularExpression
+        ) != nil {
             return 1
         }
 
         if let pattern = try? NSRegularExpression(
-            pattern: #"everys+(d+)s*(?:hours?|h)|q(d+)h"#,
+            pattern: #"\bevery\s+(\d+)\s*(?:hours?|h)\b|\bq(\d+)h\b"#,
             options: [.caseInsensitive]
         ) {
             let range = NSRange(
@@ -481,14 +588,14 @@ private enum SemanticGuard {
         }
 
         if lower.range(
-            of: #"(?:onces+as+week|weekly)"#,
+            of: #"\b(?:once\s+a\s+week|weekly)\b"#,
             options: .regularExpression
         ) != nil {
             return 1.0 / 7.0
         }
 
         if lower.range(
-            of: #"twices+(?:as+)?week"#,
+            of: #"\btwice\s+(?:a\s+)?week\b"#,
             options: .regularExpression
         ) != nil {
             return 2.0 / 7.0
@@ -497,39 +604,53 @@ private enum SemanticGuard {
         return nil
     }
 
-    private static func dailyMassDose(in text: String) -> Double? {
+    private static func dailyMassDose(
+        in text: String
+    ) -> Double? {
         if text.range(
-            of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug)s*(?:/|per)s*(?:ml|l)"#,
-            options: [.regularExpression]
+            of: #"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug)\s*(?:/|per)\s*(?:ml|l)\b"#,
+            options: .regularExpression
         ) != nil {
             return nil
         }
 
         if text.range(
-            of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug)s*/s*kg"#,
-            options: [.regularExpression]
+            of: #"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug)\s*/\s*kg\b"#,
+            options: .regularExpression
         ) != nil {
             return nil
         }
 
         let pattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\b"#,
             options: [.caseInsensitive]
         )
 
-        guard let pattern else { return nil }
+        guard let pattern else {
+            return nil
+        }
 
         let matches = pattern.matches(
             in: text,
-            range: NSRange(text.startIndex..<text.endIndex, in: text)
+            range: NSRange(
+                text.startIndex..<text.endIndex,
+                in: text
+            )
         )
 
-        guard matches.count == 1,
-              let match = matches.first,
-              let valueRange = Range(match.range(at: 1), in: text),
-              let unitRange = Range(match.range(at: 2), in: text),
-              let value = Double(text[valueRange]),
-              let multiplier = frequencyMultiplier(in: text)
+        guard
+            matches.count == 1,
+            let match = matches.first,
+            let valueRange = Range(
+                match.range(at: 1),
+                in: text
+            ),
+            let unitRange = Range(
+                match.range(at: 2),
+                in: text
+            ),
+            let value = Double(text[valueRange]),
+            let multiplier = frequencyMultiplier(in: text)
         else {
             return nil
         }
@@ -546,14 +667,16 @@ private enum SemanticGuard {
         return normalized.value * multiplier
     }
 
-    private static func concentrationDailyDose(in text: String) -> Double? {
+    private static func concentrationDailyDose(
+        in text: String
+    ) -> Double? {
         let concentrationPattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)s*(?:/|per)s*(ml|l)"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*(?:/|per)\s*(ml|l)\b"#,
             options: [.caseInsensitive]
         )
 
         let volumePattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(ml|l)"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(ml|l)\b"#,
             options: [.caseInsensitive]
         )
 
@@ -578,27 +701,28 @@ private enum SemanticGuard {
             range: range
         )
 
-        guard concentrations.count == 1,
-              volumes.count == 1,
-              let multiplier = frequencyMultiplier(in: text),
-              let massRange = Range(
+        guard
+            concentrations.count == 1,
+            volumes.count == 1,
+            let multiplier = frequencyMultiplier(in: text),
+            let massRange = Range(
                 concentrations[0].range(at: 1),
                 in: text
-              ),
-              let massUnitRange = Range(
+            ),
+            let massUnitRange = Range(
                 concentrations[0].range(at: 2),
                 in: text
-              ),
-              let volumeRange = Range(
+            ),
+            let volumeRange = Range(
                 volumes[0].range(at: 1),
                 in: text
-              ),
-              let volumeUnitRange = Range(
+            ),
+            let volumeUnitRange = Range(
                 volumes[0].range(at: 2),
                 in: text
-              ),
-              let mass = Double(text[massRange]),
-              let volume = Double(text[volumeRange])
+            ),
+            let mass = Double(text[massRange]),
+            let volume = Double(text[volumeRange])
         else {
             return nil
         }
@@ -612,8 +736,9 @@ private enum SemanticGuard {
             unit: String(text[volumeUnitRange])
         )
 
-        guard massNormalized.unit == "mg",
-              volumeNormalized.unit == "ml"
+        guard
+            massNormalized.unit == "mg",
+            volumeNormalized.unit == "ml"
         else {
             return nil
         }
@@ -623,14 +748,16 @@ private enum SemanticGuard {
             multiplier
     }
 
-    private static func weightBasedDailyDose(in text: String) -> Double? {
+    private static func weightBasedDailyDose(
+        in text: String
+    ) -> Double? {
         let dosePattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)s*/s*kg(s*/s*day)?"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\s*/\s*kg(\s*/\s*day)?\b"#,
             options: [.caseInsensitive]
         )
 
         let weightPattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*kg"#,
+            pattern: #"\b(\d+(?:\.\d+)?)\s*kg\b"#,
             options: [.caseInsensitive]
         )
 
@@ -646,16 +773,32 @@ private enum SemanticGuard {
             in: text
         )
 
-        let doses = dosePattern.matches(in: text, range: range)
-        let weights = weightPattern.matches(in: text, range: range)
+        let doses = dosePattern.matches(
+            in: text,
+            range: range
+        )
+        let weights = weightPattern.matches(
+            in: text,
+            range: range
+        )
 
-        guard doses.count == 1,
-              weights.count == 1,
-              let valueRange = Range(doses[0].range(at: 1), in: text),
-              let unitRange = Range(doses[0].range(at: 2), in: text),
-              let weightValueRange = Range(weights[0].range(at: 1), in: text),
-              let value = Double(text[valueRange]),
-              let weight = Double(text[weightValueRange])
+        guard
+            doses.count == 1,
+            weights.count == 1,
+            let valueRange = Range(
+                doses[0].range(at: 1),
+                in: text
+            ),
+            let unitRange = Range(
+                doses[0].range(at: 2),
+                in: text
+            ),
+            let weightValueRange = Range(
+                weights[0].range(at: 1),
+                in: text
+            ),
+            let value = Double(text[valueRange]),
+            let weight = Double(text[weightValueRange])
         else {
             return nil
         }
@@ -682,13 +825,15 @@ private enum SemanticGuard {
         return normalized.value * weight * multiplier
     }
 
-    private static func dailyDoseEquivalent(in text: String) -> Double? {
+    private static func dailyDoseEquivalent(
+        in text: String
+    ) -> Double? {
         for calculator in [
             dailyMassDose,
             concentrationDailyDose,
             weightBasedDailyDose
         ] {
-            if let value = calculator(text) {
+            if let value = calculator(in: text) {
                 return value
             }
         }
@@ -696,7 +841,9 @@ private enum SemanticGuard {
         return nil
     }
 
-    private static func conditionSignatures(in text: String) -> [Set<String>] {
+    private static func conditionSignatures(
+        in text: String
+    ) -> [Set<String>] {
         let lower = " " + text.lowercased() + " "
         let patterns = [
             #"\bif\s+([^,.;:]+)"#,
@@ -755,19 +902,26 @@ private enum SemanticGuard {
         source: String
     ) -> String? {
         let sourceConditions = conditionSignatures(in: source)
+
         guard !sourceConditions.isEmpty else {
             return nil
         }
 
         let claimConditions = conditionSignatures(in: claim)
+
         guard !claimConditions.isEmpty else {
             return "conditional_scope_missing"
         }
 
         for sourceCondition in sourceConditions {
             let best = claimConditions.map { claimCondition in
-                Double(sourceCondition.intersection(claimCondition).count) /
-                    Double(max(1, sourceCondition.count))
+                Double(
+                    sourceCondition.intersection(
+                        claimCondition
+                    ).count
+                ) / Double(
+                    max(1, sourceCondition.count)
+                )
             }.max() ?? 0
 
             if best < 0.70 {
@@ -778,7 +932,9 @@ private enum SemanticGuard {
         return nil
     }
 
-    private static func populations(in text: String) -> Set<String> {
+    private static func populations(
+        in text: String
+    ) -> Set<String> {
         let lower = text.lowercased()
 
         return Set([
@@ -789,7 +945,9 @@ private enum SemanticGuard {
         ].filter { lower.contains($0) })
     }
 
-    private static func relation(in text: String) -> String? {
+    private static func relation(
+        in text: String
+    ) -> String? {
         let lower = text.lowercased()
 
         if lower.contains("associated with")
@@ -830,7 +988,9 @@ private enum SemanticGuard {
         return nil
     }
 
-    private static func polarity(of text: String) -> Bool {
+    private static func polarity(
+        of text: String
+    ) -> Bool {
         let lower = " " + text.lowercased() + " "
 
         let negatives = [
