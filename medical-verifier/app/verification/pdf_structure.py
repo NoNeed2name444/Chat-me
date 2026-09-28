@@ -69,7 +69,7 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
             nonempty_pages += 1
             total_chars += sum(len(line) for line in normalized_lines)
 
-        pending_caption_ids = []
+        pending_caption_id = None
 
         for local_index, line in enumerate(normalized_lines):
             block_id = f"pdf:page:{page_number}:block:{local_index}"
@@ -88,7 +88,11 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
                         "table_detected_from_text_delimiters"
                     )
 
-            related = tuple(pending_caption_ids)
+            related = (
+                (pending_caption_id,)
+                if pending_caption_id is not None
+                else ()
+            )
 
             block = ExtractedBlock(
                 block_id=block_id,
@@ -102,37 +106,9 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
             blocks.append(block)
 
             if block_type == "caption":
-                pending_caption_ids.append(block_id)
-
-        # Associate a caption with the immediately following non-caption
-        # block only. This avoids inventing distant figure/table topology.
-        page_blocks = [
-            block for block in blocks
-            if block.page_number == page_number
-        ]
-
-        for index, block in enumerate(page_blocks[:-1]):
-            if block.block_type != "caption":
-                continue
-
-            next_block = page_blocks[index + 1]
-            if block.block_id not in next_block.related_block_ids:
-                updated_related = tuple(
-                    list(next_block.related_block_ids) + [block.block_id]
-                )
-                replacement = ExtractedBlock(
-                    block_id=next_block.block_id,
-                    page_number=next_block.page_number,
-                    block_index=next_block.block_index,
-                    block_type=next_block.block_type,
-                    text=next_block.text,
-                    related_block_ids=updated_related,
-                    warnings=next_block.warnings,
-                )
-                blocks = [
-                    replacement if item.block_id == next_block.block_id else item
-                    for item in blocks
-                ]
+                pending_caption_id = block_id
+            elif pending_caption_id is not None:
+                pending_caption_id = None
 
     if page_count == 0:
         warnings.append("pdf_has_no_pages")
