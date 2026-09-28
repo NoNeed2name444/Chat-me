@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from app.verification.adversarial import highest_severity, inspect_claim
+from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify
 
 @dataclass(frozen=True)
@@ -10,6 +12,24 @@ class QuestionValidation:
     requires_review: bool
 
 def validate_question(prompt: str, answer: str, source_items):
+    attack = inspect_claim(
+        f"{prompt} {answer}"
+    )
+
+    if highest_severity(attack) == "critical":
+        return QuestionValidation(
+            status="SAFETY_ESCALATION",
+            warnings=tuple(
+                sorted(
+                    finding.code
+                    for finding in attack
+                )
+            ),
+            supporting_source_ids=(),
+            requires_review=True,
+        )
+
+    if not source_items:
     if not source_items:
         return QuestionValidation(
             status="SOURCE_UNAVAILABLE",
@@ -29,6 +49,15 @@ def validate_question(prompt: str, answer: str, source_items):
     }
 
     for item in source_items:
+        if (
+            item.passage_sha256
+            and item.passage_sha256 != sha256_text(item.passage)
+        ):
+            warnings.append(
+                f"source_integrity_failed:{item.id}"
+            )
+            continue
+
         source_text = f"{item.title} {item.passage}"
 
         source_terms = {
@@ -49,6 +78,17 @@ def validate_question(prompt: str, answer: str, source_items):
             answer_support.append(item.id)
         else:
             warnings.extend(entailment.reasons)
+
+    if any(
+        warning.startswith("source_integrity_failed:")
+        for warning in warnings
+    ) and not answer_support:
+        return QuestionValidation(
+            status="SOURCE_INTEGRITY_FAILED",
+            warnings=tuple(sorted(set(warnings))),
+            supporting_source_ids=(),
+            requires_review=True,
+        )
 
     if not prompt_overlap:
         warnings.append("question_prompt_not_aligned_to_curriculum")
