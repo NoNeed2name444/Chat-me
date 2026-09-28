@@ -139,8 +139,14 @@ def _frequency_multiplier(text):
     return None
 
 def _daily_mass_dose(text):
+    if re.search(
+        r"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug)\s*(?:/|per)\s*(?:ml|l)\b",
+        text.lower(),
+    ):
+        return None
+
     values = re.findall(
-        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug|kg)\b",
+        r"\b(\d+(?:\.\d+)?)\s*(mg|g|mcg|ug)\b",
         text.lower(),
     )
     multiplier = _frequency_multiplier(text)
