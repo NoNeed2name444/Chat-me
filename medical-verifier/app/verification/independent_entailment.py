@@ -1,6 +1,9 @@
 from app.verification import independent_entailment_base as _base
 
 IndependentEntailment = _base.IndependentEntailment
+_condition_supported = _base._condition_supported
+_daily_dose_equivalent = _base._daily_dose_equivalent
+_tokens = _base._tokens
 
 
 def verify(claim, evidence):
@@ -12,9 +15,6 @@ def verify(claim, evidence):
     if not claim_tokens:
         return IndependentEntailment("UNKNOWN", ("empty_claim_tokens",))
 
-    # Nemesis fix: calculate the semantic equivalence escape hatch before the
-    # overlap gate. The previous ordering referenced this value before it was
-    # initialized, producing a runtime NameError on low-overlap claims.
     claim_daily_dose = _base._daily_dose_equivalent(claim_for_logic)
     evidence_daily_dose = _base._daily_dose_equivalent(evidence_for_logic)
     daily_dose_equivalent = (
@@ -121,8 +121,12 @@ def verify(claim, evidence):
     claim_neg = bool(_base.NEGATION.search(claim_for_logic))
     evidence_neg = bool(_base.NEGATION.search(evidence_for_logic))
     if claim_neg != evidence_neg:
+        if claim_neg and not evidence_neg:
+            return IndependentEntailment(
+                "CONTRADICTS", ("claim_evidence_polarity_mismatch",)
+            )
         return IndependentEntailment(
-            "CONTRADICTS", ("claim_evidence_polarity_mismatch",)
+            "UNKNOWN", ("claim_evidence_polarity_mismatch",)
         )
 
     return IndependentEntailment(
