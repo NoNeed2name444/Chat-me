@@ -60,6 +60,15 @@ def benchmark_integrity(request: BenchmarkIntegrityRequest):
 
     records = inline_records + train_records + test_records
 
+    inline_train = tuple(
+        case for case in inline_records if case.split == "train"
+    )
+    inline_test = tuple(
+        case for case in inline_records if case.split == "test"
+    )
+    train_records = train_records + inline_train
+    test_records = test_records + inline_test
+
     findings = []
     findings.extend(find_duplicate_case_ids(records))
     findings.extend(find_duplicate_cases(records))
