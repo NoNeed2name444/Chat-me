@@ -224,3 +224,18 @@ def test_weight_based_arithmetic_without_patient_weight_is_unknown():
         "Use 5 mg/kg/day.",
     )
     assert result.label == "UNKNOWN"
+
+
+def test_spanish_semantic_normalization_is_conservative():
+    result = verify(
+        "La insulina aumenta la glucosa.",
+        "La insulina aumenta la glucosa.",
+    )
+    assert result.label == "SUPPORTS"
+
+def test_french_semantic_normalization_is_conservative():
+    result = verify(
+        "Le traitement est efficace chez les adultes.",
+        "Le traitement est efficace chez les adultes.",
+    )
+    assert result.label == "SUPPORTS"
