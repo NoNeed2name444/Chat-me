@@ -60,6 +60,21 @@ def create_question(request: QuestionCreateRequest):
             for item in evidence
             if item.source_snapshot_sha256
         },
+        source_pages={
+            item.id: item.page_number
+            for item in evidence
+            if item.page_number is not None
+        },
+        source_sections={
+            item.id: item.section
+            for item in evidence
+            if item.section
+        },
+        source_block_types={
+            item.id: item.block_type
+            for item in evidence
+            if item.block_type
+        },
         validation_status=validation.status,
         validation_warnings=list(validation.warnings),
         supporting_source_ids=list(validation.supporting_source_ids),
