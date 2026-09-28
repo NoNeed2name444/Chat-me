@@ -1,6 +1,7 @@
 import hashlib
 import re
 from dataclasses import dataclass
+from io import BytesIO
 
 from pypdf import PdfReader
 
@@ -30,8 +31,7 @@ class PDFExtractionResult:
 def _classify_line(line: str):
     match = CAPTION_RE.match(line)
     if match:
-        kind = "table" if match.group(1).lower().startswith("table") else "figure"
-        return kind, match.group(2)
+        return "caption", match.group(2)
 
     if line.isupper() and 3 <= len(line.split()) <= 12:
         return "header", None
@@ -44,7 +44,7 @@ def _classify_line(line: str):
 def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
     raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
 
-    reader = PdfReader(raw_bytes)
+    reader = PdfReader(BytesIO(raw_bytes))
     page_count = len(reader.pages)
 
     blocks = []
@@ -76,9 +76,9 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
             block_type, caption_key = _classify_line(line)
             block_warnings = []
 
-            if block_type in {"table", "figure"}:
+            if block_type == "caption":
                 block_warnings.append(
-                    "structural_relationship_is_caption_heuristic"
+                    "caption_linkage_is_heuristic"
                 )
 
             if "	" in line or " | " in line:
@@ -101,7 +101,7 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
             )
             blocks.append(block)
 
-            if block_type in {"table", "figure"}:
+            if block_type == "caption":
                 pending_caption_ids.append(block_id)
 
         # Associate a caption with the immediately following non-caption
@@ -112,7 +112,7 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
         ]
 
         for index, block in enumerate(page_blocks[:-1]):
-            if block.block_type not in {"table", "figure"}:
+            if block.block_type != "caption":
                 continue
 
             next_block = page_blocks[index + 1]
@@ -149,11 +149,11 @@ def extract_pdf(raw_bytes: bytes) -> PDFExtractionResult:
         )
 
     if blocks and any(
-        "structural_relationship_is_caption_heuristic" in block.warnings
+        "caption_linkage_is_heuristic" in block.warnings
         for block in blocks
     ):
         warnings.append(
-            "figure_table_relationships_are_not_native_pdf_object_links"
+            "caption_relationships_are_not_native_pdf_object_links"
         )
 
     page_coverage = (
