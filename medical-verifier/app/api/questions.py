@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.models.question import QuestionArtifact
 from app.retrieval.local import LocalEvidenceProvider
+from app.verification.question_validation import validate_question
 
 router = APIRouter(tags=["questions"])
 
@@ -26,6 +27,12 @@ def create_question(request: QuestionCreateRequest):
         curriculum_snapshot_id=request.curriculum_snapshot_id,
     )
 
+    validation = validate_question(
+        request.prompt,
+        request.answer,
+        evidence,
+    )
+
     return QuestionArtifact(
         question_id=f"question:{uuid4()}",
         prompt=request.prompt,
@@ -42,6 +49,10 @@ def create_question(request: QuestionCreateRequest):
             for item in evidence
             if item.document_version
         ],
+        validation_status=validation.status,
+        validation_warnings=list(validation.warnings),
+        supporting_source_ids=list(validation.supporting_source_ids),
+        requires_human_review=validation.requires_review,
         generated_at=datetime.now(timezone.utc).isoformat(),
         generator_version=settings.verifier_version,
     )
