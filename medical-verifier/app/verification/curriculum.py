@@ -12,6 +12,36 @@ class CurriculumAssessment:
     reasons: tuple[str, ...]
     source_dates: tuple[str, ...]
 
+def _apply_explicit_precedence(source_items):
+    grouped = {}
+    ungrouped = []
+
+    for item in source_items:
+        if item.precedence_group:
+            grouped.setdefault(item.precedence_group, []).append(item)
+        else:
+            ungrouped.append(item)
+
+    selected = list(ungrouped)
+    excluded = []
+
+    for group, items in grouped.items():
+        highest = max(item.precedence_rank for item in items)
+        winners = [
+            item for item in items
+            if item.precedence_rank == highest
+        ]
+
+        selected.extend(winners)
+
+        excluded.extend(
+            item.id
+            for item in items
+            if item.precedence_rank < highest
+        )
+
+    return selected, tuple(sorted(excluded))
+
 def assess_curriculum_fidelity(claim: str, source_items):
     if not source_items:
         return CurriculumAssessment(
@@ -20,6 +50,10 @@ def assess_curriculum_fidelity(claim: str, source_items):
             reasons=("No supplied curriculum source was available.",),
             source_dates=(),
         )
+
+    source_items, precedence_excluded = _apply_explicit_precedence(
+        source_items
+    )
 
     normalized = " ".join(claim.lower().split())
     terms = [
@@ -82,12 +116,22 @@ def assess_curriculum_fidelity(claim: str, source_items):
         else:
             uncertain.append(item.id)
 
+    precedence_reason = (
+        "Explicit precedence excluded lower-ranked curriculum versions: "
+        + ", ".join(precedence_excluded)
+        if precedence_excluded
+        else None
+    )
+
     if integrity_failures:
         return CurriculumAssessment(
             status="SOURCE_INTEGRITY_FAILED",
             matched_source_ids=(),
-            reasons=(
-                "Stored curriculum passage failed its cryptographic integrity check.",
+            reasons=tuple(
+                [
+                    "Stored curriculum passage failed its cryptographic integrity check."
+                ]
+                + ([precedence_reason] if precedence_reason else [])
             ),
             source_dates=tuple(sorted(set(dates))),
         )
@@ -96,8 +140,11 @@ def assess_curriculum_fidelity(claim: str, source_items):
         return CurriculumAssessment(
             status="CONFLICTING_CURRICULUM_SOURCES",
             matched_source_ids=tuple(aligned),
-            reasons=(
-                "Supplied curriculum sources contain materially conflicting answers.",
+            reasons=tuple(
+                [
+                    "Supplied curriculum sources contain materially conflicting answers."
+                ]
+                + ([precedence_reason] if precedence_reason else [])
             ),
             source_dates=tuple(sorted(set(dates))),
         )
@@ -127,6 +174,9 @@ def assess_curriculum_fidelity(claim: str, source_items):
             "Claim is traceably aligned with the supplied curriculum source snapshot."
         ]
 
+        if precedence_reason:
+            reasons.append(precedence_reason)
+
         if uncertain:
             reasons.append(
                 "Some matching curriculum passages were semantically uncertain."
@@ -145,8 +195,11 @@ def assess_curriculum_fidelity(claim: str, source_items):
             matched_source_ids=tuple(
                 uncertain + contradicted
             ),
-            reasons=(
-                "The claim matches curriculum material, but exact semantic support could not be established.",
+            reasons=tuple(
+                [
+                    "The claim matches curriculum material, but exact semantic support could not be established."
+                ]
+                + ([precedence_reason] if precedence_reason else [])
             ),
             source_dates=tuple(sorted(set(dates))),
         )
