@@ -9,7 +9,7 @@ on:
       - "medical-verifier/**"
 
 jobs:
-  test:
+  python-test:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,3 +24,14 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python -m compileall app
       - run: pytest -q
+
+  swift-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: medical-verifier/ios/MedicalVerifierCore
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: swift --version
+      - run: swift test
