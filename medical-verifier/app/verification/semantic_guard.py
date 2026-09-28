@@ -3,6 +3,13 @@ import re
 from app.verification.independent_entailment import (
     _condition_supported,
     _daily_dose_equivalent,
+    _tokens,
+)
+from app.verification.claim_reasoning import (
+    decompose_claim,
+    relation_entailed,
+    safety_relation_entailed,
+    temporal_entailed,
 )
 
 CAUSAL_WORDS = (
@@ -113,10 +120,71 @@ def _has_negation_near_relation(text, relation_words):
 
     return False
 
+def _claim_reasoning_warnings(claim: str, evidence: str):
+    claim_atoms = decompose_claim(claim)
+    evidence_atoms = decompose_claim(evidence)
+    warnings = []
+
+    if not claim_atoms:
+        return warnings
+
+    for claim_atom in claim_atoms:
+        matched = False
+
+        for evidence_atom in evidence_atoms:
+            overlap = (
+                len(
+                    _tokens(claim_atom.text)
+                    & _tokens(evidence_atom.text)
+                )
+                / max(1, len(_tokens(claim_atom.text)))
+            )
+            if overlap < 0.55:
+                continue
+
+            relation_ok, relation_reason = relation_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not relation_ok:
+                continue
+
+            temporal_ok, temporal_reason = temporal_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not temporal_ok:
+                continue
+
+            safety_ok, safety_reason = safety_relation_entailed(
+                claim_atom,
+                evidence_atom,
+            )
+            if not safety_ok:
+                continue
+
+            matched = True
+            break
+
+        if not matched:
+            if relation_reason:
+                warnings.append(relation_reason)
+            elif temporal_reason:
+                warnings.append(temporal_reason)
+            elif safety_reason:
+                warnings.append(safety_reason)
+            else:
+                warnings.append("atomic_claim_not_entailed")
+
+    return sorted(set(warnings))
+
 def semantic_guard(item, claim):
     evidence = f"{item.title} {item.passage}".lower()
     claim_l = claim.lower()
-    warnings = []
+    warnings = _claim_reasoning_warnings(
+        claim_l,
+        evidence,
+    )
 
     claim_has_causal = any(
         x in claim_l
