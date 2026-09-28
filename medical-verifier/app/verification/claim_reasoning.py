@@ -327,12 +327,20 @@ def opposite_polarity_entailed(claim: str, evidence: str) -> bool:
     evidence_atoms = decompose_claim(evidence)
 
     for claim_atom in claim_atoms:
-        claim_tokens = _tokens(claim_atom.text)
+        claim_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9'-]+", claim_atom.text.lower())
+            if len(token) >= 4
+        }
         if not claim_tokens:
             continue
 
         for evidence_atom in evidence_atoms:
-            evidence_tokens = _tokens(evidence_atom.text)
+            evidence_tokens = {
+                token
+                for token in re.findall(r"[a-z0-9'-]+", evidence_atom.text.lower())
+                if len(token) >= 4
+            }
             overlap = len(claim_tokens & evidence_tokens) / max(1, len(claim_tokens))
             if overlap < 0.45:
                 continue
