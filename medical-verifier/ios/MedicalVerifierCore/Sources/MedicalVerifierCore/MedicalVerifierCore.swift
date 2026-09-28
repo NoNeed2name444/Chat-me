@@ -850,6 +850,53 @@ public struct CurriculumVerifier: Sendable {
         self.version = version
     }
 
+    private func applyExplicitPrecedence(
+        to sources: [SourceSnapshot]
+    ) -> ([SourceSnapshot], [String]) {
+        var selected = sources.filter {
+            $0.precedenceGroup == nil
+        }
+        var warnings: [String] = []
+
+        let grouped = Dictionary(
+            grouping: sources.filter {
+                $0.precedenceGroup != nil
+            },
+            by: {
+                $0.precedenceGroup!
+            }
+        )
+
+        for group in grouped.keys.sorted() {
+            guard let items = grouped[group] else {
+                continue
+            }
+
+            let highestRank = items.map {
+                $0.precedenceRank
+            }.max() ?? 0
+
+            let winners = items.filter {
+                $0.precedenceRank == highestRank
+            }
+
+            selected.append(contentsOf: winners)
+
+            let excluded = items.filter {
+                $0.precedenceRank < highestRank
+            }
+
+            if !excluded.isEmpty {
+                warnings.append(
+                    "explicit_precedence_excluded:" +
+                    excluded.map { $0.snapshotID }.sorted().joined(separator: ",")
+                )
+            }
+        }
+
+        return (selected, warnings)
+    }
+
     public func verify(
         prompt: String,
         answer: String,
@@ -871,8 +918,11 @@ public struct CurriculumVerifier: Sendable {
             )
         }
 
+        let (selectedSources, precedenceWarnings) =
+            applyExplicitPrecedence(to: sources)
+
         let integrityChecker = SourceIntegrityChecker()
-        let integrityFailures = sources.filter {
+        let integrityFailures = selectedSources.filter {
             !integrityChecker.verify($0)
         }
 
@@ -883,13 +933,13 @@ public struct CurriculumVerifier: Sendable {
                 supportingSourceIDs: [],
                 warnings: integrityFailures.map {
                     "source_integrity_failed:\($0.snapshotID)"
-                },
+                } + precedenceWarnings,
                 requiresHumanReview: true,
                 snapshotIDs: sources.map { $0.snapshotID }
             )
         }
 
-        let extractionFailures = sources.filter {
+        let extractionFailures = selectedSources.filter {
             $0.extractionQuality < 0.85
             || !$0.extractionWarnings.isEmpty
         }
@@ -916,7 +966,7 @@ public struct CurriculumVerifier: Sendable {
                 status: .safetyEscalation,
                 riskLevel: risk,
                 supportingSourceIDs: [],
-                warnings: ["clinical_action_request_requires_human_review"],
+                warnings: precedenceWarnings + ["clinical_action_request_requires_human_review"],
                 requiresHumanReview: true,
                 snapshotIDs: sources.map { $0.snapshotID }
             )
@@ -926,7 +976,9 @@ public struct CurriculumVerifier: Sendable {
         var contradicted: [String] = []
         var warnings: [String] = []
 
-        for source in sources {
+        var warnings: [String] = precedenceWarnings
+
+        for source in selectedSources {
             let sourceText = source.title + " " + source.passage
             let overlap = SemanticGuard.overlap(
                 claim: answer,
