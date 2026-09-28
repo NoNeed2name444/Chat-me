@@ -8,6 +8,8 @@ class QuestionArtifact(BaseModel):
     source_evidence_ids: list[str] = Field(default_factory=list)
     source_locators: list[str] = Field(default_factory=list)
     source_versions: list[str] = Field(default_factory=list)
+    source_passage_hashes: dict[str, str] = Field(default_factory=dict)
+    source_snapshot_hashes: dict[str, str] = Field(default_factory=dict)
 
     validation_status: str = "SOURCE_UNCERTAIN"
     validation_warnings: list[str] = Field(default_factory=list)
