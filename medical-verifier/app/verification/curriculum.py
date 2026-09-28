@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify as independent_verify
 
+EXTRACTION_THRESHOLD = 0.85
+
 @dataclass(frozen=True)
 class CurriculumAssessment:
     status: str
@@ -21,13 +23,16 @@ def assess_curriculum_fidelity(claim: str, source_items):
 
     normalized = " ".join(claim.lower().split())
     terms = [
-        word for word in normalized.split()
+        word
+        for word in normalized.split()
         if len(word) >= 5
     ]
 
     aligned = []
+    contradicted = []
     uncertain = []
     integrity_failures = []
+    extraction_uncertain = []
     dates = []
 
     for item in source_items:
@@ -36,6 +41,13 @@ def assess_curriculum_fidelity(claim: str, source_items):
             and item.passage_sha256 != sha256_text(item.passage)
         ):
             integrity_failures.append(item.id)
+            continue
+
+        if (
+            item.extraction_quality < EXTRACTION_THRESHOLD
+            or item.extraction_warnings
+        ):
+            extraction_uncertain.append(item.id)
             continue
 
         source_text = " ".join(
@@ -59,12 +71,15 @@ def assess_curriculum_fidelity(claim: str, source_items):
             or item.effective_date
             or item.publication_date
         )
+
         if observed:
             dates.append(observed.isoformat())
 
         if entailment.label == "SUPPORTS":
             aligned.append(item.id)
-        elif entailment.label == "UNKNOWN":
+        elif entailment.label == "CONTRADICTS":
+            contradicted.append(item.id)
+        else:
             uncertain.append(item.id)
 
     if integrity_failures:
@@ -77,10 +92,41 @@ def assess_curriculum_fidelity(claim: str, source_items):
             source_dates=tuple(sorted(set(dates))),
         )
 
+    if aligned and contradicted:
+        return CurriculumAssessment(
+            status="CONFLICTING_CURRICULUM_SOURCES",
+            matched_source_ids=tuple(aligned),
+            reasons=(
+                "Supplied curriculum sources contain materially conflicting answers.",
+            ),
+            source_dates=tuple(sorted(set(dates))),
+        )
+
+    if extraction_uncertain and aligned:
+        return CurriculumAssessment(
+            status="SOURCE_EXTRACTION_UNCERTAIN",
+            matched_source_ids=tuple(aligned),
+            reasons=(
+                "Relevant curriculum material has insufficient extraction quality for fully automatic validation.",
+            ),
+            source_dates=tuple(sorted(set(dates))),
+        )
+
+    if extraction_uncertain and not aligned:
+        return CurriculumAssessment(
+            status="SOURCE_EXTRACTION_UNCERTAIN",
+            matched_source_ids=(),
+            reasons=(
+                "Relevant curriculum material has insufficient extraction quality for automatic validation.",
+            ),
+            source_dates=tuple(sorted(set(dates))),
+        )
+
     if aligned:
         reasons = [
             "Claim is traceably aligned with the supplied curriculum source snapshot."
         ]
+
         if uncertain:
             reasons.append(
                 "Some matching curriculum passages were semantically uncertain."
@@ -93,12 +139,14 @@ def assess_curriculum_fidelity(claim: str, source_items):
             source_dates=tuple(sorted(set(dates))),
         )
 
-    if uncertain:
+    if uncertain or contradicted:
         return CurriculumAssessment(
             status="UNCERTAIN",
-            matched_source_ids=tuple(uncertain),
+            matched_source_ids=tuple(
+                uncertain + contradicted
+            ),
             reasons=(
-                "The claim matches the curriculum topic, but exact semantic support could not be established.",
+                "The claim matches curriculum material, but exact semantic support could not be established.",
             ),
             source_dates=tuple(sorted(set(dates))),
         )
@@ -117,7 +165,12 @@ def determine_divergence(
     current_verdict,
     has_relevant_newer_evidence,
 ):
-    if curriculum_status == "SOURCE_NOT_AVAILABLE":
+    if curriculum_status in {
+        "SOURCE_NOT_AVAILABLE",
+        "SOURCE_INTEGRITY_FAILED",
+        "SOURCE_EXTRACTION_UNCERTAIN",
+        "CONFLICTING_CURRICULUM_SOURCES",
+    }:
         return "unknown"
 
     if (
