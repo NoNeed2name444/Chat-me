@@ -121,8 +121,13 @@ def verify(claim, evidence):
     claim_neg = bool(_base.NEGATION.search(claim_for_logic))
     evidence_neg = bool(_base.NEGATION.search(evidence_for_logic))
     if claim_neg != evidence_neg:
+        if claim_neg and not evidence_neg:
+            return IndependentEntailment(
+                "CONTRADICTS",
+                ("claim_evidence_polarity_mismatch",),
+            )
         return IndependentEntailment(
-            "CONTRADICTS",
+            "UNKNOWN",
             ("claim_evidence_polarity_mismatch",),
         )
 
