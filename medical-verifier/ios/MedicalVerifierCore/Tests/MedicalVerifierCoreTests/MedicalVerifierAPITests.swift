@@ -38,5 +38,9 @@ final class MedicalVerifierAPITests: XCTestCase {
             json["verification_mode"] as? String,
             "curriculum_update_aware"
         )
+        XCTAssertEqual(
+            json["question_context"] as? String,
+            "What does insulin do?"
+        )
     }
 }
