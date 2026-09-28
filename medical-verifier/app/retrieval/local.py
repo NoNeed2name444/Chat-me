@@ -1,6 +1,7 @@
+import json
 import sqlite3
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 from app.config import settings
 from app.models.evidence import EvidenceItem
@@ -28,7 +29,8 @@ class LocalEvidenceProvider(EvidenceProvider):
                 "SELECT id,title,source_type,publisher,url,source_locator,passage,"
                 "source_family,canonical_id,source_snapshot_sha256,"
                 "passage_sha256,document_version,study_family_id,"
-                "source_date,curriculum_snapshot_id,source_authority "
+                "source_date,curriculum_snapshot_id,source_authority,"
+                "extraction_quality,extraction_warnings "
                 "FROM evidence"
             )
 
@@ -75,16 +77,24 @@ class LocalEvidenceProvider(EvidenceProvider):
                 continue
 
             source_date = None
-            if row[12]:
+            if row[13]:
                 try:
                     source_date = date.fromisoformat(row[13])
                 except ValueError:
                     pass
 
+            try:
+                extraction_warnings = json.loads(
+                    row[17] or "[]"
+                )
+            except (TypeError, json.JSONDecodeError):
+                extraction_warnings = [
+                    "stored_extraction_warnings_invalid"
+                ]
+
             results.append(
                 EvidenceItem(
                     id=row[0],
-                    canonical_id=row[7],
                     title=row[1],
                     source_type=row[2],
                     publisher=row[3],
@@ -92,6 +102,7 @@ class LocalEvidenceProvider(EvidenceProvider):
                     source_locator=row[5],
                     passage=row[6],
                     source_family=row[7] or "",
+                    canonical_id=row[8],
                     source_snapshot_sha256=row[9],
                     passage_sha256=row[10],
                     document_version=row[11],
@@ -100,6 +111,12 @@ class LocalEvidenceProvider(EvidenceProvider):
                     curriculum_snapshot_id=row[14],
                     independence_group=row[12] or row[8] or row[0],
                     source_authority=row[15] or 0.40,
+                    extraction_quality=(
+                        row[16]
+                        if row[16] is not None
+                        else 1.0
+                    ),
+                    extraction_warnings=extraction_warnings,
                     retrieval_score=float(overlap),
                 )
             )
