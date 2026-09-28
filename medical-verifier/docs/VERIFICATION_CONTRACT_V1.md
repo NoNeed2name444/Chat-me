@@ -1,10 +1,10 @@
-# Verification contract v1.3
+# Verification contract v1.4
 
 The Python server and iOS client share a versioned verification contract.
 
 ## Contract identifier
 
-Current contract: `1.3`
+Current contract: `1.4
 
 A client sends `verification_contract_version`.
 
@@ -50,7 +50,7 @@ It must never relabel a curriculum result as current medical truth merely
 because the server is unreachable.
 
 
-## v1.3 additions
+## v1.4 additions
 
 The contract now preserves:
 
@@ -58,3 +58,16 @@ The contract now preserves:
 - explicit document precedence groups and ranks; conflicting versions are not silently resolved without an explicit precedence declaration
 - conditional scope across sentence boundaries
 - conservative equivalence for direct dose, concentration-volume dose, and weight-based dose arithmetic
+
+
+## v1.4 additions
+
+The contract now supports:
+- language metadata for extracted source blocks
+- explicit table/figure/caption linkage metadata
+- deterministic source manifests containing source/passage hashes and structural provenance
+- parent-linked manifest lineage verification
+- conservative supported Spanish and French semantic normalization
+
+Manifest verification is cryptographic hash verification. No detached digital
+signature is claimed unless an external signing/trust system is configured.
