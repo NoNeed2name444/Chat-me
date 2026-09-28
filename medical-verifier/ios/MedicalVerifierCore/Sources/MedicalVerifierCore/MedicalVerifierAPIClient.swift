@@ -3,7 +3,7 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public enum JSONValue: Codable, Sendable, Equatable {
+public indirect enum JSONValue: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
