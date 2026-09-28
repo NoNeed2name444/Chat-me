@@ -498,8 +498,15 @@ private enum SemanticGuard {
     }
 
     private static func dailyMassDose(in text: String) -> Double? {
+        if text.range(
+            of: #"d+(?:.d+)?s*(?:mg|g|mcg|ug)s*(?:/|per)s*(?:ml|l)"#,
+            options: [.regularExpression]
+        ) != nil {
+            return nil
+        }
+
         let pattern = try? NSRegularExpression(
-            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug|kg)"#,
+            pattern: #"(d+(?:.d+)?)s*(mg|g|mcg|ug)"#,
             options: [.caseInsensitive]
         )
 
