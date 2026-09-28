@@ -444,7 +444,10 @@ private enum SemanticGuard {
 
                 if !claimAtom.subjectAnchor.isEmpty &&
                     !sourceAtom.subjectAnchor.isEmpty &&
-                    claimAtom.subjectAnchor != sourceAtom.subjectAnchor {
+                    !anchorsEquivalent(
+                        claimAtom.subjectAnchor,
+                        sourceAtom.subjectAnchor
+                    ) {
                     failureReason = "atomic_subject_mismatch"
                     continue
                 }
@@ -698,6 +701,30 @@ private enum SemanticGuard {
         }
 
         return tokens.prefix(2).joined(separator: " ")
+    }
+
+    private static func anchorsEquivalent(
+        _ lhs: String,
+        _ rhs: String
+    ) -> Bool {
+        let left = lhs.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let right = rhs.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if left == right {
+            return true
+        }
+
+        let aliases: [String: String] = [
+            "paracetamol": "acetaminophen",
+            "acetaminophen": "acetaminophen",
+            "ibuprofen": "ibuprofen"
+        ]
+
+        return aliases[left] != nil &&
+            aliases[right] != nil &&
+            aliases[left] == aliases[right]
     }
 
     private static func tokenOverlap(
@@ -1458,7 +1485,7 @@ private func maxRisk(_ lhs: RiskLevel, _ rhs: RiskLevel) -> RiskLevel {
 public struct CurriculumVerifier: Sendable {
     public let version: String
 
-    public init(version: String = "ios-core-0.7") {
+    public init(version: String = "ios-core-0.9") {
         self.version = version
     }
 
@@ -1706,7 +1733,7 @@ public struct SourceIntegrityChecker: Sendable {
 public struct QuestionArtifactFactory: Sendable {
     public let verifierVersion: String
 
-    public init(verifierVersion: String = "ios-core-0.7") {
+    public init(verifierVersion: String = "ios-core-0.9") {
         self.verifierVersion = verifierVersion
     }
 
