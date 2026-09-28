@@ -78,6 +78,9 @@ class BenchmarkSnapshot:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "BenchmarkSnapshot":
+        if not isinstance(payload, dict):
+            raise ValueError("snapshot_payload_must_be_object")
+
         version = str(payload.get("schema_version", ""))
         if version != SNAPSHOT_SCHEMA_VERSION:
             raise ValueError("unsupported_snapshot_schema_version")
@@ -90,14 +93,25 @@ class BenchmarkSnapshot:
         if manifest_version != SNAPSHOT_SCHEMA_VERSION:
             raise ValueError("unsupported_manifest_version")
 
-        case_ids = tuple(str(value) for value in raw_manifest.get("case_ids", []))
-        cases = _records_from_payload(payload.get("cases", []))
+        raw_case_ids = raw_manifest.get("case_ids")
+        if not isinstance(raw_case_ids, list):
+            raise ValueError("manifest_case_ids_must_be_array")
+
+        raw_cases = payload.get("cases")
+        if not isinstance(raw_cases, list):
+            raise ValueError("snapshot_cases_must_be_array")
+
+        case_ids = tuple(str(value) for value in raw_case_ids)
+        cases = tuple(sorted(
+            _records_from_payload(raw_cases),
+            key=lambda item: item.case_id,
+        ))
         actual_case_ids = tuple(case.case_id for case in cases)
 
         if len(actual_case_ids) != len(set(actual_case_ids)):
             raise ValueError("duplicate_case_id")
-        if actual_case_ids != tuple(sorted(actual_case_ids)):
-            actual_case_ids = tuple(sorted(actual_case_ids))
+        if case_ids != tuple(sorted(case_ids)):
+            raise ValueError("manifest_case_ids_must_be_sorted")
         if case_ids != actual_case_ids:
             raise ValueError("manifest_case_ids_mismatch")
 
@@ -110,7 +124,9 @@ class BenchmarkSnapshot:
         )
 
         supplied_hash = raw_manifest.get("snapshot_sha256")
-        if supplied_hash is not None and supplied_hash != manifest.digest():
+        if not isinstance(supplied_hash, str) or len(supplied_hash) != 64:
+            raise ValueError("missing_or_invalid_manifest_hash")
+        if supplied_hash != manifest.digest():
             raise ValueError("manifest_hash_mismatch")
 
         return cls(
