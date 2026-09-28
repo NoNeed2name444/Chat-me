@@ -4,6 +4,8 @@ from app.verification.adversarial import highest_severity, inspect_claim
 from app.verification.citation_integrity import sha256_text
 from app.verification.independent_entailment import verify
 
+EXTRACTION_THRESHOLD = 0.85
+
 @dataclass(frozen=True)
 class QuestionValidation:
     status: str
@@ -38,8 +40,10 @@ def validate_question(prompt: str, answer: str, source_items):
         )
 
     answer_support = []
+    answer_contradictions = []
     prompt_overlap = False
     warnings = []
+    extraction_uncertain = False
 
     prompt_terms = {
         token.lower()
@@ -48,6 +52,16 @@ def validate_question(prompt: str, answer: str, source_items):
     }
 
     for item in source_items:
+        if (
+            item.extraction_quality < EXTRACTION_THRESHOLD
+            or item.extraction_warnings
+        ):
+            extraction_uncertain = True
+            warnings.append(
+                f"source_extraction_uncertain:{item.id}"
+            )
+            continue
+
         if (
             item.passage_sha256
             and item.passage_sha256 != sha256_text(item.passage)
@@ -75,6 +89,9 @@ def validate_question(prompt: str, answer: str, source_items):
 
         if entailment.label == "SUPPORTS":
             answer_support.append(item.id)
+        elif entailment.label == "CONTRADICTS":
+            answer_contradictions.append(item.id)
+            warnings.extend(entailment.reasons)
         else:
             warnings.extend(entailment.reasons)
 
@@ -86,6 +103,24 @@ def validate_question(prompt: str, answer: str, source_items):
             status="SOURCE_INTEGRITY_FAILED",
             warnings=tuple(sorted(set(warnings))),
             supporting_source_ids=(),
+            requires_review=True,
+        )
+
+    if answer_support and answer_contradictions:
+        return QuestionValidation(
+            status="SOURCE_CONFLICT",
+            warnings=tuple(sorted(set(
+                warnings + ["conflicting_curriculum_sources"]
+            ))),
+            supporting_source_ids=tuple(answer_support),
+            requires_review=True,
+        )
+
+    if extraction_uncertain:
+        return QuestionValidation(
+            status="SOURCE_EXTRACTION_UNCERTAIN",
+            warnings=tuple(sorted(set(warnings))),
+            supporting_source_ids=tuple(answer_support),
             requires_review=True,
         )
 
