@@ -9,6 +9,8 @@ from typing import Literal
 from app.audit.store import store_evidence, store_manifest
 from app.config import settings
 from app.verification.pdf_structure import extract_pdf
+from app.verification.citation_integrity import sha256_text
+from app.models.evidence import EvidenceItem
 from app.verification.source_manifest import build_manifest
 
 router = APIRouter(tags=["documents"])
@@ -68,6 +70,8 @@ def ingest_document(request: DocumentIngestRequest):
         precedence_group=request.precedence_group,
         precedence_rank=request.precedence_rank,
     )
+    store_manifest(manifest)
+
     return {
         "status": "stored",
         "evidence_id": evidence_id,
@@ -138,10 +142,16 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
         ) from exc
 
     evidence_ids = []
+    manifest_items = []
 
     for block in extraction.blocks:
         warnings = list(extraction.warnings)
         warnings.extend(block.warnings)
+
+        source_locator = (
+            request.source_locator
+            or f"page:{block.page_number}:block:{block.block_index}"
+        )
 
         item_id = store_evidence(
             title=f"{request.title} — page {block.page_number}",
@@ -149,10 +159,7 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
             source_type=request.source_type,
             publisher=request.publisher,
             url=request.url,
-            source_locator=(
-                request.source_locator
-                or f"page:{block.page_number}:block:{block.block_index}"
-            ),
+            source_locator=source_locator,
             source_snapshot_sha256=extraction.raw_sha256,
             canonical_id=request.canonical_id,
             document_version=request.document_version,
@@ -173,43 +180,34 @@ def ingest_pdf_document(request: PDFDocumentIngestRequest):
         )
         evidence_ids.append(item_id)
 
+        manifest_items.append(
+            EvidenceItem(
+                id=item_id,
+                title=request.title,
+                source_type=request.source_type,
+                publisher=request.publisher,
+                source_locator=source_locator,
+                source_snapshot_sha256=extraction.raw_sha256,
+                passage_sha256=sha256_text(block.text),
+                page_number=block.page_number,
+                block_type=block.block_type,
+                block_index=block.block_index,
+                related_block_ids=list(block.related_block_ids),
+                language=request.language,
+                document_version=request.document_version,
+                precedence_group=request.precedence_group,
+                precedence_rank=request.precedence_rank,
+            )
+        )
+
     manifest = build_manifest(
         manifest_id=(
             request.manifest_id
             or f"manifest:{uuid4()}"
         ),
-        evidence_items=[
-            item.model_copy(
-                update={"id": evidence_id}
-            )
-            for item, evidence_id in zip(
-                [
-                    {
-                        "id": block.block_id,
-                        "source_snapshot_sha256": extraction.raw_sha256,
-                        "passage_sha256": None,
-                        "source_locator": (
-                            request.source_locator
-                            or f"page:{block.page_number}:block:{block.block_index}"
-                        ),
-                        "page_number": block.page_number,
-                        "section": None,
-                        "block_type": block.block_type,
-                        "block_index": block.block_index,
-                        "related_block_ids": list(block.related_block_ids),
-                        "language": request.language,
-                        "document_version": request.document_version,
-                        "precedence_group": request.precedence_group,
-                        "precedence_rank": request.precedence_rank,
-                    }
-                    for block in extraction.blocks
-                ],
-                evidence_ids,
-            )
-        ],
+        evidence_items=manifest_items,
         parent_manifest_sha256=request.parent_manifest_sha256,
     )
-    store_manifest(manifest)
 
     return {
         "status": "stored",
