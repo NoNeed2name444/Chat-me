@@ -17,6 +17,8 @@ private struct ConformanceCase: Codable {
     let requiresReview: Bool
     let sourcePresent: Bool?
     let tamperedPassage: String?
+    let extractionQuality: Double?
+    let extractionWarnings: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +31,8 @@ private struct ConformanceCase: Codable {
         case requiresReview = "requires_review"
         case sourcePresent = "source_present"
         case tamperedPassage = "tampered_passage"
+        case extractionQuality = "extraction_quality"
+        case extractionWarnings = "extraction_warnings"
     }
 }
 
@@ -69,6 +73,8 @@ final class CrossPlatformConformanceTests: XCTestCase {
                     vector.sourcePassage
                 ),
                 passage: passage,
+                extractionQuality: vector.extractionQuality ?? 1.0,
+                extractionWarnings: vector.extractionWarnings ?? [],
                 locator: "page:1",
                 version: "2022"
             )
