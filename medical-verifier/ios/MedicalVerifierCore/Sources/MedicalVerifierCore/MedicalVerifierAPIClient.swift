@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public enum JSONValue: Codable, Sendable, Equatable {
     case string(String)
