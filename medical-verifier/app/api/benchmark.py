@@ -18,6 +18,7 @@ from app.verification.dataset_integrity import (
     find_cross_split_provenance_leakage,
     find_duplicate_case_ids,
     find_duplicate_cases,
+    find_invalid_provenance,
     find_missing_provenance,
     summarize_integrity,
 )
@@ -89,6 +90,7 @@ def benchmark_integrity(request: BenchmarkIntegrityRequest):
 
     if request.provenance_bound:
         findings.extend(find_missing_provenance(records))
+        findings.extend(find_invalid_provenance(records))
 
     case_ids = tuple(sorted(case.case_id for case in records))
 
@@ -192,7 +194,12 @@ def benchmark_integrity(request: BenchmarkIntegrityRequest):
             finding.kind
             if hasattr(finding, "kind")
             else finding.get("kind")
-        ) == "missing_provenance"
+        ) in {
+            "missing_provenance",
+            "invalid_source_snapshot_sha256",
+            "invalid_passage_sha256",
+            "passage_sha256_mismatch",
+        }
         for finding in findings
     ):
         raise HTTPException(
