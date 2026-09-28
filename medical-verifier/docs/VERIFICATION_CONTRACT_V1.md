@@ -1,4 +1,4 @@
-# Verification contract v1.4
+# Verification contract v1.5
 
 The Python server and iOS client share a versioned verification contract.
 
@@ -50,7 +50,7 @@ It must never relabel a curriculum result as current medical truth merely
 because the server is unreachable.
 
 
-## v1.4 additions
+## v1.5 additions
 
 The contract now preserves:
 
@@ -60,7 +60,7 @@ The contract now preserves:
 - conservative equivalence for direct dose, concentration-volume dose, and weight-based dose arithmetic
 
 
-## v1.4 additions
+## v1.5 additions
 
 The contract now supports:
 - language metadata for extracted source blocks
@@ -71,3 +71,18 @@ The contract now supports:
 
 Manifest verification is cryptographic hash verification. No detached digital
 signature is claimed unless an external signing/trust system is configured.
+
+
+## v1.5 additions
+
+The contract now includes a bounded PDF-ingestion lane with:
+
+- raw PDF SHA-256 provenance
+- page and extracted-block evidence records
+- conservative caption/table heuristics
+- explicit extraction-quality warnings
+- source-manifest persistence and parent-manifest continuity
+- parser-local block relationships rewritten to persisted evidence IDs
+
+PDF structure is never treated as native figure/table truth unless the extractor
+can establish that relationship explicitly.
