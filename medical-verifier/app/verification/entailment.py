@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from datetime import date
 
 from app.verification.citation_integrity import verify_citation
 from app.verification.consistency import guard_specificity
 from app.verification.independent_entailment import verify as independent_verify
 from app.verification.semantic_guard import semantic_guard
+from app.verification.temporal_guard import guard_temporal_specificity
 
 @dataclass(frozen=True)
 class EntailmentResult:
@@ -34,22 +36,28 @@ def assess_entailment(item, claim):
     )
     warnings.extend(specificity_warnings)
 
-    # Two intentionally different checks must agree before evidence can
-    # support a claim.
+    item, temporal_warnings = guard_temporal_specificity(
+        item,
+        claim,
+        date.today(),
+    )
+    warnings.extend(temporal_warnings)
+
     semantic_support = (
         item.supports is True
         and not semantic_warnings
         and not specificity_warnings
+        and not temporal_warnings
     )
     citation_verified = not citation_warnings
     independent_support = independent.label == "SUPPORTS"
-
     independent_contradiction = independent.label == "CONTRADICTS"
 
     if (
         independent_contradiction
         and item.supports is False
         and citation_verified
+        and not temporal_warnings
     ):
         label = "CONTRADICTS"
     elif (
