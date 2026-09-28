@@ -9,6 +9,8 @@ import hashlib
 import re
 from typing import Iterable
 
+from app.verification.citation_integrity import sha256_text
+
 
 @dataclass(frozen=True)
 class IntegrityFinding:
@@ -136,6 +138,55 @@ def find_cross_split_provenance_leakage(
                     f"canonical_id:{canonical_id}",
                 )
             )
+
+    return findings
+
+
+HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def find_invalid_provenance(
+    cases: Iterable[object],
+) -> list[IntegrityFinding]:
+    findings = []
+    for case in cases:
+        case_id = str(case.case_id)
+
+        snapshot_hash = getattr(case, "source_snapshot_sha256", None)
+        if snapshot_hash and (
+            not isinstance(snapshot_hash, str)
+            or not HEX64_RE.fullmatch(snapshot_hash.lower())
+        ):
+            findings.append(
+                IntegrityFinding(
+                    case_id,
+                    "invalid_source_snapshot_sha256",
+                    "expected_64_hex_characters",
+                )
+            )
+
+        passage_hash = getattr(case, "passage_sha256", None)
+        if passage_hash and (
+            not isinstance(passage_hash, str)
+            or not HEX64_RE.fullmatch(passage_hash.lower())
+        ):
+            findings.append(
+                IntegrityFinding(
+                    case_id,
+                    "invalid_passage_sha256",
+                    "expected_64_hex_characters",
+                )
+            )
+        elif passage_hash:
+            expected = sha256_text(str(case.evidence))
+            if passage_hash != expected:
+                findings.append(
+                    IntegrityFinding(
+                        case_id,
+                        "passage_sha256_mismatch",
+                        "does_not_match_normalized_evidence",
+                    )
+                )
 
     return findings
 
