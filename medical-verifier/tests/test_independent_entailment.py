@@ -34,3 +34,19 @@ def test_matching_claim_can_support():
         "Drug X increases bleeding in adults.",
     )
     assert result.label == "SUPPORTS"
+
+
+def test_mass_unit_mismatch_is_unknown():
+    result = verify(
+        "The dose is 500 mcg.",
+        "The dose is 500 mg.",
+    )
+    assert result.label == "UNKNOWN"
+    assert "measurement_unit_or_value_mismatch" in result.reasons
+
+def test_equivalent_mass_units_match():
+    result = verify(
+        "The dose is 500 mcg.",
+        "The dose is 0.5 mg.",
+    )
+    assert result.label == "SUPPORTS"
