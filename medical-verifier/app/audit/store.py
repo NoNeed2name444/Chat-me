@@ -26,6 +26,8 @@ _EVIDENCE_COLUMNS = {
     "section": "TEXT",
     "block_type": "TEXT DEFAULT 'text'",
     "block_index": "INTEGER",
+    "related_block_ids": "TEXT DEFAULT '[]'",
+    "language": "TEXT DEFAULT 'auto'",
     "precedence_group": "TEXT",
     "precedence_rank": "INTEGER DEFAULT 0",
     "extraction_quality": "REAL DEFAULT 1.0",
@@ -78,6 +80,8 @@ def _connect():
             section TEXT,
             block_type TEXT DEFAULT "text",
             block_index INTEGER,
+            related_block_ids TEXT DEFAULT "[]",
+            language TEXT DEFAULT "auto",
             precedence_group TEXT,
             precedence_rank INTEGER DEFAULT 0,
             extraction_quality REAL DEFAULT 1.0,
@@ -127,6 +131,8 @@ def store_evidence(
     section=None,
     block_type="text",
     block_index=None,
+    related_block_ids=None,
+    language="auto",
     precedence_group=None,
     precedence_rank=0,
 ):
@@ -134,6 +140,7 @@ def store_evidence(
     passage_hash = _sha256(passage)
     snapshot_hash = source_snapshot_sha256 or passage_hash
     extraction_warnings = extraction_warnings or []
+    related_block_ids = related_block_ids or []
 
     conn = _connect()
 
@@ -144,9 +151,9 @@ def store_evidence(
             "canonical_id,source_snapshot_sha256,passage_sha256,"
             "document_version,study_family_id,source_date,"
             "curriculum_snapshot_id,source_authority,page_number,section,block_type,"
-            "block_index,precedence_group,precedence_rank,extraction_quality,"
+            "block_index,related_block_ids,language,precedence_group,precedence_rank,extraction_quality,"
             "extraction_warnings) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 evidence_id,
                 title,
@@ -168,6 +175,8 @@ def store_evidence(
                 section,
                 block_type,
                 block_index,
+                json.dumps(related_block_ids),
+                language,
                 precedence_group,
                 precedence_rank,
                 extraction_quality,
