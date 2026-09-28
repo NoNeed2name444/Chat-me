@@ -1,5 +1,56 @@
 import Foundation
 
+public enum JSONValue: Codable, Sendable, Equatable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([String: JSONValue].self) {
+            self = .object(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported JSON value"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
 public enum APIClientError: Error, Equatable {
     case insecureTransport
     case invalidResponse
@@ -9,7 +60,7 @@ public enum APIClientError: Error, Equatable {
 
 public struct VerificationAPIRequest: Codable, Sendable {
     public let claim: String
-    public let context: [String: String]
+    public let context: [String: JSONValue]
     public let sources: [String]
     public let requestedEvidenceLevel: String
     public let verificationMode: VerificationMode
@@ -19,7 +70,7 @@ public struct VerificationAPIRequest: Codable, Sendable {
 
     public init(
         claim: String,
-        context: [String: String] = [:],
+        context: [String: JSONValue] = [:],
         sources: [String] = ["pubmed", "openfda", "local"],
         requestedEvidenceLevel: String = "authoritative",
         verificationMode: VerificationMode = .currentMedical,
@@ -77,7 +128,7 @@ public struct VerificationAPIResponse: Codable, Sendable {
     }
 }
 
-public final class MedicalVerifierAPIClient: Sendable {
+public final class MedicalVerifierAPIClient: @unchecked Sendable {
     public let baseURL: URL
     public let bearerToken: String?
     public let contractVersion: String
@@ -124,9 +175,7 @@ public final class MedicalVerifierAPIClient: Sendable {
         }
 
         let encoder = JSONEncoder()
-        urlRequest.httpBody = try encoder.encode(
-            request
-        )
+        urlRequest.httpBody = try encoder.encode(request)
 
         let (data, response) = try await session.data(
             for: urlRequest
