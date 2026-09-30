@@ -1,0 +1,131 @@
+# Stethoscore app audit: 127 unverified findings (carried over)
+
+Carried over unchanged from the 30 September 2026 handoff (context.md §8). Each line is an unverified claim from the previous session's read-only audit; verify against the code before fixing. Tags: [sync], [audio], [design], and so on name the area.
+
+- [launch] Whole library (with every picture as base64) is read and decoded synchronously on the main thread inside App.init, before the first frame
+- [launch] A library file that exists but can't be read is treated as an empty library with readWhole = true, so a later save or sweep can wipe the real data
+- [launch] Files opened before the library is on screen go to the inbox after 2.5 s, over the sign-in, terms or exam screen, and decks lose their import preview
+- [launch] Spotlight indexer marks sets as indexed before the index call finishes; a cancelled run loses the adds and deletes for good
+- [launch] Privacy manifest declares disk-space reason 7D9E.1 (a bug report the user chooses to submit), but free disk is sent in automatic, on-by-default reports
+- [launch] The once-a-minute sync loop checks a stale scenePhase captured when the library first appeared
+- [launch] Tapping the 'Time to review' reminder or a 'questions are ready' notification opens the app but doesn't go anywhere
+- [launch] The app lock may ask for Face ID again straight after the student cancels it
+- [launch] The run marker never clears on termination, so quitting the app from the app switcher can be reported as a crash
+- [launch] Crash reports can't tell the Playgrounds build from an Xcode build or one package drop from the next
+- [launch] make_swiftpm.py's safety assertion can never fail, and its source patches are unchecked
+- [launch] One-up: give the Playgrounds build Face ID lock (and local-network and ProMotion keys) via package capabilities, gated at runtime rather than at compile time
+- [launch] One-up: the Playgrounds CI job builds the package but never launches it
+- [data] Pictures on imported Anki basic/cloze cards are stored but never shown in review, so image cards can't be answered
+- [data] Restoring a backup while sync is pulling can put two sets with the same id in the library
+- [data] A failed library write is silently dropped, yet sync still advances its cursor as if the data were on disk
+- [data] The library file holds every picture as base64, so every rename or move re-encodes and rewrites hundreds of MB (measured: 200 MB means 2.1 s CPU and a 660 MB peak)
+- [data] Each rating re-encodes the whole schedule on the main thread, and each sync re-encodes and hashes every deck's schedule on the main actor
+- [data] Combining textbooks points the second book's figures at the first book's pictures, and combining drops lecture sources
+- [data] The 'Mistakes' practice set loses every question's picture
+- [data] Anki export drops every picture on basic/cloze cards and exports all cards as new, losing their schedule
+- [data] A 'push wins' review conflict never merges the other device's ratings before overwriting the server copy
+- [data] A deck's schedule too big for the server is silently never synced (problems() only checks set ids)
+- [data] Backup restore throws away sets it can't read and the backup's own 'unread' sets, while the report says nothing was lost
+- [data] The 'set aside' recovery copies of unreadable library/schedule/notes files can't be reached on the owner's devices, and ReviewStore/NoteStore fail all-or-nothing
+- [data] Improvement: derive card ids from the Anki note GUID so re-importing an updated deck (AnKing v12 to v13) updates cards in place instead of duplicating 35k cards
+- [data] Improvement: sync study progress (flags, answer history/log, mistake notes, rule sheet, study log) and Ideas notes, reusing the existing merge code
+- [data] Improvement: 'Recently deleted' for sets, since a delete currently destroys the deck and its schedule immediately with no undo
+- [library-ui] Questions generated from a lecture open in a full-screen quiz you cannot leave
+- [library-ui] 'Delete account' always fails for 'Start without an account' users and says 'Please sign in again'
+- [library-ui] 'Contact us' and 'Report a problem' are never delivered for local-only accounts, and the message blames sign-in
+- [library-ui] Search that finds questions but no set names shows 'No question sets yet - Make one'
+- [library-ui] 'Add an audio file' tile adds an empty 'New lecture' set on every tap, even when cancelled
+- [library-ui] Account page contradicts itself in the personal build: Pro badge, 'No subscription yet' and 'Manage or cancel'
+- [library-ui] 'Progress' opens a page titled 'Analytics', and 'By subject' opens one titled 'Progress'
+- [library-ui] AI models page says the cloud writer and checker are 'Gemini 3.1 Pro', but the server gives students Flash, Flash-Lite and Gemma
+- [library-ui] Study reminders stay switched on after notification permission is refused
+- [library-ui] An error from the Link-device sheet stays in the account store and can reappear on the screen behind it
+- [library-ui] Paywall spins forever when the App Store returns no products
+- [library-ui] 'Mixed quiz' tile promises '20 from every set' but builds 20 in total
+- [library-ui] One-up: make deleting a set undoable (Undo toast plus Recently deleted), because a delete also destroys the recording and the review schedule
+- [study-a] Free on-device question writing sends up to 45,000 characters to models that hold only 4,096 tokens, so a normal-length lecture fails outright
+- [study-a] 'Practise mistakes' copies questions with their UUIDs, and an accepted key correction fixes only one copy
+- [study-a] 'Re-test me soon' counts as an extra question in the score and quietly erases the miss from every follow-up queue
+- [study-a] The quiz stops saving its place once a re-test is inserted, so leaving mid-quiz loses everything answered after that
+- [study-a] A mock paper (up to 3 hours) is held only in @State and is lost if iOS kills the app
+- [study-a] Mock scores ignore the negative marking the catalog records for NEET-PG and INI-CET, and the exam-day blank-vs-guess advice is wrong for NEET-PG
+- [study-a] 'Guess first' pretest questions show the answer in the stem whenever the key term appears twice in the sentence
+- [study-a] Timed exam mode in the MCQ player is forced-linear: no skipping, and an answer locks the moment you press Next
+- [study-a] The attending's hint is cached per question id forever, so after a key or stem correction it still steers towards the old answer
+- [study-a] Cases mode asks 'Did you get it right?' but gives no way to answer, and nothing is recorded or rescheduled
+- [study-a] The AI coverage check is saved per ExamTrack, not per chosen exam, so switching exams shows the previous exam's check
+- [study-a] A quiz opened from a search hit shares the real set's id, so Timed, Finish or Try again wipes that set's saved resume point
+- [study-a] A twin said to come back 'tomorrow' is due exactly 24 hours later, so a miss from the evening is not ready in the morning
+- [study-b] FSRS mis-schedules every imported Anki card: ratedAt is set to the import time, so a card forgotten on import day comes back in 30 days
+- [study-b] Classic (the default scheduler) makes every card go through 5 days of daily 'learning' reviews, and those reviews ignore the daily limit
+- [study-b] 'Talk to the patient' never uses Apple's free on-device model, even though its own screen says it does
+- [study-b] Default OSCE generation sends 12,000 characters of source to Apple's 4,096-token model, then misreports the resulting failure as 'nothing reads like a station'
+- [study-b] Cloze blanks whose answer contains ':' are not blanked, so the answer shows on the front (e.g. 'AST:ALT > {{c1::2:1}}')
+- [study-b] Rating buttons read 'back in in 10 min'
+- [study-b] Case debrief gives credit for things the student never said: the keyword pre-tick is permanent, and the final model grading can only add ticks
+- [study-b] Photo occlusion editor: a scroll swipe that starts on the picture draws a thin cover instead of scrolling, and that cover then hides part of the picture on every card
+- [study-b] Anki multi-cloze notes (c1…cN) become one card with every blank hidden at once
+- [study-b] OSCE tidy removes the closing 'Wash hands' step, a mark-scheme item
+- [study-b] Reopening an OSCE set after finishing a station that is not the last one puts you back on that station's last step
+- [study-b] The clue-case hint is cached per case, not per number of clues shown, so a replay can reveal clues not yet shown
+- [study-b] Occlusion card face decodes the base64 picture on every body pass
+- [study-b] Cancelling Reasoning writing and starting again right away can leave the new job untracked and impossible to cancel
+- [study-b] Improvement: flag leech cards (cards forgotten again and again) and offer a free on-device rewrite
+- [audio] Leaving the Narrate screen while a lecture is transcribing throws away the finished transcript and deletes the saved Gemini chunks
+- [audio] Commute mode rates a card Again when nothing was recognised (silence, a recogniser error, a phone call)
+- [audio] The Swift Playgrounds build has no audio background mode, so lecture playback, Narrate and commute mode stop when the phone locks
+- [audio] A crafted .docx/.pptx/.apkg crashes the app (Int overflow in the Zip64 central-directory parser)
+- [audio] Lupus-only terms are sent with every transcription as 'terms from this lecture's slides'
+- [audio] Transcription language is fixed to Egyptian Arabic for everyone (Gemini prompt and on-device locale)
+- [audio] Audio interruptions are not handled: commute mode hangs mid-sentence and the lecture player keeps showing 'playing'
+- [audio] Unplugging headphones or losing AirPods is not handled, so a lecture or read-aloud carries on through the loudspeaker
+- [audio] Opening a Narrate set with a recording stops the user's music or podcast, and it never comes back
+- [audio] The voice session prefers Bluetooth HFP, so all speech (including the paid-quality cloud voice) sounds like a phone call on AirPods or in the car
+- [audio] Replacing a recording deletes the old one before the copy, so a failed copy loses both
+- [audio] Lecture recordings are stored in Documents and included in iCloud backup, unlike source files
+- [audio] The page reader's 'N cards from this page' ignores which lecture a card came from
+- [audio] Improvement: read PowerPoint speaker notes when importing a deck
+- [audio] Improvement: switch on-device lecture transcription to iOS 26 SpeechAnalyzer/SpeechTranscriber
+- [ai-client] Free on-device MCQ and OSCE generation (Apple model and Gemma) sends up to 45,000 characters of lecture into a 4,096-token context, so any normal lecture fails every batch
+- [ai-client] SubscriptionStore.isPro is hard-coded true in every build, so the Pro gate, the paywall and Restore's 'nothing found' message never work
+- [ai-client] The accuracy engine burns the whole day's free check allowance (and the global 3,000 ceiling) whenever the free voter models are busy
+- [ai-client] Writing cards, cases or a textbook with a local or hosted model loses everything already written when one batch fails
+- [ai-client] The Anki/Cases/Textbook check only reads the first part of what was written, but reports the whole set as 'Checked'
+- [ai-client] MCQ generation only ever reads the first 40-45k characters of a lecture; the rest is never asked about
+- [ai-client] The checker's verdicts from generation are thrown away: '3 flagged moderate risk — check them' says nothing about which ones, and the same items are then checked a second time
+- [ai-client] Study Lens marks the wrong option as correct when the model answers 'B - Clopidogrel, not aspirin' or with an option number
+- [ai-client] If fetching a finished cloud job's result fails once, generation errors out and the finished set is not collected until the app is killed and relaunched
+- [ai-client] Starting a generation on another screen silently cancels a running one and deletes its cloud job on the server
+- [ai-client] An item is marked 'Verified' after a single free model's vote, even with no lecture source and no literature evidence
+- [ai-client] A normal range written without units is compared only against the US unit, so SI ranges get a false 'severe' flag
+- [server] One free model's 'no error' vote makes an item Verified, and that verdict is cached for everyone for a year
+- [server] No guard on D1's free 100k rows-written a day (enforced since 2026-09-01); a few first syncs can take the whole backend down until midnight UTC
+- [server] Free device accounts can fill the 500 MB D1 database through /accuracy/report, /support/message and /diagnostics, which have no global cap and no size check
+- [server] A failed or lapsed Apple subscription check is never cached; linking a fake transaction id makes every gated request call Apple twice and write the accounts row
+- [server] Counter and cache tables are never pruned; ai_usage alone grows by several rows per active account per day, for ever
+- [server] Blob upload reads a chunked body with no size limit
+- [server] The Apple nonce check gives no replay protection, because the server takes the nonce from the same request as the token
+- [server] Evidence lookups rely on caches.default, which likely does nothing on the workers.dev host the app uses; openFDA is called with no key
+- [server] Deleting an account keeps the user's Apple/Google subject id indefinitely in released_tokens
+- [map] Idea Board recomputes every link (O(n^2) in the note count) on every frame of a pan, pinch or card drag
+- [map] The map rebuilds its signature (every link, every note's word count) on each store change, and rebuilds the whole scene on each editor save
+- [map] Tapping an aliased [[Title|alias]] link in Read mode creates a junk page instead of opening the note
+- [map] A still map (Reduce Motion, Low Power Mode, hot device) keeps redrawing 60 frames a second, and the map keeps rendering under the editor sheet
+- [map] Every rebuild tessellates an SCNText name for every body on the main thread, although at most four names are ever shown
+- [map] Touch, hover and tap handlers on the main thread wait for the whole render step, because GraphSim holds its lock through every SceneKit write
+- [map] A shader probe that fails once (for example, the app backgrounded mid-probe) turns the shaders off for the rest of the process's life
+- [map] The map is not re-fitted when the view's size changes but stays upright or wide (iPad Split View, Stage Manager)
+- [map] Superseded layouts keep running: the detached force layout is not cancelled when a newer rebuild replaces it
+- [map] One-up: have the map show what needs revising by linking card sets to their source note
+- [design] Paywall Terms and Privacy links go to redpen.app, an old-brand domain the app does not serve
+- [design] The app's default accent is still Red Pen's 'pen red', not the Midnight Enamel palette
+- [design] AccentColor.colorset has no colour, so 48 Color.accentColor uses and the library's tint fall back to system blue, and screens mix red, blue and the mode colour
+- [design] White text on the amber (Cases) and lavender (Bedtime) primary buttons fails even the 3:1 large-text contrast minimum
+- [design] Billing-retry check passes the old group NAME 'Red Pen Pro' where StoreKit expects the group ID, so users in Apple's billing grace period lose Pro
+- [design] Server errors still say 'Vignette Cloud', and the app shows them to users behind a raw 'HTTP 402'
+- [design] Paywall spins forever when the App Store returns no products (Playgrounds build, or before products are live)
+- [design] The stethoscope logo appears only in the 0.7 s splash; Brand.swift still describes and draws the CramDown mark
+- [design] Import help text names three retired brands to users
+- [design] No shared radius tokens: surfaces of the same kind use 12, 14, 16, 20 and 22-point corners
+- [design] One-up: exported PDF decks carry no Stethoscore mark
+- [design] DeckPalette re-types the six mode tints by hand instead of deriving them from Theme
