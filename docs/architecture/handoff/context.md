@@ -76,8 +76,17 @@ Session: https://claude.ai/code/session_013TeS5vv11UfjdBc6bVKhj3 (session branch
 - None of the Worker changes are live until the owner gives the word to deploy. The SwiftUI call sites compile only on the Mac run.
 - Effort log, Task 6 build batches: max; succeeded. Max caught a severe false-positive path (outdated distractors in questions) before it shipped.
 
+## Verification layer, tested (1 Oct night)
+- Sensors measured on 8,081 real published questions (MedMCQA, MedQA, MedXpertQA expert, CareQA specialist): severe flags 6, all genuine defects in the published questions; planted wrong keys 396/396, copied keys 8,061/8,061, tenfold doses leaving the usual range 51/51, results off 10-100x 94.2%, retired practice 20/20 with 0 false alarms; the app's copy identical on 17,107 cases. Real questions found and fixed 10 sensor bugs (red-pen-ios docs/verification/sensor-bench.md, a35438b).
+- From the DNA and Islamic briefs, built (bd913ec): questions are solved blind by two model families before anyone sees the key; Verified needs two blind families reaching the key; two blind families agreeing on another answer flags it with that fix; a split is Unresolved; every verdict carries reasons; old question votes are re-checked.
+- Latency (41f001a): the first two checkers are asked at once (300 ms each: 307 ms, not 600); a slow one is hedged by a third family (103 ms with one hung).
+- The layer replaces MedVAL in the app (157760a): on-device sensors at generation, the checkers once a set is saved, Check accuracy opens the layer's sheet; MedVAL's picker and download gone.
+- The real-model end-to-end measure (owner target: 94% accuracy and dependability) is blocked: GitHub Models was retired on 30 Jul 2026. Needs AI_API_KEY + the word to deploy (live Worker), or a free provider key (BENCH_API_KEY, BENCH_BASE_URL, BENCH_VOTERS). Harness ready: tools/verification-bench/layer.mjs, workflow verification-bench.yml.
+- Parallel agents (design branches, compile checks only, no screenshots): quiz as patient chart and home/vitals on design/ward-round; 100k-node performance theme on design/graph-perf; space/neurons/circuit looks on design/graph-themes.
+- Cards expand the answer instead of flipping (e4d39de).
+
 ## Blockers and pending
-- Pending from the owner: the AI_API_KEY repository secret (the question-bank pilot and the benches stop without it); the word to deploy the Worker; Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).
+- Pending from the owner: the AI_API_KEY repository secret (the question-bank pilot and the benches stop without it); the word to deploy the Worker; write access for this session to NoNeed2name444/claude-code (needed for the four-repository clean-up; the request was refused by the permission system); Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).
 - The 127 unverified app audit findings (docs/architecture/audit/stethoscore-unverified-findings.md): not yet verified; next local work. Verify against the code before fixing; mark each verified/false/fixed in that file.
 
 ## Outdated plan rules
