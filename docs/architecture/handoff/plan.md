@@ -133,8 +133,11 @@ Own repo, name, pricing, marketing. Never merged into Stethoscore.
 Medical features inside it are an optional paid add-on, not the core.
 Uses the themed folder structure in §3d (neuron theme, circuit theme).
 
-Cases mode: removed from Red Pen and CramDown. Rebuild later, separately.
-Do not re-add Cases. Do not stub it. Do not mention it.
+Cases mode: the old code is removed because parts of it belong to another person
+(copyright; owner, 1 Oct 2026). Cases is rebuilt from scratch in a clean room, from
+red-pen-ios docs/design/cases-rebuild.md only: new code, names, prompts and wording,
+written without reading the removed code or its history. Nothing of the old Cases
+comes back, not even as a stub.
 
 Shared backend allowed: MedCPT, pgvector, LangGraph, Jev. Frontends stay separate.
 
@@ -3698,7 +3701,7 @@ Swift Playgrounds on iPad caps app size at about 3 MB per file.
 PERMANENT SEPARATION:
 - The 3D Knowledge Graph ships as its own standalone app, its own repo, its own Playgrounds file.
 - Never chunk it with Stethoscore. Never merge it back.
-- Cases mode excluded from all delivery.
+- The old Cases code is excluded from all delivery; only the clean-room rebuild ships.
 
 FAIL-SAFE IN DELIVERY:
 - Every chunked delivery has a checksum.
