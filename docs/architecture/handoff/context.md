@@ -21,7 +21,7 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 - Task 2 build recovery: below.
 - Task 3: done in 04c1fe0 (server/ai.js and tests, wrangler.toml, ModelSettingsView); its commit message is the migration log; tests green; live.
 - Task 4: done, docs/architecture/audit/task4-chat-me-audit.md.
-- Tasks 5 to 5d: gated on the verdicts, not started; STOP holds until the owner says go.
+- Tasks 5 to 5d and the §3c migration: the owner said go (1 Oct). Plan: red-pen-ios docs/architecture/plans/tasks-5-to-5d.md. Done: the server P0s #98 and #99, Terms and Privacy pages, the oath check and two votes before Verified, the data P0s and P1s (#15, #22, #23, #24, #25), the licence allowlist (5b step 1). In progress on design/plan-* branches: 5c retries and kill switches, 5d stages, 5b fetcher.
 
 ## Task 2, the Playgrounds build
 - Building on the iPad (M4 iPad Pro, iPadOS 27.0.1, Swift Playground 4.7) fails since 25 Sep: "Build failed", empty console. Last package that built: 43e5b39 (24 Sep, 36,624 lines); first that failed: 4fced95 (71,748); today's package: 103,916. The blank template builds; a bare zip without the lecture failed.
@@ -33,7 +33,7 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 
 ## Repositories
 - red-pen-ios: personal 9892ecf = session branch ec6b080; ci/launch b97434d; preview/graph and claude/continue-session-t3r79j at c347755 (stale); main 9eb5430 (23 Sep). Unmerged: gaps/{a11y, wardpocket, audio, saveideas, wardround, l10n, onboarding} and wip/{neuron-circuit-redesign, growth-p0-1, growth-p0-2a} (unverified).
-- Chat-me: session branch with docs/architecture; main f1bfe1f. red-pen-transcribe and Claude-Code untouched.
+- Chat-me: session branch with docs/architecture; main f1bfe1f; attached with write access on 1 Oct. Four repositories in all: red-pen-ios, Chat-me, red-pen-transcribe (private, transcription pipeline, about 20 branches) and Claude-Code (public, a README and one SwiftUI setup branch).
 - Touched: tools/ (make_swiftpm.py, playgrounds_stubs, playgrounds_cut.py), the three workflows, Graph3DView.swift, ios/UITests, icon assets, the Task 3 files, Chat-me docs/architecture.
 
 ## Fail-safe, LangGraph, folders, 3D
@@ -41,6 +41,12 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 - LangGraph: nothing exists in any repo; verdict: not now.
 - Folders: §3c tree agents/, tools/, orchestration/, prompts/, api/, governance/, evals/, tests/, docs/architecture/; only docs/architecture/ exists, in Chat-me; Stethoscore unchanged; migration default pending the owner.
 - 3D (in-app Ideas map): Space shipped; Neurons and Circuit v1 shipped, their redesigns (axon-classic, photonic) unverified WIP. Standalone 3D app (Task 10, §3d): nothing yet; theme images received.
+
+## Decisions, 1 Oct
+- The owner's design targets (Ward Round look and palette, space node styles, neurons and circuit vignettes, a performance theme for 100,000 nodes, the icon in layers) are written down in red-pen-ios docs/design/targets-2026-10-01.md; the images are in no repository.
+- No Rank card, no Clerk badge, no XP; the app stays Stethoscore (the mock's "Mnemonia" is out).
+- The 3D work targets the app's Ideas map first; the performance renderer is kept free of Stethoscore types so Task 10's standalone app can take it.
+- The Playgrounds zips go in steps: core (built on the iPad), core1 (built), core2 (sent; the lecture crash fixed and cloze answers in place).
 
 ## Blockers and pending
 - Pending: the result on zips 1 and 2, Groin_Hernia.pdf and owner-claim.txt, the go for Tasks 5 to 5d and the §3c migration.
