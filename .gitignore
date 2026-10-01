@@ -6,3 +6,4 @@ data/*.db
 *.pyc
 *.egg-info/
 __pycache__/
+.claude/worktrees/
