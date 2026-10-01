@@ -24,6 +24,8 @@ brief is re-run only when its inputs change.
 | `22f-fail-safe-brief.md` | §22f, fail-safe design (judging §22e) | §22e is not sound as written: overengineered for this shape (breakers, health pings, hash-chained logs for components no repo has) and silent on the real risks (daily quota exhaustion, push-wins data loss, unreadable file treated as empty, one model vote minting "Verified"). Adopt the reduced protocol: data integrity first, then retries and timeouts, then Worker breakers and kill switches, with CI fault injection. | 2026-09-30 |
 | `22g-langgraph-brief.md` | §22g, LangGraph | Do not integrate now: it cannot run on the 10-second Worker path, needs an undeployed Python service and a sleeping free Postgres, and supplies none of the watchdog, retry or dead-letter behaviour required. Build the explicit state machine and Cloudflare Workflows; re-open only for a deployed verifier graph with more than three branch points or resumable multi-minute runs. | 2026-09-30 |
 
+Word limits (1 Oct): `22c` is 1,965 words and `22d` 1,998 against their 2,000; `17` is 2,583 against 2,400 after a cut from 2,843, with all 59 sources, every verdict, correction and contested point kept; cutting further would drop facts. `audit/stethoscore-unverified-findings.md` carries the previous session's 127 unverified app findings.
+
 ## Audits (`audit/`)
 
 | File | Scope | Recommendation in one line | Date |

@@ -1,175 +1,133 @@
 # §22c Student AI Helper App Features — Research Brief
 
-2026-09-30. US App Store ratings today unless stated. [S#] = sources; "vendor" = developer claim; §22b = sister brief (Stethoscore facts, rejected features, medical apps; StudyFetch, SyncAI and CampusLearn are profiled there). Reddit blocked; sentiment from App Store, Trustpilot, press.
+2026-09-30. US App Store ratings today unless stated. [S#] = sources; "vendor" = developer claim; §22b = sister brief: Stethoscore facts, rejected features, medical apps, StudyFetch, SyncAI, CampusLearn. Reddit blocked; sentiment from App Store, Trustpilot, press.
 
 ## 1. Market landscape
 
 iPhone Education chart today: 1 Duolingo, 2 Gauth, 3 Learna, 8 Quizlet, 9 Gizmo; photo-solvers and AI flashcard apps dominate [S1].
 
-| App | Features | AI | Pricing | Strengths | Weaknesses |
-|---|---|---|---|---|---|
-| ChatGPT Study Mode (OpenAI) | Toggle inside chat; scaffolded steps, knowledge checks | Socratic prompts, memory personalisation | Free on all tiers since 29 Jul 2025 [S2] | Zero cost; on/off mid-chat | No peer-reviewed evaluation [S3]; ungrounded |
-| Gemini Guided Learning, NotebookLM (Google) | Step-by-step, diagrams, videos, quizzes; notebook flashcards, quizzes, Audio Overviews | LearnLM-tuned; source-grounded | Free; AI Pro free one year for students in 5 countries [S4,S5] | Multimodal, cited notebooks | Efficacy is vendor claim; Socratic output most prompt-sensitive across LLMs [S6] |
-| Quizlet | Flashcards, Learn, Test, groups, lecture audio to guide | Magic Notes, Ask Quizlet; Q-Chat killed Jun 2025 [S7] | IAP $9.99/mo, $44.99/yr; web $7.99/$35.99 (conflict) [S8,S9] | 4.8★/1.1M | Learn paywalled, "cash grab", screen-reader failures [S8]; Trustpilot: ads, auto-renew [S10] |
-| Chegg Study | 60M solutions, expert Q&A, scanner, flashcards | "AI solutions backed by experts" | $15.99/mo [S11] | 4.7★/205K | Revenue −51% YoY; traffic lost to AI Overviews and genAI [S12,S13]; Trustpilot 2.2 [S14]; 2-device cap |
-| Photomath (Google) | Camera math, multiple methods, graphs | Animated steps; textbook solutions paid | $5.99–9.99/mo [S15] | 4.8★/733K | Geometry errors; cheating stigma; users ask for practice and quizzes [S15] |
-| Socratic (Google) | Photo Q&A | — | — | — | NOT FOUND: removed, folded into Lens 2025 [S16] |
-| Brainly | Community Q&A, Scan to Solve, live tutors | AI tutor | Plus $2–9.99/mo; Tutor $29.99/mo [S17] | 4.7★/284K; points, badges | 20 Q/mo caps; tutors quit sessions; auto-renew [S17,S18] |
-| Khanmigo (Khan Academy) | Tutor over KA content, writing coach, teacher tools | Withholds answers | $4/mo, $44/yr; teachers free [S19] | KA app 4.6★/112K, free, offline [S20] | Used a third of days; "non-event for most students"; gains from KA, not AI [S21] |
-| Duolingo (Max) | Streaks, leagues, hearts, Video Call, Roleplay | LLM conversation; Explain My Answer now free | Super $9.99–119.99 [S22]; Max $29.99/mo, $168/yr (price guide) [S23] | 4.7★/5.5M; 58.7M DAU, 12.7M paid, CURR 84% [S24] | Streak anxiety, Max price [S22] |
-| Gauth (ByteDance) | Photo solve, expert network, notes to study tools | Live voice tutor with whiteboard | Plus $11.99/mo, $99.99/yr [S25] | 4.8★/1.5M; #2 | Voice "creepy"; cheating, data-privacy criticism [S25,S26] |
-| Studdy | Scan, chat, practice, videos | "98% accuracy", GPA +1.3 (vendor) | Free 5 scans/day; from $6.99/wk [S27] | 4.8★/13K | "MORE SNAPS" cap anger [S27] |
-| Knowt | Free Learn mode, SRS, Quizlet import, PDF/video to cards | Kai feedback, podcasts | Ultra $9.99/wk–$149.99/yr [S28] | 4.7★/11K; 4M students (vendor) | No images in notes; video tool Chrome-only; notifications [S28] |
-| Gizmo | Import Quizlet/Anki/PDF/YouTube, games, leaderboards | Explanations from uploads | $6.99–309.99 [S29] | 4.8★/14K; ADHD praise | SRS repeats too often; off-material questions [S29] |
-| Class Companion | Rubric feedback on writing, hints, TTS, translation | Ditto tutor, AI-writing flags | Teachers free; school quotes [S30] | 25,000 schools (vendor) | Teacher-side; no student app |
-| Luna AI | Phone-call tutor: notes to spoken quiz; languages | Voice LLM | 20 free min/mo; no app [S31] | Blind, commuter access | iOS app NOT FOUND; ratings UNKNOWN |
-| EduAI; RIACT | Prototypes: adaptive paths, Feynman board [S32]; study-log burnout rules, LLM coach, no user study [S33] | | Free | Responsible-AI design | Not shipping |
-| ElevatED, Zuno, PlanIC, LearnEscape | NOT FOUND (Zuno exists only as a fitness app) [S34] | | | | |
+- ChatGPT Study Mode (OpenAI): in-chat toggle, scaffolded steps, knowledge checks; Socratic prompts, memory personalisation. Free on all tiers since 29 Jul 2025 [S2]. No peer-reviewed evaluation [S3]; ungrounded.
+- Gemini Guided Learning, NotebookLM (Google): step-by-step, diagrams, videos, quizzes; notebook flashcards, Audio Overviews; LearnLM-tuned, source-grounded. Free; AI Pro free one year for students in 5 countries [S4,S5]. Efficacy is vendor claim.
+- Quizlet: flashcards, Learn, Test, groups, lecture audio to guide; Magic Notes, Ask Quizlet; Q-Chat killed Jun 2025 [S7]. IAP $9.99/mo, $44.99/yr; web $7.99/$35.99 (conflict) [S8,S9]. 4.8★/1.1M. Learn paywalled, "cash grab", screen-reader and text-size failures [S8]; Trustpilot: ads, auto-renew [S10].
+- Chegg Study: 60M solutions, expert Q&A, scanner, flashcards; "AI solutions backed by experts". $15.99/mo [S11]. 4.7★/205K. Revenue −51% YoY, traffic lost to AI Overviews, genAI [S12,S13]; Trustpilot 2.2 [S14]; 2-device cap.
+- Photomath (Google): camera math, multiple methods, graphs; animated steps; textbook solutions paid. $5.99–9.99/mo [S15]. 4.8★/733K. Geometry errors; cheating stigma; users want practice, quizzes [S15].
+- Brainly: community Q&A, Scan to Solve, live tutors; AI tutor. Plus $2–9.99/mo; Tutor $29.99/mo [S17]. 4.7★/284K; points, badges. 20 Q/mo caps; tutors quit sessions; auto-renew [S17,S18].
+- Khanmigo (Khan Academy): tutor over KA content, writing coach, teacher tools; withholds answers. $4/mo, $44/yr; teachers free [S19]. KA app 4.6★/112K, free, offline [S20]. Used a third of days; "non-event for most students"; gains from KA, not AI [S21].
+- Duolingo (Max): streaks, leagues, hearts, Video Call, Roleplay; LLM conversation; Explain My Answer now free. Super $9.99–119.99 [S22]; Max $29.99/mo, $168/yr (price guide) [S23]. 4.7★/5.5M; 58.7M DAU, 12.7M paid, CURR 84% [S24]. Streak anxiety, Max price [S22].
+- Gauth (ByteDance): photo solve, expert network, notes to study tools; live voice tutor with whiteboard. Plus $11.99/mo, $99.99/yr [S25]. 4.8★/1.5M. Voice "creepy"; cheating, data-privacy criticism [S25,S26].
+- Studdy: scan, chat, practice, videos; "98% accuracy", GPA +1.3 (vendor). Free 5 scans/day; from $6.99/wk [S27]. 4.8★/13K. "MORE SNAPS" cap anger [S27].
+- Knowt: free Learn mode, SRS, Quizlet import, PDF/video to cards; Kai feedback, podcasts. Ultra $9.99/wk–$149.99/yr [S28]. 4.7★/11K; 4M students (vendor). No images in notes, no iPad parity; video tool Chrome-only; notifications [S28].
+- Gizmo: import Quizlet/Anki/PDF/YouTube, games, leaderboards; explanations from uploads. $6.99–309.99 [S29]. 4.8★/14K; ADHD praise. SRS repeats too often; off-material questions [S29].
+- Class Companion: rubric feedback on writing, hints, TTS, translation; Ditto tutor, AI-writing flags. Teachers free; school quotes [S30]. 25,000 schools (vendor). Teacher-side; no student app.
+- Luna AI: phone-call tutor, notes to spoken quiz, languages; voice LLM. 20 free min/mo [S31]. Blind, commuter access. iOS app NOT FOUND; ratings UNKNOWN.
+- EduAI; RIACT: prototypes, adaptive paths, Feynman board [S32]; study-log burnout rules, LLM coach, no user study [S33]. Free. Responsible-AI design; not shipping.
+- NOT FOUND: Socratic (Google), folded into Lens 2025 [S16]; ElevatED, Zuno, PlanIC, LearnEscape; Zuno is only a fitness app [S34].
 
 ## 2. Feature frequency (18 profiled apps)
 
-| Feature | % apps | Category |
-|---|---|---|
-| AI tutor chat; freemium with capped free tier | 94% | Table stakes |
-| Progress tracking | ~50% | Common |
-| Flashcard generation from uploads 44%; photo or math solving 39% | | Common |
-| Voice; grounding in own files; test prep; sharing; writing help; points or streaks | 33–39% | Common |
-| Lecture audio or video to study material | 28% | Differentiator |
-| Spaced repetition; offline | 22% | Differentiator |
-| Human experts; leaderboards; study plans | 17% | Differentiator (leaderboards rejected, §22b) |
-| Burnout signals; career tools | 6% | Differentiator |
-| Exam-date plan; deep links to slide or minute; drawing recall; medical modes | 0% | Gap |
-
-Requested but missing: practice in Photomath [S15]; more free scans [S27]; images in notes, iPad parity [S28]; tunable SRS [S29]; screen readers, text size [S8]; streak forgiveness [S22]; no device caps [S11].
+- Table stakes, 94%: AI tutor chat; capped freemium.
+- Common: progress tracking ~50%; flashcard generation from uploads 44%; photo or math solving 39%; voice, grounding in own files, test prep, sharing, writing help, points or streaks 33–39%.
+- Differentiators: lecture audio or video to study material 28%; spaced repetition, offline 22%; human experts, leaderboards, study plans 17%, leaderboards rejected in §22b; burnout signals, career tools 6%.
+- Gaps at 0%: exam-date plan; deep links to slide or minute; drawing recall; medical modes.
 
 ## 3. Feature impact
 
-| Feature | Downloads | Retention | Conversion | Word-of-mouth | Effort |
-|---|---|---|---|---|---|
-| Photo homework help | Very high [S1,S25] | Med | High: scan caps sell [S27] | High, cheating stigma [S26] | M |
-| AI tutor chat | High | Low–Med [S21]; AI apps churn faster (§22b) | Med | Med | M |
-| Flashcard generation | High [S28,S29] | Med | Med [S8] | High | Have |
-| Quizzing, SRS | Low | High: g=0.50 over 50K students [S35]; SRS SMD 0.78 (§22b) | Med | Med | Have |
-| Gamification | Med | High but element-dependent: badges +2.4% DAU, streak wager +14% D7 (vendor) [S36,S37]; g=.46 cognitive, reward-only weakest [S38]; nursing SMD 0.81, I² 82–95% [S47] | Med | High | S–M |
-| Daily goal, plan | Low | High [S37] | Med | Low | S |
-| Voice tutor | Med | Med | High: Max priced on Video Call [S23,S24] | High | Have |
-| Human experts | Med | Med | High price, low trust [S14] | Low | XL |
-| Lecture capture | Med | Med | Med | Med | Have |
-| Offline | Low | High [S20] | Med | Med | M |
-| Analytics, notes, search, tasks | Low | Med | Low | Low | S |
-| Writing, math, language | High generally; low medical relevance | | | | — |
-| Burnout, well-being | Low | UNKNOWN | Low | Med | S |
-| Career | Low; Chegg pivot [S12] | | | | — |
+Med unless stated.
+
+- Downloads: very high for photo homework help [S1,S25]; high for AI tutor chat and flashcard generation [S28,S29]; low for quizzing and SRS, daily goal, offline, analytics, burnout.
+- Retention: high for quizzing and SRS, g=0.50 over 50K students [S35], SRS SMD 0.78 (§22b); gamification, element-dependent: badges +2.4% DAU, streak wager +14% D7 (vendor) [S36,S37], g=.46 cognitive, reward-only weakest [S38], nursing SMD 0.81, I² 82–95% [S47]; daily goal [S37]; offline [S20]. Low–Med for AI tutor chat [S21]; AI apps churn faster (§22b). UNKNOWN for burnout.
+- Conversion: high for photo help, scan caps sell [S27]; voice tutor, Max priced on Video Call [S23,S24]; human experts, high price but low trust [S14]. Med for flashcards [S8]. Low for analytics, burnout.
+- Word-of-mouth: high for photo help, with cheating stigma [S26], flashcards, gamification, voice; low for daily goal, human experts, analytics.
+- Effort: have flashcards, quizzing and SRS, voice, lecture capture; S for daily goal, analytics, burnout; S–M for gamification; M for photo help, AI tutor chat, offline; XL for human experts.
+- Writing, math, language: high demand generally, low medical relevance. Career: low demand; Chegg's pivot [S12].
 
 ## 4. UI/UX patterns
 
-| Pattern | Where used | Evidence | Recommendation |
-|---|---|---|---|
-| Value before sign-up | Duolingo | Delayed sign-up +20% DAU (vendor A/B) [S36] | Generate from a sample lecture first |
-| Camera primary, typing kept | Gauth, Photomath, Brainly, Studdy | Chart dominance [S1]; forced-camera complaint (§22b) | "Snap a slide" beside upload |
-| Tutor-mode toggle | ChatGPT, Gemini | On/off mid-chat [S2,S4] | "Guide me / Just answer" chip |
-| Free core mode | Knowt vs Quizlet | Paywalled Learn earns 1★ [S8]; Knowt's wedge [S28] | Review free; meter generation |
-| Forgiving streaks | Duolingo | Amulet +4% D14, 5% fewer lost streaks (vendor) [S37]; anxiety reviews [S22] | Private streak, freezes, never ranked |
-| Flow: clear goal, matched difficulty, instant feedback | Duolingo, Khan mastery | Flow–performance r=.49; goals r=.61, feedback r=.52, challenge–skill r=.49; 108 studies, correlational [S39] | Session goal card; adaptive MCQ difficulty; per-item feedback |
-| One tuned notification | Duolingo 23.5h cadence, copy +5% DAU (vendor) [S36] | Knowt "intrusive" [S28] | One due-card nudge at chosen hour |
-| Multimodal answers | Gemini | Diagrams, videos inline [S5] | Pull figures from user slides |
-| Accessibility | Quizlet fails [S8]; Luna call-in [S31]; Class Companion TTS [S30] | Reviews | VoiceOver, Dynamic Type, spoken quiz |
-| Tab bar, dark mode, density, streaming, citations | §22b | | |
+Adaptations: §8, §10.
+
+- Value before sign-up: Duolingo's delayed sign-up +20% DAU, vendor A/B [S36].
+- Camera primary, typing kept: Gauth, Photomath, Brainly, Studdy dominate the chart [S1]; forced-camera complaint (§22b).
+- Tutor-mode toggle: ChatGPT, Gemini; on/off mid-chat [S2,S4].
+- Free core mode: Quizlet's paywalled Learn earns 1★ [S8]; Knowt's wedge [S28].
+- Forgiving streaks: Duolingo amulet +4% D14, 5% fewer lost streaks, vendor [S37]; streak-anxiety reviews [S22].
+- Flow: clear goal, matched difficulty, instant feedback; Duolingo, Khan mastery; flow–performance r=.49; goals r=.61, feedback r=.52, challenge–skill r=.49; 108 studies, correlational [S39].
+- One tuned notification: Duolingo 23.5h cadence, copy +5% DAU, vendor [S36]; Knowt "intrusive" [S28].
+- Multimodal answers: Gemini's inline diagrams, videos [S5].
+- Accessibility: Quizlet fails [S8]; Luna call-in [S31]; Class Companion TTS [S30].
+- Tab bar, dark mode, density, streaming, citations: §22b.
 
 ## 5. Student workflow (non-medical)
 
-| Stage | Need | Current app | Frustration | Opportunity |
-|---|---|---|---|---|
-| Morning | Due cards, streak | Quizlet, Knowt, Duolingo | Guilt, paywalled Learn [S8,S22] | Free due-ring with freeze |
-| Between classes | Quick answer | ChatGPT, Gemini, Gauth | Ungrounded; stigma [S26] | Answer citing own slide |
-| Study session | Deep help | Chegg, Photomath, Study Mode | Wrong answers, billing [S14]; answers without struggle [S21] | Guide toggle; why-wrong |
-| Evening | Group, feedback | Brainly, Quizlet groups, Class Companion | Caps, tutor drop-outs [S17] | Share sets without ranks; feedback on OSCE notes |
-| Exam prep | Tests, weak spots | Quizlet Test, Knowt guides, Khan mastery | No exam-date plan | Plan plus blueprint coverage (§22b) |
+- Morning, due cards, streak: Quizlet, Knowt, Duolingo; guilt, paywalled Learn [S8,S22]. Opportunity: free due-ring with freeze.
+- Between classes, quick answer: ChatGPT, Gemini, Gauth; ungrounded, stigma [S26]. Opportunity: answer citing own slide.
+- Study session, deep help: Chegg, Photomath, Study Mode; wrong answers, billing [S14], answers without struggle [S21]. Opportunity: guide toggle, why-wrong.
+- Evening, group, feedback: Brainly, Quizlet groups, Class Companion; caps, tutor drop-outs [S17]. Opportunity: share sets without ranks, feedback on OSCE notes.
+- Exam prep, tests, weak spots: Quizlet Test, Knowt guides, Khan mastery; no exam-date plan. Opportunity: plan plus blueprint coverage (§22b).
 
 ## 6. Monetisation
 
 - Ladder: $4 Khanmigo; $5.99–9.99 Photomath, Quizlet; $11.99 Gauth; $15.99 Chegg; $29.99 Brainly Tutor, Duolingo Max; weekly $6.99–9.99 at Studdy, Knowt, Gizmo [S15,S19,S23,S25,S27–S29].
-- Conversion: Duolingo 12.7M paid of 140.6M MAU = 9% (computed) [S24]; Quizlet, Brainly, Chegg, Gauth UNKNOWN; education medians in §22b.
+- Conversion: Duolingo 12.7M paid of 140.6M MAU = 9% (computed) [S24]; Quizlet, Brainly, Chegg, Gauth UNKNOWN; education medians in §22b. LTV UNKNOWN for all.
 - Paid for: unlimited scans and generation, voice AI, offline, no ads, human help. Refused: paywalled basics [S8], auto-renewal [S10,S14,S18], caps failing mid-task [S17,S27].
-- Triggers: hitting the cap, exam week, voice. Churn: free substitutes; Study Mode free, AI Pro free for students; Chegg −51% [S2,S5,S12].
-- LTV: UNKNOWN for every profiled app.
+- Triggers: hitting the cap, exam week, voice. Churn: free substitutes, Study Mode and student AI Pro; Chegg −51% [S2,S5,S12].
 
 ## 7. AI-specific
 
 - Used: photo-solve, generation from notes, explanations; 86% of students use AI, 54% feel unprepared [S40]; 26% of US teens used ChatGPT for schoolwork in 2024, double 2023 [S41].
 - Ignored: Khanmigo [S21]; Q-Chat withdrawn after two years, reason UNKNOWN [S7].
-- Distrusted: wrong answers ("6×3=45" [S20]; Chegg "AI errors" [S14]); "creepy" voice [S25]; ByteDance data [S26].
+- Distrusted: wrong answers, "6×3=45" [S20], Chegg "AI errors" [S14]; Gauth's "creepy" voice, ByteDance data [S25,S26].
 - Works when guided: custom AI tutor beat active-learning class in an RCT [S42]; +0.27 SD, persisting only for "augmentation" users [S43]; nursing anatomy RCT (§22b). Contested: one ChatGPT meta-analysis was retracted [S44].
 - Risks: Socratic prompting is the least stable strategy [S6]; benchmark harm rises 17.7%→77.8% over multi-turn dialogue [S45].
-- Trust recovery: warning 252 students the tutor can err raised hint requests [S46]; pair with §22b citations and confidence.
-- Latency: §22b.
+- Trust recovery: warning 252 students the tutor can err raised hint requests [S46]; pair with §22b citations and confidence. Latency: §22b.
 
 ## 8. Cross-pollination
 
-| Finding | Transfers? | Adaptation | Recommendation |
-|---|---|---|---|
-| Camera-first help | Partly | Slide, question, ECG to grounded explanation; typing kept | Snap-to-explain, P1 |
-| Tutor toggle | Yes | Fixed Socratic templates; ask-before-answer (§22b) | P1 |
-| Free core mode | Yes | Review free; meter generation | P0 |
-| Forgiving streaks | Partly | Private; no leagues, ranks | P1 |
-| Value before sign-up | Yes | Sample-lecture demo | P0 |
-| Challenge, narrative gamification | Yes | Adaptive difficulty, case narratives; no points economy | P1 |
-| Human expert marketplace | No | Faculty do it; liability; XL | Avoid |
-| Community Q&A with ranks | No | Share sets only | Avoid |
-| Voice tutor | Yes | Opt-in, labelled; Luna's quiz-aloud | Have; add quiz-aloud |
-| Burnout detection | Partly | Rules, observations, opt-in, no diagnosis [S33] | P2 |
-| Generic chat vs free giants | No | Compete on own material, blueprint, offline | Avoid |
-| Weekly pricing; career or fitness bundles | No | Zuno, PlanIC NOT FOUND; Chegg pivot | Avoid |
+- Transfers. Value before sign-up: sample-lecture demo. Free core mode: review free, meter generation. Tutor toggle: fixed Socratic templates, ask-before-answer (§22b). Challenge and narrative gamification: adaptive difficulty, case narratives, no points economy. Voice tutor: have; opt-in, labelled; add Luna's quiz-aloud.
+- Transfers partly. Camera-first help: slide, question or ECG to grounded explanation, typing kept. Forgiving streaks: private, no leagues or ranks. Burnout detection: rules, observations, opt-in, no diagnosis [S33].
+- No transfer, avoid. Human expert marketplace: faculty do it, liability, XL. Community Q&A with ranks: share sets only. Generic chat vs free giants: compete on own material, blueprint, offline. Weekly pricing, career or fitness bundles: Zuno, PlanIC NOT FOUND; Chegg pivot.
 
 ## 9. Gap analysis
 
-| Gap | Severity | Opportunity | Recommendation |
-|---|---|---|---|
-| Sign-up before value | High | +20% DAU pattern [S36] | Demo first |
-| Free tier undefined | High | Knowt wedge; cap complaints | Free review, metered generation |
-| No camera entry | Med | Top-2 chart apps camera-first | Snap-to-explain |
-| No tutor toggle | Med | Both AI giants ship one | Guide/Answer |
-| Fixed MCQ difficulty | Med | Flow antecedents [S39] | Adaptive sessions |
-| No streak forgiveness | Med | Vendor A/B [S37] | Private streak, freezes |
-| No error disclosure | Med | [S46] | "May be wrong" plus report |
-| Accessibility UNKNOWN | Med | Quizlet failures [S8] | VoiceOver, spoken mode |
-| Notifications undesigned | Low | [S36] | One nudge |
-| Well-being | Low | RIACT [S33] | Rules-based insight |
+Fixes are the §10 items, in order.
+
+- High: sign-up before value [S36]; free tier undefined [S8,S28].
+- Medium: no camera entry [S1]; no tutor toggle [S2,S4]; fixed MCQ difficulty [S39]; no streak forgiveness [S37]; no error disclosure [S46]; accessibility UNKNOWN [S8].
+- Low: notifications undesigned [S36]; well-being [S33].
 
 Matches: AI tutor, generation from uploads, SRS, test prep, voice, analytics. Unique against all 18: OSCE examiner, cases, drawing recall, 3D graph, Arabic, offline-first (§22b). Win: grounded medicine plus these patterns while the giants stay generic.
 
 ## 10. Implementation recommendations
 
-| Feature | Why | UI/UX | Effort | Revenue | Priority |
-|---|---|---|---|---|---|
-| Demo before sign-up | [S36] | Sample lecture to cards in 60s, then account | S | Downloads | P0 |
-| Free review, generation meter | [S8,S28] | Meter on Today; upsell at cap | S | Conversion | P0 |
-| Guide/Answer toggle | [S2,S4,S6] | Sticky chip in tutor bar | M | Retention | P1 |
-| Snap-to-explain | [S1,S25] | Camera in Study Lens; typing kept | M | Downloads | P1 |
-| Adaptive difficulty, goal card | [S35,S39] | Session goal; per-item feedback | M | Retention | P1 |
-| Private streak, freeze | [S22,S37] | Today ring; two freezes a month; no ranks | S | Retention | P1 |
-| Error disclosure, report | [S45,S46] | Banner; Report regenerates with source | S | Trust | P1 |
-| VoiceOver, spoken quiz | [S8,S31] | Audit; "quiz me aloud" | M | Retention | P1 |
-| One tuned nudge | [S28,S36] | Chosen hour, due count | S | Retention | P2 |
-| Study-load insight | [S33] | Weekly observation, opt-in | S | — | P2 |
+Each: UI; effort, revenue lever, priority.
+
+- Demo before sign-up: sample lecture to cards in 60s, then account; S, downloads, P0.
+- Free review, generation meter: meter on Today, upsell at cap; S, conversion, P0.
+- Guide/Answer toggle: sticky chip in tutor bar, answers pull figures from user slides; M, retention, P1.
+- Snap-to-explain: camera in Study Lens beside upload, typing kept; M, downloads, P1.
+- Adaptive difficulty, goal card: session goal, per-item feedback; M, retention, P1.
+- Private streak, freeze: Today ring, two freezes a month, no ranks; S, retention, P1.
+- Error disclosure, report: "May be wrong" banner, Report regenerates with source; S, trust, P1.
+- VoiceOver, spoken quiz: audit, Dynamic Type, "quiz me aloud"; M, retention, P1.
+- One tuned nudge: chosen hour, due count; S, retention, P2.
+- Study-load insight: weekly observation, opt-in; S, P2.
 
 ## Top 10 features to add
 
 1. Demo before sign-up (P0): Duolingo's delayed sign-up lifted DAU 20% (vendor) [S36].
-2. Free review plus visible generation meter (P0): Knowt grows on free Learn while Quizlet's paywall earns 1★ [S8,S28]; caps are the loudest complaint [S17,S27].
-3. Guide/Answer toggle (P1): both AI giants ship it [S2,S4]; use fixed templates because Socratic output is prompt-fragile [S6].
+2. Free review, visible generation meter (P0): Knowt grows on free Learn while Quizlet's paywall earns 1★ [S8,S28]; caps are the loudest complaint [S17,S27].
+3. Guide/Answer toggle (P1): both AI giants ship it [S2,S4]; fixed templates, since Socratic output is prompt-fragile [S6].
 4. Snap-to-explain (P1): the two biggest study apps are camera-first [S1,S15,S25].
-5. Adaptive difficulty with a session goal (P1): flow antecedents r=.49–.61 [S39]; quizzing g=0.50 [S35].
+5. Adaptive difficulty, session goal (P1): flow antecedents r=.49–.61 [S39]; quizzing g=0.50 [S35].
 6. Private streak with freezes (P1): forgiveness raised retention (vendor) [S37]; anxiety when absent [S22].
-7. Error disclosure and one-tap report (P1): honesty about fallibility increased help-seeking [S46]; multi-turn harm grows [S45].
+7. Error disclosure, one-tap report (P1): admitting fallibility increased help-seeking [S46]; multi-turn harm grows [S45].
 8. VoiceOver and quiz-aloud (P1): Quizlet's accessibility failures [S8]; Luna's blind-student mode [S31].
-9. One tuned daily nudge (P2): copy alone moved DAU 5% (vendor) [S36]; Knowt shows the downside [S28].
+9. One tuned daily nudge (P2): copy alone moved DAU 5% (vendor) [S36]; Knowt's downside [S28].
 10. Rules-based study-load insight (P2): RIACT's observation-not-diagnosis design [S33].
 
 ## Top 5 features to avoid
 
 1. Human tutor marketplace: Chegg −51%, Trustpilot 2.2, Brainly drop-outs [S12,S14,S17].
-2. Generic ungrounded chatbot: free Study Mode and Gemini own it [S2,S5]; Khanmigo shows low uptake [S21].
+2. Generic ungrounded chatbot: free Study Mode and Gemini own it [S2,S5]; Khanmigo's low uptake [S21].
 3. Leaderboards, ranks, points economies: owner-rejected (§22b); reward-only elements weakest [S38].
 4. Weekly plans, paywalled basics, auto-renew traps: 1★ magnets across Quizlet, Chegg, Brainly [S8,S10,S14,S18].
 5. Answer-engine positioning and data-hungry permissions: Gauth's cheating and privacy backlash [S26]; ElevatED, Zuno, PlanIC, LearnEscape bundles NOT FOUND.
