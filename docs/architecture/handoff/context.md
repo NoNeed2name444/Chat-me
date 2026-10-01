@@ -57,6 +57,13 @@ Session: https://claude.ai/code/session_013TeS5vv11UfjdBc6bVKhj3 (session branch
 - The 3D work targets the app's Ideas map first; the performance renderer is kept free of Stethoscore types so Task 10's standalone app can take it.
 - The Playgrounds zips go in steps: core (built on the iPad), core1 (built), core2 (sent; the lecture crash fixed and cloze answers in place).
 
+## New rulebook (owner, 1 Oct evening) and effort log
+- The owner's new prompt (§–1 to §8) replaces the plan's task order: 0 intake, 1 DNA brief, 2 Islamic brief, 3 feature brief, 4 question-bank brief, 5 verification design (DNA x Islamic x Chat-me), 6 build, 7 integration, 8 student features, 9 UI/visual (max effort only, gated), 10 App Store, 11 launch tracking, 12 merge. Stops after 0-5, before 9, after 10. Every brief ends with MEDICAL IMPROVEMENTS THIS UNLOCKS; code follows the DNA coding contract (16a §3).
+- Mapping to work already done: briefs 16a (DNA), 17 (Islamic), 22b/22c (features), 22d (question bank) exist; each is being revised to the new required sections. Old-plan Tasks 6-15 agents keep running under the earlier approval (waves of at most four after the usage limit).
+- Effort log:
+  - Task 0 intake: low; succeeded; low was enough.
+  - Task 1 DNA brief (16a revision 2): max; succeeded. Max caught 2 of 15 wrong recalled PubMed IDs and grounded every layer mapping in the code. Would have been weaker at lower effort.
+
 ## Blockers and pending
 - Pending from the owner: the word to deploy the Worker; Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).
 - The 127 unverified app audit findings (docs/architecture/audit/stethoscore-unverified-findings.md): not yet verified; next local work. Verify against the code before fixing; mark each verified/false/fixed in that file.
