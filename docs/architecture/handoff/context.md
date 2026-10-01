@@ -63,6 +63,7 @@ Session: https://claude.ai/code/session_013TeS5vv11UfjdBc6bVKhj3 (session branch
 - Effort log:
   - Task 0 intake: low; succeeded; low was enough.
   - Task 1 DNA brief (16a revision 2): max; succeeded. Max caught 2 of 15 wrong recalled PubMed IDs and grounded every layer mapping in the code. Would have been weaker at lower effort.
+  - Task 2 Islamic brief (17 revision 2, framed for medical verification at the owner's word): max; succeeded. Max caught a third wrong recalled PubMed ID and found two real gaps in the Worker: no retraction filter on evidence, and two votes not required to come from different families.
 
 ## Blockers and pending
 - Pending from the owner: the word to deploy the Worker; Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).

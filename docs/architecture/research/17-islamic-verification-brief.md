@@ -1,221 +1,285 @@
-# ISLAMIC VERIFICATION RESEARCH BRIEF
+# ISLAMIC VERIFICATION RESEARCH BRIEF, for medical verification (§17, revision 2)
 
-§17 run, 2026-09-30. `[S#]` = source; "Contested" = scholars disagree; UNKNOWN = no evidence found; "Correction" = protocol text was wrong.
+**What this revision is:**
+- Revision 2, 1 October 2026, for the rulebook's Task 2 (§5).
+- **The owner's clarification (1 Oct):** the subject is *medical* verification, and the Islamic sciences are the method. So each science is paired with the medical check it becomes.
+- **What happened to revision 1 (kept in git history):** its verification content is folded into §1–§2. Everything else is kept in substance in Appendix A, and its 59 sources are kept as they were.
 
-- **Isnad:**
-  - Ibn al-Mubarak: without isnad "whoever wished would say whatever he wished" [S11].
-  - Ittisal: Bukhari required proven meeting, Muslim accepted contemporaneity with possible meeting; contested: Nadwi calls the gap practical only [S12].
-  - Gaps by position: mu'allaq (start), mursal (after Successor), munqati' (one link), mu'dal (two+) [S13]. Verify backward, latest link first [S6].
+**Keys:**
+- [S#] is a source.
+- **Contested** means scholars disagree. **UNKNOWN** means no evidence was found. **Correction** means the protocol text was wrong.
+- Medical sources were checked in PubMed, and every DOI is linked.
+- "Today" means what the code did when read on 1 Oct (red-pen-ios personal d5548c1, Chat-me personal).
 
-- **Ilm al-rijal:**
-  - Dictionaries record name, kunya, nisba, teachers, students, verdicts, death date (al-Mizzi, ~8,000 narrators); al-Sam'ani's Ansab disambiguates 5,348 nisbas [S39]. Taqrib compresses verdicts into 12 ranks [S8].
-  - Unknowns: majhul al-'adalah rejected by most, mastur accepted by some Shafi'is, majhul al-'ayn lifted when two known scholars transmit from him [S5]; mubham rejected even with praise [S6]. Correction: jahala yields da'if, not a "broken chain" [S7].
+## 1. The sciences, and the medical check each becomes
 
-- **Jarh wa ta'dil:**
-  - Ten causes of ta'n: lying, accusation of lying, gross error, heedlessness, fisq, delusion, contradiction, obscurity, innovation, bad memory [S7].
-  - Jarh "accepted only when explained"; explained jarh beats ta'dil "even from thirty" [S5][S6]. Correction: "tawthiq beats tajrih" only against unexplained jarh. Al-Dhahabi: two masters never agreed to authenticate a weak narrator or weaken a reliable one [S10]. Jarh is obligatory, not backbiting [S11].
+| # | Science | What the scholars did | The medical check it becomes |
+|---|---|---|---|
+| 1 | **Isnad** | Every report carries its chain. Ibn al-Mubarak: without isnad "whoever wished would say whatever he wished" [S11]. Gaps are named by position: mu'allaq (start missing), mursal, munqati' (one link), mu'dal (two or more) [S13]. Verify backwards, latest link first [S6] | Every claim carries its chain: claim → exact passage → source → how it was retrieved → who checked it. Missing links are typed: no source at all (mu'allaq); a review cited for a primary finding (mursal-like); a source that does not contain the claim (munqati') |
+| 2 | **Ittisal, tabaqat, tarikh** | Continuity checked by generations, death dates and transmission formulas. Bukhari required a proven meeting; Muslim accepted contemporaneity with a possible meeting. **Contested** [S12][S8][S59]. Sufyan al-Thawri: "we used history against them" [S50]. Tadlis hides a weak link behind 'an, so a mudallis needs explicit sama' [S13] | Dates falsify. A source dated after the lecture cannot be the lecture's basis. A cited guideline edition must have existed at the cited date. A secondary source presented as primary ("citation laundering", the medical tadlis) needs its primary found |
+| 3 | **Ilm al-rijal** | Dictionaries record each narrator's name, teachers, students, verdicts and death date (al-Mizzi: ~8,000 narrators); Taqrib grades in 12 ranks [S39][S8]. A majhul narrator is rejected by most, and majhul al-'ayn is lifted when two known scholars transmit from him [S5]. A mubham narrator is rejected even with praise [S6] | **A source registry:** identity; type (guideline, systematic review, RCT, cohort, case report, textbook, lecture, model memory); publisher; date and edition; retraction status; funding; grade. An unidentifiable source ("studies show") is majhul: Unverified until two known sources corroborate it |
+| 4 | **Jarh wa ta'dil** | Ten causes of ta'n, including lying, gross error, heedlessness, contradiction, innovation and bad memory [S7]. Explained jarh beats ta'dil "even from thirty" [S5][S6]. **Correction:** tawthiq beats only *unexplained* jarh. Al-Dhahabi: two masters never agreed to authenticate a weak narrator or weaken a reliable one [S10]. Criticism among rivals (kalam al-aqran) is disregarded, especially when it comes from jealousy or school rivalry [S62] | Checkers' verdicts must be explained and sourced. An explained objection ("contraindicated in pregnancy, per [S2]") outweighs bare agreement. Agreement between independent checkers is the strongest label. A rival's unexplained critique (a competitor attacking a drug) is weighed, not trusted |
+| 5 | **'Adalah and the innovator rule** | A narrator with a lesser innovation is accepted if he does not propagate it, unless he narrates what supports his innovation; then he is rejected (al-Juzajani) [S61][S6] | **Conflict-of-interest rule:** a source's claim that favours its own sponsor or product is never accepted alone; it needs independent corroboration. Industry-sponsored drug studies report favourable efficacy more often (RR 1.27) and favourable conclusions more often (RR 1.34) [S67] |
+| 6 | **Dabt and ikhtilat** | Accuracy is checked by collating with precise narrators [S5][S6]. For trustworthy narrators who became confused late in life, what was taken before the confusion is accepted and what came after is rejected [S60] | The claim must reproduce its source faithfully: numbers, units, population, negation. Reliability depends on the date: a source is trusted for what it said before it was retracted, withdrawn or superseded. A 2019 lecture is judged "correct as taught in 2019, changed in 2023" |
+| 7 | **The five conditions of sahih** | Continuity, integrity, accuracy, no shudhudh, no hidden 'illah. All five must hold [S1][S13] | Five automated gates per claim (§2, D) |
+| 8 | **Shadh and munkar** | A reliable narrator contradicting more reliable ones is shadh; a weak one contradicting reliable ones is munkar [S2][S13] | A single study against a guideline or systematic review is shadh: held, not adopted. A weak source against strong ones is dropped |
+| 9 | **'Ilal** | Hidden defects show only when all chains are collated (Ibn al-Madini): tafarrud, mukhalafa, qara'in [S13][S3]. Al-Hakim illustrated ten kinds [S14]. Ibn Abi Hatim catalogued ~2,840 cases, al-Daraqutni 4,000+ [S13][S15] | Collect every version before judging: preprint, published, erratum, retraction notice; guideline editions; every retrieved passage; the item's own regenerations. A claim only one source makes is flagged (tafarrud) |
+| 10 | **I'tibar: mutaba'at and shawahid** | Light weakness is upgraded by corroboration (hasan li-ghayrihi); heavy weakness (lost 'adalah) is not [S54][S6]. Chains that converge on one narrator, the common link, share his weakness and are not independent [S42] | Corroboration counts *independent origins* only: several papers from one trial or one dataset, or all citing one review, are one witness. Covert duplicate publication: 17% of ondansetron trial reports and 28% of the patient data were duplicated, inflating efficacy by 23% [S66]. Citation networks can manufacture "unfounded authority" through bias, amplification and invention [S65] |
+| 11 | **Tawatur vs ahad** | Enough independent transmitters at every layer that collusion is impossible [S21]. No fixed number; **contested** [S13][S20]. Ahad is probable (zann), never certain [S20] | Certainty tiers. "Verified, strong": independent high-grade sources agree at every layer, e.g. a guideline and a systematic review from different bodies. Otherwise "Verified, single source". One chain never yields certainty |
+| 12 | **Mawdu'at** | "Worst of the weak"; knowingly narrating one without disclosure is unlawful [S4]. **Signs:** disproportionate rewards or punishments; praise of particular groups or places; detailed, dated prophecies; unsuitable or non-Arabic style; fanciful claims; something said "before many" yet reported by none [S63]. Pious forgers "for religion": intent is no defence [S4]. Weak is not fabricated [S18] | **Medical signs of fabrication:** an unresolvable PMID or DOI, or a title that does not match; "all guidelines recommend…" when none is found (said before many, reported by none); disproportionate effects (cures, 100%, never/always); precise numbers with no source; a guideline or trial name that does not exist. A fabricated item is quarantined and never shown as fact, even if the generator "meant well" |
+| 13 | **Matn criticism** | Reject what contradicts the Quran, mutawatir Sunna, ijma' or sound reason (al-Khatib) [S17]. A sound isnad does not make a sound matn (Ibn al-Qayyim) [S19]. Early critics did criticise matn (Brown; **contested** against Goldziher and Schacht) [S16] | Check content independently of its chain: physiology, drug class, arithmetic, units and ranges, internal consistency (key vs explanation). A perfectly cited claim that breaks physiology is still wrong |
+| 14 | **Al-ta'arud wa al-tarjih** | Ibn Hajar: reconcile; else naskh, if the later text is established; else tarjih; else tawaqquf [S6]. Kamali: reconcile, prefer, abrogate, suspend. Hanafis put naskh before tarjih; **contested** [S26]. Genuine conflict exists only among probable evidence [S26]. Tarjih criteria: mutawatir > mashhur > ahad; better memory; jurist narrator; affirmative > negative; prohibition > permission [S26] | **Conflict order for medical claims**, Ibn Hajar's: a dated, explicit replacement should beat a strength comparison. (§5's order — harmonise, prefer, abrogate — is Kamali's.) Steps: (1) harmonise by scope: population, dose, setting, jurisdiction. Example: stage 1 hypertension is 130–139/80–89 under ACC/AHA 2017 [S73], but NICE diagnoses at clinic ≥140/90 with ABPM/HBPM ≥135/85 [S74]. That is a scope difference, not an error. (2) Dated, explicit supersession. (3) Prefer by evidence grade. (4) Otherwise "Unresolved", with both sides shown |
+| 15 | **Naskh** | Needs a later origin and separate texts. Lateness is known only by explicit report, a Companion's statement or consensus, "not by ijtihad" [S25] | Supersession only on explicit, dated evidence. Sepsis-3 (2016) says its definitions "should replace previous definitions" and calls "severe sepsis" redundant [S72], so content teaching SIRS-based "severe sepsis" is flagged "superseded by Sepsis-3 (2016)". A newer date alone never implies supersession |
+| 16 | **Maqasid, ihtiyat and the legal maxims** | Five essentials, life among them, at three levels [S35]. Prohibition beats permission; averting harm comes before bringing benefit; doubt cancels a penalty [S26][S56][S57]. Certainty is not removed by doubt [S32][S57] | When evidence stays ambiguous, safety decides: the more cautious statement, no dose specifics, uncertainty marked. A verified item stays verified until equal or stronger evidence arrives; a new claim starts Unverified |
+| 17 | **Tahqiq** | The editor presents and never improves. Collate the copies, record the variants, state the criteria for preferring one. No talfiq: never build a text that no witness contains [S40] | Every correction keeps the earlier edition and its reason. Never compose a statement from two sources when neither makes it (a dose from one guideline and an interval from another); a synthesis is labelled as one |
+| 18 | **Takhrij** | Trace every report to its primary sources, by several routes [S38]. Tracing overturns grades: al-Hakim's "sahih" became al-Dhahabi's "they never met" [S13] | Resolve every citation to its primary identifier (PMID, DOI, guideline id) by more than one route. Registries disagree about retractions [S70], so check both PubMed and Crossref–Retraction Watch [S69] |
+| 19 | **Sama'at and tahammul** | Audition certificates log who heard what, when and where; 6,100+ are digitised [S49]. Transmission modes differ in strength: sama' > ijaza > wijada [S59] | A provenance certificate per item: model and version, prompt version, sources, date, checkers. The retrieval mode is recorded: a quoted passage (sama'), a summary (ijaza), model memory (wijada, the weakest) |
+| 20 | **"La adri"** | Malik answered "I do not know" to 32 of 48 questions [S55] | Abstention is a correct answer. "Not established" or "sources disagree" beats a confident guess, and the checker bench should score it that way |
 
-- **Five conditions:**
-  - Ittisal: each transmitter received from the previous, to the end [S1]; checked by tabaqat, death dates, formulas (haddathana vs 'an), liqa'/mu'asara [S8][S12][S59].
-  - 'Adalah: Muslim, adult, sane, no fisq or dishonor; checked by explained jarh/ta'dil of recognized critics [S5][S39].
-  - Dabt: accurate retention by memory or writing; collate with precise narrators, mostly concordant = dabit [S5][S6].
-  - Ghayr shadh: not contradicting more reliable narrators (al-Shafi'i); a solitary contradicting report is shadh or munkar [S2][S13].
-  - La 'illah: no hidden impairing cause; jam' al-turuq collects every chain, testing tafarrud, mukhalafa, qara'in [S3][S13].
+## 2. How this improves the verification layer
 
-- **Matn criticism:**
-  - Al-Khatib: reject what contradicts Quran, mutawatir Sunna, ijma', sound reason [S17]. Ibn al-Jawzi: contradiction with reason or principles marks fabrication [S18]. Ibn al-Qayyim: sound isnad does not make sound matn [S19].
-  - Contested: Goldziher/Schacht said critics ignored matn; Brown shows 15 early cases voiced in isnad language [S16].
+| Component | From §1 | Today | Change |
+|---|---|---|---|
+| A. A chain per claim (isnad plus certificate) | 1, 2, 19 | Voters cite evidence ids [Sn]; passages and verdicts are kept per batch; Chat-me has provenance and source_manifest modules | Store one chain per claim, with the item; show it as "Why trust this?" |
+| B. Source registry (rijal) | 3, 5, 6, 18 | Evidence comes from Europe PMC (reviews and guidelines only, recent, with an abstract), MedlinePlus and openFDA (server/evidence.js). Retracted records are not excluded; there are no funding or edition fields | Exclude retracted records, checking both PubMed's "Retracted Publication" [pt] and Crossref–Retraction Watch. Record type, date, edition and funding. Grade every source |
+| C. Explained criticism weighs more (jarh wa ta'dil) | 4 | Two votes before Verified (MIN_VERIFY_VOTERS = 2). The four default voters span four model families: Gemini, gpt-oss, Nemotron, Gemma. The writer model never votes on its own item | The two agreeing votes must come from different families, for independence. Explained, cited objections weigh more than bare "supports" |
+| D. Five gates per claim | 7 | The pieces exist across stages (claim gate, rules, evidence, votes) but are not reported as five named gates | Report continuity, integrity, accuracy, conformity and hidden defect per claim. Any failure demotes it |
+| E. Content checks (matn) | 13 | 14 typed rules, including dose-range, lab ranges, key–explanation conflict and numbers-disagree | Add drug-class and mechanism consistency, together with the DNA brief's missing sensors |
+| F. Independent corroboration (tawatur, i'tibar) | 10, 11 | evidenceCount is a model feature; sources are not de-duplicated by origin | Collapse shared origins (same trial, dataset or review). Label strong vs single source |
+| G. All-versions sweep ('ilal) | 9 | Chat-me's revalidation and temporal_guard; nothing in the Worker | Before Verified, check whether each cited source has a later erratum, retraction or new edition |
+| H. Fabrication screen (mawdu'at) | 12 | Chat-me's citation_integrity. The Worker's own citations come from records it fetched, but references written by a model go unchecked | Resolve and title-match every reference; apply the medical signs list; quarantine what fails |
+| I. Conflict order, and "Unresolved" (ta'arud wa tarjih) | 14, 15 | Voters judge, with no explicit order and no Unresolved verdict | Scope → dated supersession → grade → Unresolved. Exam mode leaves out Unresolved items |
+| J. Safety tie-break (maqasid) | 16 | Oath items (dose, management, diagnosis) need two votes | When still ambiguous, show the more cautious statement and withhold dose specifics |
+| K. Editions, and no talfiq (tahqiq) | 17 | A fix overwrites the item | Keep each edition with its reason; label syntheses |
+| L. Stakes against grade | 4, 10, 16 | Partly: the oath items' strictness | P0 needs sahih grade: a connected chain to a guideline or systematic review, and two independent checkers. P1 accepts hasan, with a caveat. P2 may carry light weakness, with a caveat. P0 never rests on weak evidence [S54] |
+| M. Abstention | 20 | Unverified exists | Tutor and explanations may say "not established", and the bench scores that as correct |
 
-- **Tawatur:**
-  - Enough transmitters at every layer that collusion is impossible, grounded in perception [S21]; al-Ghazali: number required at beginning, middle, end [S13]. No fixed number, 4 to 313 proposed, contested [S13][S20]; "whoever lies about me" has 62+ Companions [S13].
-  - Quran: Zayd wrote nothing without two witnesses; Uthman sent one copy per province; "seven ahruf" [S22]. Ibn al-Jazari: Arabic fit, Uthmanic rasm, sahih chain; Ibn al-Hajib demanded tawatur, contested [S23]. "Thousands per generation": UNKNOWN.
+**Verdict vocabulary.** The GRADE column is this brief's proposed approximate mapping, not an established equivalence.
 
-- **Ilm al-dirayah:**
-  - Ibn Jama'a: "rules by which the states of sanad and matn are known"; riwaya transmits, diraya judges chain and text separately [S9].
-  - Ibn al-Salah: later scholars rely on canonical grading rather than re-authenticating, contested [S1].
+| Hadith grade | Meaning | App verdict | GRADE certainty of the evidence [S64] |
+|---|---|---|---|
+| Sahih, corroborated at every layer | five conditions, independent chains | Verified, strong | High |
+| Sahih, ahad | five conditions, one chain | Verified, single source | Moderate to high |
+| Hasan | lighter accuracy | Verified with caveat; never P0 | Moderate to low |
+| Da'if | a condition fails | Unverified | Low to very low |
+| Mawdu' | fabricated | Rejected, quarantined | none |
+| Tawaqquf | conflict cannot be resolved | Unresolved | none |
 
-- **Takhrij:**
-  - Trace to primary sources with chains and grade; al-Tahhan's five routes: Companion, first words, distinctive word, subject, chain/text traits [S38]. Tuhfat al-Ashraf indexes the six books by opening and Companion [S38].
-  - Tracing overturns: al-Hakim's "sahih" became al-Dhahabi's "munqati', they never met" [S13].
+## 3. Where this meets the DNA brief (for Task 5)
+- **DNA gives the machinery:** layered, independent filters; a sensor and a repair for each error type; checkpoints; rules for bypass and apoptosis [16a §2].
+- **The Islamic sciences give the epistemology:**
+  - whom to trust: rijal, jarh wa ta'dil;
+  - how a claim must connect to its source: isnad, ittisal;
+  - how to count corroboration: tawatur, i'tibar;
+  - how to resolve conflict: ta'arud wa tarjih, naskh;
+  - what to do in doubt: maqasid, tawaqquf, "la adri".
+- **Where both agree:**
+  - independence counts, not numbers;
+  - an explained diagnosis comes before any repair or verdict;
+  - fail closed;
+  - always record the reason.
 
-- **Ilm al-'ilal:**
-  - Ibn al-Madini: revealed only when all isnads are collated [S13][S3]. Sits in sanad, matn, or both; non-impairing defects contested [S3]. Al-Hakim illustrated ten genera [S14]; protocol's "7 ways": UNKNOWN.
-  - Scale: Ibn Abi Hatim ~2,840 cases; al-Daraqutni 4,000+ [S13][S15].
+## 4. Contested and UNKNOWN
+- **Contested:**
+  - liqa' vs mu'asara [S12];
+  - the minimum number for tawatur [S13][S20];
+  - whether naskh or tarjih comes first [S26];
+  - whether early critics practised matn criticism [S16].
+- **UNKNOWN** (carried from revision 1):
+  - the protocol's "7 ways" of 'illah;
+  - "thousands per generation" for transmission of the Quran.
+- **A proposal, not an established equivalence:** the hadith grade ↔ GRADE mapping in §2.
 
-- **Ilm al-mawdu'at:**
-  - Mawdu' is "worst of the weak"; knowingly narrating it is unlawful without disclosure [S4]. Weak is not fabricated [S18].
-  - Signs: confession; narrator or wording indications; contradiction with decisive texts, reason, history [S4][S18]. Ibn al-Jawzi ~1,847 entries; Ibn al-Qayyim's al-Manar lists matn signs [S18]. Pious ascetics forged "for religion" [S4]: intent is no defense.
-
-- **Ilm al-tabaqat:**
-  - Taqrib's 12 generations test ittisal, exposing inqita' and irsal [S8]. Tadlis hides a weak link behind 'an; a mudallis needs explicit sama' [S13].
-  - Sufyan al-Thawri: "we used history against them" [S50]. Ibn al-Madini recorded whom 34 Successors heard [S13].
-
-- **Al-ta'arud wa al-tarjih:**
-  - Ibn Hajar: reconcile; else naskh if the later is established; else tarjih; else tawaqquf [S6]. Al-Shafi'i: using both beats discarding one [S19]. Kamali: reconcile, prefer, abrogate, suspend; Hanafis put naskh before tarjih, contested [S26].
-  - Genuine conflict only between zanni evidences [S26]; al-Shatibi: conflict is in the mujtahid's view, not the Shari'a [S35].
-  - Tarjih: mutawatir > mashhur > ahad; better memory; faqih narrator; Bukhari-Muslim > one; affirmative > negative; prohibition > permission [S26].
-
-- **Mustalah:**
-  - Accepted: sahih, hasan, li-ghayrihi by corroboration; rejected: da'if, mawdu' [S6][S13]. Light weakness upgradable by mutaba'at/shawahid; heavy (lost 'adalah) not [S54]. Seven grades of sahih; no "soundest isnad absolutely" [S1].
-  - Rejection by saqt (gap) or ta'n (defect) [S6]; shadh (reliable vs more reliable) vs munkar (weak vs reliable) [S2][S13].
-
+## Appendix A. Revision 1 material outside medical verification, kept in substance
+- **Ilm al-dirayah:** Ibn Jama'a: "rules by which the states of sanad and matn are known". Riwaya transmits; diraya judges chain and text separately [S9]. Ibn al-Salah: later scholars rely on canonical grading. **Contested** [S1].
 - **Quranic sciences:**
-  - Ibn Taymiyya: Quran by Quran, then Sunna, Companions, Successors [S24]. Tirmidhi 2952: opinion-based tafsir "has erred" even when right [S24].
-  - Naskh needs later origin and separate texts; lateness known only by explicit report, Companion statement or consensus, "not by ijtihad"; al-Suyuti kept 20 cases [S25]. Contested: ahad abrogating Quran.
-
+  - Tafsir: Quran by Quran, then Sunna, then Companions, then Successors (Ibn Taymiyya). Tirmidhi 2952: opinion-based tafsir "has erred" even when right [S24].
+  - Compilation: Zayd wrote nothing without two witnesses. Uthman sent one copy to each province [S22].
+  - Accepted readings (Ibn al-Jazari): Arabic fit, the Uthmanic rasm, a sahih chain. Ibn al-Hajib demanded tawatur. **Contested** [S23].
+  - Naskh details; al-Suyuti kept 20 cases [S25].
 - **Evidence hierarchy:**
-  - Al-Ghazali: Book, Sunna, ijma', rational proof/istishab [S27]; Kamali adds qiyas and secondary proofs [S26]. "Strength does not consist in number"; qat'i always beats zanni [S26]. Ahad is 0.51+, never 1 [S20].
-  - The Mu'adh hadith modeling "Quran, Sunna, ijtihad" is itself weak for majhul narrators [S37].
-
-- **Qiyas / ijma' / ijtihad:**
-  - Pillars asl, far', 'illah, hukm; 'illah evident, constant, proper, transferable; far' has no direct text [S26]. Ibn Hazm rejects qiyas and limits ijma' to Companions [S36].
-  - Sukuti ijma' is presumptive: Hanafis bind it; Shafi'is, Malikis, Zahiris refuse, contested [S26].
-  - Al-Shatibi: grasp of objectives plus ability to derive [S35]; al-Ghazali: "whoever lacks logic has no trust in his sciences" [S27].
-
-- **Maqasid:**
-  - Five essentials at three levels: daruriyyat, hajiyyat, tahsiniyyat; istiqra' across many zanni texts yields certainty about objectives [S35].
-  - Raysuni lists four ways, not three: commands, their 'ilal, primary/secondary aims, the Lawgiver's silence [S35]. In conflict, find the objective first [S26].
-
+  - Al-Ghazali: Book, Sunna, ijma', rational proof [S27]; Kamali adds qiyas [S26].
+  - "Strength does not consist in number"; qat'i beats zanni [S26]. Ahad is 0.51+, never 1 [S20].
+  - The Mu'adh hadith is itself weak [S37].
+- **Qiyas, ijma', ijtihad:**
+  - The four pillars of qiyas [S26]. Ibn Hazm rejects qiyas [S36]. Sukuti ijma' is **contested** [S26].
+  - Al-Shatibi on objectives [S35].
 - **Kalam and mantiq:**
-  - Ibn Rushd: burhan, jadal, khataba [S29]. Al-Ghazali: logic is neutral toward religion [S28]; Mustasfa opens with logic [S27]. Contested: Ibn Taymiyya's attack [S30].
-  - Assent (al-Jurjani): yaqin, zann, shakk, wahm [S31]; Milani: 100%, 51-99%, 50%, <50% [S32]. Taqabul: contradiction, contrariety, privation/possession, correlation [S34]. Legal qiyas is not the syllogism [S26].
-
-- **Yaqin:**
-  - 'ilm (102:5), 'ayn (102:7), haqq al-yaqin (56:95, 69:51) [S32]. Al-Farabi: six conditions; demonstration alone yields certitude [S33].
-  - Map: qat'i = yaqin; sahih ahad = zann, act but mark; shakk = suspend; wahm = discard [S20][S32].
-
-- **Tahqiq:**
-  - Harun (1954): faithfulness and non-interference; the editor presents, never improves; comments in footnotes [S40]. Steps: verify title and attribution; assess copies (paper, ink, script, date); collate; record variants; state preference criteria [S40]. No talfiq: never build a text no witness contains [S40].
-  - Sama'at certificates (6,100+ digitized) log who heard what, when, where [S49].
-
-- **vs modern:**
-  - Isnad is chain of custody as text; Şentürk maps it as the longest recorded social network [S41]. Peer review resembles jarh, but jarh names critic and reason [S5].
-  - Hallaq: authenticity was always probabilistic [S20]; Rabb: the doubt canon predates "reasonable doubt" [S56].
-  - ICMA dates reports by correlating text and chain variation [S42]; version comparison is the 'ilal method [S3]. Raja (2026) ports isnad-rijal to agent provenance: weakest-link grade, independent-chain corroboration; results mixed [S43].
-
-- **Digital:**
-  - Surveys: Hakak 2020 [S44]; 2026 review of computational hadith [S45]. Narrator network analysis [S46]; blockchain validation models [S48]; a hadith browser verification extension (2017) precedes our wedge [S47].
-  - Metadata = isnad; author profiles = rijal; algorithmic text validation = tahqiq [S43][S45].
-
+  - Ibn Rushd: burhan, jadal, khataba [S29]. Al-Ghazali on logic [S27][S28]. Ibn Taymiyya's attack is **contested** [S30].
+  - Grades of assent: yaqin, zann, shakk, wahm (al-Jurjani) [S31]; 100%, 51–99%, 50%, <50% (Milani) [S32]. Taqabul [S34].
+  - Yaqin: 'ilm, 'ayn and haqq al-yaqin [S32]; al-Farabi on certitude [S33].
+- **Compared with modern methods:**
+  - Isnad as a social network (Şentürk) [S41]; authenticity was probabilistic (Hallaq) [S20]; the doubt canon (Rabb) [S56].
+  - ICMA [S42]. Raja 2026 ported isnad-rijal to agent provenance, with mixed results [S43].
+- **Digital work:** surveys and tools [S44]–[S48].
 - **Additional:**
-  - Poor Arabic signals forgery [S18]. Falak: definitive calculation rejects a sighting, "zann cannot contradict qat'i"; zanni calculation cannot establish a month [S52]. Fara'id: 'awl checks shares sum correctly [S53].
-  - Tibb nabawi: Ibn Khaldun, custom not revelation; Qadi 'Iyad, worldly error possible [S51]: authority is domain-bound.
+  - Poor Arabic as a sign of forgery [S18].
+  - Falak: calculation vs sighting [S52]. Fara'id: 'awl [S53].
+  - Tibb nabawi: authority is bound to its domain [S51].
+- **Connection principles, for the 3D map:**
+  - 'illah-typed edges; atraf indexing;
+  - a teacher–student graph; ashbah and furuq;
+  - takhrij al-furu' and munasabat; tabaqat layers with a certificate per edge.
+  - [S8][S26][S38][S39][S41][S49][S58]
+- **Jev mapping:**
+  - Noul is one narrator's ahad verdict, so it needs a second, independent verifier before any P0 claim.
+  - Choice gives the claim type. Score takes the weakest link, raised by independent chains.
+  - Probability bands: <0.5 discard, 0.5 abstain, P0 needs the sahih band.
+  - [S13][S20][S26][S31][S32][S43][S54]
+- Revision 1's 17 design principles (T1–T27) and its nine-stage application are folded into §2 (A–M).
 
-- **Fail-safe principles:**
-  1. Tawaqquf: when reconciliation, supersession and preference fail, emit "unresolved", never a verdict [S6][S26].
-  2. Unknown source not accepted: unknown identity or reliability = da'if, route to review; lift only when two known sources corroborate [S5][S6].
-  3. Broken chain = no evidence unless corroborated Shafi'i-style: another connected chain, independent source, or expert consensus [S13].
-  4. Weak evidence only for low stakes: light da'if may support P1 under Ibn Hajar's three conditions (not severe, under an established principle, caveated); never P0 [S54].
-  5. Ihtiyat: prohibition beats permission; averting harm beats benefit; doubt cancels penalty-grade action [S26][S56][S57].
-  6. Certainty not removed by doubt: verified state persists until equal-or-stronger evidence; new claims start unverified [S32][S57].
-  7. "I do not know" is a first-class answer (Malik: 32 of 48) [S55].
-  8. Weaker source contradicting stronger = munkar, drop [S2]; known fabrication carries a warning [S4]; dates falsify automatically [S50].
+## Sources
+Revision 1's sources S1–S59, unchanged:
+- [S1] Ibn al-Salah, Muqaddima 1: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الأول
+- [S2] Muqaddima 13: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثالث_عشر
+- [S3] Muqaddima 18: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثامن_عشر
+- [S4] Muqaddima 21: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الحادي_والعشرون
+- [S5] Muqaddima 23: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثالث_والعشرون
+- [S6] Nukhbat al-Fikar (tr.): https://asimiqbal2nd.wordpress.com/wp-content/uploads/2009/06/ibnhajarchosenthoughts.pdf
+- [S7] Nuzhat al-Nazar, ten causes: https://shamela.ws/book/25955/219
+- [S8] Taqrib ranks, tabaqat: https://kwpublications.com/papers_submitted/17909/
+- [S9] Tadrib al-Rawi definitions: https://www.alukah.net/sharia/0/169021/
+- [S10] al-Dhahabi, Fath al-Mughith: https://www.islamweb.net/ar/library/content/82/369/
+- [S11] Sahih Muslim intro 27, 32: https://sunnah.com/muslim/introduction/26
+- [S12] Mu'an'an dispute: https://www.islamweb.net/en/fatwa/86172/
+- [S13] Hasan, Science of Hadith: https://d1.islamhouse.com/data/en/ih_books/single/en_A_Introduction_to_the_Science_of_Hadith.pdf
+- [S14] al-Hakim's ten ajnas: https://www.alukah.net/sharia/0/53530/
+- [S15] al-Daraqutni: https://www.europeanproceedings.com/article/10.15405/epsbs.2020.10.02.73
+- [S16] Brown, ILS 15 (2008), doi:10.1163/156851908X290574
+- [S17] al-Kifaya criteria: https://mjs.um.edu.my/index.php/JUD/article/download/3227/1300/8829
+- [S18] Forgery signs: https://www.abuaminaelias.com/dailyhadithonline/2016/01/19/ibn-jawzi-weak-mawdu-hadith/
+- [S19] Ibn al-Qayyim, ikhtilaf: https://tsaqafah.journal.unida.gontor.ac.id/index.php/tsq/article/download/35/2
+- [S20] Hallaq 1999: https://almuslih.org/wp-content/uploads/Library/Hallaq,%20W%20-%20The%20authenticity.pdf
+- [S21] Tawatur conditions: https://www.islamweb.net/en/article/183231
+- [S22] Bukhari 4986; two witnesses: https://sunnah.com/bukhari:4986
+- [S23] Ibn al-Jazari; Ibn al-Hajib: https://islam.stackexchange.com/questions/5866/
+- [S24] Ibn Taymiyya; Tirmidhi 2952: https://ia803205.us.archive.org/3/items/dawrah2021/Muqaddimah-Fi-Usool-Al-Tafsir.pdf
+- [S25] Naskh: http://hmazeem.blogspot.com/2018/12/theory-of-abrogation-naskh.html
+- [S26] Kamali, Principles pt 2: https://d1.islamhouse.com/data/en/ih_books/parts/Principles_of_Islamic_Jurisprudence/en_Principles_of_Islamic_Jurisprudence_Part_2.pdf
+- [S27] al-Ghazali, Mustasfa: https://shamela.ws/index.php/book/5459
+- [S28] al-Munqidh on logic: https://isamveri.org/pdfdrg/D03380/2010_3_2/2010_3_2_VURALM.pdf
+- [S29] Ibn Rushd, Fasl al-Maqal: https://dergipark.org.tr/tr/download/article-file/10185
+- [S30] Hallaq 1993, via https://link.springer.com/rwe/10.1007/978-1-4020-9729-4_303
+- [S31] al-Jurjani, Ta'rifat: https://www.ghazali.org/arabic/jurjani-tarifat.htm
+- [S32] Milani ch. 7: https://al-islam.org/thirty-principles-islamic-jurisprudence-sayyid-fadhil-milani/chapter-7-certainty-not-challenged
+- [S33] al-Farabi certitude: https://plato.stanford.edu/entries/al-farabi-psych/
+- [S34] Taqabul: https://ar.wikipedia.org/wiki/تقابل_(منطق)
+- [S35] al-Shatibi: https://www.alukah.net/sharia/0/113245/
+- [S36] Ibn Hazm: https://www.ajis.org/index.php/ajiss/article/download/1099/432/1578
+- [S37] Abu Dawud 3592: https://sunnah.com/abudawud:3592
+- [S38] al-Tahhan; Tuhfat al-Ashraf: http://tuhfataltullab.blogspot.com/2013/08/a-summary-of-usul-al-takhrij.html
+- [S39] Tahdhib al-Kamal; rijal: https://en.wikipedia.org/wiki/Tahdhib_Al-Kamal_fi_Asma'_Al-rijal
+- [S40] Harun, Tahqiq al-Nusus: https://dergipark.org.tr/tr/download/article-file/5067005
+- [S41] Şentürk: https://www.sup.org/books/title/?id=9033
+- [S42] ICMA: https://en.wikipedia.org/wiki/Isnad-cum-matn_analysis
+- [S43] Raja 2026: https://arxiv.org/abs/2607.24117
+- [S44] Hakak 2020: https://ouci.dntb.gov.ua/en/works/7Bm38G39/
+- [S45] Review 2026: https://link.springer.com/article/10.1007/s00521-026-12188-8
+- [S46] Narrator SNA: https://www.sciencedirect.com/science/article/pii/S1319157821000215
+- [S47] Browser extension: https://arxiv.org/pdf/1701.07382
+- [S48] Computational/blockchain: https://www.semanticscholar.org/paper/8aaa2fc1d76f633a64b14d706351001efddf98ed
+- [S49] Audition certificates: https://www.leidenspecialcollectionsblog.nl/articles/mapping-medieval-scholarship-arabic-audition-certificates-from-the-leiden-special-collection
+- [S50] Sufyan al-Thawri: https://www.islamweb.net/ar/article/1431/
+- [S51] Ibn Khaldun; Qadi 'Iyad: https://hadithnotes.org/prophetic-medicine-between-revelation-and-traditional-knowledge/
+- [S52] Hisab/ru'ya: https://www.masud.co.uk/hisab-ruya-or-matla-al-budur/
+- [S53] 'Awl: https://faraidhub.com/blog/awl-explained.html
+- [S54] Weak hadith: https://islamqa.info/en/answers/44877
+- [S55] Malik "la adri": https://seekersguidance.org/articles/general-artices/a-motto-from-our-masters-i-do-not-know/
+- [S56] Rabb, Doubt in Islamic Law: https://www.cambridge.org/core/books/doubt-in-islamic-law/3F33884C01782919E73DC857A504D434
+- [S57] Legal maxims: https://www.dar-alifta.org/en/article/details/361/islamic-legal-maxims
+- [S58] Furuq; ashbah: https://islamiclaw.blog/2018/10/17/al-qarafis-collection-of-legal-distinctions/
+- [S59] Transmission formulas: https://hadithanswers.com/the-difference-between-haddathana-and-akhbarana/
+Added in revision 2. The medical articles were retrieved from PubMed; each DOI is linked:
+- [S60] Ibn al-Salah, Muqaddima, naw' 62 (those who became confused late in life): https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثاني_والستون
+- [S61] Ibn Hajar, Nukhbat al-Fikar (the innovator's narration): https://www.kalamullah.com/Books/Nukhbat_al_Fikr.pdf
+- [S62] al-Dhahabi on kalam al-aqran: https://www.salafiri.com/contextualising-hafiz-adh-dhahabis-statement-on-criticising-contemporaries/
+- [S63] Signs of fabricated hadith (eight criteria): https://islamonline.net/en/fabricated-hadiths-3/
+- [S64] Guyatt et al. 2008, GRADE, BMJ 336:924, PMID 18436948, https://doi.org/10.1136/bmj.39489.470347.AD
+- [S65] Greenberg 2009, citation distortion, BMJ 339:b2680, PMID 19622839, https://doi.org/10.1136/bmj.b2680
+- [S66] Tramèr et al. 1997, covert duplicate publication, BMJ 315:635, PMID 9310564, https://doi.org/10.1136/bmj.315.7109.635
+- [S67] Lundh et al. 2017, industry sponsorship and research outcome, Cochrane MR000033, PMID 28207928, https://doi.org/10.1002/14651858.MR000033.pub3
+- [S68] Fang, Steen & Casadevall 2012, misconduct and retractions, PNAS 109:17028, PMID 23027971, https://doi.org/10.1073/pnas.1212247109
+- [S69] Crossref, Retraction Watch data in the Crossref API: https://www.crossref.org/documentation/retrieve-metadata/retraction-watch/ ; acquired 12 Sep 2023: https://www.infodocket.com/2023/09/12/retaction/
+- [S70] PubMed's "Retracted Publication" [pt]: https://mdanderson.libanswers.com/faq/266875 ; registries disagree on retracted status: https://pmc.ncbi.nlm.nih.gov/articles/PMC8243230/
+- [S71] Continued use of retracted papers in biomedicine (Quantitative Science Studies 2021): https://direct.mit.edu/qss/article/2/4/1144/107356/
+- [S72] Singer et al. 2016, Sepsis-3, JAMA 315:801, PMID 26903338, https://doi.org/10.1001/jama.2016.0287
+- [S73] Whelton et al. 2017 ACC/AHA high blood pressure guideline, Hypertension 71:e13, PMID 29133356, https://doi.org/10.1161/HYP.0000000000000065
+- [S74] NICE NG136, Hypertension in adults: https://www.nice.org.uk/guidance/ng136/chapter/recommendations
 
-- **Connection principles:**
-  1. 'Illah as edge type: link concepts by shared effective cause, label the edge [S26].
-  2. Atraf indexing: canonical opening cross-referenced to all chains and sources [S38].
-  3. Teacher-student graph: who received from whom, to validate paths [S39][S41].
-  4. Ashbah and furuq: analogues plus explicit distinctions with the criterion (al-Qarafi's 274) [S58].
-  5. Takhrij al-furu' 'ala al-usul and munasabat: every derivative points to its principle; adjacent units carry a stated relation [S58].
-  6. Tabaqat layering plus certificate notes per edge: who verified, when, where [S8][S49].
+## MEDICAL IMPROVEMENTS THIS UNLOCKS
 
-- **Design principles for verification:**
-  1. (T1) Every claim carries a complete chain: source, passage, retrieval mode, generation step, verdict; missing link = mu'allaq = reject [S6][S11].
-  2. (T2) Source registry: identity, type, dates, retraction status, error history, grade thiqa to matruk [S39][S8].
-  3. (T3) Verdicts must be explained; an explained negative overrides generic reputation [S5][S6]. Grades come from recognized critics, never the generating model; independent critics' agreement is the strongest label [S10][S11].
-  4. (T4) Five conjunctive gates; fail one, demote [S1].
-  5. (T5) Test text independently: contradiction with higher-tier source, fact or arithmetic rejects a clean-chain claim [S17][S19].
-  6. (T6) Certainty tier = independent corroboration at every hop, no magic number; single-source = zanni [S20][S21].
-  7. (T7) Score chain state and text state separately; store both [S9].
-  8. (T8) Resolve every citation to a primary locator by several lookup routes [S38].
-  9. (T9) Collect all versions before judging; flag one version's deviation from the majority [S3][S13].
-  10. (T10) Fabrication screen: nonexistent DOI, malformed citation, impossible numbers; label, never silently drop or pass [S4][S18].
-  11. (T11) Temporal possibility: source predates claim, version existed, link reachable [S8][S12].
-  12. (T12) Conflict order: reconcile scope, dated supersession, prefer by strength, suspend [S6][S26].
-  13. (T13) Fixed verdict vocabulary with thresholds: sahih, hasan, da'if, mawdu'; mutawatir, ahad [S6].
-  14. (T14/15) No unsourced inference; harmony before contradiction; supersession needs dated evidence [S24][S25].
-  15. (T16/17) Rank by evidence hierarchy before similarity; analogy needs an evident, constant, transferable 'illah and no direct text, labeled qiyas [S26][S27].
-  16. (T20/24) Ambiguity resolves toward patient safety; bands: <0.5 discard, 0.5 abstain, zann caveat, qat'i assert [S31][S32][S57].
-  17. (T27) Conflicting versions of one source: base text, recorded variants, no talfiq [S40].
+Each item says what the student gets, the method behind it, and its status.
 
-- **Sources:**
-  - S1 Ibn al-Salah, Muqaddima 1: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الأول
-  - S2 Muqaddima 13: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثالث_عشر
-  - S3 Muqaddima 18: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثامن_عشر
-  - S4 Muqaddima 21: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الحادي_والعشرون
-  - S5 Muqaddima 23: https://ar.wikisource.org/wiki/مقدمة_ابن_الصلاح/النوع_الثالث_والعشرون
-  - S6 Nukhbat al-Fikar (tr.): https://asimiqbal2nd.wordpress.com/wp-content/uploads/2009/06/ibnhajarchosenthoughts.pdf
-  - S7 Nuzhat al-Nazar, ten causes: https://shamela.ws/book/25955/219
-  - S8 Taqrib ranks, tabaqat: https://kwpublications.com/papers_submitted/17909/
-  - S9 Tadrib al-Rawi definitions: https://www.alukah.net/sharia/0/169021/
-  - S10 al-Dhahabi, Fath al-Mughith: https://www.islamweb.net/ar/library/content/82/369/
-  - S11 Sahih Muslim intro 27, 32: https://sunnah.com/muslim/introduction/26
-  - S12 Mu'an'an dispute: https://www.islamweb.net/en/fatwa/86172/
-  - S13 Hasan, Science of Hadith: https://d1.islamhouse.com/data/en/ih_books/single/en_A_Introduction_to_the_Science_of_Hadith.pdf
-  - S14 al-Hakim's ten ajnas: https://www.alukah.net/sharia/0/53530/
-  - S15 al-Daraqutni: https://www.europeanproceedings.com/article/10.15405/epsbs.2020.10.02.73
-  - S16 Brown, ILS 15 (2008), doi:10.1163/156851908X290574
-  - S17 al-Kifaya criteria: https://mjs.um.edu.my/index.php/JUD/article/download/3227/1300/8829
-  - S18 Forgery signs: https://www.abuaminaelias.com/dailyhadithonline/2016/01/19/ibn-jawzi-weak-mawdu-hadith/
-  - S19 Ibn al-Qayyim, ikhtilaf: https://tsaqafah.journal.unida.gontor.ac.id/index.php/tsq/article/download/35/2
-  - S20 Hallaq 1999: https://almuslih.org/wp-content/uploads/Library/Hallaq,%20W%20-%20The%20authenticity.pdf
-  - S21 Tawatur conditions: https://www.islamweb.net/en/article/183231
-  - S22 Bukhari 4986; two witnesses: https://sunnah.com/bukhari:4986
-  - S23 Ibn al-Jazari; Ibn al-Hajib: https://islam.stackexchange.com/questions/5866/
-  - S24 Ibn Taymiyya; Tirmidhi 2952: https://ia803205.us.archive.org/3/items/dawrah2021/Muqaddimah-Fi-Usool-Al-Tafsir.pdf
-  - S25 Naskh: http://hmazeem.blogspot.com/2018/12/theory-of-abrogation-naskh.html
-  - S26 Kamali, Principles pt 2: https://d1.islamhouse.com/data/en/ih_books/parts/Principles_of_Islamic_Jurisprudence/en_Principles_of_Islamic_Jurisprudence_Part_2.pdf
-  - S27 al-Ghazali, Mustasfa: https://shamela.ws/index.php/book/5459
-  - S28 al-Munqidh on logic: https://isamveri.org/pdfdrg/D03380/2010_3_2/2010_3_2_VURALM.pdf
-  - S29 Ibn Rushd, Fasl al-Maqal: https://dergipark.org.tr/tr/download/article-file/10185
-  - S30 Hallaq 1993, via https://link.springer.com/rwe/10.1007/978-1-4020-9729-4_303
-  - S31 al-Jurjani, Ta'rifat: https://www.ghazali.org/arabic/jurjani-tarifat.htm
-  - S32 Milani ch. 7: https://al-islam.org/thirty-principles-islamic-jurisprudence-sayyid-fadhil-milani/chapter-7-certainty-not-challenged
-  - S33 al-Farabi certitude: https://plato.stanford.edu/entries/al-farabi-psych/
-  - S34 Taqabul: https://ar.wikipedia.org/wiki/تقابل_(منطق)
-  - S35 al-Shatibi: https://www.alukah.net/sharia/0/113245/
-  - S36 Ibn Hazm: https://www.ajis.org/index.php/ajiss/article/download/1099/432/1578
-  - S37 Abu Dawud 3592: https://sunnah.com/abudawud:3592
-  - S38 al-Tahhan; Tuhfat al-Ashraf: http://tuhfataltullab.blogspot.com/2013/08/a-summary-of-usul-al-takhrij.html
-  - S39 Tahdhib al-Kamal; rijal: https://en.wikipedia.org/wiki/Tahdhib_Al-Kamal_fi_Asma'_Al-rijal
-  - S40 Harun, Tahqiq al-Nusus: https://dergipark.org.tr/tr/download/article-file/5067005
-  - S41 Şentürk: https://www.sup.org/books/title/?id=9033
-  - S42 ICMA: https://en.wikipedia.org/wiki/Isnad-cum-matn_analysis
-  - S43 Raja 2026: https://arxiv.org/abs/2607.24117
-  - S44 Hakak 2020: https://ouci.dntb.gov.ua/en/works/7Bm38G39/
-  - S45 Review 2026: https://link.springer.com/article/10.1007/s00521-026-12188-8
-  - S46 Narrator SNA: https://www.sciencedirect.com/science/article/pii/S1319157821000215
-  - S47 Browser extension: https://arxiv.org/pdf/1701.07382
-  - S48 Computational/blockchain: https://www.semanticscholar.org/paper/8aaa2fc1d76f633a64b14d706351001efddf98ed
-  - S49 Audition certificates: https://www.leidenspecialcollectionsblog.nl/articles/mapping-medieval-scholarship-arabic-audition-certificates-from-the-leiden-special-collection
-  - S50 Sufyan al-Thawri: https://www.islamweb.net/ar/article/1431/
-  - S51 Ibn Khaldun; Qadi 'Iyad: https://hadithnotes.org/prophetic-medicine-between-revelation-and-traditional-knowledge/
-  - S52 Hisab/ru'ya: https://www.masud.co.uk/hisab-ruya-or-matla-al-budur/
-  - S53 'Awl: https://faraidhub.com/blog/awl-explained.html
-  - S54 Weak hadith: https://islamqa.info/en/answers/44877
-  - S55 Malik "la adri": https://seekersguidance.org/articles/general-artices/a-motto-from-our-masters-i-do-not-know/
-  - S56 Rabb, Doubt in Islamic Law: https://www.cambridge.org/core/books/doubt-in-islamic-law/3F33884C01782919E73DC857A504D434
-  - S57 Legal maxims: https://www.dar-alifta.org/en/article/details/361/islamic-legal-maxims
-  - S58 Furuq; ashbah: https://islamiclaw.blog/2018/10/17/al-qarafis-collection-of-legal-distinctions/
-  - S59 Transmission formulas: https://hadithanswers.com/the-difference-between-haddathana-and-akhbarana/
-
-## APPLICATION TO VERIFICATION LAYER
-
-- **Stage 1:** source = narrator. Rijal record per document: identity, publisher, dates, retraction flag, evidence type, grade, critic and reason [S39][S5]. Unknown publisher = majhul until two known sources corroborate [S5].
-- **Stage 2:** rank by hierarchy, then similarity: guideline/systematic review (mutawatir-grade) > RCT (sahih) > observational (hasan) > case report/opinion (da'if) [S26][S27]. Log retrieval mode like tahammul: direct passage = sama', summary = ijaza, model memory = wijada [S59].
-- **Stage 3:** every sentence cites its passage; unsourced inference is stripped [S24].
-- **Stage 3.5 (Jev gate):** Noul "inside the passages?" and "adds numbers?"; failure = mu'allaq, regenerate [S6].
-- **Stage 4:** atomic claims, each with its own chain and canonical opening (tarf) [S38].
-- **Stage 5:** five conjunctive gates, then 'ilal: collect all versions, flag tafarrud [S1][S3]. mDeBERTa checks ittisal (entailment); Jev checks matn against higher-tier sources [S17].
-- **Stage 6:** no resolvable primary locator = no isnad = reject [S6][S38].
-- **Stage 7:** severity x grade. P0 (dosage, contraindication) needs sahih; hasan caveated; da'if never P0, "strict in halal and haram" [S54]; prohibition beats permission [S26].
-- **Stage 8:** hasan-for-P0, majhul sources, unresolved conflicts, qiyas-based claims go to experts; reviewer verdicts must be explained [S5].
-- **Stage 9:** store the full chain with each link's grade, critic, reason, timestamp, model version, like a sama'at certificate; hash-chain it [S49].
-- **Contradictions and hidden defects:** reconcile scope (population, dose, setting); dated supersession; tarjih by grade; else tawaqquf [S6][S26]. Compare preprint, published, erratum, guideline editions before accepting [S3][S40].
-- **Fabrication:** screen nonexistent DOIs, impossible values, mismatched titles; label mawdu', show only with warning [S4][S18].
-- **Ambiguity and uncertainty:** maqasid, hifz al-nafs first; in doubt withhold the P0 action [S35][S56]. Tawaqquf = "unresolved"; ihtiyat = more restrictive reading; "I do not know" allowed [S55][S57].
-- **Jev Noul** = one narrator's ahad verdict, zanni: a second independent verifier (mutaba'a) before any P0 claim shows [S20][S13].
-- **Jev Choice** = claim type: foundational (mutawatir-grade), clinical (sahih), emerging (ahad, caveat), methodology (qiyas, lowest) [S26].
-- **Jev Score** = isnad strength: weakest link sets the grade; independent chains raise it (hasan li-ghayrihi) [S43][S54].
-- **Jev probability threshold** = minimum narrator reliability: <0.5 wahm, discard; 0.5 shakk, abstain; P0 needs the sahih band, P1 accepts hasan [S31][S32].
-- **3D connections:** 'illah-typed edges, atraf cross-references, teacher-student paths, ashbah/furuq pairs, munasabat labels, tabaqat layers, certificate notes per edge [S26][S38][S58][S49].
+1. **"Why trust this?" on every claim.**
+   - Each claim shows its chain:
+     - the exact passage quoted;
+     - the source's title, type, date and grade;
+     - how it was retrieved (quoted, summarised or from model memory);
+     - which checkers judged it, when, with what verdict and reason.
+   - The student sees the evidence behind a dose or a diagnostic criterion, and learns appraisal while studying.
+   - Method: isnad and sama'at [S11][S49].
+   - Status: partly built. Voters cite [Sn] ids; the per-claim record and the view are new.
+2. **No retracted evidence.**
+   - Every source is checked against PubMed's "Retracted Publication" type and the Crossref–Retraction Watch data before it can support a claim.
+   - Why both: the registries disagree [S70], retracted papers keep being cited [S71], and 67.4% of retractions are for misconduct [S68].
+   - Method: jarh of a discredited narrator [S5][S7].
+   - Status: new. Today Europe PMC results are filtered to reviews and guidelines but not for retraction.
+3. **Conflict-of-interest weighting.**
+   - A finding that favours its own sponsor's product is not accepted alone; it needs independent corroboration.
+   - Why: industry-sponsored drug studies report favourable efficacy (RR 1.27) and conclusions (RR 1.34) more often [S67].
+   - Method: the innovator-propagandist rule [S61].
+   - Status: design. Funding metadata is only partly available from free sources.
+4. **Corroboration that counts independent origins only.**
+   - Papers from one trial, one dataset or one review count as one witness.
+   - Why: duplicated trial reports inflated ondansetron's apparent efficacy by 23% [S66], and citation chains can manufacture authority [S65].
+   - Labels: "Verified, strong" when independent high-grade sources agree; "Verified, single source" otherwise.
+   - Method: tawatur and the common link [S21][S42].
+   - Status: new.
+5. **Guideline differences explained, not marked wrong.**
+   - The app knows which guideline system the student's exam follows (Egypt, UK, US). It checks against that system and shows the other system as a note.
+   - Example: stage 1 hypertension is ≥130/80 under ACC/AHA 2017 but needs clinic ≥140/90 under NICE [S73][S74].
+   - Method: harmonise by scope first [S6][S26].
+   - Status: new. The exam catalogue already exists to anchor it.
+6. **Superseded teaching flagged, with what replaced it.**
+   - Content built on replaced definitions carries the replacing source and its date.
+   - Example: SIRS-based "severe sepsis" is superseded by Sepsis-3 (2016), which says its definitions "should replace previous definitions" [S72].
+   - Only explicit replacements count; a newer date alone never does.
+   - Method: naskh rules [S25].
+   - Status: partly built (the temporal guard). The guideline-edition registry is new.
+7. **"Unresolved" as an honest verdict.**
+   - When scope, supersession and evidence grade cannot settle a conflict, the student sees both positions with their sources instead of a coin toss. Unresolved items stay out of exam mode.
+   - Method: tawaqquf [S6][S26].
+   - Status: new.
+8. **Explained objections outweigh bare agreement.**
+   - One checker's specific, sourced objection ("contraindicated in pregnancy per [S2]") outweighs any number of unexplained "supports" votes.
+   - The two votes needed for Verified must come from different model families. The pool already spans Gemini, gpt-oss, Nemotron and Gemma, but two Google votes can still verify an item today.
+   - Method: explained jarh, plus the independence of tawatur [S5][S6][S21].
+   - Status: partly built.
+9. **Strictness that matches the stakes.**
+   - Doses, contraindications, management and diagnostic criteria need sahih-grade support: a connected chain to a guideline or systematic review, and two independent checkers.
+   - Lower-stakes facts may carry a caveat. A dose never rests on weak evidence.
+   - Method: Ibn Hajar's conditions for weak reports, and ihtiyat [S54][S57].
+   - Status: partly built (oath items need two votes); the full table is new.
+10. **Fabrication caught by its signs.**
+    - Signs: unresolvable PMIDs or DOIs and title mismatches; "all guidelines recommend…" when none is found; cures and 100% effects; precise unsourced numbers; guidelines or trials that do not exist.
+    - Such items are quarantined and never shown as fact.
+    - Method: ilm al-mawdu'at [S4][S63].
+    - Status: partly built (Chat-me's citation_integrity). References written by a model in the Worker path are unchecked.
+11. **Reliability that depends on the date.**
+    - A source is trusted for what it said before it was retracted, withdrawn or superseded.
+    - A lecture is judged as of its date, so the student sees "taught this way in 2019; changed in 2023" rather than "your lecture is wrong".
+    - Method: ikhtilat [S60].
+    - Status: new.
+12. **Editions, and no stitched facts.**
+    - Every correction keeps the earlier edition and the reason, so the student sees what changed and why.
+    - No statement is composed from two sources that neither makes, such as a dose from one guideline with an interval from another. Any synthesis is labelled as one.
+    - Method: tahqiq and the ban on talfiq [S40].
+    - Status: new.
+13. **"I don't know" from the tutor.**
+    - Explanations and the tutor may answer "not established" or "sources disagree" instead of guessing, and the checker bench counts that as correct.
+    - Method: Malik's "la adri" [S55].
+    - Status: partly built (Unverified exists); tutor abstention is new.
+14. **Evidence literacy as a by-product.**
+    - Verdicts sit beside a GRADE-style certainty label (high, moderate, low, very low) [S64], so students learn how strong the evidence behind each fact is, as clinicians must.
+    - Method: graded verdict vocabulary [S6][S13].
+    - Status: new display.
