@@ -17,10 +17,10 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 
 ## Task state
 - Task 0: done; icon rebuilt from the owner's image (707763a).
-- Tasks 1, 1b, 1c: complete; ten outputs in Chat-me docs/architecture/research. Verdicts: §22a Jev in specific layers only (Layer 7 oath check, card/MCQ part of Layer 6); §22d question bank yes with restrictions; §22f: §22e not sound as written; §22g: no LangGraph now; §20: base case misses $4,000 in month 1, about $58,800 in year 1, Egypt regional pricing; §23a: one shared page template. §22c and §22d are under their word limits; §17 is about 2,580 words against 2,400, every source kept.
-- Task 2 build recovery: in progress, below.
+- Tasks 1, 1b, 1c: complete; ten outputs in Chat-me docs/architecture/research. Verdicts: §22a Jev in specific layers only (Layer 7 oath check, card/MCQ part of Layer 6); §22d question bank yes with restrictions; §22f: §22e not sound as written; §22g: no LangGraph now; §20: base case misses $4,000 in month 1, about $58,800 in year 1, Egypt regional pricing; §23a: one shared page template. §22c and §22d are under their word limits; §17 is 2,583 words against 2,400, every source kept.
+- Task 2 build recovery: below.
 - Task 3: done in 04c1fe0 (server/ai.js and tests, wrangler.toml, ModelSettingsView); its commit message is the migration log; tests green; live.
-- Task 4: done, docs/architecture/audit/task4-chat-me-audit.md with probe scripts.
+- Task 4: done, docs/architecture/audit/task4-chat-me-audit.md.
 - Tasks 5 to 5d: gated on the verdicts, not started; STOP holds until the owner says go.
 
 ## Task 2, the Playgrounds build
@@ -33,7 +33,7 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 
 ## Repositories
 - red-pen-ios: personal e004f33 = session branch 9c06680; ci/launch b97434d; preview/graph and claude/continue-session-t3r79j at c347755 (stale); main 9eb5430 (23 Sep). Unmerged: gaps/{a11y, wardpocket, audio, saveideas, wardround, l10n, onboarding} and wip/{neuron-circuit-redesign, growth-p0-1, growth-p0-2a} (unverified).
-- Chat-me: session branch with docs/architecture; main f1bfe1f. red-pen-transcribe and Claude-Code untouched.
+- Chat-me: session branch 03f250d with docs/architecture; main f1bfe1f. red-pen-transcribe and Claude-Code untouched.
 - Touched: tools/ (make_swiftpm.py, playgrounds_stubs, playgrounds_cut.py), the three workflows, Graph3DView.swift, ios/UITests, icon assets, the Task 3 files, Chat-me docs/architecture.
 
 ## Fail-safe, LangGraph, folders, 3D
@@ -44,7 +44,7 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 
 ## Blockers and pending
 - Pending: the result on zips 1 and 2, Groin_Hernia.pdf and owner-claim.txt, the go for Tasks 5 to 5d and the §3c migration.
-- The 127 unverified Stethoscore audit findings: Chat-me docs/architecture/audit/stethoscore-unverified-findings.md; verify before fixing.
+- The 127 unverified app audit findings: Chat-me docs/architecture/audit/stethoscore-unverified-findings.md; verify before fixing.
 
 ## Outdated plan rules
 - §25 assumes one Playgrounds package holds the whole app; it cannot. §4's migration is an inert lane, not a swap. §22e should follow the §22f brief. §22g tasks and dashboards are moot. The app sections still say Red Pen and CramDown.
