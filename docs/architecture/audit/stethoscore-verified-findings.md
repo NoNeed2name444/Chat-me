@@ -42,6 +42,38 @@ Started 1 October 2026 from `stethoscore-unverified-findings.md` (127 carried-ov
 | 27 | data | Improvement: sync study progress and Ideas notes | CONFIRMED (not synced) | `Models/SyncDoc.swift:8-13`; `Store.swift:80-85` | - | `.study` and `.note` kinds, reuse `mergeStudy` and `NoteStore.restore` |
 | 28 | data | Improvement: Recently deleted for sets | CONFIRMED (delete is immediate) | `Store.swift:347-360`; `LibrarySheets.swift:57` | - | A deleted list with a 30-day stamp; defer the recording's removal |
 
+
+## Batch 4: [design] and [map], 22 findings (22 confirmed, 2 of them in part, 0 refuted)
+
+Verified against personal db7fbf3. Contrast ratios computed with the WCAG formula from the RGB literals in the code.
+
+| # | tag | finding (short) | verdict | evidence | sev | fix sketch |
+|---|---|---|---|---|---|---|
+| 106 | map | Idea Board recomputes every link, O(n squared), on every frame of pan, pinch or drag | CONFIRMED | `Features/Notes/IdeaBoardView.swift:100-104` inside the GeometryReader body; `Persistence/NoteStore.swift:325-338`, `:299-305` | P2 | Cache edges and lanes in `@State`, refreshed on `notes.notes` change; build `known` once |
+| 107 | map | Signature rebuilt on each store change; whole scene rebuilt on each editor save | CONFIRMED in part | `Graph3DView.swift:724-754`, `:135`; the per-save rebuild is REFUTED: the id holds title, kind, folder and size level only (`NoteEditorView.swift:117`, `:309`) | P2 | A `graphVersion` bumped only on title, folder, link or level change |
+| 108 | map | Tapping an aliased wiki link in Read mode creates a junk page | CONFIRMED | `NoteMarkdown.swift:155-168`, `:24-26`, `:170-173`; `NoteEditorView.swift:330-335`; `NoteStore.swift:349` splits correctly | P1 | Split on the bar in `wikiLinksAsMarkdown` as `wikiTitles` does |
+| 109 | map | A still map keeps rendering at 60 fps; the map renders under the editor sheet | CONFIRMED | `Graph3DView.swift:1311-1312` `rendersContinuously = true` never cleared, `:1523`, `:1796-1798`, `:1823`, `:1782-1785`, `:1383`, `:151` | P1 | `rendersContinuously = lively`; `isPlaying` false while the sheet is up |
+| 110 | map | Every rebuild tessellates an SCNText per body on the main thread; at most four names shown | CONFIRMED | `Graph3DView.swift:1156-1180`, `:1013`, `:1029`; `GraphUniverseScene.swift:101`; `GraphThemeScene.swift:180`; `GraphMotion.swift:1097-1100` | P2 | Lazy labels, made the first time a name is wanted |
+| 111 | map | Touch, hover and tap wait for the render step because the sim holds its lock through SceneKit writes | CONFIRMED | `GraphMotion.swift:1234-1236`, `:1312-1405`, `:787-1043` (tilt and shaders are outside the lock) | P2 | Integrate into a snapshot under the lock, write the nodes after |
+| 112 | map | A probe that fails once turns shaders off for the life of the process | CONFIRMED | `GraphLook.swift:317`, `:327-359`; same in `GraphCircuitLook.swift:787`, `GraphNodeShaders.swift:1197`, `GraphNeuronLook.swift:873`; probes run in the rebuild's detached task (`Graph3DView.swift:791-792`) | P2 | Cache only when the app is active at probe time |
+| 113 | map | Not re-fitted when the view's size changes but stays upright or wide | CONFIRMED | `Graph3DView.swift:1683-1689`; only `inset(to:)` `:1659-1663` refits | P2 | Track the last size and refit when untouched |
+| 114 | map | Superseded force layouts keep running | CONFIRMED | `Graph3DView.swift:786-795`, `:811-817`, `:842-847`; `ForceLayout3D.swift` has no cancellation check | P2 | Cancel the detached job with the task; check `Task.isCancelled` in the loop |
+| 115 | map | One-up: link card sets to their source note | CONFIRMED (absent) | `NoteEditorView.swift:447-453`; `Models/StudySet.swift:35-70`; `NoteStore.swift:4-17` | P2 | `sourceNoteId` on StudySet |
+| 116 | design | Paywall Terms and Privacy go to redpen.app | CONFIRMED | `Features/Paywall/PaywallView.swift:168-169`; the app's only host is the Worker (`Shared/AuthAPI.swift:22`), which has no terms or privacy route; whether redpen.app resolves is UNKNOWN | P1 | Brand URLs on the Stethoscore site, or serve both from the Worker |
+| 117 | design | Default accent still pen red, not Midnight Enamel | CONFIRMED | `RedPenApp.swift:251`, `:285`; the Midnight Enamel colours exist only in `tools/make_icon.py:36-42` and `LaunchSplash.swift:25` | P2 | `Brand.accent` used at both tint sites |
+| 118 | design | AccentColor.colorset empty, so accentColor uses fall back to blue and mix with red | CONFIRMED | `Assets.xcassets/AccentColor.colorset/Contents.json` has no colour; 49 `.accentColor` uses; `LibraryView.swift:206` tints the library with it | P2 | Add the colour to the colorset |
+| 119 | design | White on amber (Cases) and lavender (Bedtime) buttons fails 3 to 1 | CONFIRMED | `Shared/Theme.swift:17`, `:464`, `:470`; `BedtimeReviewView.swift:39`, `:121`; `CaseChatView.swift:65-309`; amber 2.88, lavender 2.73 | P2 | Ink by tint luminance, or darken the two tints |
+| 120 | design | Billing-retry check passes the group name where StoreKit wants the group id | CONFIRMED | `Shared/SubscriptionStore.swift:171`, `:155`, `:174`; `Shared/Entitlement.swift:15`; `RedPen.storekit:13`; masked by `isPro { true }` (`:30`) | P2, P1 once the gate is live | Pass the transaction's subscription group id |
+| 121 | design | Server errors still say Vignette Cloud; the app shows them behind a raw HTTP 402 | CONFIRMED in part | `server/ai.js:62`, `:271`, `:1188-1205`; the raw prefix is REFUTED for 402 and 429 (`LLMCore.swift:43-44`), present for other codes (`:46`) | P2 | One brand constant in the server; drop the prefix |
+| 122 | design | Paywall spins forever when the App Store returns no products | CONFIRMED | `PaywallView.swift:88-89`; `SubscriptionStore.swift:58-68` sets `trouble` only on a throw; reachable from `AccountView.swift:94` and `ModelSettingsView.swift:77` | P1 | Treat an empty result as trouble and show it |
+| 123 | design | Stethoscope logo only in the splash; Brand.swift draws the CramDown mark | CONFIRMED | `LaunchSplash.swift:17-20`, `:49`; `Brand.swift:5-11`, `:44-80`, no callers | P2 | Replace the mark with the icon; show it on Account and Paywall |
+| 124 | design | Import help names three retired brands | CONFIRMED | `LibraryImport.swift:39`; shown at `NewSetView.swift:567` | P2 | Name only the current brand |
+| 125 | design | No shared radius tokens; like surfaces use 12, 14, 16, 20, 22 | CONFIRMED | 21 of 12, 20 of 20, 18 of 16, 14 of 14, 11 of 18, 9 of 28, 9 of 22, 13 others; no constant in Shared | P2 | A `Radius` enum with three values |
+| 126 | design | One-up: exported PDF decks carry no Stethoscore mark | CONFIRMED (absent) | `DeckPDF.swift:155`; `DeckPDFPages.swift:173-183`; `PDFExporter.swift` | P2 | The brand name in the bar and a footer line |
+| 127 | design | DeckPalette re-types the six mode tints by hand | CONFIRMED | `DeckPalette.swift:26-34` repeats `Theme.swift:14-19`; DeckPalette is Foundation only | P2 | Derive the SwiftUI tints from DeckPalette |
+
+P1s in this batch: 108, 109, 116, 122 (and 120 once the Pro gate is live). No P0.
+
 ## Still to verify
 
-The remaining tags of `stethoscore-unverified-findings.md`: next batches follow in this file.
+Batches 2 ([library-ui], [study-a], [study-b]) and 3 ([audio], [ai-client], [server]) follow in this file.
