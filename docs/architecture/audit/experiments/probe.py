@@ -1,10 +1,10 @@
 # Offline probes of the real pipeline with fake providers (no network).
 import json, sys
 from datetime import date
-import app.verification.pipeline as pipeline
-from app.models.claim import ClaimRequest
-from app.models.evidence import EvidenceItem
-from app.verification.citation_integrity import bind_evidence
+import orchestration.graph as pipeline
+from api.schemas.claim import ClaimRequest
+from api.schemas.evidence import EvidenceItem
+from agents.specialists.retrieval_agent.citation_integrity import bind_evidence
 
 def fda_item(id_, passage, canonical, eff, authority=0.92, source_type="regulatory"):
     it = EvidenceItem(id=id_, canonical_id=canonical, title="FDA drug label: metformin", source_type=source_type,
@@ -76,7 +76,7 @@ pipeline.OpenFDALabelProvider = Boom
 run("E9 provider exception", "Metformin reduces HbA1c.", [], sources=["openfda"], context={"medications": ["metformin"]})
 
 # E10: audit store failure -> exception?
-import app.audit.store as store
+import governance.audit.store as store
 def broken(result): raise RuntimeError("disk full")
 pipeline.store_verification = broken
 pipeline.OpenFDALabelProvider = FDA

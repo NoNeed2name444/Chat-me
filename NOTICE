@@ -1,0 +1,9 @@
+Medical Verifier — Third-Party Notices
+
+pypdf
+
+This project uses pypdf for PDF text extraction.
+
+pypdf is distributed under the BSD-3-Clause license. Preserve the upstream license and attribution requirements when distributing the dependency with commercial software.
+
+Upstream: https://github.com/py-pdf/pypdf

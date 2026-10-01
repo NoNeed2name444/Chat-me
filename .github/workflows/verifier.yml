@@ -1,0 +1,40 @@
+name: Medical Verifier CI
+
+on:
+  push:
+    paths: &verifier
+      - "api/**"
+      - "agents/**"
+      - "orchestration/**"
+      - "governance/**"
+      - "tools/**"
+      - "evals/**"
+      - "tests/**"
+      - "clients/ios/**"
+      - "pyproject.toml"
+      - ".github/workflows/verifier.yml"
+
+jobs:
+  python-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[dev]"
+      - run: python -m compileall api agents orchestration governance tools evals
+      - run: pytest -q
+
+  swift-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ios/MedicalVerifierCore
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: swift --version
+      - run: swift test

@@ -1,10 +1,10 @@
 import json
 from datetime import date
-import app.verification.pipeline as pipeline
-from app.models.claim import ClaimRequest
-from app.models.evidence import EvidenceItem
-from app.verification.citation_integrity import bind_evidence
-import app.verification.revalidation as reval
+import orchestration.graph as pipeline
+from api.schemas.claim import ClaimRequest
+from api.schemas.evidence import EvidenceItem
+from agents.specialists.retrieval_agent.citation_integrity import bind_evidence
+import agents.specialists.retrieval_agent.revalidation as reval
 def fda_item(id_, passage, canonical, eff):
     it = EvidenceItem(id=id_, canonical_id=canonical, title="FDA drug label", source_type="regulatory", publisher="U.S. FDA / openFDA",
         effective_date=eff, url="https://open.fda.gov/apis/drug/label/", source_locator="x", passage=passage, source_family="regulatory",

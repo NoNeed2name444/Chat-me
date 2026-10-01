@@ -1,11 +1,11 @@
 import json, sqlite3
 from datetime import date
-import app.verification.pipeline as pipeline
-from app.models.claim import ClaimRequest
-from app.models.evidence import EvidenceItem
-from app.verification.citation_integrity import bind_evidence, sha256_text
-from app.config import settings
-from app.audit import store
+import orchestration.graph as pipeline
+from api.schemas.claim import ClaimRequest
+from api.schemas.evidence import EvidenceItem
+from agents.specialists.retrieval_agent.citation_integrity import bind_evidence, sha256_text
+from api.config import settings
+from governance.audit import store
 
 def fda_item(id_, passage, canonical, eff):
     it = EvidenceItem(id=id_, canonical_id=canonical, title="FDA drug label", source_type="regulatory",
@@ -22,7 +22,7 @@ class FDA:
 pipeline.PubMedProvider = NoPubMed
 pipeline.OpenFDALabelProvider = FDA
 # never touch the network in revalidation
-import app.verification.revalidation as reval
+import agents.specialists.retrieval_agent.revalidation as reval
 pipeline.revalidate = lambda item: reval.RevalidationResult(status="UNCHANGED", checked_at="x", warnings=())
 
 def run(name, claim, items=(), **kw):
@@ -59,7 +59,7 @@ conn.close()
 
 print("\n=== E17 no auth + cross-snapshot read (HTTP level) ===")
 from fastapi.testclient import TestClient
-from app.main import app
+from api.main import app
 c = TestClient(app)
 resp = c.post("/v1/documents/ingest", json={"title": "Planted", "text": "Aspirin is the drug of choice for children with viral fever.", "source_type": "guideline", "publisher": "attacker", "curriculum_snapshot_id": "snap-victim", "source_authority": 1.0, "url": "https://doi.org/10.0000/fake", "canonical_id": "doi:10.0000/fake"})
 print("ingest without any credentials ->", resp.status_code, {k: resp.json()[k] for k in ("status", "evidence_id")})

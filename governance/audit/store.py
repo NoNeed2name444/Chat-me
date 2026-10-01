@@ -1,0 +1,304 @@
+import json
+import sqlite3
+from pathlib import Path
+from uuid import uuid4
+
+from api.config import settings
+from agents.specialists.retrieval_agent.citation_integrity import normalize_source_text
+
+_EVIDENCE_COLUMNS = {
+    "title": "TEXT",
+    "source_type": "TEXT",
+    "publisher": "TEXT",
+    "url": "TEXT",
+    "source_locator": "TEXT",
+    "source_snapshot_sha256": "TEXT",
+    "passage": "TEXT",
+    "source_family": "TEXT",
+    "canonical_id": "TEXT",
+    "passage_sha256": "TEXT",
+    "document_version": "TEXT",
+    "study_family_id": "TEXT",
+    "source_date": "TEXT",
+    "curriculum_snapshot_id": "TEXT",
+    "source_authority": "REAL DEFAULT 0.4",
+    "page_number": "INTEGER",
+    "section": "TEXT",
+    "block_type": "TEXT DEFAULT 'text'",
+    "block_index": "INTEGER",
+    "related_block_ids": "TEXT DEFAULT '[]'",
+    "language": "TEXT DEFAULT 'auto'",
+    "precedence_group": "TEXT",
+    "precedence_rank": "INTEGER DEFAULT 0",
+    "extraction_quality": "REAL DEFAULT 1.0",
+    "extraction_warnings": "TEXT DEFAULT '[]'",
+}
+
+def _connect():
+    path = Path(settings.database_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS verification_audit (
+            verification_id TEXT PRIMARY KEY,
+            verdict TEXT,
+            risk_level TEXT,
+            result_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS source_manifests (
+            manifest_id TEXT PRIMARY KEY,
+            manifest_version TEXT NOT NULL,
+            parent_manifest_sha256 TEXT,
+            manifest_sha256 TEXT NOT NULL,
+            manifest_json TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            question_id TEXT PRIMARY KEY,
+            question_json TEXT NOT NULL,
+            curriculum_snapshot_id TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS evidence (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            publisher TEXT NOT NULL,
+            url TEXT,
+            source_locator TEXT,
+            passage TEXT NOT NULL,
+            source_family TEXT,
+            canonical_id TEXT,
+            source_snapshot_sha256 TEXT,
+            passage_sha256 TEXT,
+            document_version TEXT,
+            study_family_id TEXT,
+            source_date TEXT,
+            curriculum_snapshot_id TEXT,
+            source_authority REAL DEFAULT 0.4,
+            page_number INTEGER,
+            section TEXT,
+            block_type TEXT DEFAULT "text",
+            block_index INTEGER,
+            related_block_ids TEXT DEFAULT "[]",
+            language TEXT DEFAULT "auto",
+            precedence_group TEXT,
+            precedence_rank INTEGER DEFAULT 0,
+            extraction_quality REAL DEFAULT 1.0,
+            extraction_warnings TEXT DEFAULT "[]",
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    existing = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(evidence)").fetchall()
+    }
+
+    for column, sql_type in _EVIDENCE_COLUMNS.items():
+        if column not in existing:
+            conn.execute(
+                f"ALTER TABLE evidence ADD COLUMN {column} {sql_type}"
+            )
+
+    conn.commit()
+    return conn
+
+def _sha256(text: str) -> str:
+    import hashlib
+    return hashlib.sha256(
+        normalize_source_text(text).encode("utf-8")
+    ).hexdigest()
+
+def store_evidence(
+    *,
+    title,
+    passage,
+    source_type,
+    publisher,
+    url=None,
+    canonical_id=None,
+    document_version=None,
+    study_family_id=None,
+    source_date=None,
+    curriculum_snapshot_id=None,
+    source_authority=0.40,
+    source_locator=None,
+    source_snapshot_sha256=None,
+    extraction_quality=1.0,
+    extraction_warnings=None,
+    page_number=None,
+    section=None,
+    block_type="text",
+    block_index=None,
+    related_block_ids=None,
+    language="auto",
+    precedence_group=None,
+    precedence_rank=0,
+    evidence_id=None,
+):
+    evidence_id = evidence_id or f"local:{uuid4()}"
+    passage_hash = _sha256(passage)
+    snapshot_hash = source_snapshot_sha256 or passage_hash
+    extraction_warnings = extraction_warnings or []
+    related_block_ids = related_block_ids or []
+
+    conn = _connect()
+
+    try:
+        conn.execute(
+            "INSERT INTO evidence "
+            "(id,title,source_type,publisher,url,source_locator,passage,source_family,"
+            "canonical_id,source_snapshot_sha256,passage_sha256,"
+            "document_version,study_family_id,source_date,"
+            "curriculum_snapshot_id,source_authority,page_number,section,block_type,"
+            "block_index,related_block_ids,language,precedence_group,precedence_rank,extraction_quality,"
+            "extraction_warnings) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                evidence_id,
+                title,
+                source_type,
+                publisher,
+                url,
+                source_locator,
+                passage,
+                source_type,
+                canonical_id,
+                snapshot_hash,
+                passage_hash,
+                document_version,
+                study_family_id,
+                source_date,
+                curriculum_snapshot_id,
+                source_authority,
+                page_number,
+                section,
+                block_type,
+                block_index,
+                json.dumps(related_block_ids),
+                language,
+                precedence_group,
+                precedence_rank,
+                extraction_quality,
+                json.dumps(extraction_warnings),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return evidence_id
+
+def store_verification(result):
+    conn = _connect()
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO verification_audit "
+            "(verification_id,verdict,risk_level,result_json) VALUES (?,?,?,?)",
+            (
+                result.verification_id,
+                result.verdict,
+                result.risk_level,
+                json.dumps(result.model_dump(mode="json")),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def store_question(question):
+    conn = _connect()
+
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO questions "
+            "(question_id,question_json,curriculum_snapshot_id) VALUES (?,?,?)",
+            (
+                question.question_id,
+                json.dumps(question.model_dump(mode="json")),
+                question.curriculum_snapshot_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def fetch_question(question_id):
+    conn = _connect()
+
+    try:
+        row = conn.execute(
+            "SELECT question_json FROM questions WHERE question_id = ?",
+            (question_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return None
+
+    return json.loads(row[0])
+
+
+def store_manifest(manifest):
+    from governance.audit.source_manifest import verify_manifest
+
+    if not verify_manifest(manifest):
+        raise ValueError("manifest_integrity_failed")
+
+    conn = _connect()
+
+    try:
+        if manifest.parent_manifest_sha256:
+            parent = conn.execute(
+                "SELECT 1 FROM source_manifests "
+                "WHERE manifest_sha256 = ?",
+                (manifest.parent_manifest_sha256,),
+            ).fetchone()
+
+            if parent is None:
+                raise ValueError(
+                    "manifest_parent_not_found"
+                )
+
+        conn.execute(
+            "INSERT OR REPLACE INTO source_manifests "
+            "(manifest_id,manifest_version,parent_manifest_sha256,"
+            "manifest_sha256,manifest_json) VALUES (?,?,?,?,?)",
+            (
+                manifest.manifest_id,
+                manifest.manifest_version,
+                manifest.parent_manifest_sha256,
+                manifest.manifest_sha256,
+                json.dumps(
+                    {
+                        "manifest_id": manifest.manifest_id,
+                        "manifest_version": manifest.manifest_version,
+                        "parent_manifest_sha256": manifest.parent_manifest_sha256,
+                        "entries": [
+                            entry.canonical()
+                            for entry in manifest.entries
+                        ],
+                        "manifest_sha256": manifest.manifest_sha256,
+                    },
+                    sort_keys=True,
+                ),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
