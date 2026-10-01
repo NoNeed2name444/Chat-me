@@ -74,6 +74,109 @@ Verified against personal db7fbf3. Contrast ratios computed with the WCAG formul
 
 P1s in this batch: 108, 109, 116, 122 (and 120 once the Pro gate is live). No P0.
 
-## Still to verify
+## Batch 2: [library-ui], [study-a], [study-b], 41 findings (40 confirmed, 1 refuted)
 
-Batches 2 ([library-ui], [study-a], [study-b]) and 3 ([audio], [ai-client], [server]) follow in this file.
+Verified against personal db7fbf3.
+
+| # | tag | finding (short) | verdict | evidence | sev | fix sketch |
+|---|---|---|---|---|---|---|
+| 29 | library-ui | A lecture-generated quiz opens full screen with no way out | CONFIRMED | `Features/Library/NewSetView.swift:211-215`; `Features/MCQ/MCQQuizView.swift:186-199`; `MCQSummaryView.swift:194,221` | P1 | A Close button in the quiz toolbar while unsaved |
+| 30 | library-ui | Delete account fails for this-device-only users with "Please sign in again" | CONFIRMED | `Persistence/AccountStore.swift:225-237`; `Models/Account.swift:50`; `server/worker.js:384-406`; `Shared/AuthAPI.swift:39,156` | P1 | Local-only: sign out and return success |
+| 31 | library-ui | Contact us and Report a problem never delivered for local-only accounts; the message blames sign-in | CONFIRMED | `Shared/SupportSender.swift:53-65`; `Shared/LLM/LocalLLMService.swift:115-117` | P1 | Send without a bearer, or mint a device account first |
+| 32 | library-ui | A search with question hits but no set names shows "No question sets yet" | CONFIRMED | `Features/Library/LibraryView.swift:581-591` | P2 | Not while searching |
+| 33 | library-ui | "Add an audio file" adds an empty New lecture set per tap, even when cancelled | CONFIRMED | `LibraryCategory.swift:215-218`; `NarrateReviewView.swift:144-153,197-199` | P1 | Add the set only when the import produces it |
+| 34 | library-ui | Personal build shows a Pro badge, "No subscription yet" and "Manage or cancel" | CONFIRMED | `SubscriptionStore.swift:30`; `AccountView.swift:173-179,267,293` | P2 | "Personal build, everything unlocked"; hide Manage |
+| 35 | library-ui | "Progress" opens "Analytics"; "By subject" opens "Progress" | CONFIRMED | `SupportCenter.swift:54-55,83-84`; `AnalyticsView.swift:87`; `StatsView.swift:102` | P2 | Match the titles |
+| 36 | library-ui | AI models page says Gemini 3.1 Pro | REFUTED | The page says Gemini 3.5 Flash with Gemma and Cloudflare fallback (`ModelSettingsView.swift:146-152`) | - | Nit: name Flash-Lite too |
+| 37 | library-ui | Reminders stay on after permission is refused | CONFIRMED | `StudyReminderSettings.swift:51-59`; `LearnNotifications.swift:36-42` | P2 | Turn the toggle off when refused |
+| 38 | library-ui | A link-device error lingers and reappears behind the sheet | CONFIRMED | `LinkDeviceView.swift:108-110,180`; `AccountView.swift:57-61,216-219` | P2 | Clear it on disappear |
+| 39 | library-ui | Paywall spins forever with no products | CONFIRMED | same as 122 | P2 | Fixed in c07beb6 |
+| 40 | library-ui | "20 from every set" builds 20 in total | CONFIRMED | `StudyCategory.swift:281` vs `:411-413` | P2 | "20 across all your sets" |
+| 41 | library-ui | One-up: undoable delete | CONFIRMED as described | `Persistence/Store.swift:421-434`; `LibraryView.swift:744-756` | P2 | A recently-deleted list, purged after 30 days |
+| 42 | study-a | Free on-device MCQ writing sends 45,000 characters into 4,096-token models | CONFIRMED | `Shared/MCQPrompt.swift:17`; `MCQGenerator.swift:134,172-174`; `GemmaGenerate.swift:35,54` | P1 | Cap at about 10,000 characters or window per batch |
+| 43 | study-a | Practise-mistakes copies keep the ids; an accepted key fix reaches one copy | CONFIRMED | `MCQSummaryView.swift:103-116`; `AccuracyBadge.swift:262-271` | P1 | Apply the fix to every set it fits |
+| 44 | study-a | A re-test counts as an extra question and erases the miss from the queues | CONFIRMED | `MCQQuizView.swift:148-155,846-859,1060`; `StudyCategory.swift:440-442`; `StoreInsight.swift:92,167`; `StoreStudy.swift:100-104` | P1 | Do not record re-test answers; leave them out of the score |
+| 45 | study-a | Progress stops saving once a re-test is inserted | CONFIRMED | `MCQQuizView.swift:307,314-319` | P1 | Save against the set's own questions |
+| 46 | study-a | A mock paper sitting lives only in view state, lost if iOS ends the app | CONFIRMED | `Features/Mock/MockSittingView.swift:12-32,498`; `MockPaperView.swift:50` | P0 (up to three hours of answers) | Persist the sitting on each answer; offer Resume |
+| 47 | study-a | Mock ignores negative marking; exam-day advice wrong for NEET-PG | CONFIRMED | `Shared/Exam/MockPaper.swift:217-221`; `ExamCatalog.swift:165,487,503`; `ExamDayKitView.swift:41-42` | P1 | A wrong-answer penalty in the catalog, scored and worded |
+| 48 | study-a | Guess-first shows the answer when the term appears twice in the stem | CONFIRMED | `Shared/Learn/Pretest.swift:224-235` | P1 | Blank every whole-word hit |
+| 49 | study-a | Timed exam mode is forced-linear; an answer locks on Next | CONFIRMED | `MCQQuizView.swift:991,1020,1035-1043,629` | P2 | Let answers change until finish in exam mode |
+| 50 | study-a | The attending hint is cached per id for ever | CONFIRMED | `ExamStore.swift:243`; `AttendingHint.swift:116-131`; `AccuracySchedule.swift:109-120` | P2 | Key by id and a hash of stem and answer |
+| 51 | study-a | Cases asks "Did you get it right?" with no way to answer | CONFIRMED | `Features/QA/QACardsView.swift:75,135-160` | P2 | Reword, or add Got it and Missed it |
+| 52 | study-a | The AI coverage check is saved per track, not per exam | CONFIRMED | `CoverageView.swift:29-35,105`; `CoverageChecker.swift:38,112`; `CoverageCloudCheck.swift:232-243` | P2 | Key the file by exam too |
+| 53 | study-a | A quiz from a search hit shares the set id; Timed, Finish or Try again wipe its resume point | CONFIRMED | `Shared/LibrarySearch.swift:418-425`; `LibraryView.swift:382`; `MCQQuizView.swift:299,337,445,1078` | P1 | Guard each clear with keepsProgress |
+| 54 | study-a | A twin due "tomorrow" is due exactly 24 hours later | CONFIRMED | `Shared/Exam/TwinQueue.swift:44-46`; `MCQQuizView.swift:886` | P2 | Start of the next calendar day |
+| 55 | study-b | Imported Anki cards get their last rating set to the import time | CONFIRMED | `LibraryImport.swift:320-333`; `ReviewOptions.swift:329`; `FSRS.swift:142-143` | P1 | Rated at due minus interval |
+| 56 | study-b | Classic (default) keeps cards in sub-day learning for days, outside the daily limit | CONFIRMED | `ReviewOptions.swift:49,89,115-129`; `AnkiScheduler.swift:18-23,49` | P1 | Graduate Good to at least a day after the 10-minute step |
+| 57 | study-b | Talk to the patient never uses Apple's free model although the screen says so | CONFIRMED | `Features/Cases/CaseChatView.swift:60,70`; `LocalLLMService.swift:200-202` | P1 | `writerOrApple()` |
+| 58 | study-b | Default OSCE generation sends 12,000 characters to the 4,096-token model, then says nothing reads like a station | CONFIRMED | `Shared/OsceGenerator.swift:21,64,99-104` | P1 | Cap at about 8,000; a context-size message |
+| 59 | study-b | Cloze answers containing a colon are not blanked | CONFIRMED | `Features/Anki/AnkiCardFace.swift:150,176` | P1 | Allow single colons in the capture |
+| 60 | study-b | Buttons read "back in in 10 min" | CONFIRMED | `AnkiCardFace.swift:381`; `ReviewPlan.swift:154` | P2 | Drop the extra "in" |
+| 61 | study-b | The case debrief credits things never said | CONFIRMED | `Shared/CaseSimulator.swift:300-307,348-350` | P1 | Reset before applying the grade |
+| 62 | study-b | A scroll swipe over the picture draws a thin cover | CONFIRMED | `OcclusionCoverEditor.swift:135,186-189`; `PictureFromPhotoView.swift:63,287`; `PhotoOcclusion.swift:109` | P1 | Both sides at least the minimum; a minimum drag distance |
+| 63 | study-b | Multi-cloze Anki notes become one card with every blank hidden | CONFIRMED | `Shared/ApkgImport.swift:668-697`; `AnkiCardFace.swift:174-177` | P1 | One card per cloze number |
+| 64 | study-b | OSCE tidy drops the closing "Wash hands" | CONFIRMED | `Shared/OsceStations.swift:35-40` | P2 | Drop only consecutive repeats |
+| 65 | study-b | Reopening after finishing a non-last station lands on its last step | CONFIRMED | `OsceReviewView.swift:91-95,392-416`; `Models/OsceChecklist.swift:30-34` | P2 | Save the next station's first step |
+| 66 | study-b | The clue-case hint is cached per case, not per clues shown | CONFIRMED | `Features/Reasoning/ClueCaseView.swift:173-179`; `ExamStore.swift:243` | P2 | Key by case and clues shown |
+| 67 | study-b | The occlusion face decodes base64 on every body pass | CONFIRMED | `AnkiCardFace.swift:76-79` | P2 | Decode once per card |
+| 68 | study-b | Cancelling Reasoning writing and restarting leaves the new job untrackable | CONFIRMED | `Shared/Reasoning/ReasoningStore.swift:155-197` | P1 | Guard the old task's tail by job id |
+| 69 | study-b | Improvement: leech flagging and an on-device rewrite | CONFIRMED gap | `ApkgExporter.swift:195`; `ReviewPlan.swift:10` | P2 | Leeches from lapses, a tile, a rewrite |
+
+## Batch 3: [audio], [ai-client], [server], 36 findings (36 confirmed, 2 with corrections)
+
+Verified against personal db7fbf3. No secret was printed.
+
+| # | tag | finding (short) | verdict | evidence | sev | fix sketch |
+|---|---|---|---|---|---|---|
+| 70 | audio | Leaving Narrate mid-transcription loses the transcript and deletes the cloud chunks | CONFIRMED | `Features/Narrate/NarrateReviewView.swift:52,147,160`; `Shared/CloudTranscriber.swift:72` | P1 | The importer saves into the store itself |
+| 71 | audio | Commute rates Again when nothing was recognised | CONFIRMED | `Shared/Voice/VoiceListener.swift:108-120,156`; `CommuteSession.swift:166,192-200` | P1 | Silence is not rated |
+| 72 | audio | The Playgrounds build has no audio background mode | CONFIRMED | `tools/make_swiftpm.py:108,218-222`; `ios/project.yml:104-107` | P1 | An extra plist with the audio mode in the package |
+| 73 | audio | A crafted .docx, .pptx or .apkg crashes the app (Zip64 integer overflow) | CONFIRMED | `Shared/Zip.swift:205,209,248`; used by `OfficeIngest.swift`, `ApkgImport.swift`, `LibraryBackup.swift` | P0 | Bound the Zip64 values by the archive size; overflow-safe offsets |
+| 74 | audio | Lupus-only terms sent as "terms from this lecture's slides" | CONFIRMED | `Shared/LectureTranscriber.swift:160-167`; `LectureImporter.swift:59-65`; `CloudTranscript.swift:52` | P2 | Drop the fixed list from the slide vocabulary |
+| 75 | audio | Transcription language fixed to Egyptian Arabic | CONFIRMED | `CloudTranscript.swift:42-44`; `LectureImporter.swift:35` | P1 | A per-set language |
+| 76 | audio | Interruptions unhandled: commute hangs, the player shows playing | CONFIRMED | only `NarrateVoice.swift:103-109` observes; `LecturePlayer.swift:82-142`; `VoiceSpeaker.swift:118-122` | P1 | Observe interruptions in the player, commute and speaker |
+| 77 | audio | Headphone unplug and AirPods loss unhandled | CONFIRMED | no route-change observer anywhere | P2 | Pause on old device unavailable |
+| 78 | audio | Opening a Narrate set stops music, which never resumes | CONFIRMED | `NarrateReviewView.swift:207`; `LecturePlayer.swift:65,127`; `NowPlaying.swift:17-18,57-64` | P1 | Activate on play; deactivate with notify-others |
+| 79 | audio | The voice session prefers Bluetooth HFP | CONFIRMED | `VoiceAccess.swift:94-97`; `CommuteSession.swift:124` | P2 | A2DP out, phone mic in |
+| 80 | audio | Replacing a recording deletes the old one before the copy | CONFIRMED | `Shared/LectureAudio.swift:71-72` | P0 | Copy beside it first, then swap |
+| 81 | audio | Recordings sit in Documents, inside the iCloud backup | CONFIRMED | `LectureAudio.swift:16-17` vs `SourceFiles.swift:28`, `BlobCache.swift:33` | P2 | Exclude the folder from backup |
+| 82 | audio | "N cards from this page" ignores which lecture | CONFIRMED | `Features/Sources/SourcePageReader.swift:66-72`; `SourceSearch.swift:106-131` | P2 | Resolve the citation to its source |
+| 83 | audio | Improvement: read PowerPoint speaker notes | CONFIRMED (not done) | `Shared/PptxText.swift:13` | P2 | Read the notes slides |
+| 84 | audio | Improvement: SpeechAnalyzer on iOS 26 | CONFIRMED (not done) | `LectureTranscriber.swift:119-127` | P2 | An iOS 26 path |
+| 85 | ai-client | Free on-device MCQ and OSCE send 45,000 characters into a 4,096-token context | CONFIRMED | same as 42 and 58 | P1 | Cap and window |
+| 86 | ai-client | `isPro` hard-coded true in every build | CONFIRMED | `Shared/SubscriptionStore.swift:30` | P1 | True only in the personal build |
+| 87 | ai-client | Busy voters burn the day's allowance and the global ceiling | CONFIRMED | `server/accuracy.js:286,296-316`; `server/ai.js:1086-1094` | P1 | Charge after the vote, only when ballots came back |
+| 88 | ai-client | Local and hosted writing lose everything on one failed batch | CONFIRMED | `Shared/LLM/LectureWriter.swift:71,188` | P1 | Count the failure and continue |
+| 89 | ai-client | Anki, Cases and Textbook checks read the first part and say "Checked" | CONFIRMED | `LectureWriterSection.swift:462-468`; `AccuracyChecker.swift:24` | P2 | Check per slice, or say how much was checked |
+| 90 | ai-client | MCQ generation reads only the first 40,000 to 45,000 characters | CONFIRMED | `MCQGenerator.swift:134`; `MedicalGenerate.swift:18,32,60-61` | P1 | Rotate windows per batch |
+| 91 | ai-client | Generation-time verdicts thrown away; items checked again | CONFIRMED | `AccuracyChecker.swift:125-131`; `AccuracyStore.swift:215-229`; `AccuracySchedule.swift:45` | P2 | Record the verdicts |
+| 92 | ai-client | Study Lens marks the wrong option | CONFIRMED | `Shared/LLM/LLMParsing.swift:453-459`; `Shared/Lens/LensAnswer.swift:195,204` | P1 | Letters first; numbers one-based; the longest contained option |
+| 93 | ai-client | A failed result fetch is collected only after a relaunch | CONFIRMED | `Shared/LLM/CloudJobs.swift:221,240,269`; `CloudJobCollector.swift:96` | P1 | Retry; clear the launch on giving up |
+| 94 | ai-client | A new generation cancels the running one and deletes its cloud job | CONFIRMED | `Shared/GenerationCenter.swift:32,67-73`; `CloudJobs.swift:269-273` | P1 | Refuse while one runs, or keep the cloud job |
+| 95 | ai-client | Verified after one free vote with no source | CONFIRMED | `Shared/Accuracy/AccuracyModel.swift:116-137,160-196,260` | P1 | At least two of three voters for Verified |
+| 96 | ai-client | A unit-less normal range is compared only with the US unit | CONFIRMED | `Shared/Accuracy/AccuracyRules.swift:61-67,332-363` | P1 | Any unit's reference passes when none is given |
+| 97 | server | One vote is Verified, cached for everyone for a year | CONFIRMED | `server/accuracy.js:296-330`; `accuracy-model.js:28,52,60,86` | P1 | Write a verdict only with two votes |
+| 98 | server | No guard on D1's 100,000 rows written a day | CONFIRMED (the guard is absent; the magnitude of a few first syncs is not verifiable) | `server/sync.js:90,213-241` | P0 | A daily rows-written counter before each batch, headroom kept for sign-in |
+| 99 | server | Free device accounts can fill D1 through report, support and diagnostics | CONFIRMED with correction: per-row and per-account caps exist; no global cap; two tables never pruned | `server/accuracy.js:345-346`; `support.js:14-29`; `diagnostics.js:39-46,375-381`; `pair.js:14` | P0 | Global daily ceilings; nightly pruning |
+| 100 | server | A lapsed Apple check is never cached; a fake id costs two Apple calls and a write per request | CONFIRMED | `server/ai.js:1103-1108,1181,1194-1196,1222-1228` | P1 | Honour the recheck interval before asking Apple |
+| 101 | server | Counter and cache tables are never pruned | CONFIRMED | `worker.js:215-219`; `schema.sql:111-178` | P2 | Nightly deletes by age |
+| 102 | server | Blob upload reads a chunked body with no limit | CONFIRMED | `server/sync.js:320-323`; `worker.js:95-131` | P2 | Require a length, or a bounded reader |
+| 103 | server | The Apple sign-in nonce gives no replay protection | CONFIRMED | `worker.js:263-265`; `tokens.js:185-188` | P2 | Server-issued, single-use nonces |
+| 104 | server | Evidence relies on the edge cache, possibly a no-op on workers.dev; openFDA without a key | CONFIRMED (code); the no-op claim UNKNOWN | `server/evidence.js:61-74,117` | P2 | A key and a D1 or KV cache |
+| 105 | server | A deleted account's Apple or Google subject stays in released_tokens | CONFIRMED | `worker.js:452-455` | P2 | Prune by age, or store a hash |
+
+## The P0 list, all batches
+
+| # | finding | state |
+|---|---|---|
+| 2 | Unreadable library taken for an empty one | Fixed in db7fbf3; a regression in it fixed in 0f9925f |
+| 16 | Failed write taken for a save | Fixed in db7fbf3 and 0f9925f |
+| 73 | Zip64 overflow crash on a crafted file | Next |
+| 80 | Replacing a recording deletes the old one first | Next |
+| 46 | Mock paper sitting lost if iOS ends the app | Next |
+| 98 | No guard on D1's daily write ceiling | Server; needs a deploy, which the owner approves |
+| 99 | No global cap or pruning on report and support tables | Server; needs a deploy, which the owner approves |
+
+## Coverage
+
+All 127 findings are verified: 123 confirmed (some in part), 2 refuted (#20, #36), 2 unknown (#9 needs a device, #104's edge-cache claim needs a live test).
