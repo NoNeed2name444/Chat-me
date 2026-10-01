@@ -9,6 +9,8 @@ Session: https://claude.ai/code/session_014rUkUW7dRK6Mox54Ygz44U.
 - Branches: personal plus the session branch (this one: claude/new-session-eskvv8, all four repos); preview/graph for UI tests; ci/launch for the launch matrix; main only at the end, minus the owner-only bits behind PersonalBuild.isOn. Never force-push. No PRs unless asked.
 - Deliverable: the Swift Playgrounds zip from tools/make_swiftpm.py ("Stethoscore Personal", com.cramdown.personal). Groin_Hernia.pdf and owner-claim.txt go only in the zip, never committed; not received this session.
 - Never propose: Modal, Whisper fallback, GEMINI_API_KEY in the app, Gemini 3.6 Flash, challenge-a-friend, ranks or leaderboards, a personal self-learning model.
+- From the owner's own brief (Claude-Code claude/swiftui-project-setup-m0r481 CLAUDE.md): you cannot see the app running, so after each build tell the owner exactly what to check on screen; explain problems in plain terms; keep token use per message low and script repeated procedures.
+- Open question (1 Oct): that brief says an Apple Developer account, cloud macOS builds and TestFlight are set up; Stethoscore's records say not. If true, the full app can go to TestFlight from CI (ipa.yml) and the Playgrounds size limit stops mattering.
 
 ## Versions
 - Stethoscore (formerly Red Pen, CramDown): SwiftUI and SceneKit, iOS 26; red-pen-ios personal 9892ecf; 104,000 lines of Swift in the package. Backend: Cloudflare Worker in server/ with D1 redpen-auth, live at 3f11f51 since 12:08 AM Cairo, 1 Oct.
