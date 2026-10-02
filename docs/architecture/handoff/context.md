@@ -85,8 +85,16 @@ Session: https://claude.ai/code/session_013TeS5vv11UfjdBc6bVKhj3 (session branch
 - Parallel agents (design branches, compile checks only, no screenshots): quiz as patient chart and home/vitals on design/ward-round; 100k-node performance theme on design/graph-perf; space/neurons/circuit looks on design/graph-themes.
 - Cards expand the answer instead of flipping (e4d39de).
 
+## 2 Oct (owner: deploy; 99.9%, then 99.999%; rebuild Cases; 3D boards re-sent)
+- Deployed twice (157760a, then 4373cd8). First live real-model bench (run 36915283305, 180 checks): only Google's models answered; Workers AI refused every call (429, its free pool, ~30 checks a day, was spent). Old rules committed 20 verdicts, 10 wrong (right keys flagged on one family's say).
+- The bar is now three families (1dda823): Verified only if three families solving blind all reach the key, none dissents, no concern, no sensor firing, evidence for oath items; Flagged only if three families agree on another answer with none on the key, or a severe sensor the models also judge wrong; else Check this. Three asked at once; a check short of families retried after a day. App grades the same way.
+- 4373cd8: Groq and Cerebras free tiers as checker families (keys GROQ_API_KEY, CEREBRAS_API_KEY, no card; the deploy sets them). Without them only Google answers reliably, so almost nothing can be Verified.
+- 99.999% cannot be proven by a test: it takes about 300,000 committed verdicts with no error, and published question banks have more key errors than that. tools/verification-bench/policy.mjs replays bench results under other rules with lower bounds.
+- Cases: parts of the old code belong to another person (copyright). Removal on design/cases-out (agent); the rebuild is clean-room, from red-pen-ios docs/design/cases-rebuild.md only. The old code stays in the public repository's git history (purging needs a force-push: owner's decision).
+- Ward Round home, vitals and quiz screens: design/ward-round App build green (36917283585).
+
 ## Blockers and pending
-- Pending from the owner: the AI_API_KEY repository secret (the question-bank pilot and the benches stop without it); the word to deploy the Worker; write access for this session to NoNeed2name444/claude-code (needed for the four-repository clean-up; the request was refused by the permission system); Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).
+- Pending from the owner: GROQ_API_KEY and CEREBRAS_API_KEY repository secrets (free); which Cases features were the other person's; write access for this session to NoNeed2name444/claude-code (needed for the four-repository clean-up; the request was refused by the permission system); Groin_Hernia.pdf and owner-claim.txt (ask when the final zip is near); the launch splash colour (midnight kept for now).
 - The 127 unverified app audit findings (docs/architecture/audit/stethoscore-unverified-findings.md): not yet verified; next local work. Verify against the code before fixing; mark each verified/false/fixed in that file.
 
 ## Outdated plan rules
