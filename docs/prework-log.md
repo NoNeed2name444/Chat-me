@@ -1,0 +1,1 @@
+INT-CONTAINER | gpt-6.1-sol | high | fixed; request check blocked | Dockerfile; docs/architecture/verifier/README.md | Static diff, Uvicorn import, callable FastAPI, registered health route and direct health handler passed; TestClient/ASGI requests timed out in restricted AnyIO thread handoff; evidence: docs/prework-container-check.json.

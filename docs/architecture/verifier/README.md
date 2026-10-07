@@ -23,7 +23,7 @@ cd medical-verifier
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uvicorn api.main:app --reload
 ```
 
 Open http://127.0.0.1:8000/docs
