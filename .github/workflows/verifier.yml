@@ -29,7 +29,8 @@ jobs:
       - run: pytest -q
 
   swift-test:
-    runs-on: ubuntu-latest
+    # MedicalVerifierCore imports CryptoKit (SHA256), which Linux Swift lacks
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: clients/ios/MedicalVerifierCore
