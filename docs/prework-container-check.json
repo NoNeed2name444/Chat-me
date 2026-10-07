@@ -1,14 +1,14 @@
 {
   "task": "INT-CONTAINER",
-  "checked_at_utc": "2026-10-07T00:44:20.147376+00:00",
+  "checked_at_utc": "2026-10-07T00:46:00.640388+00:00",
   "base_commit": "4aa7e0641f84acf296c0df18335c6f1ff1006f10",
   "branch": "prework/container-20261007",
-  "status": "mechanical_passed_runtime_request_blocked",
+  "status": "passed",
   "scope": [
     "Dockerfile",
     "docs/architecture/verifier/README.md"
   ],
-  "source_gate": "Root completed full-source review before authorization; this change covers mechanical entrypoint behavior only.",
+  "source_gate": "Full-source review completed by root before authorization; this check covers mechanical entrypoint and health behavior.",
   "static": {
     "docker_cmd": [
       "uvicorn",
@@ -25,37 +25,25 @@
     "diff_check": "passed"
   },
   "runtime": {
+    "method": "uvicorn.importer.import_from_string + FastAPI/Starlette TestClient",
     "module_target": "api.main:app",
-    "uvicorn_import": "passed",
     "app_type": "FastAPI",
     "callable": true,
-    "health_route_registered": true,
     "database_path": "/tmp/chatme-prework-health.sqlite3",
-    "direct_existing_health_handler": {
-      "status": "passed",
-      "json": {
-        "status": "ok",
-        "version": "1.6.0",
-        "knowledge_snapshot": "LIVE-API"
-      }
-    },
-    "asgi_health_request": {
-      "status": "blocked",
-      "result": null,
-      "reason": "Installed AnyIO runtime stalls in cross-thread event-loop handoff under restricted shell; bounded FastAPI/Starlette TestClient and httpx.ASGITransport attempts timed out before a response.",
-      "attempts": [
-        {
-          "method": "FastAPI/Starlette TestClient",
-          "timeout_seconds": 20,
-          "exit_code": 124
-        },
-        {
-          "method": "httpx.AsyncClient with ASGITransport",
-          "timeout_seconds": 15,
-          "exit_code": 124
+    "database_created": false,
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "status_code": 200,
+        "json": {
+          "status": "ok",
+          "version": "1.6.0",
+          "knowledge_snapshot": "LIVE-API"
         }
-      ]
-    }
+      }
+    ],
+    "external_socket_connection_attempts": 0
   },
   "dependencies": {
     "fastapi": "0.141.1",
@@ -64,8 +52,7 @@
     "pydantic": "2.13.4",
     "pydantic-settings": "2.15.0",
     "httpx": "0.28.1",
-    "pypdf": "6.10.0",
-    "anyio": "4.14.2"
+    "pypdf": "6.10.0"
   },
   "template_review": {
     "path": ".env.example",
@@ -75,10 +62,9 @@
     "api_key_fields_blank": true
   },
   "limits": [
-    "No successful ASGI health response has yet been observed.",
     "No Docker image build or live listener was exercised.",
     "No verification, question, drug, ingestion or benchmark route was invoked.",
     "No provider, model, orchestrator function, deployment or workflow was invoked.",
-    "These checks establish entrypoint mechanics only."
+    "Health result establishes entrypoint mechanics only."
   ]
 }
