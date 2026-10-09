@@ -150,9 +150,10 @@ def validate_question(prompt: str, answer: str, source_items):
         }
         if prompt_intents & answer_relations:
             prompt_overlap = True
-        if "dose" in prompt_intents and any(
-            re.search(r"\b(?:mg|g|mcg|ug|ml|l|kg)\b", token)
-            for token in answer_terms
+        # an amount with its unit ("500 mg"), read from the answer itself:
+        # answer_terms keep only words of four letters or more, so never "mg"
+        if "dose" in prompt_intents and re.search(
+            r"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug|ml|l|kg)\b", answer, re.I
         ):
             prompt_overlap = True
 

@@ -346,17 +346,25 @@ private enum SemanticGuard {
         let normalizedSource = normalizeDoubleNegation(
             normalizeMultilingualTerms(source)
         )
-        var warnings: [String] =
-            atomicReasoningWarnings(
-                claim: normalizedClaim,
-                source: normalizedSource
-            )
-
         let dailyClaim = dailyDoseEquivalent(in: normalizedClaim)
         let dailySource = dailyDoseEquivalent(in: normalizedSource)
         let dailyEquivalent = dailyClaim != nil &&
             dailySource != nil &&
             abs(dailyClaim! - dailySource!) < 1e-9
+
+        let rewordedDoseReasons: Set<String> = [
+            "atomic_claim_not_entailed",
+            "atomic_object_mismatch",
+            "atomic_relation_mismatch"
+        ]
+        var warnings: [String] =
+            atomicReasoningWarnings(
+                claim: normalizedClaim,
+                source: normalizedSource
+            )
+            .filter {
+                !(dailyEquivalent && rewordedDoseReasons.contains($0))
+            }
 
         let claimNumbers = numbers(in: normalizedClaim)
         let sourceNumbers = numbers(in: normalizedSource)
@@ -662,9 +670,15 @@ private enum SemanticGuard {
                 "prevent", "prevents"
             ]
         case "risk_increase":
-            phrases = ["increase", "increases", "raises", "elevates", "higher"]
+            phrases = [
+                "increase", "increases", "increased",
+                "raises", "elevates", "higher"
+            ]
         case "risk_decrease":
-            phrases = ["reduce", "reduces", "lowers", "decrease", "decreases"]
+            phrases = [
+                "reduce", "reduces", "reduced",
+                "lowers", "decrease", "decreases"
+            ]
         case "association":
             phrases = [
                 "associated with",
@@ -1765,7 +1779,7 @@ public struct CurriculumVerifier: Sendable {
 
             if lower.contains("dose") || lower.contains("dosage") {
                 return answerLower.range(
-                    of: #"\bd+(?:.d+)?s*(?:mg|g|mcg|ug|ml|l|kg)\b"#,
+                    of: #"\b\d+(?:\.\d+)?\s*(?:mg|g|mcg|ug|ml|l|kg)\b"#,
                     options: .regularExpression
                 ) != nil
             }

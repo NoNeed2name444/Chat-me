@@ -26,6 +26,16 @@ def test_daily_dose_equivalence_is_supported():
     )
     assert result.label == "SUPPORTS"
 
+def test_dose_question_is_answered_by_an_equivalent_daily_dose():
+    # the Swift twin holds the same case (testDailyDoseEquivalenceIsSupported)
+    result = validate_question(
+        "How should the dose be taken?",
+        "Take 500 mg twice daily.",
+        [make_item("Take 1000 mg daily.")],
+    )
+    assert result.status == "VALIDATED"
+    assert result.requires_review is False
+
 def test_dose_frequency_mismatch_is_unknown():
     result = verify(
         "Take 500 mg twice daily.",
