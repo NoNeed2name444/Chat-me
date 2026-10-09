@@ -99,11 +99,19 @@ def directions(text, *, cut_offs=True):
     return tuple(signs)
 
 
+# Three-letter words that name no side of a comparison. Other three-letter
+# words do: "than in men", "higher LDL", "with HIV".
+FILLER = frozenset(
+    "the and for are was has had its can may all any per via who his her our"
+    " yet nor not but".split()
+)
+
+
 def _words(text):
     return {
         token
         for token in re.findall(r"[a-z0-9'-]+", text.lower())
-        if len(token) >= 4
+        if len(token) >= 4 or (len(token) == 3 and token not in FILLER)
     }
 
 

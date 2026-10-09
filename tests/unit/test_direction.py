@@ -84,6 +84,22 @@ def test_swapped_comparison_reads_the_same_way():
     ) == (False, "atomic_direction_mismatch")
 
 
+def test_three_letter_side_is_read():
+    assert direction_entailed(
+        "Gout is less common in women than in men.",
+        "Gout is more common in men than in women.",
+    ) == (True, None)
+    assert direction_entailed(
+        "Gout is more common in women than in men.",
+        "Gout is more common in men than in women.",
+    ) == (False, "atomic_direction_mismatch")
+    # "the" names no side: the elderly are not the young, so this is no swap
+    assert direction_entailed(
+        "Risk is higher in women than in the elderly.",
+        "Risk is lower in the young than in women.",
+    ) == (False, "atomic_direction_mismatch")
+
+
 def test_turned_around_claim_abstains_rather_than_contradicts():
     # a wrong-way reading is an abstention, not a contradiction: one
     # structured provider's read never decides the verdict alone
