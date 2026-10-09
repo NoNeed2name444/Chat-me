@@ -617,7 +617,9 @@ private enum SemanticGuard {
     ]
 
     // the short and long names of one route, so writing it the other way
-    // is no swap ("500 mg PO" for "500 mg orally")
+    // is no swap ("500 mg PO" for "500 mg orally"), while two different
+    // routes are one, whatever words stand around them ("given IV" for "IM
+    // is given")
     private static let routeNames: [String: String] = [
         "po": "oral", "oral": "oral", "orally": "oral",
         "iv": "intravenous", "intravenous": "intravenous",
@@ -626,7 +628,14 @@ private enum SemanticGuard {
         "intramuscularly": "intramuscular",
         "sc": "subcutaneous", "sq": "subcutaneous",
         "subcut": "subcutaneous", "subcutaneous": "subcutaneous",
-        "subcutaneously": "subcutaneous"
+        "subcutaneously": "subcutaneous",
+        "intrathecal": "intrathecal", "intrathecally": "intrathecal",
+        "sublingual": "sublingual", "sublingually": "sublingual",
+        "rectal": "rectal", "rectally": "rectal",
+        "topical": "topical", "topically": "topical",
+        "inhaled": "inhaled", "nebulised": "inhaled", "nebulized": "inhaled",
+        "intranasal": "intranasal", "intranasally": "intranasal",
+        "intradermal": "intradermal", "intradermally": "intradermal"
     ]
 
     // endings cut so another form of the same word still lines up; there is
@@ -824,7 +833,11 @@ private enum SemanticGuard {
             }
         }
 
-        return false
+        let claimRoutes = Set(claimWords.compactMap { routeNames[$0] })
+        let sourceRoutes = Set(sourceWords.compactMap { routeNames[$0] })
+
+        return !claimRoutes.isEmpty && !sourceRoutes.isEmpty &&
+            claimRoutes.isDisjoint(with: sourceRoutes)
     }
 
     // true when a claim sentence lines up with source sentences only by

@@ -497,7 +497,8 @@ SHORT_NON_TERMS = frozenset({
 })
 
 # The short and long names of one route, so writing it the other way is no
-# swap ("500 mg PO" for "500 mg orally")
+# swap ("500 mg PO" for "500 mg orally"), while two different routes are
+# one, whatever words stand around them ("given IV" for "IM is given")
 ROUTE_NAMES = {
     "po": "oral", "oral": "oral", "orally": "oral",
     "iv": "intravenous", "intravenous": "intravenous",
@@ -506,6 +507,13 @@ ROUTE_NAMES = {
     "intramuscularly": "intramuscular",
     "sc": "subcutaneous", "sq": "subcutaneous", "subcut": "subcutaneous",
     "subcutaneous": "subcutaneous", "subcutaneously": "subcutaneous",
+    "intrathecal": "intrathecal", "intrathecally": "intrathecal",
+    "sublingual": "sublingual", "sublingually": "sublingual",
+    "rectal": "rectal", "rectally": "rectal",
+    "topical": "topical", "topically": "topical",
+    "inhaled": "inhaled", "nebulised": "inhaled", "nebulized": "inhaled",
+    "intranasal": "intranasal", "intranasally": "intranasal",
+    "intradermal": "intradermal", "intradermally": "intradermal",
 }
 
 # endings cut so another form of the same word still lines up; there is no
@@ -618,7 +626,14 @@ def _swaps_a_term(claim_text, evidence_text):
         ]
         if _is_swap(claim_gap, evidence_gap, set(claim_stems), set(evidence_stems)):
             return True
-    return False
+
+    claim_routes = {ROUTE_NAMES[word] for word in claim_words if word in ROUTE_NAMES}
+    evidence_routes = {
+        ROUTE_NAMES[word] for word in evidence_words if word in ROUTE_NAMES
+    }
+    return bool(claim_routes and evidence_routes) and not (
+        claim_routes & evidence_routes
+    )
 
 def _term_substituted(claim, evidence):
     """True when a claim sentence lines up with evidence sentences only by

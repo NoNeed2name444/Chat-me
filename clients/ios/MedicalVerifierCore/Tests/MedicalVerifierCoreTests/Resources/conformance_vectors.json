@@ -1,5 +1,5 @@
 {
-  "version": "1.6",
+  "version": "1.7",
   "cases": [
     {
       "id": "valid_basic",
@@ -379,6 +379,16 @@
       "source_file_seed": "pdf-bytes",
       "expected_status": "VALIDATED",
       "requires_review": false
+    },
+    {
+      "id": "atomic_term_route_swapped_around_words",
+      "prompt": "How is adrenaline given for anaphylaxis?",
+      "answer": "Adrenaline 0.5 mg IV for anaphylaxis in adults.",
+      "source_title": "Course",
+      "source_passage": "Adrenaline 0.5 mg IM is given for anaphylaxis in adults.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
     },
     {
       "id": "causal_association_mismatch",

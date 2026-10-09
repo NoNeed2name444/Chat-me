@@ -137,3 +137,15 @@ def test_short_name_of_the_same_term_is_not_a_swap():
         ("Rivaroxaban inhibits factor Xa.", "Rivaroxaban inhibits activated factor X."),
     ):
         assert verify(claim, evidence).label == "SUPPORTS", claim
+
+def test_another_route_is_unknown_whatever_words_stand_around():
+    # the Swift twin holds the same cases (testAnotherRouteIsRejected)
+    for claim, evidence in (
+        ("Adrenaline 0.5 mg IV for anaphylaxis in adults.",
+         "Adrenaline 0.5 mg IM is given for anaphylaxis in adults."),
+        ("Vincristine is given intrathecally.",
+         "Vincristine must only be given intravenously."),
+    ):
+        result = verify(claim, evidence)
+        assert result.label == "UNKNOWN", claim
+        assert "atomic_term_substituted" in result.reasons, claim

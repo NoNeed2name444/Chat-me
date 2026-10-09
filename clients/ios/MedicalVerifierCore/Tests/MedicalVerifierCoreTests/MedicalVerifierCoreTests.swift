@@ -909,4 +909,28 @@ final class MedicalVerifierCoreTests: XCTestCase {
         }
     }
 
+
+    func testAnotherRouteIsRejected() {
+        // the Python verifier holds the same cases
+        // (test_another_route_is_unknown_whatever_words_stand_around)
+        let cases = [
+            ("How is adrenaline given for anaphylaxis?",
+             "Adrenaline 0.5 mg IV for anaphylaxis in adults.",
+             "Adrenaline 0.5 mg IM is given for anaphylaxis in adults."),
+            ("How is vincristine given?",
+             "Vincristine is given intrathecally.",
+             "Vincristine must only be given intravenously.")
+        ]
+
+        for (prompt, answer, passage) in cases {
+            let result = CurriculumVerifier().verify(
+                prompt: prompt,
+                answer: answer,
+                sources: [self.source(passage: passage)]
+            )
+
+            XCTAssertEqual(result.status, .sourceUnsupported, answer)
+        }
+    }
+
 }
