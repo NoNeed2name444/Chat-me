@@ -2,12 +2,14 @@ import re
 from dataclasses import dataclass
 
 from agents.specialists.verification_agent.claim_reasoning import (
+    _STOPWORDS,
     decompose_claim,
     relation_entailed,
     safety_relation_entailed,
     temporal_entailed,
 )
 from agents.specialists.verification_agent.direction import direction_entailed
+from agents.specialists.verification_agent.entity_normalization import entities_equivalent
 
 RELATION_CLASSES = {
     "causal": (
@@ -409,6 +411,24 @@ def _condition_supported(claim, evidence):
 
     return True, None
 
+def _atom_pair_check(claim_atom, evidence_atom):
+    claim_tokens = _tokens(claim_atom.text)
+    evidence_tokens = _tokens(evidence_atom.text)
+    overlap = (
+        len(claim_tokens & evidence_tokens)
+        / max(1, len(claim_tokens))
+    )
+
+    if overlap < 0.45:
+        return False, None
+
+    for check in (relation_entailed, temporal_entailed, safety_relation_entailed):
+        ok, reason = check(claim_atom, evidence_atom)
+        if not ok:
+            return False, reason
+
+    return direction_entailed(claim_atom.text, evidence_atom.text)
+
 def _atomic_alignment(claim: str, evidence: str):
     claim_atoms = decompose_claim(claim)
     evidence_atoms = decompose_claim(evidence)
@@ -425,57 +445,15 @@ def _atomic_alignment(claim: str, evidence: str):
     )
 
     for claim_atom in claim_atoms:
-        claim_tokens = _tokens(claim_atom.text)
         matched = False
         failure_reasons = []
 
         for evidence_atom in evidence_atoms:
-            evidence_tokens = _tokens(evidence_atom.text)
-            overlap = (
-                len(claim_tokens & evidence_tokens)
-                / max(1, len(claim_tokens))
-            )
-
-            if overlap < 0.45:
-                continue
-
-            relation_ok, relation_reason = relation_entailed(
-                claim_atom,
-                evidence_atom,
-            )
-            if not relation_ok:
-                if relation_reason:
-                    failure_reasons.append(relation_reason)
-                continue
-
-            temporal_ok, temporal_reason = temporal_entailed(
-                claim_atom,
-                evidence_atom,
-            )
-            if not temporal_ok:
-                if temporal_reason:
-                    failure_reasons.append(temporal_reason)
-                continue
-
-            safety_ok, safety_reason = safety_relation_entailed(
-                claim_atom,
-                evidence_atom,
-            )
-            if not safety_ok:
-                if safety_reason:
-                    failure_reasons.append(safety_reason)
-                continue
-
-            direction_ok, direction_reason = direction_entailed(
-                claim_atom.text,
-                evidence_atom.text,
-            )
-            if not direction_ok:
-                failure_reasons.append(direction_reason)
-                continue
-
-            matched = True
-            break
+            matched, reason = _atom_pair_check(claim_atom, evidence_atom)
+            if matched:
+                break
+            if reason:
+                failure_reasons.append(reason)
 
         if not matched:
             return False, (
@@ -485,6 +463,129 @@ def _atomic_alignment(claim: str, evidence: str):
             )
 
     return True, None
+
+_WORD = re.compile(r"[a-z0-9'-]+")
+
+# words that join or qualify a phrase rather than name a drug, a condition or
+# an outcome ("after", "before", "more", "less" and the like carry meaning)
+FUNCTION_WORDS = frozenset({
+    "about", "across", "along", "also", "although", "among", "because", "been",
+    "being", "between", "could", "from", "however", "into", "might", "onto",
+    "shall", "such", "than", "their", "them", "then", "there", "therefore",
+    "they", "though", "through", "throughout", "thus", "toward", "towards",
+    "upon", "very", "what", "when", "where", "whereas", "whether", "which",
+    "while", "whom", "whose", "would",
+})
+
+ARTICLES = frozenset({"a", "an", "the"})
+
+# endings cut so another form of the same word still lines up; there is no
+# "-ate" or "-ic" rule, which would make nitrate and nitrite one word
+_STEM_RULES = (
+    ("isations", ""), ("izations", ""), ("isation", ""), ("ization", ""),
+    ("ising", ""), ("izing", ""), ("ised", ""), ("ized", ""),
+    ("ises", ""), ("izes", ""), ("ise", ""), ("ize", ""),
+    ("ations", "at"), ("ation", "at"), ("ites", ""), ("ite", ""),
+    ("isms", ""), ("ism", ""), ("ies", "y"), ("ied", "y"), ("ing", ""),
+    ("eed", "eed"), ("ed", ""), ("sses", "ss"), ("ss", "ss"), ("us", "us"),
+    ("is", "is"), ("es", ""), ("s", ""), ("e", ""),
+)
+
+def _stem(word):
+    word = word.removesuffix("'s").replace("ae", "e").replace("oe", "e")
+    for suffix, replacement in _STEM_RULES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: len(word) - len(suffix)] + replacement
+    return word
+
+def _content_word(word):
+    return (
+        len(word) >= 4
+        and word not in _STOPWORDS
+        and word not in FUNCTION_WORDS
+        and word not in DOSE_WORDS
+        and not any(character.isdigit() for character in word)
+    )
+
+def _unmatched_runs(left, right):
+    """The stretches of two word lists left over by their longest common
+    subsequence, as pairs of index ranges; at least one side has words."""
+    table = [[0] * (len(right) + 1) for _ in range(len(left) + 1)]
+    for i in range(len(left) - 1, -1, -1):
+        for j in range(len(right) - 1, -1, -1):
+            if left[i] == right[j]:
+                table[i][j] = table[i + 1][j + 1] + 1
+            else:
+                table[i][j] = max(table[i + 1][j], table[i][j + 1])
+
+    runs = []
+    i = j = start_i = start_j = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            if (start_i, start_j) != (i, j):
+                runs.append(((start_i, i), (start_j, j)))
+            i += 1
+            j += 1
+            start_i, start_j = i, j
+        elif table[i + 1][j] >= table[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    if (start_i, start_j) != (len(left), len(right)):
+        runs.append(((start_i, len(left)), (start_j, len(right))))
+    return runs
+
+def _is_swap(claim_gap, evidence_gap, claim_stems, evidence_stems):
+    # one or two words on each side, every one a term, none said elsewhere in
+    # the other sentence and no pair a known alias (paracetamol, acetaminophen)
+    if not (1 <= len(claim_gap) <= 2 and 1 <= len(evidence_gap) <= 2):
+        return False
+    if not all(_content_word(word) for word in claim_gap + evidence_gap):
+        return False
+    if any(_stem(word) in evidence_stems for word in claim_gap):
+        return False
+    if any(_stem(word) in claim_stems for word in evidence_gap):
+        return False
+    pairs = [(" ".join(claim_gap), " ".join(evidence_gap))]
+    pairs += [(left, right) for left in claim_gap for right in evidence_gap]
+    return not any(entities_equivalent(left, right) for left, right in pairs)
+
+def _swaps_a_term(claim_text, evidence_text):
+    claim_words = _WORD.findall(claim_text.lower())
+    evidence_words = _WORD.findall(evidence_text.lower())
+    claim_stems = [_stem(word) for word in claim_words]
+    evidence_stems = [_stem(word) for word in evidence_words]
+
+    for (i1, i2), (j1, j2) in _unmatched_runs(claim_stems, evidence_stems):
+        claim_gap = [word for word in claim_words[i1:i2] if word not in ARTICLES]
+        evidence_gap = [
+            word for word in evidence_words[j1:j2] if word not in ARTICLES
+        ]
+        if _is_swap(claim_gap, evidence_gap, set(claim_stems), set(evidence_stems)):
+            return True
+    return False
+
+def _term_substituted(claim, evidence):
+    """True when a claim sentence lines up with evidence sentences only by
+    putting another drug, condition or outcome in one place."""
+    evidence_atoms = tuple(
+        atom for atom in decompose_claim(evidence)
+        if atom.text
+    )
+
+    for claim_atom in decompose_claim(claim):
+        carriers = [
+            evidence_atom
+            for evidence_atom in evidence_atoms
+            if _atom_pair_check(claim_atom, evidence_atom)[0]
+        ]
+        if carriers and all(
+            _swaps_a_term(claim_atom.text, evidence_atom.text)
+            for evidence_atom in carriers
+        ):
+            return True
+
+    return False
 
 def verify(claim, evidence):
     claim_for_logic = _normalize_double_negation(claim)

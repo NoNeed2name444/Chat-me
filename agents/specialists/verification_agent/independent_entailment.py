@@ -133,6 +133,9 @@ def verify(claim, evidence):
             ("claim_evidence_polarity_mismatch",),
         )
 
+    if _base._term_substituted(claim_for_logic, evidence_for_logic):
+        return IndependentEntailment("UNKNOWN", ("atomic_term_substituted",))
+
     return IndependentEntailment(
         "SUPPORTS", ("independent_structured_checks_passed",)
     )

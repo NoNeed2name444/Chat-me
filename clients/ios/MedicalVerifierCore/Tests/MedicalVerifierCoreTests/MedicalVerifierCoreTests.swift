@@ -773,4 +773,86 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .validated)
     }
 
+    func testSwappedDrugIsRejected() {
+        // the Python verifier holds the same case
+        // (test_swapped_drug_is_unknown)
+        let source = self.source(
+            passage: "Ibuprofen treats otitis media."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What treats otitis media?",
+            answer: "Amoxicillin treats otitis media.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertTrue(result.requiresHumanReview)
+        XCTAssertTrue(result.warnings.contains(
+            "atomic_term_substituted:snapshot-1"
+        ))
+    }
+
+    func testSwappedOutcomeIsRejected() {
+        let source = self.source(
+            passage: "Warfarin increases the risk of stroke."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What does warfarin increase?",
+            answer: "Warfarin increases the risk of bleeding.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertTrue(result.warnings.contains(
+            "atomic_term_substituted:snapshot-1"
+        ))
+    }
+
+    func testKnownAliasIsNotASwap() {
+        let source = self.source(
+            passage: "Acetaminophen treats fever."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What treats fever?",
+            answer: "Paracetamol treats fever.",
+            sources: [source]
+        )
+
+        XCTAssertFalse(result.warnings.contains(
+            "atomic_term_substituted:snapshot-1"
+        ))
+    }
+
+    func testAnotherFormOfTheSameWordIsNotASwap() {
+        let source = self.source(
+            passage: "Clopidogrel is a prodrug and requires metabolic activation."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "How is clopidogrel activated?",
+            answer: "Clopidogrel is a prodrug requiring metabolic activation.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testASentenceNamingTheClaimedDrugStillSupports() {
+        let source = self.source(
+            passage: "Ibuprofen treats otitis media. "
+                + "Amoxicillin treats otitis media."
+        )
+
+        let result = CurriculumVerifier().verify(
+            prompt: "What treats otitis media?",
+            answer: "Amoxicillin treats otitis media.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
 }

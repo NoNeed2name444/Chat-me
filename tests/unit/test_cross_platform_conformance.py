@@ -63,4 +63,4 @@ def test_shared_conformance_vectors():
 
 def test_shared_conformance_corpus_version():
     corpus = json.loads(VECTORS.read_text())
-    assert corpus["version"] == "1.4"
+    assert corpus["version"] == "1.5"

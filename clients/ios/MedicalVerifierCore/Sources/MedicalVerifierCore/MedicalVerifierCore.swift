@@ -443,6 +443,13 @@ private enum SemanticGuard {
             warnings.append("exclusive_scope_not_supported")
         }
 
+        if atomicTermSubstituted(
+            claim: normalizedClaim,
+            source: normalizedSource
+        ) {
+            warnings.append("atomic_term_substituted")
+        }
+
         return warnings
     }
 
@@ -464,83 +471,16 @@ private enum SemanticGuard {
             var failureReason = "atomic_claim_not_entailed"
 
             for sourceAtom in sourceAtoms {
-                let overlapValue = tokenOverlap(
-                    claimAtom.text,
-                    sourceAtom.text
-                )
+                let check = atomPairCheck(claimAtom, sourceAtom)
 
-                guard overlapValue >= 0.45 else {
-                    continue
+                if check.carries {
+                    matched = true
+                    break
                 }
 
-                if !claimAtom.subjectAnchor.isEmpty &&
-                    !sourceAtom.subjectAnchor.isEmpty &&
-                    !anchorsEquivalent(
-                        claimAtom.subjectAnchor,
-                        sourceAtom.subjectAnchor
-                    ) {
-                    failureReason = "atomic_subject_mismatch"
-                    continue
+                if let reason = check.reason {
+                    failureReason = reason
                 }
-
-                if !claimAtom.objectAnchor.isEmpty &&
-                    !sourceAtom.objectAnchor.isEmpty &&
-                    claimAtom.objectAnchor != sourceAtom.objectAnchor {
-                    failureReason = "atomic_object_mismatch"
-                    continue
-                }
-
-                if claimAtom.relation == "causal" &&
-                    sourceAtom.relation != "causal" {
-                    failureReason =
-                        "causal_claim_requires_causal_evidence"
-                    continue
-                }
-
-                if claimAtom.relation == "interaction" &&
-                    sourceAtom.relation != "interaction" {
-                    failureReason =
-                        "interaction_claim_requires_interaction_evidence"
-                    continue
-                }
-
-                if claimAtom.relation == "contraindication" &&
-                    sourceAtom.relation != "contraindication" {
-                    failureReason =
-                        "contraindication_claim_requires_contraindication_evidence"
-                    continue
-                }
-
-                if let relation = claimAtom.relation,
-                    relation != "mixed",
-                    relation != "unclassified",
-                    sourceAtom.relation != relation &&
-                    sourceAtom.relation != "mixed" {
-                    failureReason = "atomic_relation_mismatch"
-                    continue
-                }
-
-                if !claimAtom.temporal.isEmpty &&
-                    claimAtom.temporal != sourceAtom.temporal {
-                    failureReason = sourceAtom.temporal.isEmpty
-                        ? "temporal_scope_missing"
-                        : "temporal_scope_mismatch"
-                    continue
-                }
-
-                if claimAtom.safety != nil &&
-                    claimAtom.safety != sourceAtom.safety {
-                    failureReason = "safety_relation_mismatch"
-                    continue
-                }
-
-                if claimAtom.polarity != sourceAtom.polarity {
-                    failureReason = "atomic_polarity_mismatch"
-                    continue
-                }
-
-                matched = true
-                break
             }
 
             if !matched {
@@ -549,6 +489,300 @@ private enum SemanticGuard {
         }
 
         return Array(Set(warnings)).sorted()
+    }
+
+    // whether a source sentence carries a claim sentence and, when it does
+    // not, why (no reason when the two share too few words to compare)
+    private static func atomPairCheck(
+        _ claimAtom: AtomicClaim,
+        _ sourceAtom: AtomicClaim
+    ) -> (carries: Bool, reason: String?) {
+        let overlapValue = tokenOverlap(
+            claimAtom.text,
+            sourceAtom.text
+        )
+
+        guard overlapValue >= 0.45 else {
+            return (false, nil)
+        }
+
+        if !claimAtom.subjectAnchor.isEmpty &&
+            !sourceAtom.subjectAnchor.isEmpty &&
+            !anchorsEquivalent(
+                claimAtom.subjectAnchor,
+                sourceAtom.subjectAnchor
+            ) {
+            return (false, "atomic_subject_mismatch")
+        }
+
+        if !claimAtom.objectAnchor.isEmpty &&
+            !sourceAtom.objectAnchor.isEmpty &&
+            claimAtom.objectAnchor != sourceAtom.objectAnchor {
+            return (false, "atomic_object_mismatch")
+        }
+
+        if claimAtom.relation == "causal" &&
+            sourceAtom.relation != "causal" {
+            return (false, "causal_claim_requires_causal_evidence")
+        }
+
+        if claimAtom.relation == "interaction" &&
+            sourceAtom.relation != "interaction" {
+            return (false, "interaction_claim_requires_interaction_evidence")
+        }
+
+        if claimAtom.relation == "contraindication" &&
+            sourceAtom.relation != "contraindication" {
+            return (
+                false,
+                "contraindication_claim_requires_contraindication_evidence"
+            )
+        }
+
+        if let relation = claimAtom.relation,
+            relation != "mixed",
+            relation != "unclassified",
+            sourceAtom.relation != relation &&
+            sourceAtom.relation != "mixed" {
+            return (false, "atomic_relation_mismatch")
+        }
+
+        if !claimAtom.temporal.isEmpty &&
+            claimAtom.temporal != sourceAtom.temporal {
+            return (
+                false,
+                sourceAtom.temporal.isEmpty
+                    ? "temporal_scope_missing"
+                    : "temporal_scope_mismatch"
+            )
+        }
+
+        if claimAtom.safety != nil &&
+            claimAtom.safety != sourceAtom.safety {
+            return (false, "safety_relation_mismatch")
+        }
+
+        if claimAtom.polarity != sourceAtom.polarity {
+            return (false, "atomic_polarity_mismatch")
+        }
+
+        return (true, nil)
+    }
+
+    // the same lists as the Python verifier's (claim_reasoning._STOPWORDS,
+    // FUNCTION_WORDS and ARTICLES); anchor(in:relation:before:) keeps its own
+    private static let claimStopwords: Set<String> = [
+        "a", "an", "the", "and", "or", "but", "for", "with",
+        "in", "on", "to", "of", "is", "are", "was", "were",
+        "that", "this", "these", "those", "patients", "patient",
+        "all", "selected", "every", "everyone", "regardless", "only",
+        "exclusively", "previously", "previous", "prior", "currently",
+        "current", "now", "at", "present", "will", "planned", "plan",
+        "expected", "future",
+        "no", "not", "never", "without", "does", "doesn't",
+        "cannot", "can't", "has", "have", "had"
+    ]
+
+    // words that join or qualify a phrase rather than name a drug, a
+    // condition or an outcome ("after", "before", "more", "less" and the
+    // like carry meaning)
+    private static let functionWords: Set<String> = [
+        "about", "across", "along", "also", "although", "among",
+        "because", "been", "being", "between", "could", "from",
+        "however", "into", "might", "onto", "shall", "such", "than",
+        "their", "them", "then", "there", "therefore", "they", "though",
+        "through", "throughout", "thus", "toward", "towards", "upon",
+        "very", "what", "when", "where", "whereas", "whether", "which",
+        "while", "whom", "whose", "would"
+    ]
+
+    private static let articles: Set<String> = ["a", "an", "the"]
+
+    // endings cut so another form of the same word still lines up; there is
+    // no "-ate" or "-ic" rule, which would make nitrate and nitrite one word
+    private static let stemRules: [(suffix: String, replacement: String)] = [
+        ("isations", ""), ("izations", ""), ("isation", ""),
+        ("ization", ""), ("ising", ""), ("izing", ""), ("ised", ""),
+        ("ized", ""), ("ises", ""), ("izes", ""), ("ise", ""),
+        ("ize", ""), ("ations", "at"), ("ation", "at"), ("ites", ""),
+        ("ite", ""), ("isms", ""), ("ism", ""), ("ies", "y"),
+        ("ied", "y"), ("ing", ""), ("eed", "eed"), ("ed", ""),
+        ("sses", "ss"), ("ss", "ss"), ("us", "us"), ("is", "is"),
+        ("es", ""), ("s", ""), ("e", "")
+    ]
+
+    private static func stem(_ word: String) -> String {
+        var word = word
+
+        if word.hasSuffix("'s") {
+            word.removeLast(2)
+        }
+
+        word = word
+            .replacingOccurrences(of: "ae", with: "e")
+            .replacingOccurrences(of: "oe", with: "e")
+
+        for rule in stemRules where word.hasSuffix(rule.suffix) &&
+            word.count - rule.suffix.count >= 3 {
+            return String(word.dropLast(rule.suffix.count)) +
+                rule.replacement
+        }
+
+        return word
+    }
+
+    private static func contentWord(_ word: String) -> Bool {
+        word.count >= 4 &&
+            !claimStopwords.contains(word) &&
+            !functionWords.contains(word) &&
+            !doseWords.contains(word) &&
+            !word.contains { $0.isNumber }
+    }
+
+    // ASCII letters and digits with apostrophes and hyphens, as the Python
+    // verifier reads a sentence's words
+    private static func termWords(in text: String) -> [String] {
+        text
+            .lowercased()
+            .split {
+                !($0.isASCII && ($0.isLetter || $0.isNumber)) &&
+                    $0 != "'" &&
+                    $0 != "-"
+            }
+            .map(String.init)
+    }
+
+    // the stretches of two word lists left over by their longest common
+    // subsequence; at least one side of each has words
+    private static func unmatchedRuns(
+        _ left: [String],
+        _ right: [String]
+    ) -> [(Range<Int>, Range<Int>)] {
+        var table = Array(
+            repeating: Array(repeating: 0, count: right.count + 1),
+            count: left.count + 1
+        )
+
+        for i in stride(from: left.count - 1, through: 0, by: -1) {
+            for j in stride(from: right.count - 1, through: 0, by: -1) {
+                table[i][j] = left[i] == right[j]
+                    ? table[i + 1][j + 1] + 1
+                    : max(table[i + 1][j], table[i][j + 1])
+            }
+        }
+
+        var runs: [(Range<Int>, Range<Int>)] = []
+        var i = 0
+        var j = 0
+        var startI = 0
+        var startJ = 0
+
+        while i < left.count && j < right.count {
+            if left[i] == right[j] {
+                if (startI, startJ) != (i, j) {
+                    runs.append((startI..<i, startJ..<j))
+                }
+                i += 1
+                j += 1
+                startI = i
+                startJ = j
+            } else if table[i + 1][j] >= table[i][j + 1] {
+                i += 1
+            } else {
+                j += 1
+            }
+        }
+
+        if (startI, startJ) != (left.count, right.count) {
+            runs.append((startI..<left.count, startJ..<right.count))
+        }
+
+        return runs
+    }
+
+    // one or two words on each side, every one a term, none said elsewhere
+    // in the other sentence and no pair a known alias (paracetamol,
+    // acetaminophen)
+    private static func isSwap(
+        _ claimGap: [String],
+        _ sourceGap: [String],
+        claimStems: Set<String>,
+        sourceStems: Set<String>
+    ) -> Bool {
+        guard (1...2).contains(claimGap.count),
+            (1...2).contains(sourceGap.count),
+            (claimGap + sourceGap).allSatisfy(contentWord),
+            !claimGap.contains(where: { sourceStems.contains(stem($0)) }),
+            !sourceGap.contains(where: { claimStems.contains(stem($0)) })
+        else {
+            return false
+        }
+
+        var pairs = [(
+            claimGap.joined(separator: " "),
+            sourceGap.joined(separator: " ")
+        )]
+
+        for left in claimGap {
+            for right in sourceGap {
+                pairs.append((left, right))
+            }
+        }
+
+        return !pairs.contains { anchorsEquivalent($0.0, $0.1) }
+    }
+
+    private static func swapsATerm(
+        claim: String,
+        source: String
+    ) -> Bool {
+        let claimWords = termWords(in: claim)
+        let sourceWords = termWords(in: source)
+        let claimStems = claimWords.map(stem)
+        let sourceStems = sourceWords.map(stem)
+
+        for (claimRun, sourceRun) in unmatchedRuns(claimStems, sourceStems) {
+            let claimGap = claimWords[claimRun].filter {
+                !articles.contains($0)
+            }
+            let sourceGap = sourceWords[sourceRun].filter {
+                !articles.contains($0)
+            }
+
+            if isSwap(
+                claimGap,
+                sourceGap,
+                claimStems: Set(claimStems),
+                sourceStems: Set(sourceStems)
+            ) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    // true when a claim sentence lines up with source sentences only by
+    // putting another drug, condition or outcome in one place
+    private static func atomicTermSubstituted(
+        claim: String,
+        source: String
+    ) -> Bool {
+        let sourceAtoms = atomicClaims(in: source)
+
+        for claimAtom in atomicClaims(in: claim) {
+            let carriers = sourceAtoms.filter {
+                atomPairCheck(claimAtom, $0).carries
+            }
+
+            if !carriers.isEmpty && carriers.allSatisfy({
+                swapsATerm(claim: claimAtom.text, source: $0.text)
+            }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func atomicClaims(

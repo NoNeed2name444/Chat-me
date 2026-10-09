@@ -1,5 +1,5 @@
 {
-  "version": "1.4",
+  "version": "1.5",
   "cases": [
     {
       "id": "valid_basic",
@@ -309,6 +309,36 @@
       "source_file_seed": "pdf-bytes",
       "expected_status": "SOURCE_UNSUPPORTED",
       "requires_review": true
+    },
+    {
+      "id": "atomic_term_swapped_drug",
+      "prompt": "What treats otitis media?",
+      "answer": "Amoxicillin treats otitis media.",
+      "source_title": "Course",
+      "source_passage": "Ibuprofen treats otitis media.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "atomic_term_swapped_outcome",
+      "prompt": "What does warfarin increase?",
+      "answer": "Warfarin increases the risk of bleeding.",
+      "source_title": "Course",
+      "source_passage": "Warfarin increases the risk of stroke.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "atomic_term_reworded",
+      "prompt": "How is clopidogrel activated?",
+      "answer": "Clopidogrel is a prodrug requiring metabolic activation.",
+      "source_title": "Course",
+      "source_passage": "Clopidogrel is a prodrug and requires metabolic activation.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
     },
     {
       "id": "causal_association_mismatch",
