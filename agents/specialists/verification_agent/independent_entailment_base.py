@@ -7,6 +7,7 @@ from agents.specialists.verification_agent.claim_reasoning import (
     safety_relation_entailed,
     temporal_entailed,
 )
+from agents.specialists.verification_agent.direction import direction_entailed
 
 RELATION_CLASSES = {
     "causal": (
@@ -86,7 +87,13 @@ def _normalize_multilingual_terms(text):
     }
 
     for source, replacement in replacements.items():
-        result = result.replace(source, replacement)
+        # whole words only: Spanish "reduce" must not turn English "reduced"
+        # into "reducesd", nor "causa" turn "causal" into "causesl"
+        result = re.sub(
+            r"(?<!\w)" + re.escape(source) + r"(?!\w)",
+            replacement,
+            result,
+        )
 
     return result
 
@@ -433,6 +440,14 @@ def _atomic_alignment(claim: str, evidence: str):
             if not safety_ok:
                 if safety_reason:
                     failure_reasons.append(safety_reason)
+                continue
+
+            direction_ok, direction_reason = direction_entailed(
+                claim_atom.text,
+                evidence_atom.text,
+            )
+            if not direction_ok:
+                failure_reasons.append(direction_reason)
                 continue
 
             matched = True

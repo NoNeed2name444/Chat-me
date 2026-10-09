@@ -18,16 +18,17 @@ This is an engineering foundation, **not a clinically validated medical device**
 
 ## Quick start
 
+From the repository root:
+
 ```bash
-cd medical-verifier
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uvicorn api.main:app --reload
 ```
 
 Open http://127.0.0.1:8000/docs
 
 ## Commercial use
 
-The project code is MIT licensed. Runtime dependencies are permissively licensed. External medical data/services have separate terms; see `docs/COMMERCIAL_USE.md` before redistributing source content or using it for model training.
+The project code is MIT licensed. Runtime dependencies are permissively licensed. External medical data/services have separate terms; see `NOTICE`, next to this file, before redistributing source content or using it for model training.
