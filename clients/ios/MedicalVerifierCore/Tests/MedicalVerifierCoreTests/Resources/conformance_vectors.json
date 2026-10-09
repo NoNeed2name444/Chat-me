@@ -1,5 +1,5 @@
 {
-  "version": "1.3",
+  "version": "1.4",
   "cases": [
     {
       "id": "valid_basic",
@@ -159,6 +159,36 @@
       "answer": "Take 500 mg twice daily.",
       "source_title": "Course",
       "source_passage": "Take 500 mg once daily.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "daily_dose_same_drug",
+      "prompt": "How should you take the medicine daily?",
+      "answer": "Aspirin 1000 mg is given daily.",
+      "source_title": "Course",
+      "source_passage": "Aspirin 500 mg is given twice daily.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
+      "id": "daily_dose_other_drug",
+      "prompt": "How should you take the medicine daily?",
+      "answer": "Warfarin 1000 mg is given daily.",
+      "source_title": "Course",
+      "source_passage": "Aspirin 500 mg is given twice daily.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "daily_dose_added_duration",
+      "prompt": "How should you take the medicine daily?",
+      "answer": "Aspirin 1000 mg is given daily for 7 days.",
+      "source_title": "Course",
+      "source_passage": "Aspirin 500 mg is given twice daily.",
       "source_file_seed": "pdf-bytes",
       "expected_status": "SOURCE_UNSUPPORTED",
       "requires_review": true

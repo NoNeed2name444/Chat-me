@@ -36,6 +36,37 @@ def test_dose_question_is_answered_by_an_equivalent_daily_dose():
     assert result.status == "VALIDATED"
     assert result.requires_review is False
 
+def test_daily_dose_rewording_keeps_the_drug():
+    result = verify(
+        "Aspirin 1000 mg is given daily.",
+        "Aspirin 500 mg is given twice daily.",
+    )
+    assert result.label == "SUPPORTS"
+
+def test_same_daily_total_of_another_drug_is_unknown():
+    result = verify(
+        "Warfarin 1000 mg is given daily.",
+        "Aspirin 500 mg is given twice daily.",
+    )
+    assert result.label == "UNKNOWN"
+
+def test_daily_dose_rewording_cannot_add_a_condition():
+    result = verify(
+        "Aspirin 1000 mg is given daily with food.",
+        "Aspirin 500 mg is given twice daily.",
+    )
+    assert result.label == "UNKNOWN"
+
+def test_dose_question_for_another_drug_is_not_validated():
+    # the Swift twin holds the same case (testSameDailyTotalOfAnotherDrugIsRejected)
+    result = validate_question(
+        "How should the dose be taken?",
+        "Warfarin 1000 mg is given daily.",
+        [make_item("Aspirin 500 mg is given twice daily.")],
+    )
+    assert result.status == "SOURCE_UNSUPPORTED"
+    assert result.requires_review is True
+
 def test_dose_frequency_mismatch_is_unknown():
     result = verify(
         "Take 500 mg twice daily.",

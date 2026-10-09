@@ -3,6 +3,7 @@ from agents.specialists.verification_agent import independent_entailment_base as
 IndependentEntailment = _base.IndependentEntailment
 _condition_supported = _base._condition_supported
 _daily_dose_equivalent = _base._daily_dose_equivalent
+_dose_rewording_keeps_terms = _base._dose_rewording_keeps_terms
 _tokens = _base._tokens
 
 
@@ -21,6 +22,7 @@ def verify(claim, evidence):
         claim_daily_dose is not None
         and evidence_daily_dose is not None
         and abs(claim_daily_dose - evidence_daily_dose) < 1e-9
+        and _base._dose_rewording_keeps_terms(claim_for_logic, evidence_for_logic)
     )
 
     overlap = len(claim_tokens & evidence_tokens) / len(claim_tokens)

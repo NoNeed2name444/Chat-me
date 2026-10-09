@@ -299,6 +299,52 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .validated)
     }
 
+    func testSameDailyTotalOfTheSameDrugIsSupported() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Aspirin 500 mg is given twice daily."
+        )
+
+        let result = verifier.verify(
+            prompt: "How should the dose be taken?",
+            answer: "Aspirin 1000 mg is given daily.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .validated)
+    }
+
+    func testSameDailyTotalOfAnotherDrugIsRejected() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Aspirin 500 mg is given twice daily."
+        )
+
+        let result = verifier.verify(
+            prompt: "How should the dose be taken?",
+            answer: "Warfarin 1000 mg is given daily.",
+            sources: [source]
+        )
+
+        XCTAssertEqual(result.status, .sourceUnsupported)
+        XCTAssertTrue(result.requiresHumanReview)
+    }
+
+    func testSameDailyTotalCannotAddACondition() {
+        let verifier = CurriculumVerifier()
+        let source = self.source(
+            passage: "Aspirin 500 mg is given twice daily."
+        )
+
+        let result = verifier.verify(
+            prompt: "How should the dose be taken?",
+            answer: "Aspirin 1000 mg is given daily with food.",
+            sources: [source]
+        )
+
+        XCTAssertNotEqual(result.status, .validated)
+    }
+
     func testDoseFrequencyMismatchIsRejected() {
         let verifier = CurriculumVerifier()
         let source = self.source(

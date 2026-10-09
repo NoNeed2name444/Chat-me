@@ -48,6 +48,22 @@ DOUBLE_NEGATION_EQUIVALENTS = {
     "not impossible": "possible",
 }
 
+# words that only say how much, how often or how a dose is given: a reworded
+# daily dose may change these, never the drug, the patient or anything else
+DOSE_WORDS = frozenset({
+    "dose", "doses", "dosed", "dosing", "dosage", "dosages",
+    "total", "amount", "divided",
+    "milligram", "milligrams", "gram", "grams", "microgram", "micrograms",
+    "millilitre", "millilitres", "milliliter", "milliliters",
+    "litre", "litres", "liter", "liters", "kilogram", "kilograms",
+    "daily", "once", "twice", "three", "four", "times", "every",
+    "hour", "hours", "hourly", "week", "weekly",
+    "take", "takes", "taken", "taking", "give", "gives", "given", "giving",
+    "administer", "administers", "administered", "administering",
+    "used", "uses", "using",
+    "should", "must", "will", "with", "each", "that", "this", "from", "into",
+})
+
 @dataclass(frozen=True)
 class IndependentEntailment:
     label: str
@@ -291,6 +307,14 @@ def _daily_dose_equivalent(text):
         if value is not None:
             return value
     return None
+
+def _dose_rewording_keeps_terms(claim, evidence):
+    evidence_words = set(re.findall(r"[a-z]+", evidence.lower()))
+    return all(
+        word in evidence_words
+        for word in re.findall(r"[a-z]+", claim.lower())
+        if len(word) >= 4 and word not in DOSE_WORDS
+    )
 
 def _measurement_kind(text):
     lower = text.lower()

@@ -3,6 +3,7 @@ import re
 from agents.specialists.verification_agent.independent_entailment import (
     _condition_supported,
     _daily_dose_equivalent,
+    _dose_rewording_keeps_terms,
     _tokens,
 )
 from agents.specialists.verification_agent.claim_reasoning import (
@@ -222,6 +223,7 @@ def semantic_guard(item, claim):
         claim_daily is not None
         and evidence_daily is not None
         and abs(claim_daily - evidence_daily) < 1e-9
+        and _dose_rewording_keeps_terms(claim_l, evidence)
     )
 
     if not daily_equivalent:

@@ -350,7 +350,11 @@ private enum SemanticGuard {
         let dailySource = dailyDoseEquivalent(in: normalizedSource)
         let dailyEquivalent = dailyClaim != nil &&
             dailySource != nil &&
-            abs(dailyClaim! - dailySource!) < 1e-9
+            abs(dailyClaim! - dailySource!) < 1e-9 &&
+            doseRewordingKeepsTerms(
+                claim: normalizedClaim,
+                source: normalizedSource
+            )
 
         let rewordedDoseReasons: Set<String> = [
             "atomic_claim_not_entailed",
@@ -1361,6 +1365,41 @@ private enum SemanticGuard {
         }
 
         return nil
+    }
+
+    private static let doseWords: Set<String> = [
+        "dose", "doses", "dosed", "dosing", "dosage", "dosages",
+        "total", "amount", "divided",
+        "milligram", "milligrams", "gram", "grams",
+        "microgram", "micrograms",
+        "millilitre", "millilitres", "milliliter", "milliliters",
+        "litre", "litres", "liter", "liters", "kilogram", "kilograms",
+        "daily", "once", "twice", "three", "four", "times", "every",
+        "hour", "hours", "hourly", "week", "weekly",
+        "take", "takes", "taken", "taking",
+        "give", "gives", "given", "giving",
+        "administer", "administers", "administered", "administering",
+        "used", "uses", "using",
+        "should", "must", "will", "with", "each", "that", "this",
+        "from", "into"
+    ]
+
+    private static func doseRewordingKeepsTerms(
+        claim: String,
+        source: String
+    ) -> Bool {
+        let sourceWords = Set(asciiWords(in: source))
+
+        return asciiWords(in: claim)
+            .filter { $0.count >= 4 && !doseWords.contains($0) }
+            .allSatisfy { sourceWords.contains($0) }
+    }
+
+    private static func asciiWords(in text: String) -> [String] {
+        text
+            .lowercased()
+            .split { !($0.isASCII && $0.isLetter) }
+            .map(String.init)
     }
 
     private static func conditionSignatures(
