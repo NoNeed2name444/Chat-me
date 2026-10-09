@@ -598,6 +598,37 @@ private enum SemanticGuard {
 
     private static let articles: Set<String> = ["a", "an", "the"]
 
+    // words of three letters or fewer that name no drug, condition or
+    // outcome. Other short words do: LDL for HDL, HIV for HBV, MI for PE, IV
+    // for IM, men for women, vitamin K for vitamin D. The short ways of
+    // writing a dose (mg, bd, tds) stay out, so a dose written another way
+    // lines up as before.
+    private static let shortNonTerms: Set<String> = [
+        "am", "as", "at", "be", "by", "do", "eg", "ie", "if", "in", "is",
+        "it", "no", "of", "on", "or", "so", "to", "up", "us", "vs", "we",
+        "all", "and", "any", "are", "but", "can", "did", "due", "etc",
+        "few", "for", "get", "got", "had", "has", "her", "him", "his",
+        "how", "its", "let", "may", "nor", "not", "now", "off", "our",
+        "out", "own", "per", "put", "say", "see", "she", "the", "too",
+        "try", "use", "via", "was", "way", "who", "why", "yet", "you",
+        "mg", "kg", "ml", "dl", "ug", "iu", "mcg", "mol", "hr", "hrs",
+        "min", "od", "bd", "bid", "tid", "tds", "qds", "qid", "prn", "day",
+        "one", "two", "six", "ten"
+    ]
+
+    // the short and long names of one route, so writing it the other way
+    // is no swap ("500 mg PO" for "500 mg orally")
+    private static let routeNames: [String: String] = [
+        "po": "oral", "oral": "oral", "orally": "oral",
+        "iv": "intravenous", "intravenous": "intravenous",
+        "intravenously": "intravenous",
+        "im": "intramuscular", "intramuscular": "intramuscular",
+        "intramuscularly": "intramuscular",
+        "sc": "subcutaneous", "sq": "subcutaneous",
+        "subcut": "subcutaneous", "subcutaneous": "subcutaneous",
+        "subcutaneously": "subcutaneous"
+    ]
+
     // endings cut so another form of the same word still lines up; there is
     // no "-ate" or "-ic" rule, which would make nitrate and nitrite one word
     private static let stemRules: [(suffix: String, replacement: String)] = [
@@ -632,8 +663,13 @@ private enum SemanticGuard {
     }
 
     private static func contentWord(_ word: String) -> Bool {
-        word.count >= 4 &&
-            !claimStopwords.contains(word) &&
+        if word.count < 4 {
+            return word.allSatisfy { $0.isLetter } &&
+                !shortNonTerms.contains(word) &&
+                !claimStopwords.contains(word)
+        }
+
+        return !claimStopwords.contains(word) &&
             !functionWords.contains(word) &&
             !doseWords.contains(word) &&
             !word.contains { $0.isNumber }
@@ -700,8 +736,37 @@ private enum SemanticGuard {
         return runs
     }
 
+    // a known alias, one route's two names, a short name spelled by the
+    // initials of the other side's two words (AF, atrial fibrillation), or a
+    // clotting factor and its activated form (X, Xa)
+    private static func sameTerm(_ left: String, _ right: String) -> Bool {
+        if anchorsEquivalent(left, right) {
+            return true
+        }
+
+        if let route = routeNames[left], route == routeNames[right] {
+            return true
+        }
+
+        for (short, long) in [(left, right), (right, left)] {
+            let words = long.split(separator: " ")
+
+            if short.count < 4, words.count == 2,
+                short == String(words.compactMap(\.first)) {
+                return true
+            }
+
+            if !short.isEmpty, short.allSatisfy({ "ivx".contains($0) }),
+                long == short + "a" {
+                return true
+            }
+        }
+
+        return false
+    }
+
     // one or two words on each side, every one a term, none said elsewhere
-    // in the other sentence and no pair a known alias (paracetamol,
+    // in the other sentence and no pair the same term (paracetamol,
     // acetaminophen)
     private static func isSwap(
         _ claimGap: [String],
@@ -729,7 +794,7 @@ private enum SemanticGuard {
             }
         }
 
-        return !pairs.contains { anchorsEquivalent($0.0, $0.1) }
+        return !pairs.contains { sameTerm($0.0, $0.1) }
     }
 
     private static func swapsATerm(

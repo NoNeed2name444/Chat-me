@@ -87,7 +87,7 @@ final class CrossPlatformConformanceTests: XCTestCase {
     func testSharedConformanceVectors() throws {
         let corpus = try loadCorpus()
 
-        XCTAssertEqual(corpus.version, "1.5")
+        XCTAssertEqual(corpus.version, "1.6")
 
         let verifier = CurriculumVerifier()
 

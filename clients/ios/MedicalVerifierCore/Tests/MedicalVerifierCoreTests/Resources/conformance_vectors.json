@@ -1,5 +1,5 @@
 {
-  "version": "1.5",
+  "version": "1.6",
   "cases": [
     {
       "id": "valid_basic",
@@ -336,6 +336,46 @@
       "answer": "Clopidogrel is a prodrug requiring metabolic activation.",
       "source_title": "Course",
       "source_passage": "Clopidogrel is a prodrug and requires metabolic activation.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
+      "id": "atomic_term_swapped_short",
+      "prompt": "What do statins lower?",
+      "answer": "Statins lower LDL cholesterol.",
+      "source_title": "Course",
+      "source_passage": "Statins lower HDL cholesterol.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "atomic_term_swapped_route",
+      "prompt": "How is adrenaline given for anaphylaxis?",
+      "answer": "Adrenaline 0.5 mg is given IM for anaphylaxis.",
+      "source_title": "Course",
+      "source_passage": "Adrenaline 0.5 mg is given IV for anaphylaxis.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "SOURCE_UNSUPPORTED",
+      "requires_review": true
+    },
+    {
+      "id": "atomic_term_short_name_reworded",
+      "prompt": "What is used for rate control in AF?",
+      "answer": "Rate control in AF uses beta blockers.",
+      "source_title": "Course",
+      "source_passage": "Rate control in atrial fibrillation uses beta blockers.",
+      "source_file_seed": "pdf-bytes",
+      "expected_status": "VALIDATED",
+      "requires_review": false
+    },
+    {
+      "id": "atomic_term_route_reworded",
+      "prompt": "How is amoxicillin given?",
+      "answer": "Amoxicillin 500 mg PO three times a day.",
+      "source_title": "Course",
+      "source_passage": "Amoxicillin 500 mg orally three times a day.",
       "source_file_seed": "pdf-bytes",
       "expected_status": "VALIDATED",
       "requires_review": false

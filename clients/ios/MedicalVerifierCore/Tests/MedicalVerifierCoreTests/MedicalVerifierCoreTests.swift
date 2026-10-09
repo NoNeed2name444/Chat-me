@@ -855,4 +855,58 @@ final class MedicalVerifierCoreTests: XCTestCase {
         XCTAssertEqual(result.status, .validated)
     }
 
+
+    func testSwappedShortTermIsRejected() {
+        // the Python verifier holds the same cases
+        // (test_swapped_short_term_is_unknown)
+        let cases = [
+            ("What do statins lower?", "Statins lower LDL cholesterol.",
+             "Statins lower HDL cholesterol."),
+            ("What does tenofovir treat?", "Tenofovir treats HIV infection.",
+             "Tenofovir treats HBV infection."),
+            ("How is adrenaline given for anaphylaxis?",
+             "Adrenaline 0.5 mg is given IM for anaphylaxis.",
+             "Adrenaline 0.5 mg is given IV for anaphylaxis."),
+            ("What reverses warfarin?", "Warfarin is reversed with vitamin K.",
+             "Warfarin is reversed with vitamin D.")
+        ]
+
+        for (prompt, answer, passage) in cases {
+            let result = CurriculumVerifier().verify(
+                prompt: prompt,
+                answer: answer,
+                sources: [self.source(passage: passage)]
+            )
+
+            XCTAssertEqual(result.status, .sourceUnsupported, answer)
+            XCTAssertTrue(result.warnings.contains(
+                "atomic_term_substituted:snapshot-1"
+            ), answer)
+        }
+    }
+
+    func testShortNameOfTheSameTermIsNotASwap() {
+        let cases = [
+            ("How is amoxicillin given?",
+             "Amoxicillin 500 mg PO three times a day.",
+             "Amoxicillin 500 mg orally three times a day."),
+            ("What is used for rate control in AF?",
+             "Rate control in AF uses beta blockers.",
+             "Rate control in atrial fibrillation uses beta blockers."),
+            ("What does rivaroxaban inhibit?",
+             "Rivaroxaban inhibits factor Xa.",
+             "Rivaroxaban inhibits activated factor X.")
+        ]
+
+        for (prompt, answer, passage) in cases {
+            let result = CurriculumVerifier().verify(
+                prompt: prompt,
+                answer: answer,
+                sources: [self.source(passage: passage)]
+            )
+
+            XCTAssertEqual(result.status, .validated, answer)
+        }
+    }
+
 }

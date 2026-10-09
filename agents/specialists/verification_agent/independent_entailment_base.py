@@ -479,6 +479,35 @@ FUNCTION_WORDS = frozenset({
 
 ARTICLES = frozenset({"a", "an", "the"})
 
+# Words of three letters or fewer that name no drug, condition or outcome.
+# Other short words do: LDL for HDL, HIV for HBV, MI for PE, IV for IM, men
+# for women, vitamin K for vitamin D. The short ways of writing a dose (mg,
+# bd, tds) stay out, so a dose written another way lines up as before.
+SHORT_NON_TERMS = frozenset({
+    "am", "as", "at", "be", "by", "do", "eg", "ie", "if", "in", "is", "it",
+    "no", "of", "on", "or", "so", "to", "up", "us", "vs", "we",
+    "all", "and", "any", "are", "but", "can", "did", "due", "etc", "few",
+    "for", "get", "got", "had", "has", "her", "him", "his", "how", "its",
+    "let", "may", "nor", "not", "now", "off", "our", "out", "own", "per",
+    "put", "say", "see", "she", "the", "too", "try", "use", "via", "was",
+    "way", "who", "why", "yet", "you",
+    "mg", "kg", "ml", "dl", "ug", "iu", "mcg", "mol", "hr", "hrs", "min",
+    "od", "bd", "bid", "tid", "tds", "qds", "qid", "prn", "day",
+    "one", "two", "six", "ten",
+})
+
+# The short and long names of one route, so writing it the other way is no
+# swap ("500 mg PO" for "500 mg orally")
+ROUTE_NAMES = {
+    "po": "oral", "oral": "oral", "orally": "oral",
+    "iv": "intravenous", "intravenous": "intravenous",
+    "intravenously": "intravenous",
+    "im": "intramuscular", "intramuscular": "intramuscular",
+    "intramuscularly": "intramuscular",
+    "sc": "subcutaneous", "sq": "subcutaneous", "subcut": "subcutaneous",
+    "subcutaneous": "subcutaneous", "subcutaneously": "subcutaneous",
+}
+
 # endings cut so another form of the same word still lines up; there is no
 # "-ate" or "-ic" rule, which would make nitrate and nitrite one word
 _STEM_RULES = (
@@ -499,9 +528,14 @@ def _stem(word):
     return word
 
 def _content_word(word):
+    if len(word) < 4:
+        return (
+            word.isalpha()
+            and word not in SHORT_NON_TERMS
+            and word not in _STOPWORDS
+        )
     return (
-        len(word) >= 4
-        and word not in _STOPWORDS
+        word not in _STOPWORDS
         and word not in FUNCTION_WORDS
         and word not in DOSE_WORDS
         and not any(character.isdigit() for character in word)
@@ -535,9 +569,30 @@ def _unmatched_runs(left, right):
         runs.append(((start_i, len(left)), (start_j, len(right))))
     return runs
 
+_ROMAN = re.compile(r"[ivx]+")
+
+def _same_term(left, right):
+    # a known alias, one route's two names, a short name spelled by the
+    # initials of the other side's two words (AF, atrial fibrillation), or a
+    # clotting factor and its activated form (X, Xa)
+    if entities_equivalent(left, right):
+        return True
+    route = ROUTE_NAMES.get(left)
+    if route is not None and route == ROUTE_NAMES.get(right):
+        return True
+    for short, long in ((left, right), (right, left)):
+        words = long.split()
+        if len(short) < 4 and len(words) == 2:
+            if short == "".join(word[0] for word in words):
+                return True
+        if _ROMAN.fullmatch(short) and long == short + "a":
+            return True
+    return False
+
 def _is_swap(claim_gap, evidence_gap, claim_stems, evidence_stems):
     # one or two words on each side, every one a term, none said elsewhere in
-    # the other sentence and no pair a known alias (paracetamol, acetaminophen)
+    # the other sentence and no pair the same term (paracetamol,
+    # acetaminophen)
     if not (1 <= len(claim_gap) <= 2 and 1 <= len(evidence_gap) <= 2):
         return False
     if not all(_content_word(word) for word in claim_gap + evidence_gap):
@@ -548,7 +603,7 @@ def _is_swap(claim_gap, evidence_gap, claim_stems, evidence_stems):
         return False
     pairs = [(" ".join(claim_gap), " ".join(evidence_gap))]
     pairs += [(left, right) for left in claim_gap for right in evidence_gap]
-    return not any(entities_equivalent(left, right) for left, right in pairs)
+    return not any(_same_term(left, right) for left, right in pairs)
 
 def _swaps_a_term(claim_text, evidence_text):
     claim_words = _WORD.findall(claim_text.lower())

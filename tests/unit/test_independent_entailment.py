@@ -110,3 +110,30 @@ def test_a_sentence_naming_the_claimed_drug_still_supports():
         "Ibuprofen treats otitis media. Amoxicillin treats otitis media.",
     )
     assert result.label == "SUPPORTS"
+
+def test_swapped_short_term_is_unknown():
+    # the Swift twin holds the same cases (testSwappedShortTermIsRejected)
+    for claim, evidence in (
+        ("Statins lower LDL cholesterol.", "Statins lower HDL cholesterol."),
+        ("Tenofovir treats HIV infection.", "Tenofovir treats HBV infection."),
+        ("Aspirin is used after MI.", "Aspirin is used after PE."),
+        ("Adrenaline 0.5 mg is given IM for anaphylaxis.",
+         "Adrenaline 0.5 mg is given IV for anaphylaxis."),
+        ("Warfarin is reversed with vitamin K.", "Warfarin is reversed with vitamin D."),
+        ("Gout is more common in men.", "Gout is more common in women."),
+    ):
+        result = verify(claim, evidence)
+        assert result.label == "UNKNOWN", claim
+        assert "atomic_term_substituted" in result.reasons, claim
+
+def test_short_name_of_the_same_term_is_not_a_swap():
+    # a route's two names, and a short name spelled by the initials
+    for claim, evidence in (
+        ("Amoxicillin 500 mg PO three times a day.",
+         "Amoxicillin 500 mg orally three times a day."),
+        ("Rate control in AF uses beta blockers.",
+         "Rate control in atrial fibrillation uses beta blockers."),
+        ("Furosemide is used in heart failure.", "Furosemide is used for heart failure."),
+        ("Rivaroxaban inhibits factor Xa.", "Rivaroxaban inhibits activated factor X."),
+    ):
+        assert verify(claim, evidence).label == "SUPPORTS", claim
