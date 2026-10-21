@@ -12,6 +12,7 @@ Safety-first medical verification framework.
 - risk gates and abstention
 - contradiction handling
 - audit/provenance
+- question-bank evidence loop and licence gate ([QUESTION_BANK_PIPELINE.md](QUESTION_BANK_PIPELINE.md))
 - Docker and CI tests
 
 This is an engineering foundation, **not a clinically validated medical device**. It must not be used as an autonomous diagnostic, prescribing, or treatment system.
