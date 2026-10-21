@@ -113,6 +113,11 @@ def licence_decision(source) -> LicenceDecision:
 
     if family in REFUSED_FAMILIES:
         return refuse(f"refused_source:{family}: {REFUSED_FAMILIES[family]}")
+    if family not in (OPENFDA, PMC_OPEN_ACCESS):
+        return refuse(
+            f"family_not_allowed:{family or '<none>'}: only openFDA and PMC OA "
+            "families are allowed"
+        )
     if licence == "UNKNOWN":
         return refuse("licence_unknown: a source without a readable licence is unusable")
     if licence.startswith("CC-BY-NC"):

@@ -306,6 +306,13 @@ def test_refused_families_fail_even_when_relabelled_cc_by(family):
     assert decision.reason.startswith("refused_source:" + family)
 
 
+@pytest.mark.parametrize("family", ["", "medqa-usmle", "some-new-bank"])
+def test_unlisted_families_fail_even_when_labelled_cc_by(family):
+    decision = licence_decision(source("X1", family=family))
+    assert decision.allowed is False
+    assert decision.reason.startswith("family_not_allowed:" + (family or "<none>"))
+
+
 def test_openfda_is_cc0_unless_flagged_and_pmc_is_per_article():
     cc0 = "https://creativecommons.org/publicdomain/zero/1.0/"
     label = {"source_id": "openfda:spl-1", "family": "openfda", "license": "CC0",
