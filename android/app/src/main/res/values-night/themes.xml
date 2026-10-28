@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- At night the same, on the dark page, with light icons in the status bar. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- At night the same, on the dark page, with light icons. -->
     <style name="Base.AppTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/page</item>
         <item name="android:statusBarColor">@color/page</item>
         <item name="android:navigationBarColor">@color/page</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 </resources>

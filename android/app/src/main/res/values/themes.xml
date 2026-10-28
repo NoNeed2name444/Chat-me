@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The starting window and its bars stand on the page colour, so nothing changes when the
-         app draws its first frame; from then on enableEdgeToEdge makes the bars clear. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The starting window and its bars stand on the page colour, with dark icons, so nothing
+         changes when the app draws its first frame; from then on enableEdgeToEdge draws the page
+         under the bars. Android 8.0 has no theme attribute for the navigation bar's icons, so
+         there they stay light until the first frame. -->
     <style name="Base.AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/page</item>
         <item name="android:statusBarColor">@color/page</item>
         <item name="android:navigationBarColor">@color/page</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
     </style>
     <style name="AppTheme" parent="Base.AppTheme" />
 </resources>

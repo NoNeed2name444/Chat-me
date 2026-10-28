@@ -60,11 +60,18 @@ class LaunchTest {
         assertEquals(listOf(MainActivity::class.java.name), opens)
     }
 
-    /** The window drawn in software, as it would be on screen, read in the middle and near each corner. */
+    /**
+     * The window drawn in software, read in the middle and near each corner. The window's own background is
+     * the page colour too (the starting window's), so it's taken away first: what's read is SortaRoot's fill.
+     */
     private fun assertPage(expected: String) {
-        val root = compose.activity.window.decorView.rootView
+        val window = compose.activity.window
+        val root = window.decorView.rootView
         val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
-        compose.runOnIdle { root.draw(Canvas(bitmap)) }
+        compose.runOnIdle {
+            window.setBackgroundDrawable(null)
+            root.draw(Canvas(bitmap))
+        }
         for ((fx, fy) in listOf(0.5f to 0.5f, 0.02f to 0.02f, 0.98f to 0.02f, 0.02f to 0.98f, 0.98f to 0.98f)) {
             val seen = "%06X".format(bitmap.getPixel((root.width * fx).toInt(), (root.height * fy).toInt()) and 0xFFFFFF)
             assertEquals("the page at $fx, $fy (window ${root.width} x ${root.height})", expected, seen)

@@ -15,8 +15,8 @@ concurrency:
 jobs:
   build:
     runs-on: macos-latest
-    # about twice the 14 minutes run 40714297807 took
-    timeout-minutes: 30
+    # about twice the 19 minutes run 40718963474 took the first time
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,18 +62,18 @@ jobs:
       - name: The app's Info.plist
         run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
       # each simulator runs once the build has passed, whatever the other did;
-      # each step took 6 to 7 minutes in run 40714297807, most of it the
-      # simulator's first boot
+      # in run 40718963474 the iPhone's step took 7 to 8 minutes and the iPad's
+      # 9, most of it the simulator's first boot, so each may take twice that
       - name: Launch tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 15
+        timeout-minutes: 18
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone
       - name: Launch tests on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 15
+        timeout-minutes: 18
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}

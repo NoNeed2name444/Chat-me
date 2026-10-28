@@ -1,19 +1,25 @@
 #!/bin/bash
 # Runs the launch tests that "Build for testing" built (ci/public/ios.yml) on
 # one simulator, from ios/. Each test runs on its own, with the simulator set
-# to that test's appearance first and read back. XCUIDevice.shared.appearance,
-# which the tests also set, is ignored when tests run through xcodebuild on
-# iOS 26 simulators: in run 40714297807 the dark test found the page bone, and
-# the simulator never went dark (Apple's developer forums, thread 812656).
+# to that test's appearance first and read back. The tests also set
+# XCUIDevice.shared.appearance, but in run 40714297807 that didn't take: the
+# dark test found the page bone, and the simulator never went dark. One report
+# on Apple's developer forums says the same of tests run through xcodebuild
+# (thread 812656); nobody there confirmed it.
 # Logs go to ../results/<kind>-<look>.log and result bundles to
 # ../results/<kind>-<look>.xcresult. It fails unless each test passed, by name.
+# The simulator is shut down afterwards, so the next one boots alone: in run
+# 40718963474 the iPad booted beside the running iPhone, in 6 minutes the
+# first time and in 11 the second.
 #
 #   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad
 set -euo pipefail
 kind="$1"
 : "${UDID:?the simulator to run on}"
 mkdir -p ../results
+booting=$SECONDS
 xcrun simctl bootstatus "$UDID" -b > /dev/null
+echo "$kind: the simulator booted in $((SECONDS - booting)) seconds"
 failed=0
 for run in light:testLightPageIsBone dark:testDarkPageIsAubergine; do
   look="${run%%:*}"
@@ -43,4 +49,5 @@ for run in light:testLightPageIsBone dark:testDarkPageIsAubergine; do
     failed=1
   fi
 done
+xcrun simctl shutdown "$UDID" || echo "::warning::$kind: the simulator didn't shut down"
 exit "$failed"

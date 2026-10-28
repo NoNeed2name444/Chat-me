@@ -4,8 +4,8 @@ import XCTest
 /// aubergine in dark, as the Page colour set states them. Each test keeps its
 /// screenshot, so a run shows what was on screen.
 ///
-/// Under xcodebuild, iOS 26 simulators ignore XCUIDevice's appearance, so CI
-/// sets the simulator's appearance itself before each test
+/// In CI run 40714297807, setting XCUIDevice's appearance left the simulator
+/// light, so CI sets the simulator's appearance itself before each test
 /// (tools/run_ui_tests.sh).
 final class LaunchTests: XCTestCase {
     private static let bone = [0xF3, 0xEA, 0xDB]
@@ -15,8 +15,14 @@ final class LaunchTests: XCTestCase {
     private static let tolerance = 2
     /// Where the page is read, as fractions of the screen's width and height:
     /// the middle, and near each corner, clear of the status bar and the home
-    /// indicator.
-    private static let points: [(Double, Double)] = [(0.5, 0.5), (0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9)]
+    /// indicator; and in the strips under those bars, where the page shows only
+    /// if it ignores the safe area: at the top's middle, and at the bottom,
+    /// either side of the home indicator and clear of the corner where the
+    /// iPad draws its window's handle.
+    private static let points: [(Double, Double)] = [
+        (0.5, 0.5), (0.1, 0.1), (0.9, 0.1), (0.1, 0.9), (0.9, 0.9),
+        (0.5, 0.005), (0.2, 0.995), (0.8, 0.995),
+    ]
 
     override func tearDown() {
         XCUIDevice.shared.appearance = .light
