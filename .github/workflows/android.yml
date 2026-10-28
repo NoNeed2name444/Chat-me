@@ -1,0 +1,61 @@
+# Sorta's Android app, on every copy pushed to Chat-me's sorta branch
+# (tools/mirror_chatme.py): the debug APK built and checked, and the unit
+# tests run. The SDK steps are Stethoscore's
+# (reference/stethoscore-aec2af1c/.github/workflows/android.yml). Chat-me is
+# public, so its standard runners cost nothing; no secret is used. A second
+# run of the same copy is a re-run of this one.
+name: Android
+on:
+  push:
+    branches: [sorta]
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # a first guess, to be set to about twice the usual time once runs show it
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '15859902'
+          packages: 'platform-tools'
+      - name: The command-line tools that know Android 17
+        run: |
+          mv "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/preinstalled-backup"
+          ln -s "$ANDROID_HOME/cmdline-tools/15859902" "$ANDROID_HOME/cmdline-tools/latest"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - name: Install the Android 17 SDK
+        run: sdkmanager --channel=3 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.7.1'
+      - name: Build the APK and run the unit tests
+        working-directory: android
+        run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
+      - name: The APK
+        run: python3 tools/check_apk.py "$ANDROID_HOME/build-tools/37.0.0/aapt2" android/app/build/outputs/apk/debug/app-debug.apk
+      - name: The tests that ran
+        if: ${{ always() }}
+        run: |
+          set -o pipefail
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect LaunchTest=6 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: sorta-android
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's name, the owner's choice (23 Oct) -->
+    <string name="app_name" translatable="false">Sorta</string>
+</resources>

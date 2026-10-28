@@ -1,0 +1,98 @@
+# Sorta's iOS app, on every copy pushed to Chat-me's sorta branch
+# (tools/mirror_chatme.py): the project generated, built for the simulator,
+# the app's Info.plist checked, and the launch tests run on an iPhone and an
+# iPad. Chat-me is public, so its standard runners cost nothing; no secret is
+# used. A second run of the same copy is a re-run of this one.
+name: iOS
+on:
+  push:
+    branches: [sorta]
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-latest
+    # a first guess, to be set to about twice the usual time once runs show it
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # What the runner offers for the iPhone Duo, Xcode 27.1 and a foldable
+      # simulator: the owner's check of 22 Oct
+      - name: What this runner has
+        run: |
+          {
+            echo '### This runner'
+            echo '```'
+            echo "image $ImageOS $ImageVersion"
+            sw_vers
+            xcodebuild -version
+            ls -d /Applications/Xcode*.app
+            xcrun simctl list runtimes | grep -i ios
+            xcrun simctl list devicetypes | grep -iE 'duo|fold' || echo "no foldable iPhone among the device types"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Pick the simulators
+        id: sim
+        run: |
+          python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+          python3 tools/pick_sim.py ipad >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          { echo '### Compile errors and warnings'; echo '```'; grep -E "error:|warning:" ../build.log | sed -E 's#^.*/ios/##' | sort -u | head -60 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The app's Info.plist
+        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
+      - name: Launch tests on an iPhone
+        timeout-minutes: 15
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone
+      - name: Launch tests on an iPad
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.ipad_udid }}
+        run: bash ../tools/run_ui_tests.sh ipad
+      # the screenshots the tests kept, where they can be looked at without Xcode
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for kind in iphone ipad; do
+            [ -d "$kind.xcresult" ] || continue
+            mkdir -p "shots/$kind"
+            xcrun xcresulttool export attachments --path "$kind.xcresult" --output-path "shots/$kind" || true
+          done
+          ls -R shots 2>/dev/null || echo "no screenshots"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: sorta-ios
+          path: |
+            build.log
+            iphone.log
+            ipad.log
+            iphone.xcresult
+            ipad.xcresult
+            shots/
+          if-no-files-found: ignore
+          retention-days: 7

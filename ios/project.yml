@@ -1,0 +1,85 @@
+# Sorta for iPhone and iPad. `xcodegen generate` in ios/ makes Sorta.xcodeproj
+# and Sorta/Info.plist from this file; neither is committed. The settings start
+# from Stethoscore's (reference/stethoscore-aec2af1c/ios/project.yml).
+name: Sorta
+options:
+  bundleIdPrefix: com.cramdown
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Sorta:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sorta
+      # The icon and the alternate icons, for the builds the owner installs:
+      # tools/private/wire_art.py copies them in, and those builds name the
+      # icon on the xcodebuild line. Never committed, so other builds have no
+      # icon and nothing drawn in its place.
+      - path: Art
+        optional: true
+    info:
+      path: Sorta/Info.plist
+      properties:
+        CFBundleDisplayName: Sorta
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations:
+          - en
+        # The first frame is the page colour alone, light or dark with the
+        # phone (the Page colour set). The first screen shows no mark, so the
+        # launch screen shows none either (work/T0137/README.md, A4).
+        UILaunchScreen:
+          UIColorName: Page
+        # As Stethoscore had it (T0138): the phone turns on its side and opens
+        # as a book, but never upside down; the iPad turns every way.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        ITSAppUsesNonExemptEncryption: false
+        # Sorta's own links: sorta://...
+        CFBundleURLTypes:
+          - CFBundleURLName: com.cramdown.sorta
+            CFBundleURLSchemes:
+              - sorta
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta
+  SortaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Sorta
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Sorta
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta.uitests
+schemes:
+  Sorta:
+    build:
+      targets:
+        Sorta: all
+        SortaUITests: [test]
+    test:
+      targets:
+        - SortaUITests
+    run:
+      config: Debug

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and later: the system's splash stands on the page colour too. Its mark is
+         splash_mark: the art's when the build has it (art/res), nothing otherwise (plain/res). -->
+    <style name="AppTheme" parent="Base.AppTheme">
+        <item name="android:windowSplashScreenBackground">@color/page</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
+</resources>

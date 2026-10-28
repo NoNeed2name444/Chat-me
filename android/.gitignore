@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.jks
+*.keystore
+*.hprof
+.idea/
+.DS_Store
+# the icon and splash art, copied in for the builds the owner installs only
+# (tools/private/wire_art.py)
+app/art/
