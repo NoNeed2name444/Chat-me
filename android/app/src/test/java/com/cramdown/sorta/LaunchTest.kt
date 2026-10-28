@@ -14,8 +14,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 // Sorta opens on the page colour from edge to edge, bone by day and aubergine at night, on a
-// phone and on a tablet; it carries Sorta's ids, and sorta:// links open it. The same checks
-// as LaunchTests on iOS.
+// phone, a tablet, and a foldable closed and open; it carries Sorta's ids, and sorta:// links
+// open it. The same checks as LaunchTests on iOS.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -33,6 +33,20 @@ class LaunchTest {
 
     @Test @Config(qualifiers = "w1280dp-h800dp-land-night")
     fun aTabletsNightPageIsAubergine() = assertPage("281E2A")
+
+    // Closed, a foldable shows a tall, narrow cover screen; open, the size of Android's reference
+    // unfolded foldable (PreviewScreenSizes).
+    @Test @Config(qualifiers = "w344dp-h882dp-port-notnight")
+    fun aClosedFoldablesDayPageIsBone() = assertPage("F3EADB")
+
+    @Test @Config(qualifiers = "w344dp-h882dp-port-night")
+    fun aClosedFoldablesNightPageIsAubergine() = assertPage("281E2A")
+
+    @Test @Config(qualifiers = "w673dp-h841dp-port-notnight")
+    fun anOpenFoldablesDayPageIsBone() = assertPage("F3EADB")
+
+    @Test @Config(qualifiers = "w673dp-h841dp-port-night")
+    fun anOpenFoldablesNightPageIsAubergine() = assertPage("281E2A")
 
     @Test fun itCarriesSortasIds() {
         val app = compose.activity

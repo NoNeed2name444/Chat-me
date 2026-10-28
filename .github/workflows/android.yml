@@ -16,8 +16,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # a first guess, to be set to about twice the usual time once runs show it
-    timeout-minutes: 30
+    # about twice the 2 to 3 minutes its first three runs took
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,7 +49,7 @@ jobs:
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect LaunchTest=6 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect LaunchTest=10 | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:

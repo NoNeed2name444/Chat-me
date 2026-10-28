@@ -3,6 +3,10 @@ import XCTest
 /// Sorta opens on the page colour from edge to edge: bone in light and
 /// aubergine in dark, as the Page colour set states them. Each test keeps its
 /// screenshot, so a run shows what was on screen.
+///
+/// Under xcodebuild, iOS 26 simulators ignore XCUIDevice's appearance, so CI
+/// sets the simulator's appearance itself before each test
+/// (tools/run_ui_tests.sh).
 final class LaunchTests: XCTestCase {
     private static let bone = [0xF3, 0xEA, 0xDB]
     private static let aubergine = [0x28, 0x1E, 0x2A]
