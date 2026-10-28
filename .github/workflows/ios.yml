@@ -47,6 +47,7 @@ jobs:
           python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
           python3 tools/pick_sim.py ipad >> "$GITHUB_OUTPUT"
       - name: Build for testing
+        id: build
         working-directory: ios
         run: |
           set -o pipefail
@@ -60,14 +61,16 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The app's Info.plist
         run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
+      # each simulator runs once the build has passed, whatever the other did
       - name: Launch tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 15
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone
       - name: Launch tests on an iPad
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         timeout-minutes: 15
         working-directory: ios
         env:

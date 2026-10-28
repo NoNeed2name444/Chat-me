@@ -60,6 +60,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta
+        # XcodeGen names an icon, AppIcon, for every app, and the asset
+        # compiler stops when the catalog has none. These builds have none;
+        # the builds with the art name it on the xcodebuild line.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
   SortaUITests:
     type: bundle.ui-testing
     platform: iOS

@@ -14,7 +14,8 @@ builds and checks the copy and says what it would push.
 Before anything is written to Chat-me, the guard stops on:
 - a file with the same SHA-256 as any file under work/ or design/ in that
   Sorta commit, or any file in docs/provenance/work-sha256.txt;
-- a picture, vector drawing or icon file;
+- a picture or icon file, unless it is on PICTURES_ALLOWED by path and
+  SHA-256, and any vector drawing;
 - a session link (the scheme CLAUDE.md names), an email address, or
   something that looks like a key;
 - a symbolic link, a submodule or a file over 5 MB.
