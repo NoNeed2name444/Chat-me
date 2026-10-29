@@ -165,7 +165,8 @@ struct GraphStyleTool: View {
                 }
             }
         } label: {
-            IdeaToolFace(symbol: "sparkles")
+            // the board's Look glyph; sparkles is the Universe's
+            IdeaToolFace(symbol: "paintpalette")
         }
         .foregroundStyle(IdeaToolFace.ink(active: custom))
         .ideaToolRelief(active: custom)

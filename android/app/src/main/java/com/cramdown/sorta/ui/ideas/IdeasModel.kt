@@ -11,6 +11,8 @@ import androidx.compose.material.icons.rounded.Adjust
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Flare
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Speed
@@ -129,7 +131,7 @@ val NoteKind.icon: ImageVector get() = when (this) {
 
 val GraphTheme.icon: ImageVector get() = when (this) {
     GraphTheme.SPACE -> Icons.Rounded.AutoAwesome              // sparkles
-    GraphTheme.NEURONS -> Icons.Rounded.Public
+    GraphTheme.NEURONS -> Icons.Rounded.Psychology            // brain.head.profile
     GraphTheme.PERFORMANCE -> Icons.Rounded.Speed              // speedometer
 }
 
@@ -139,7 +141,7 @@ val SpaceStyle.icon: ImageVector get() = when (this) {
     SpaceStyle.ROCKY -> Icons.Rounded.Public                   // globe.europe.africa.fill
     SpaceStyle.GAS_GIANT -> Icons.Rounded.Contrast             // circle.lefthalf.filled
     SpaceStyle.PULSAR -> Icons.Rounded.Sensors                 // dot.radiowaves.left.and.right
-    SpaceStyle.COMET -> Icons.Rounded.AutoAwesome              // sparkle
+    SpaceStyle.COMET -> Icons.Rounded.Flare                    // sparkle; AutoAwesome (sparkles) is the Universe's
 }
 
 /** New page's glyph (doc.badge.plus). */

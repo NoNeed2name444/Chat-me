@@ -353,7 +353,7 @@ struct GraphPreviewBar: View {
                 Button {
                 } label: {
                     Image(systemName: "chevron.backward")
-                        .wardFont(.body.weight(.semibold))
+                        .wardFont(.circleGlyph)
                         .frame(width: WardControlSize.target, height: WardControlSize.target)
                 }
                 .buttonStyle(.plain)
@@ -362,7 +362,8 @@ struct GraphPreviewBar: View {
                 Spacer()
             }
         }
-        .foregroundStyle(.primary)
+        // the kit's ink, as the peek card's More glyph is
+        .foregroundStyle(Color.wardInk)
         .padding(.horizontal, WardSpace.gutter)
         .padding(.top, WardSpace.xs)
     }

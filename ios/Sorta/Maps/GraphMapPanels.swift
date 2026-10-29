@@ -167,7 +167,7 @@ struct GraphPeekCardView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .wardFont(.body.weight(.semibold))
+                        .wardFont(.circleGlyph)
                         .foregroundStyle(Color.wardInk)
                         .frame(width: WardControlSize.target, height: WardControlSize.target)
                         .contentShape(Circle())

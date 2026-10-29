@@ -59,6 +59,7 @@ struct NameSheet: View {
 
     private var field: some View {
         TextField(prompt, text: $name)
+            .wardFont(.body)
             .focused($focused)
             .submitLabel(.done)
             .onSubmit(submit)

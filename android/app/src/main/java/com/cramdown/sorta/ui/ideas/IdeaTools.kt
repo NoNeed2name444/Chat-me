@@ -119,6 +119,7 @@ const val LINES_PICKER_WIDTH = 200
                     }
                 })
         }
+        // room under the field so the keyboard doesn't cover it, not a gap between pieces
         Spacer(Modifier.height(120.dp))
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }

@@ -25,6 +25,23 @@ mkdir -p ../results
 booting=$SECONDS
 xcrun simctl bootstatus "$UDID" -b > /dev/null
 echo "$kind: the simulator booted in $((SECONDS - booting)) seconds"
+# One launch of the map before any test, timed by none: just after boot the
+# simulator is still busy, and the first launch after an install fills
+# caches that no later one does. Without it the first map test hit the
+# simulator's own timeouts after slow boots (Chat-me run 40855930427, 169
+# seconds: an orientation change; run 40861178931, 88 seconds: the launch),
+# and passed after a 40-second boot (run 40848934308). Stethoscore launched
+# once before its films and shots for the same reason
+# (reference/stethoscore-aec2af1c/.github/workflows/launch-recording.yml:119).
+warming=$SECONDS
+if xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Sorta.app \
+   && xcrun simctl launch "$UDID" com.cramdown.sorta -graphPreview > /dev/null; then
+  sleep 20
+  xcrun simctl terminate "$UDID" com.cramdown.sorta || true
+  echo "$kind: the warm-up launch took $((SECONDS - warming)) seconds"
+else
+  echo "::warning::$kind: the warm-up launch failed, after $((SECONDS - warming)) seconds"
+fi
 failed=0
 # Each run is <appearance>:<target>/<class>/<test>, or <appearance>:<target>
 # for a whole unit-test bundle. The gallery's screenshots are step 2's

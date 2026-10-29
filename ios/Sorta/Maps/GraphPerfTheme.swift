@@ -129,7 +129,7 @@ struct GraphPerfSpace: View {
         .foregroundStyle(Color.wardInk)
         .accessibilityLabel("Speed")
         .accessibilityValue(stats.spoken)
-        .accessibilityHint("How fast the map draws. Opens the demo maps of 100,000, 300,000 and 1,000,000 notes.")
+        .accessibilityHint("How fast the map draws. Opens the demo maps of 100,000 and 300,000 notes.")
         .accessibilityIdentifier("perfReadout")
     }
 }

@@ -27,6 +27,7 @@ struct GraphLegendSheet: View {
                             Image(systemName: row.symbol)
                                 .wardFont(.title3)
                                 .foregroundStyle(row.tint)
+                                // the column the glyphs line up in, not a gap
                                 .frame(width: 30)
                                 .accessibilityHidden(true)
                             // 2, under the scale's 4, so the lines read as one item (WardRow)
@@ -85,6 +86,7 @@ struct GraphLegendSheet: View {
             HStack(alignment: .top, spacing: 0) {
                 ForEach(content.rungs, id: \.caption) { rung in
                     VStack(spacing: WardSpace.s) {
+                        // the rungs' one height, not a gap, so their captions start level
                         rungCircle(rung)
                             .frame(height: 36)
                         // two lines rather than cut short or shrunk

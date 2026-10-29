@@ -11,7 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -199,21 +200,28 @@ private const val CARD_HEIGHT = 88.0
         }
 
         if (notes.isEmpty()) {
-            Column(Modifier.align(Alignment.Center).padding(bottom = hidden).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Rounded.TouchApp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(40.dp))
+            // the kit's empty state's gap and message type (WardEmptyState); iOS's outlined hand.tap at Title 2
+            Column(Modifier.align(Alignment.Center).padding(bottom = hidden).padding(WardSpace.xl.wardDp), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+                Icon(Icons.Outlined.TouchApp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(26.0)))
                 Text("Double-tap anywhere to put an idea there.", style = WardTextStyle.subheadline.textStyle(),
                     color = wardColor(WardToken.inkSecondary), textAlign = TextAlign.Center)
             }
         }
 
         if (connecting || source != null) {
-            Row(Modifier.align(Alignment.TopCenter).padding(top = 12.dp).padding(horizontal = 16.dp)
-                .wardRelief(RoundedCornerShape(50), WardLift.high, wardColor(WardToken.raised)).padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // one height with Cancel or without it, so the capsule doesn't jump when a card is picked;
+            // Cancel drops the pick, and the Connect tool ends connecting (as on iOS)
+            Row(Modifier.align(Alignment.TopCenter).padding(top = WardSpace.m.wardDp).padding(horizontal = WardSpace.gutter.wardDp)
+                .wardRelief(RoundedCornerShape(50), WardLift.high, wardColor(WardToken.raised))
+                .padding(start = WardSpace.gutter.wardDp, end = (if (source == null) WardSpace.gutter else WardSpace.xs).wardDp,
+                    top = WardSpace.xs.wardDp, bottom = WardSpace.xs.wardDp)
+                .heightIn(min = WardControlSize.target.wardDp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                Icon(Icons.Outlined.Route, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(18.0)))
                 Text(if (source == null) "Tap a card to start a connection." else "Tap another card to connect them, or to part them.",
                     Modifier.weight(1f, fill = false), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
-                WardTextButton("Cancel", { source = null; connecting = false }, kind = WardButtonKind.quiet, fills = false)
+                if (source != null) WardTextButton("Cancel", { source = null }, kind = WardButtonKind.quiet, fills = false)
             }
         }
 

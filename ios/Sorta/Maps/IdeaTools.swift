@@ -2,10 +2,11 @@ import SwiftUI
 
 // MARK: - The canvas tools
 //
-// The Board (Recentre, Connect, Look) and the Space (Filter, Recentre) each have a
-// couple of small tools. They share one shape and one place: a vertical
-// cluster of 44-point circles at the bottom-trailing corner just above Ideas'
-// bottom container - under the right thumb on a phone - and on the trailing
+// The Board (Look, Connect, Recentre) and the Space (Look, Filter, Recentre) each
+// have a couple of small tools, Look first and Recentre last. They share one
+// shape and one place: a vertical cluster of 44-point circles at the
+// bottom-trailing corner just above Ideas' bottom container - under the right
+// thumb on a phone - and on the trailing
 // edge, vertically centred, on a wide iPad, where the right hand rests. Each
 // is a soft circle raised off the base on the floating plane; a tool that is
 // on is pressed in, its glyph in the section's accent. Over the 3D map
@@ -33,7 +34,7 @@ struct IdeaToolFace: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .wardFont(.body.weight(.medium))
+            .wardFont(.circleGlyph)
             .frame(width: WardControlSize.target, height: WardControlSize.target)
             .contentShape(Circle())
     }

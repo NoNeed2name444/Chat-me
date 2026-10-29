@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -69,6 +70,10 @@ import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.grouped
+import com.cramdown.sorta.ui.ward.WardSpace
+import com.cramdown.sorta.ui.ward.WardType
+import com.cramdown.sorta.ui.ward.textStyle
+import com.cramdown.sorta.ui.ward.wardDp
 import java.util.Locale
 import kotlin.math.cbrt
 import kotlin.math.max
@@ -234,7 +239,9 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val drawnNow = drawn
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }) {
         if (!gles3) {
-            Text("This device has no OpenGL ES 3, which the 3D map needs.", Modifier.align(Alignment.Center).padding(24.dp), color = Color.White)
+            // white on the map's own night blue, which stays dark by day
+            Text("This device has no OpenGL ES 3, which the 3D map needs.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
+                style = WardType.body.textStyle(), color = Color.White, textAlign = TextAlign.Center)
             return@Box
         }
         AndroidView(

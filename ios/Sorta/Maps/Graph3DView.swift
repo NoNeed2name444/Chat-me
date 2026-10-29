@@ -190,7 +190,7 @@ struct Graph3DView: View {
             renameSheet(target)
         }
         .sheet(item: $addingInto) { target in
-            NameSheet(title: "New idea", prompt: "Idea", initial: "", confirm: "Add") { name in
+            NameSheet(title: "New idea", prompt: "The idea", initial: "", confirm: "Add") { name in
                 let folder: UUID? = target.home ? nil : target.id
                 _ = notes.create(title: name, kind: .idea, folderId: folder)
             }
@@ -665,11 +665,15 @@ struct Graph3DView: View {
         filter == .all ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
     }
 
-    /// The only controls on screen: filter, the notes' look, and back to
-    /// the middle.
+    /// The only controls on screen: the notes' look, filter, and back to
+    /// the middle, Look first and Recentre last as in every cluster.
     @ViewBuilder
     private var tools: some View {
         let filtering: Bool = filter != .all
+        GraphStyleTool(theme: themeBinding, main: lookBinding, folderRaw: folderBinding, folders: topFolders,
+                       showLegend: { showingLegend = true }, linkLength: linkValue,
+                       tuneLinks: tuneLinksAction, cellState: cellStateBinding, cellFolders: cellFoldersBinding)
+
         Menu {
             filterMenu
         } label: {
@@ -678,10 +682,6 @@ struct Graph3DView: View {
         .foregroundStyle(IdeaToolFace.ink(active: filtering))
         .ideaToolRelief(active: filtering)
         .accessibilityLabel("Filter")
-
-        GraphStyleTool(theme: themeBinding, main: lookBinding, folderRaw: folderBinding, folders: topFolders,
-                       showLegend: { showingLegend = true }, linkLength: linkValue,
-                       tuneLinks: tuneLinksAction, cellState: cellStateBinding, cellFolders: cellFoldersBinding)
 
         IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") {
             recenter += 1

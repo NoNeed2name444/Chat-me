@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -211,29 +212,37 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
     showLegend: () -> Unit, showFolderLooks: () -> Unit, openFolder: (String) -> Unit,
 ) {
     var showing by remember { mutableStateOf(false) }
+    // pressed in, its glyph the accent, while the map is off the standard (Space's Universe, with no
+    // folder looks), as iOS's GraphStyleTool
+    val custom = theme != GraphTheme.SPACE || spaceStyle(settings.nodeStyle) != null ||
+        GraphStyleChoice.folders(settings.folderStyles).isNotEmpty()
     Box {
-        IdeaToolButton(Icons.Outlined.Palette, "Look", value = theme.title) { showing = true }
+        IdeaToolButton(Icons.Outlined.Palette, "Look", active = custom, value = theme.title) { showing = true }
         DropdownMenu(showing, { showing = false }, containerColor = wardColor(WardToken.background)) {
             MenuHeader("Theme")
             GraphTheme.offered.forEach { t ->
                 Choice(t.title, t.icon, t == theme) { settings.setTheme(t.rawValue); showing = false }
             }
             HorizontalDivider()
+            // each theme's own choices end on their own divider, so in Neurons, which has none here, one
+            // divider stands between Theme and Lines
             if (theme == GraphTheme.SPACE) {
                 MenuHeader("Bodies")
-                Choice("Universe", Icons.Rounded.Public, spaceStyle(settings.nodeStyle) == null) { settings.setNodeStyle(GraphStyleChoice.AUTO); showing = false }
+                // sparkles, as on iOS: the globe is the rocky planet's
+                Choice("Universe", Icons.Rounded.AutoAwesome, spaceStyle(settings.nodeStyle) == null) { settings.setNodeStyle(GraphStyleChoice.AUTO); showing = false }
                 SpaceStyle.menuOrder.forEach { s ->
                     Choice(s.label, s.icon, settings.nodeStyle == s.rawValue) { settings.setNodeStyle(s.rawValue); showing = false }
                 }
                 if (book.subfolders(null).isNotEmpty()) Choice("Folder looks", Icons.Outlined.Folder, false) { showing = false; showFolderLooks() }
+                HorizontalDivider()
             } else if (theme == GraphTheme.PERFORMANCE) {
                 MenuHeader("Map")
                 Choice("Your notes", Icons.Outlined.Lightbulb, settings.perfDemo !in IdeasSettings.perfDemoSizes) { settings.setPerfDemo(0); showing = false }
                 IdeasSettings.perfDemoSizes.forEach { n ->
                     Choice(perfDemoTitle(n), Icons.Rounded.Public, settings.perfDemo == n) { settings.setPerfDemo(n); showing = false }
                 }
+                HorizontalDivider()
             }
-            HorizontalDivider()
             MenuHeader("Lines")
             IdeaLinesPicker(settings, Modifier.width(LINES_PICKER_WIDTH.dp).padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.xs.wardDp))
             HorizontalDivider()
@@ -247,9 +256,10 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
     WardSmallCapsText(text, Modifier.padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp).semantics { heading() })
 }
 
-@Composable private fun Choice(title: String, icon: ImageVector, chosen: Boolean, onClick: () -> Unit) {
+/** A menu row; with no glyph (iOS's "Same as all"), the glyph's room stays, so its words line up with the rest. */
+@Composable private fun Choice(title: String, icon: ImageVector?, chosen: Boolean, onClick: () -> Unit) {
     DropdownMenuItem({ Text(title, color = wardColor(WardToken.ink)) }, onClick,
-        leadingIcon = { Icon(icon, null, tint = wardColor(WardToken.inkSecondary)) },
+        leadingIcon = { if (icon != null) Icon(icon, null, tint = wardColor(WardToken.inkSecondary)) else Spacer(Modifier.size(24.dp)) },
         trailingIcon = if (chosen) ({ Icon(Icons.Outlined.Check, "Chosen", tint = wardColor(WardToken.primaryInk)) }) else null)
 }
 
@@ -290,7 +300,8 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
                         leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = toneColor(folder.id, book)) },
                         trailingIcon = { Text(chosen?.label ?: "Same as all", style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.primaryInk)) })
                     DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
-                        Choice("Same as all", Icons.Rounded.Public, chosen == null) { set(folder.id, null); menu = false }
+                        // no glyph, as on iOS: the globe is the rocky planet's
+                        Choice("Same as all", null, chosen == null) { set(folder.id, null); menu = false }
                         SpaceStyle.menuOrder.forEach { s -> Choice(s.label, s.icon, chosen == s) { set(folder.id, s); menu = false } }
                     }
                 }

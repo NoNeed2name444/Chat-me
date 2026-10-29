@@ -144,12 +144,15 @@ struct IdeaBoardView: View {
                 }
 
                 if notes.notes.isEmpty {
-                    VStack(spacing: 8) {
+                    // the kit's empty state's gap and message type (WardEmptyState)
+                    VStack(spacing: WardSpace.m) {
                         Image(systemName: "hand.tap")
-                            .font(.title2)
+                            .wardFont(.title2)
                         Text("Double-tap anywhere to put an idea there.")
-                            .font(.callout)
+                            .wardFont(.subheadline)
+                            .multilineTextAlignment(.center)
                     }
+                    .padding(WardSpace.xl)
                     .foregroundStyle(Color.wardInkSecondary)
                     .allowsHitTesting(false)
                     .position(x: size.width / 2, y: midY)
@@ -198,15 +201,15 @@ struct IdeaBoardView: View {
         let title: String = note.title.isEmpty ? "Untitled" : note.title
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
         return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
+            HStack(spacing: WardSpace.xs) {
                 Image(systemName: note.kind.symbol)
                 Text(place)
                     .lineLimit(1)
             }
-            .font(.caption2)
+            .wardFont(.caption2)
             .foregroundStyle(Color.wardInkSecondary)
             Text(title)
-                .font(.subheadline.weight(.medium))
+                .wardFont(.subheadline.weight(.medium))
                 .foregroundStyle(Color.wardInk)
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
@@ -256,26 +259,29 @@ struct IdeaBoardView: View {
     private var hint: some View {
         let words: String = source == nil ? "Tap a card to start a connection."
                                           : "Tap another card to connect them, or to part them."
-        return HStack(spacing: 10) {
+        // one height with Cancel or without it, so the capsule doesn't jump
+        // when a card is picked; Cancel drops the pick, and the Connect tool
+        // ends connecting
+        return HStack(spacing: WardSpace.s) {
             Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                .wardFont(.subheadline)
                 .accessibilityHidden(true)
             Text(words)
-                .font(.footnote)
+                .wardFont(.subheadline)
                 .foregroundStyle(Color.wardInk)
             if source != nil {
                 Button("Cancel") { source = nil }
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.wardPrimaryInk)
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.wardQuiet)
             }
         }
-        .padding(.horizontal, WardSpace.gutter)
-        .padding(.vertical, 10)
+        .frame(minHeight: WardControlSize.target)
+        .padding(.leading, WardSpace.gutter)
+        .padding(.trailing, source == nil ? WardSpace.gutter : WardSpace.xs)
+        .padding(.vertical, WardSpace.xs)
         .foregroundStyle(Color.wardPrimaryInk)
         .wardRaised(in: Capsule(), lift: .high)
         .padding(.horizontal, WardSpace.gutter)
-        .padding(.top, 12)
+        .padding(.top, WardSpace.m)
     }
 
     // MARK: where things are
