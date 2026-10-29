@@ -230,7 +230,13 @@ nonisolated struct GraphPerfForce: Sendable {
             let mask: UInt64 = (1 << UInt64(slotBits)) - 1
             return packed.map { Int32(truncatingIfNeeded: $0 & mask) }
         }
-        return (0..<count).sorted { keys[$0] != keys[$1] ? keys[$0] < keys[$1] : $0 < $1 }.map { Int32($0) }
+        // typed out: Xcode 26.6 could not type-check the one-line closure in
+        // time (Chat-me run 40840943666)
+        let order: [Int] = (0..<count).sorted { (a: Int, b: Int) -> Bool in
+            let ka: UInt64 = keys[a], kb: UInt64 = keys[b]
+            return ka != kb ? ka < kb : a < b
+        }
+        return order.map { Int32($0) }
     }
 
     private mutating func rebuildGrid() {

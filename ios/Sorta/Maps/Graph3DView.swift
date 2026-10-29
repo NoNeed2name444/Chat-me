@@ -151,8 +151,13 @@ struct Graph3DView: View {
             } else if let built {
                 space(built)
             } else {
-                ProgressView()
-                    .controlSize(.large)
+                // Stethoscore's wait was its ECG trace, which Sorta leaves
+                // out; Sorta's kit has no spinner (WardKitPortTest), so the
+                // wait says what is happening, as Android's does
+                Text("Laying out your notes")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.wardInkSecondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task(id: signature) { await rebuild() }
