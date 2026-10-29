@@ -166,6 +166,9 @@ final class NoteStore: ObservableObject {
         writer.async { try? data.write(to: url, options: .atomic) }
     }
 
+    /// Waits until every save made so far has been written. For the tests.
+    func waitForSaves() { writer.sync {} }
+
     // MARK: finding notes
 
     func note(_ id: UUID) -> Note? {

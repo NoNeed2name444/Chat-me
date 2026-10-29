@@ -1,9 +1,13 @@
 # Sorta's iOS app, on every copy pushed to Chat-me's sorta branch
 # (tools/mirror_chatme.py): the project generated, built for the simulator,
 # the app's Info.plist checked, and the launch, gallery and unit tests run on
-# an iPhone and an iPad. The Foundation-only Swift suites (the look kit's and
-# the maps') run on Linux (tools/swift_suites.py). Chat-me is public, so its standard runners cost nothing; no secret is
-# used. A second run of the same copy is a re-run of this one.
+# an iPhone and an iPad. The Foundation-only Swift suites (the look kit's, the
+# maps' and the store's recovery) run on Linux (tools/swift_suites.py); the two
+# that need Apple's Compression, zip and backup (S04,
+# tools/swift_suites_mac_only.txt), run on the build job's Mac, as
+# Stethoscore ran them (its swift-tests.yml:127). Chat-me is public, so its
+# standard runners cost nothing; no secret is used. A second run of the same
+# copy is a re-run of this one.
 name: iOS
 on:
   push:
@@ -72,6 +76,15 @@ jobs:
       - name: Generate the project
         working-directory: ios
         run: xcodegen generate
+      # the suites that need Apple frameworks (zip and backup), before the
+      # simulators, so slow ones can't use up the job's time; they need only
+      # the checkout. Stethoscore gave its Mac job 20 minutes for more of
+      # them, so this step, two suites optimised, gets the same
+      - name: The macOS-only Swift suites
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          python3 tools/swift_suites.py --platform mac --release -j 3 | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Pick the simulators
         id: sim
         run: |
@@ -128,6 +141,7 @@ jobs:
             build.log
             results/
             shots/
+            ios/build/swift-suites/out/
           if-no-files-found: ignore
           retention-days: 7
   # The maps' own tests (GraphPreviewUITests: each theme at rest, flown in,
