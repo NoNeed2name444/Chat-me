@@ -408,7 +408,7 @@ struct Graph3DView: View {
     }
 
     static let graphHint: String =
-        "Drag to turn, pinch to zoom. Tap a note to preview it, tap again to open it; hold it to move it or for options."
+        "Drag to turn, pinch to zoom. Tap a note to preview it, tap again to open it; hold it to move it or for its options."
 
     /// Whether a theme's first-run card has been seen (the Universe keeps
     /// its own old key).

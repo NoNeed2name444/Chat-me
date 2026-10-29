@@ -182,7 +182,15 @@ private const val CARD_HEIGHT = 88.0
                             .semantics {
                                 role = Role.Button
                                 selected = note.id == source
-                                onClick(if (connecting || source != null) "Connect" else "Open") { tapCard(note.id); true }
+                                // what this tap does, as tapCard decides it
+                                val from = source
+                                val action = when {
+                                    from == null -> if (connecting) "Start a connection" else "Open"
+                                    from == note.id -> "Cancel"
+                                    book.isLinked(from, note.id) -> "Disconnect"
+                                    else -> "Connect"
+                                }
+                                onClick(action) { tapCard(note.id); true }
                                 onLongClick("Start a connection") { source = note.id; true }
                             })
                 }

@@ -330,4 +330,14 @@ class NeuronLookTest {
         check("M1 a mouth's half width: h over r, plus the blend", abs(w - (0.1f + NeuronMembrane.BLEND)) < 1e-6f)
         done()
     }
+
+    // the owner, 29 Oct: a process exists only where it attaches to something, so no cell grows
+    // one of its own; its links are its processes (6ff9e10), as iOS's NeuronArborTests ask
+    @Test fun noProcessOfItsOwn() {
+        for (kind in NeuronCellKind.entries) for (variant in 0 until 3) for (rich in listOf(false, true)) {
+            val grown = NeuronArbor.branches(kind, variant, rich)
+            check("$kind, variant $variant${if (rich) ", rich" else ""}: no process of its own", grown.isEmpty(), "${grown.size} branches")
+        }
+        done()
+    }
 }

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The 3D maps draw in OpenGL ES 3.0 (ui/map). Not required: without it the map says so
-         (Map3DView), and the rest of the app needs no GL -->
-    <uses-feature android:glEsVersion="0x00030000" android:required="false" />
+    <!-- The 3D maps draw in OpenGL ES 3.0 (ui/map), and without it the map says so (Map3DView);
+         the rest of the app needs no GL. So no glEsVersion here: Google Play filters on it even
+         with required="false" (aapt2's badging lists it as uses-gl-es, never as not required),
+         and it would hide the app from phones without 3.0 -->
     <application android:theme="@style/AppTheme" android:label="@string/app_name" android:icon="${appIcon}" android:allowBackup="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>

@@ -28,8 +28,8 @@ import java.util.regex.Pattern
  * sample ideas (MapPreview), with the system by day and by night, one still each, named
  * map-<look>-<light|dark>-<device>.png in /sdcard/Download/sorta-renders. The 3D maps are always
  * night (iOS's are too); the board follows the system. The device's name comes from the
- * instrumentation's "device" argument (tools/capture_renders.sh). The waits and the system-dialog
- * handling are Stethoscore's ScreenshotTest's
+ * instrumentation's "device" argument (the render script in ci/public/android.yml). The waits
+ * and the system-dialog handling are Stethoscore's ScreenshotTest's
  * (reference/stethoscore-aec2af1c/android/app/src/androidTest/java/com/stethoscore/app/ScreenshotTest.kt).
  */
 @RunWith(AndroidJUnit4::class)

@@ -446,10 +446,13 @@ final class GraphPreviewUITests: XCTestCase {
             target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             return true
         }
+        // the reference's last check here, that the board opened, as
+        // MapRenderTests finds it
+        let look = app.buttons["Look"]
+        XCTAssertTrue(look.waitForExistence(timeout: 30), "the board didn't open")
         sleep(2)
         snap(app, "49-1-board-straight-lines")
-        let look = app.buttons["Look"]
-        if look.waitForExistence(timeout: 5) && press(look) {
+        if press(look) {
             sleep(1)
             snap(app, "49-2-board-look-menu")
         }

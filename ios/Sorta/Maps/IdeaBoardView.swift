@@ -9,10 +9,10 @@ import SwiftUI
 /// next to each other and draw the lines between them by hand:
 /// - drag the background to move around, pinch to zoom;
 /// - drag a card to put it somewhere else (where it lands is kept);
-/// - long-press a card, then tap another, to connect the two - or to part
-///   them if they were already connected. "Connect", in the round tools at
-///   the bottom corner, does the same with plain taps, for joining up a lot
-///   at once;
+/// - long-press a card, then tap another, to connect the two - or to
+///   disconnect them if they were already connected. "Connect", in the
+///   round tools at the bottom corner, does the same with plain taps, for
+///   joining up a lot at once;
 /// - double-tap empty space to put a new idea exactly there.
 ///
 /// Cards are tinted, faintly, by the folder they belong to. They stand just
@@ -237,7 +237,8 @@ struct IdeaBoardView: View {
         .gesture(cardDrag(note))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Connect from here") { source = note.id }
+        // as Android's hold names it, and as both hints say it
+        .accessibilityAction(named: "Start a connection") { source = note.id }
     }
 
     /// A tap opens the card - unless a connection is being made, when it is

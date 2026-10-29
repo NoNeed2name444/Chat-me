@@ -250,7 +250,7 @@ struct GraphLegendContent {
                        tint: beamTint, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
     ]
 
-    private static let spaceFooter: String = "Inner orbits turn faster. Tap a note twice to open it; hold it to move it or for its options. Tap a star or black hole twice to fly in, twice again to open the folder. Drag a star and its planets follow."
+    private static let spaceFooter: String = "Inner orbits turn faster. Tap a note twice to open it; hold it to move it or for its options. Tap a star or black hole twice to fly in, twice again to open the folder. Move a star and its planets follow."
 
     static let space: GraphLegendContent = GraphLegendContent(
         rungs: spaceRungs, ladderCaption: "Bigger bodies hold more.",
@@ -306,7 +306,7 @@ struct GraphLegendContent {
                        tint: amber, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
     ]
 
-    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Tap a note twice to open it; hold it to move it or for its options. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Drag a cell and everything inside it follows."
+    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Tap a note twice to open it; hold it to move it or for its options. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Move a cell and everything inside it follows."
 
     /// The Neurons (GraphNeurons): one line per kind of cell.
     static let neurons: GraphLegendContent = GraphLegendContent(
