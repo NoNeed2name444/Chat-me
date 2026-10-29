@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// The maps rendered for real, on the design preview's sample ideas
@@ -23,8 +24,18 @@ final class MapRenderTests: XCTestCase {
             app.launchArguments += ["-graphPreview", "-graphPreviewTheme", theme, "-graphFreeze"]
             app.launch()
             XCTAssertTrue(app.otherElements["graph3D"].waitForExistence(timeout: 60), "the \(theme) map is on screen")
-            // the scene is built and drawn
-            sleep(4)
+            // the scene is built: wait until it is drawn too. A fixed 4 s
+            // caught the iPad's first map, Space, before SceneKit's first
+            // frame, with nothing drawn but the tools (Chat-me copy c8186ce)
+            let start = Date()
+            var lit = Self.lit()
+            while lit < Self.drawn && Date().timeIntervalSince(start) < 60 {
+                sleep(1)
+                lit = Self.lit()
+            }
+            XCTAssertGreaterThanOrEqual(lit, Self.drawn, "the \(theme) map is drawn, not just its background")
+            // the labels and the last bodies settle
+            sleep(2)
             keep("map-\(theme)")
             app.terminate()
         }
@@ -36,6 +47,38 @@ final class MapRenderTests: XCTestCase {
         XCTAssertTrue(app.buttons["Look"].waitForExistence(timeout: 30), "the board is on screen, with its Look tool")
         sleep(2)
         keep("map-board")
+    }
+
+    /// The share of the map's middle (past the top bar, short of the tools)
+    /// that is lit, every fourth pixel: no channel of the night's background
+    /// passes 40. On copy c8186ce's renders, Performance, the sparest, lit
+    /// 1.1% to 1.4% of it; the blank iPad Space, none.
+    private static let drawn: Double = 0.003
+
+    private static func lit() -> Double {
+        guard let picture = XCUIScreen.main.screenshot().image.cgImage,
+              let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return 0 }
+        let width = picture.width, height = picture.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let redrawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: srgb,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(picture, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard redrawn else { return 0 }
+        var seen = 0, bright = 0
+        for y in stride(from: height * 15 / 100, to: height * 85 / 100, by: 4) {
+            for x in stride(from: width * 8 / 100, to: width * 80 / 100, by: 4) {
+                let at = (y * width + x) * 4
+                seen += 1
+                if max(bytes[at], bytes[at + 1], bytes[at + 2]) > 40 { bright += 1 }
+            }
+        }
+        return seen > 0 ? Double(bright) / Double(seen) : 0
     }
 
     private func keep(_ name: String) {
