@@ -19,23 +19,25 @@
     <!-- The open bottom bar's band that folds it away, read aloud -->
     <string name="ward_deck_hide">Hide buttons</string>
     <!-- The view switcher's chevron that folds it into a disc, read aloud -->
-    <string name="ward_switcher_hide">Hide the switcher</string>
-    <!-- The folded switcher's disc, read aloud, with the view on show: "Show the switcher, now Board" -->
-    <string name="ward_switcher_show">Show the switcher, now %1$s</string>
+    <string name="ward_switcher_hide">Hide views</string>
+    <!-- The folded switcher's disc, read aloud, with the view on show: "Show views. Now showing Board" -->
+    <string name="ward_switcher_show">Show views. Now showing %1$s</string>
     <!-- The title of the sheet that lists every view, at the largest text sizes -->
-    <string name="ward_switcher_list_title">Show</string>
+    <string name="ward_switcher_list_title">Views</string>
     <!-- The states gallery (a design reference): its heading, with the look's name -->
     <string name="ward_gallery_heading">States · %1$s</string>
     <string name="ward_gallery_rest">Rest</string>
     <string name="ward_gallery_held">Held</string>
     <string name="ward_gallery_disabled">Disabled</string>
-    <string name="ward_gallery_primary">Start</string>
+    <string name="ward_gallery_primary">Save</string>
     <string name="ward_gallery_secondary">Skip</string>
     <string name="ward_gallery_destructive">Delete</string>
     <string name="ward_gallery_quiet">Cancel</string>
-    <string name="ward_gallery_toggle">Night sky</string>
+    <string name="ward_gallery_toggle">Reminders</string>
     <string name="ward_gallery_list">List</string>
     <string name="ward_gallery_grid">Grid</string>
     <string name="ward_gallery_chip">Pinned</string>
     <string name="ward_gallery_add">Add</string>
+    <!-- The states gallery's sample tile, named after Sorta's ideas -->
+    <string name="ward_gallery_tile">Ideas</string>
 </resources>

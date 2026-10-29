@@ -52,20 +52,25 @@ final class WardFontTests: XCTestCase {
         }
     }
 
-    /// The default size is the text style's own, and every style is larger at
-    /// the largest accessibility size: the type keeps Dynamic Type.
+    /// At the smallest, the default and the largest accessibility size, each
+    /// style is the system's own size for its text style, and every style is
+    /// larger at the largest: the type keeps Dynamic Type. (Apple's table
+    /// keeps some styles, caption 2 among them, the same size below the
+    /// default, so the smallest size is checked against the system's, not
+    /// asked to shrink.)
     func testDynamicType() {
         let standard = UITraitCollection(preferredContentSizeCategory: .large)
         let largest = UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
         let smallest = UITraitCollection(preferredContentSizeCategory: .extraSmall)
         for style in Self.styles {
-            let atStandard = style.uiFont(compatibleWith: standard).pointSize
-            let system = UIFont.preferredFont(forTextStyle: style.style, compatibleWith: standard).pointSize
-            XCTAssertEqual(atStandard, system, accuracy: 0.5, "\(style.style.rawValue) at the default size")
-            XCTAssertGreaterThan(style.uiFont(compatibleWith: largest).pointSize, atStandard,
+            for (name, traits) in [("the smallest", smallest), ("the default", standard), ("AX5", largest)] {
+                let ours = style.uiFont(compatibleWith: traits).pointSize
+                let system = UIFont.preferredFont(forTextStyle: style.style, compatibleWith: traits).pointSize
+                XCTAssertEqual(ours, system, accuracy: 0.5, "\(style.style.rawValue) at \(name) size")
+            }
+            XCTAssertGreaterThan(style.uiFont(compatibleWith: largest).pointSize,
+                                 style.uiFont(compatibleWith: standard).pointSize,
                                  "\(style.style.rawValue) grows at AX5")
-            XCTAssertLessThan(style.uiFont(compatibleWith: smallest).pointSize, atStandard,
-                              "\(style.style.rawValue) shrinks at the smallest size")
         }
     }
 

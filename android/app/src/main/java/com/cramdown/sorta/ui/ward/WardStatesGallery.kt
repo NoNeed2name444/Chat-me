@@ -120,7 +120,7 @@ enum class WardGalleryColumn(val title: Int) {
 
 /** The section's name, for the gallery's heading and its tile. */
 val WardSection.galleryTitle: Int get() = when (this) {
-    WardSection.sorta -> R.string.app_name
+    WardSection.sorta -> R.string.ward_gallery_tile
 }
 
 /** The section's glyph: a light bulb, for ideas. */
