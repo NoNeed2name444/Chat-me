@@ -2,4 +2,40 @@
 <resources>
     <!-- The app's name, the owner's choice (23 Oct) -->
     <string name="app_name" translatable="false">Sorta</string>
+
+    <!-- The look kit's words (ui/ward and the bars). Every one is checked for tone before it ships. -->
+    <!-- A toolbar button that goes to the page before -->
+    <string name="ward_back">Back</string>
+    <!-- A sheet's button that closes it -->
+    <string name="ward_done">Done</string>
+    <!-- What a progress ring or bar is called aloud when its caller names nothing -->
+    <string name="ward_progress">Progress</string>
+    <!-- A ring's or bar's value, read aloud: "68 percent" -->
+    <string name="ward_percent_spoken">%1$d percent</string>
+    <!-- A ring's value, shown in its middle: "68%" -->
+    <string name="ward_percent_short">%1$d%%</string>
+    <!-- The folded bottom bar's button that opens it, read aloud -->
+    <string name="ward_deck_show">Show buttons</string>
+    <!-- The open bottom bar's band that folds it away, read aloud -->
+    <string name="ward_deck_hide">Hide buttons</string>
+    <!-- The view switcher's chevron that folds it into a disc, read aloud -->
+    <string name="ward_switcher_hide">Hide the switcher</string>
+    <!-- The folded switcher's disc, read aloud, with the view on show: "Show the switcher, now Board" -->
+    <string name="ward_switcher_show">Show the switcher, now %1$s</string>
+    <!-- The title of the sheet that lists every view, at the largest text sizes -->
+    <string name="ward_switcher_list_title">Show</string>
+    <!-- The states gallery (a design reference): its heading, with the look's name -->
+    <string name="ward_gallery_heading">States · %1$s</string>
+    <string name="ward_gallery_rest">Rest</string>
+    <string name="ward_gallery_held">Held</string>
+    <string name="ward_gallery_disabled">Disabled</string>
+    <string name="ward_gallery_primary">Start</string>
+    <string name="ward_gallery_secondary">Skip</string>
+    <string name="ward_gallery_destructive">Delete</string>
+    <string name="ward_gallery_quiet">Cancel</string>
+    <string name="ward_gallery_toggle">Night sky</string>
+    <string name="ward_gallery_list">List</string>
+    <string name="ward_gallery_grid">Grid</string>
+    <string name="ward_gallery_chip">Pinned</string>
+    <string name="ward_gallery_add">Add</string>
 </resources>

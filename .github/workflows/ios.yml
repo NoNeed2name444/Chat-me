@@ -19,6 +19,10 @@ jobs:
     # the swift:6.1 image builds the seven Ward suites in a few minutes
     timeout-minutes: 20
     container: swift:6.1-noble
+    # the container's default shell is sh, which has no pipefail
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
         with:
