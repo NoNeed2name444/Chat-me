@@ -1,6 +1,7 @@
 package com.cramdown.sorta.ideas
 
 import com.cramdown.sorta.data.Note
+import java.util.Locale
 
 /**
  * The design preview's sample ideas, the same as iOS's (Stethoscore's NoteExamples.seed and
@@ -10,12 +11,17 @@ import com.cramdown.sorta.data.Note
  * no folder. Stethoscore's medical examples, kept as test data: only the instrumented tests
  * and a launch under MainActivity's map-preview extra read them, never a screen a user reaches.
  * The board places past the examples' are Sorta's (Stethoscore left Cardiology in one pile in
- * the middle): no card on another, and no link under a third card.
+ * the middle), and so are three of the examples' (Direct inguinal hernia, Internal ring test
+ * and Femoral hernia, which iOS's makeStore moves): no card on another, and every link, curved
+ * or straight, at least 12 points clear of each card it doesn't join. The ids are a count, in
+ * the order the ideas and folders are made, as iOS's makeStore gives them, so every launch
+ * draws the maps alike and each link bows the same way on both platforms.
  */
 object SampleIdeas {
     /** A new book holding every sample idea, as iOS's makeStore() fills its store. */
     fun book(): IdeaBook {
-        val book = IdeaBook(emptyList(), emptyList())
+        var made = 0
+        val book = IdeaBook(emptyList(), emptyList(), makeId = { "00000000-0000-4000-8000-%012x".format(Locale.ROOT, ++made) })
         examples(book)
         anatomy(book)
         cardiology(book)
@@ -75,7 +81,7 @@ object SampleIdeas {
         - The sac lies inside the cord and may reach the scrotum
         - Neck of the sac lateral to the [[Inferior epigastric vessels]]
         """.trimIndent())
-        val direct = add("Direct inguinal hernia", NoteKind.PAGE, inguinal, 240.0, 60.0, """
+        val direct = add("Direct inguinal hernia", NoteKind.PAGE, inguinal, 180.0, 60.0, """
         - Through the posterior wall of the canal
         - Adult or elderly, more often bilateral, hemispherical
         - Reduces backwards; complications uncommon
@@ -84,12 +90,12 @@ object SampleIdeas {
         add("Inferior epigastric vessels", NoteKind.IDEA, inguinal, 470.0, -60.0, """
         The landmark that tells them apart: sac lateral = [[Indirect inguinal hernia]], sac medial = [[Direct inguinal hernia]].
         """.trimIndent())
-        val ringTest = add("Internal ring test", NoteKind.IDEA, inguinal, 470.0, 150.0, """
+        val ringTest = add("Internal ring test", NoteKind.IDEA, inguinal, 480.0, 120.0, """
         Positive (swelling controlled) = oblique, [[Indirect inguinal hernia]]. Negative = direct. The finger invagination test is obsolete.
         """.trimIndent())
 
         // the femoral side
-        val femoralHernia = add("Femoral hernia", NoteKind.PAGE, femoral, -200.0, 200.0, """
+        val femoralHernia = add("Femoral hernia", NoteKind.PAGE, femoral, -240.0, 150.0, """
         - Parietal peritoneum down through the [[Femoral canal]]
         - More common in women
         - Neck below and lateral to the pubic tubercle
@@ -168,7 +174,7 @@ object SampleIdeas {
         - A salt and fluid plan, flu and pneumococcal vaccines, cardiac rehabilitation, and advance care planning.
         - Review within two weeks of discharge.
         """.trimIndent())
-        add("BNP", NoteKind.IDEA, 240.0, 740.0, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
+        add("BNP", NoteKind.IDEA, 240.0, 780.0, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
         add("Loop diuretics", NoteKind.IDEA, -240.0, 920.0, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
         add("ACE inhibitors", NoteKind.IDEA, 240.0, 920.0, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
         add("Hypokalaemia", NoteKind.IDEA, 0.0, 920.0, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
@@ -205,7 +211,7 @@ object SampleIdeas {
         """.trimIndent(), NoteKind.IDEA, examples.id, BoardPoint(0.0, -360.0))
         book.create("Richter's hernia", """
         Only part of the bowel wall is trapped, so it can strangulate without obstructing. Most often through the femoral ring: see [[Femoral hernia]].
-        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(280.0, 180.0))
+        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(300.0, 180.0))
         book.create("Pericarditis", """
         Sharp chest pain, better sitting forward; saddle-shaped ST elevation in many leads and PR depression. Not a [[STEMI]].
         """.trimIndent(), NoteKind.IDEA, null, BoardPoint(-470.0, 420.0))

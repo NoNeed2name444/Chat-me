@@ -58,13 +58,16 @@ object IdeaEdges {
 
 /**
  * Every note and folder in the idea dump (iOS NoteStore), on a copy of the library's. Each
- * change calls [onChange] with the new notes and folders.
+ * change calls [onChange] with the new notes and folders. [makeId] gives each new note and
+ * folder its id: a random one, or a count for the sample ideas (SampleIdeas), as iOS's
+ * NoteStore.makeID.
  */
 class IdeaBook(
     notes: List<Note>,
     folders: List<NoteFolder>,
     private val now: () -> Long = System::currentTimeMillis,
     private val onChange: (List<Note>, List<NoteFolder>) -> Unit = { _, _ -> },
+    private val makeId: () -> String = ::newId,
 ) {
     var notes: List<Note> = notes
         private set(value) { field = value; edgeCache = null }
@@ -99,7 +102,7 @@ class IdeaBook(
                at: BoardPoint? = null): Note {
         val spot = at ?: nextBoardSpot()
         val time = now()
-        val note = Note(title = title.trim(), body = body, folderId = folderId, kind = kind.rawValue,
+        val note = Note(id = makeId(), title = title.trim(), body = body, folderId = folderId, kind = kind.rawValue,
             boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
         notes = notes + note
         changed()
@@ -206,7 +209,7 @@ class IdeaBook(
     // ---- folders ----
 
     fun createFolder(name: String, parentId: String? = null): NoteFolder {
-        val folder = NoteFolder(name = name.trim(), parentId = parentId, createdAt = now())
+        val folder = NoteFolder(id = makeId(), name = name.trim(), parentId = parentId, createdAt = now())
         folders = folders + folder
         changed()
         return folder

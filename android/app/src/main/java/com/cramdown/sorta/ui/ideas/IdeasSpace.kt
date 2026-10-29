@@ -5,12 +5,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material3.*
@@ -59,9 +59,10 @@ import java.util.Locale
 // Ideas' Space (IdeasView's .space, fed0105): every note a point in space joined to the notes
 // it links to, on the existing GL map, in the theme the Look menu chose. Space draws the six
 // bodies (GraphNodeStyle); Performance is the plain fast map with its readout, and offers the
-// seeded demo maps. The tools sit at the bottom-trailing corner over the bottom bar: Look and
-// Recentre. Android's map has no force simulation, so bodies do not drift and cannot be held
-// and moved; a tap opens the note.
+// seeded demo maps only in a developer's build, as iOS's readout does. The tools sit at the
+// bottom-trailing corner over the bottom bar, on a map only: Look and Recentre. The map runs
+// edge to edge and the tools keep to the safe area, as iOS's do. Android's map has no force
+// simulation, so bodies do not drift and cannot be held and moved; a tap opens the note.
 
 /** A note as the map reads it: its links from the book's edges, its group its top-level folder. */
 private class NoteNode(override val id: String, override val title: String, override val links: List<String>, override val tags: List<String>) : NoteLike
@@ -83,30 +84,35 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     open: (String) -> Unit, openFolder: (String) -> Unit,
 ) {
     val theme = GraphTheme.stored(settings.theme)
-    val demo = if (theme == GraphTheme.PERFORMANCE) settings.perfDemo.takeIf { it in IdeasSettings.perfDemoSizes } else null
+    // the demo maps are a developer's, as on iOS, where only the readout offers them
+    val demo = if (theme == GraphTheme.PERFORMANCE && IdeasSettings.DEVELOPER) settings.perfDemo.takeIf { it in IdeasSettings.perfDemoSizes } else null
     var recenter by remember { mutableIntStateOf(0) }
     var legend by remember { mutableStateOf(false) }
     var folderLooks by remember { mutableStateOf(false) }
 
     // the space is always night, whatever the phone's setting: the map, its tools and the bars'
-    // icons (iOS Graph3DView's colorScheme .dark); the empty page and the sheets follow the
-    // phone, as there
+    // icons (iOS Graph3DView's colorScheme .dark, on the drawn map only); the empty page, the
+    // wait and the sheets follow the phone, as there, and only a drawn map has the tools
     val outer = LocalWardLook.current
-    val night = demo != null || book.notes.isNotEmpty()
-    SortaTheme(dark = night || outer.dark, section = outer.section) {
+    var shown by remember { mutableStateOf(false) }
+    SortaTheme(dark = shown || outer.dark, section = outer.section) {
         Box(Modifier.fillMaxSize()) {
             when {
-                demo != null -> DemoMap(demo, recenter, settings.readout)
+                demo != null -> DemoMap(demo, recenter, settings.readout) { shown = it }
                 book.notes.isEmpty() -> Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)).padding(bottom = hidden), contentAlignment = Alignment.Center) {
                     WardEmptyState(Icons.Outlined.Lightbulb, "Dump your first idea",
                         "Every note appears here as a point in space, joined to the notes it links to. Type one in the bar below.")
                 }
-                else -> NotesMap(book, settings, theme, recenter, open)
+                else -> NotesMap(book, settings, theme, recenter, open) { shown = it }
             }
-            if (!covered) Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
+            // above what the bottom bar hides, and clear of a cutout or a side navigation bar, as
+            // iOS's overlay keeps to the safe area while the scene runs under the bars
+            if (!covered && shown) Box(Modifier.align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)) {
                 IdeaToolCluster {
                     SpaceLookTool(book, settings, theme, showLegend = { legend = true }, showFolderLooks = { folderLooks = true }, openFolder = openFolder)
-                    IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { recenter++ }
+                    // iOS's smallcircle.filled.circle, on every Recentre
+                    IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { recenter++ }
                 }
             }
         }
@@ -116,7 +122,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
 }
 
 /** The user's notes on the map, rebuilt off the main thread when they or the look change. */
-@Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, open: (String) -> Unit) {
+@Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, open: (String) -> Unit,
+                                  onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
     val main = settings.nodeStyle
@@ -144,6 +151,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
         }
     }
     val ready = scene
+    MapShown(ready != null, onShown)
     if (ready == null) { Building(null); return }
     val description = "${theme.mapLabel}: ${notes.size} ${if (notes.size == 1) "note" else "notes"}, ${edges.size} ${if (edges.size == 1) "link" else "links"}. " +
         theme.hint
@@ -194,12 +202,20 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
 }
 
 /** A seeded demo map (GraphPerfDemo): synthetic notes, not the user's, turning by itself. */
-@Composable private fun DemoMap(size: Int, recenter: Int, readout: Boolean) {
+@Composable private fun DemoMap(size: Int, recenter: Int, readout: Boolean, onShown: (Boolean) -> Unit) {
     val scene by produceState<MapScene?>(null, size) { value = withContext(Dispatchers.Default) { DemoScenes.get(size) } }
     val ready = scene
+    MapShown(ready != null, onShown)
     if (ready == null) { Building(size); return }
     Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(size)} made-up notes, not your notes",
         continuous = true, autoOrbit = true, showReadout = readout, showControls = false, recenter = recenter, corner = 0.dp)
+}
+
+/** Tells [onShown] whether the map is drawn, not waiting on its layout, and that it isn't once it goes. */
+@Composable private fun MapShown(shown: Boolean, onShown: (Boolean) -> Unit) {
+    val latest by rememberUpdatedState(onShown)
+    LaunchedEffect(shown) { latest(shown) }
+    DisposableEffect(Unit) { onDispose { latest(false) } }
 }
 
 @Composable private fun Building(size: Int?) {
@@ -244,7 +260,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
                 }
                 if (book.subfolders(null).isNotEmpty()) Choice("Folder looks", Icons.Outlined.Folder, false) { showing = false; showFolderLooks() }
                 HorizontalDivider()
-            } else if (theme == GraphTheme.PERFORMANCE) {
+            } else if (theme == GraphTheme.PERFORMANCE && IdeasSettings.DEVELOPER) {
                 MenuHeader("Map")
                 Choice("Your notes", Icons.Outlined.Lightbulb, settings.perfDemo !in IdeasSettings.perfDemoSizes) { settings.setPerfDemo(0); showing = false }
                 IdeasSettings.perfDemoSizes.forEach { n ->
@@ -253,7 +269,8 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
                 HorizontalDivider()
             }
             MenuHeader("Lines")
-            IdeaLinesPicker(settings, Modifier.width(LINES_PICKER_WIDTH.dp).padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.xs.wardDp))
+            // the picker 200 wide inside its room, as on the board
+            IdeaLinesPicker(settings, Modifier.padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.xs.wardDp).width(LINES_PICKER_WIDTH.dp))
             HorizontalDivider()
             Choice(theme.legendTitle, Icons.Outlined.Info, false) { showing = false; showLegend() }
         }

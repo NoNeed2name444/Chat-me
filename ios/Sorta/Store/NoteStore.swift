@@ -108,6 +108,11 @@ final class NoteStore: ObservableObject {
     /// allEdges, kept until a note changes: the board draws them every frame.
     private var edgeCache: [(UUID, UUID)]?
 
+    /// Each new note's and folder's id: a random one, or a count for the
+    /// design preview's sample ideas (GraphPreview.makeStore), as Android's
+    /// IdeaBook.makeId.
+    var makeID: () -> UUID = { UUID() }
+
     private let fileURL: URL
     /// One queue, so two quick saves land in the order they were made.
     private let writer = DispatchQueue(label: "vignette.notes.save", qos: .utility)
@@ -201,7 +206,7 @@ final class NoteStore: ObservableObject {
     func create(title: String, body: String = "", kind: NoteKind = .idea,
                 folderId: UUID? = nil, at point: (x: Double, y: Double)? = nil,
                 source: NoteSource? = nil) -> Note {
-        var note = Note(title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+        var note = Note(id: makeID(), title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         body: body, folderId: folderId, kind: kind)
         note.source = source
         let spot = point ?? nextBoardSpot()
@@ -378,7 +383,7 @@ final class NoteStore: ObservableObject {
 
     @discardableResult
     func createFolder(name: String, parentId: UUID? = nil) -> NoteFolder {
-        let folder = NoteFolder(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+        let folder = NoteFolder(id: makeID(), name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                                 parentId: parentId)
         folders.append(folder)
         save()

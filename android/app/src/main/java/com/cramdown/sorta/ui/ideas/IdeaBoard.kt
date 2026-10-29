@@ -9,8 +9,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.Icon
@@ -235,13 +235,16 @@ private const val CARD_HEIGHT = 88.0
             }
         }
 
-        Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
+        // bottom-trailing; on the trailing edge, centred, in a broad window (iOS IdeaToolsPlacement)
+        val toolsSpot = if (currentWindowShape().isBroad) Alignment.CenterEnd else Alignment.BottomEnd
+        Box(Modifier.align(toolsSpot).padding(bottom = hidden)) {
             IdeaToolCluster {
                 IdeaBoardLookTool(settings)
                 IdeaToolButton(Icons.Outlined.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
                     connecting = !connecting; source = null
                 }
-                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { fitAll() }
+                // iOS's smallcircle.filled.circle, on every Recentre
+                IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { fitAll() }
             }
         }
     }

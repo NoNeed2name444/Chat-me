@@ -164,18 +164,43 @@ enum GraphPreview {
     /// inside, Femoral), the bridging idea, a Cardiology folder of 14 more
     /// (one linked from Examples) and two ideas in no folder, on a file in
     /// the temporary folder. The board places past the examples' are
-    /// Sorta's (Stethoscore left Cardiology in one pile in the middle): no
-    /// card on another, and no link under a third card.
+    /// Sorta's (Stethoscore left Cardiology in one pile in the middle), and
+    /// so are three of the examples' (placeExamples): no card on another,
+    /// and every link, curved or straight, at least 12 points clear of each
+    /// card it doesn't join. The ids are a count, in the order the ideas and
+    /// folders are made, as Android's SampleIdeas gives them, so every
+    /// launch draws the maps alike and each link bows the same way on both
+    /// platforms.
     @MainActor
     static func makeStore() -> NoteStore {
         let name = "sorta-graph-preview-\(UUID().uuidString).json"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         let store = NoteStore(fileURL: url)
+        var made = 0
+        store.makeID = {
+            made += 1
+            return UUID(uuidString: String(format: "00000000-0000-4000-8000-%012lX", made)) ?? UUID()
+        }
         NoteExamples.seed(into: store)
+        placeExamples(in: store)
         addAnatomy(to: store)
         addCardiology(to: store)
         addBridgeAndLoose(to: store)
         return store
+    }
+
+    /// Three of Stethoscore's examples moved, so no link runs under a card
+    /// it doesn't join (Android's SampleIdeas has them in these places).
+    @MainActor
+    private static func placeExamples(in store: NoteStore) {
+        let places: [String: (x: Double, y: Double)] = [
+            "Direct inguinal hernia": (x: 180, y: 60),
+            "Internal ring test": (x: 480, y: 120),
+            "Femoral hernia": (x: -240, y: 150),
+        ]
+        for note in store.notes {
+            if let place = places[note.title] { store.setPosition(note.id, x: place.x, y: place.y) }
+        }
     }
 
     /// A subfolder inside a subfolder: Anatomy in Inguinal, holding the
@@ -234,7 +259,7 @@ enum GraphPreview {
         - A salt and fluid plan, flu and pneumococcal vaccines, cardiac rehabilitation, and advance care planning.
         - Review within two weeks of discharge.
         """)
-        _ = add("BNP", .idea, x: 240, y: 740, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
+        _ = add("BNP", .idea, x: 240, y: 780, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
         _ = add("Loop diuretics", .idea, x: -240, y: 920, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
         _ = add("ACE inhibitors", .idea, x: 240, y: 920, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
         _ = add("Hypokalaemia", .idea, x: 0, y: 920, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
@@ -273,18 +298,18 @@ enum GraphPreview {
         """, kind: .idea, folderId: examples.id, at: (x: 0, y: -360))
         store.create(title: "Richter's hernia", body: """
         Only part of the bowel wall is trapped, so it can strangulate without obstructing. Most often through the femoral ring: see [[Femoral hernia]].
-        """, kind: .idea, folderId: nil, at: (x: 280, y: 180))
+        """, kind: .idea, folderId: nil, at: (x: 300, y: 180))
         store.create(title: "Pericarditis", body: """
         Sharp chest pain, better sitting forward; saddle-shaped ST elevation in many leads and PR depression. Not a [[STEMI]].
         """, kind: .idea, folderId: nil, at: (x: -470, y: 420))
     }
 }
 
-/// Stand-in ids for laying out the design preview's store, whose ids are
-/// new every launch: ForceLayout3D and GraphFraming order notes by id, so
-/// the preview's notes and folders take ids that follow the store's own
-/// order (and give them back after), and every launch lays out alike.
-/// `.none` passes every id through.
+/// Stand-in ids for laying out the design preview's store: ForceLayout3D
+/// and GraphFraming order notes by id, so the preview's notes and folders
+/// take ids that follow the store's own order, notes then folders (and give
+/// them back after), and every launch lays out alike whatever ids the store
+/// gave. `.none` passes every id through.
 nonisolated struct GraphStandIns: Sendable {
     private let forward: [UUID: UUID]
     private let back: [UUID: UUID]

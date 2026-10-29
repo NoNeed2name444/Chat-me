@@ -2,10 +2,12 @@ package com.cramdown.sorta.ui.ideas
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -41,9 +43,10 @@ import com.cramdown.sorta.ui.wardColor
 
 // The canvas tools (IdeaTools.swift, fed0105): the Board's (Look, Connect,
 // Recentre) and the Space's, a vertical cluster of 44-point circles at the
-// bottom-trailing corner, each raised off the base on the floating plane, pressed
-// in while held or while the tool is on, its glyph the section's accent then and
-// Biro Grey at rest. Also the naming sheet (NameSheet) and "Move to".
+// bottom-trailing corner (the board's on the trailing edge, centred, in a broad
+// window, as iOS's IdeaToolsPlacement), each raised off the base on the floating
+// plane, pressed in while held or while the tool is on, its glyph the section's
+// accent then and Biro Grey at rest. Also the naming sheet (NameSheet) and "Move to".
 
 /** A vertical cluster of tool circles, 16 apart, each with its own relief. */
 @Composable fun IdeaToolCluster(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -61,10 +64,13 @@ const val LINES_PICKER_WIDTH = 200
                                value: String? = null, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val held by source.collectIsPressedAsState()
+    val focused by source.collectIsFocusedAsState()
     // a 44 circle (WardControlSize.buttonSmall, iOS's tool) in Android's 48 target, a control's face
     // as iOS's (WardPressFace): on its small rim with the section's ink edge. The reference's
-    // Android drew the wide shade with no edge, which read as a gradient and, at night, as the page
+    // Android drew the wide shade with no edge, which read as a gradient and, at night, as the page.
+    // The kit's focus ring, as WardCircleButton's
     Box(modifier.minimumInteractiveComponentSize().size(WardControlSize.buttonSmall.wardDp).capPop(held)
+        .wardFocusRing(CircleShape, focused, wardColor(WardControlStates.focusInk))
         .wardRelief(pressed = active || held, radius = WardControlSize.buttonSmall / 2, lift = WardLift.high, fill = WardToken.surface)
         .clickable(source, indication = null, role = Role.Button, onClick = onClick)
         .semantics { contentDescription = label; selected = active; if (value != null) stateDescription = value },
@@ -91,7 +97,8 @@ const val LINES_PICKER_WIDTH = 200
     Box {
         IdeaToolButton(Icons.Outlined.Palette, "Look", active = straight, value = if (straight) "Straight lines" else "Curved lines") { showing = true }
         DropdownMenu(showing, { showing = false }, containerColor = wardColor(WardToken.background)) {
-            IdeaLinesPicker(settings, Modifier.width(LINES_PICKER_WIDTH.dp).padding(WardSpace.m.wardDp))
+            // the picker 200 wide inside its 12 around, as iOS's popover
+            IdeaLinesPicker(settings, Modifier.padding(WardSpace.m.wardDp).width(LINES_PICKER_WIDTH.dp))
         }
     }
 }

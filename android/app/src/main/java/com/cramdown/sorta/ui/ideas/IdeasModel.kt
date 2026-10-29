@@ -3,20 +3,20 @@ package com.cramdown.sorta.ui.ideas
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.NoteAdd
-import androidx.compose.material.icons.automirrored.rounded.List
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.ViewInAr
 import androidx.compose.material.icons.rounded.Adjust
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Contrast
-import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.ViewInAr
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -118,10 +118,11 @@ class IdeasSettings(context: Context) {
     }
 }
 
+/** The modes' glyphs, Outlined as every control's is (the kit's own menu, WardSwitcher). */
 val IdeasMode.icon: ImageVector get() = when (this) {
-    IdeasMode.LIST -> Icons.AutoMirrored.Rounded.List          // list.bullet
-    IdeasMode.BOARD -> Icons.Rounded.Dashboard                 // rectangle.3.group
-    IdeasMode.SPACE -> Icons.Rounded.ViewInAr                  // cube.transparent
+    IdeasMode.LIST -> Icons.AutoMirrored.Outlined.List         // list.bullet
+    IdeasMode.BOARD -> Icons.Outlined.Dashboard                // rectangle.3.group
+    IdeasMode.SPACE -> Icons.Outlined.ViewInAr                 // cube.transparent
 }
 
 val NoteKind.icon: ImageVector get() = when (this) {

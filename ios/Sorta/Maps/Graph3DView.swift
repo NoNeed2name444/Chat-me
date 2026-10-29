@@ -896,10 +896,10 @@ struct Graph3DView: View {
         }
         // a constant copy: a var cannot be handed to another thread
         let groups = folders
-        // the design preview's store makes new ids every launch, and the
-        // layout and packing order notes by id: there they work on stand-ins
-        // in the store's own order, so every launch has the same shape (a
-        // close-up's rest and dragged shots, two launches, frame one note)
+        // the layout and packing order notes by id: in the design preview
+        // they work on stand-ins in the store's own order, so every launch
+        // has the same shape whatever ids the store gave (a close-up's rest
+        // and dragged shots, two launches, frame one note)
         let stand: GraphStandIns = GraphPreview.isOn ? GraphStandIns(ids, folders: notes.folders.map(\.id)) : .none
         // the rocky planets' Earth maps, made here off the main thread (GraphEarth)
         let largeEarth: Bool = GraphEarth.largeNow

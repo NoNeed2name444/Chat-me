@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CenterFocusStrong
+import androidx.compose.material.icons.rounded.RadioButtonChecked
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -74,9 +74,11 @@ import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.grouped
 import com.cramdown.sorta.ui.ward.WardSpace
+import com.cramdown.sorta.ui.ward.WardToken
 import com.cramdown.sorta.ui.ward.WardType
 import com.cramdown.sorta.ui.ward.textStyle
 import com.cramdown.sorta.ui.ward.wardDp
+import com.cramdown.sorta.ui.wardColor
 import java.util.Locale
 import kotlin.math.cbrt
 import kotlin.math.max
@@ -246,9 +248,10 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }
         .onSizeChanged { if (synchronized(camera) { home.fit(camera, scene.viewRadius, it.width, it.height) }) loop.moved() }) {
         if (!gles3) {
-            // white on the map's own night blue, which stays dark by day
+            // the kit's ink on the map's own night blue: the map's callers keep it night
+            // (IdeasSpace's SortaTheme), so the ink is night's too
             Text("This device can’t draw the 3D map.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
-                style = WardType.body.textStyle(), color = Color.White, textAlign = TextAlign.Center)
+                style = WardType.body.textStyle(), color = wardColor(WardToken.ink), textAlign = TextAlign.Center)
             return@Box
         }
         AndroidView(
@@ -325,7 +328,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
                     color = android.graphics.Color.rgb(225, 235, 249); textAlign = android.graphics.Paint.Align.CENTER
                     typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 }
-                val gap = 2.dp.toPx()
+                val gap = 2.dp.toPx() // the clear space kept between two names, a hairline's nudge (iOS GraphPerfLabelRoom.gap)
                 val placed = ArrayList<LabelBox>()
                 val order = screenNodes.filter { it.crisp }.sortedByDescending { if (it.index in named) it.pixels * LabelRoom.HOLD else it.pixels }
                 named.clear()
@@ -351,7 +354,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
             IconButton(onClick = {
                 loop.touched()
                 synchronized(camera) { home.restore(camera) }
-            }) { Icon(Icons.Rounded.CenterFocusStrong, "Recentre", tint = Color.White) }
+            }) { Icon(Icons.Rounded.RadioButtonChecked, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }
     }
