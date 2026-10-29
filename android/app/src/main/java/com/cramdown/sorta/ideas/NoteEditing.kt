@@ -3,14 +3,10 @@ package com.cramdown.sorta.ideas
 import com.cramdown.sorta.data.Note
 
 // The note editor's rules (NoteEditorView, fed0105), apart from its view so they are
-// tested: the `[[` completion, the links as typed, and Turn into cards' words.
+// tested: the `[[` completion and the links as typed. The editor's words come with
+// the editor (step 4); Turn into cards is study code and stays out.
 
 object NoteEditing {
-    const val NOTES_FOOTER = "Type [[ and a note’s title to link it, like [[Heart failure]]. Markdown works too: " +
-        "# headings, - bullets, **bold**, *italic*; switch to Read to see it laid out. Lines written " +
-        "“Question | Answer”, or bullet points, can be turned into cards."
-    const val NOTHING_FOR_CARDS = "Nothing to make cards from yet. Write lines like “Question | Answer”, or bullet points under a title."
-    const val MISSING = "No note by this name yet — tap to make it"
     const val READ_KEY = "notesReadAsMarkdown"
 
     /** Whatever has been typed after an unclosed `[[` at the end of the text. */
@@ -55,11 +51,5 @@ object NoteEditing {
         val index = book.titleIndex()
         val seen = HashSet<String>()
         return IdeaBook.wikiTitles(text).filter { index[it.lowercase()] == null && seen.add(it.lowercase()) }
-    }
-
-    /** What Turn into cards says once the set is made. */
-    fun cardsMade(name: String, count: Int): String {
-        val plural = if (count == 1) "" else "s"
-        return "“$name” is in your Cards now, $count card$plural ready to review."
     }
 }

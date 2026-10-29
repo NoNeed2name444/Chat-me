@@ -212,8 +212,6 @@ class IdeaBookTest {
         val s = NoteEditing.suggestions("[[heart", notes, id(10))
         assertEquals("eight, newest first, not itself or untitled", (9 downTo 2).map { id(it) }, s.map { it.id })
         assertTrue(NoteEditing.suggestions("no bracket", notes, id(1)).isEmpty())
-        assertEquals("“Gout” is in your Cards now, 1 card ready to review.", NoteEditing.cardsMade("Gout", 1))
-        assertEquals("“Gout” is in your Cards now, 3 cards ready to review.", NoteEditing.cardsMade("Gout", 3))
     }
 
     @Test fun editorLinksAsTyped() {

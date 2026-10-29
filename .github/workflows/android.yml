@@ -77,12 +77,13 @@ jobs:
   # GL draws only on a real surface, which the unit tests' Robolectric has
   # not. The emulator steps are Stethoscore's screenshots job
   # (reference/stethoscore-aec2af1c/.github/workflows/android.yml and
-  # android/scripts/capture-screenshots.sh). Not yet timed: Stethoscore's
-  # job had 40 minutes, so this one does until its first green run.
+  # android/scripts/capture-screenshots.sh). Its first green run (Chat-me
+  # run 40855930084) took 4.1 minutes on the phone and 5.0 on the tablet,
+  # so it has about twice that.
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
