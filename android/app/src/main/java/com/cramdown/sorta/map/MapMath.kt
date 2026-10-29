@@ -155,6 +155,23 @@ class OrbitCamera(
     fun focalPixels(viewportHeight: Float) = viewportHeight / 2f / tan(fovY / 2)
 }
 
+/** A name's box on screen: its centre and size, in pixels. */
+data class LabelBox(val x: Float, val y: Float, val width: Float, val height: Float)
+
+/**
+ * Which names go on screen, as iOS's GraphPerfLabelRoom: tried biggest body first, each one whose
+ * box is clear of every name placed before it by [gap], so the names in a crowd do not print over
+ * one another. Sorta's rule: the reference drew every name.
+ */
+object LabelRoom {
+    /** A name shown last frame counts as this much bigger, so two close ones do not swap as the camera drifts. */
+    const val HOLD = 1.05f
+
+    fun fits(box: LabelBox, placed: List<LabelBox>, gap: Float): Boolean = placed.all { p ->
+        abs(box.x - p.x) * 2 >= box.width + p.width + 2 * gap || abs(box.y - p.y) * 2 >= box.height + p.height + 2 * gap
+    }
+}
+
 fun smoothstep(a: Float, b: Float, x: Float): Float {
     val t = ((x - a) / (b - a)).coerceIn(0f, 1f)
     return t * t * (3 - 2 * t)

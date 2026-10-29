@@ -452,6 +452,15 @@ check("P6 a clear change does", moved == [0, 2], "\(moved)")
 var small4 = GraphPerfLabelChooser(budget: 4)
 check("P6 the selection even when far and the budget is full",
       small4.choose((0..<10).map { (index: $0, depth: Float($0)) }, selection: 9) == [9, 0, 1, 2])
+let placedName: [GraphPerfLabelRoom.Box] = [(x: 100, y: 100, width: 60, height: 16)]
+check("P6 the first name always has room", GraphPerfLabelRoom.fits((x: 0, y: 0, width: 500, height: 40), among: []))
+check("P6 a name clear of a placed one by the gap has room: below it, or beside it",
+      GraphPerfLabelRoom.fits((x: 100, y: 118, width: 60, height: 16), among: placedName)
+      && GraphPerfLabelRoom.fits((x: 162, y: 100, width: 60, height: 16), among: placedName))
+check("P6 a name over a placed one, or inside its gap, waits",
+      !GraphPerfLabelRoom.fits((x: 120, y: 110, width: 60, height: 16), among: placedName)
+      && !GraphPerfLabelRoom.fits((x: 161, y: 100, width: 60, height: 16), among: placedName)
+      && !GraphPerfLabelRoom.fits((x: 100, y: 117, width: 60, height: 16), among: placedName))
 
 // MARK: - P7 frame stats and the readout
 

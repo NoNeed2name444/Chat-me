@@ -14,9 +14,12 @@ final class MapRenderTests: XCTestCase {
             let app = XCUIApplication()
             app.keepTraceOffConsole()
             // -graphFreeze: the map as Reduce Motion shows it, every link
-            // whole and every body at its size. GraphSim steps its motion at
-            // most 0.05 s a frame, so on a slow simulator the links were
-            // caught still growing in (run 40841930118, the iPad's Neurons)
+            // whole and every body at home at its size. GraphSim steps its
+            // motion at most 0.05 s a frame, so on a slow simulator the links
+            // were caught still growing in (run 40841930118, the iPad's
+            // Neurons). Its start went by the map's liveliness before the
+            // freeze, so every body stayed at nothing (the Chat-me copies
+            // 3d0f11b and 196b905)
             app.launchArguments += ["-graphPreview", "-graphPreviewTheme", theme, "-graphFreeze"]
             app.launch()
             XCTAssertTrue(app.otherElements["graph3D"].waitForExistence(timeout: 60), "the \(theme) map is on screen")

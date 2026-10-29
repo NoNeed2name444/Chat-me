@@ -47,6 +47,8 @@ import com.cramdown.sorta.ui.map.MapScene
 import com.cramdown.sorta.ui.map.MapTheme
 import com.cramdown.sorta.ui.sources.ReaderDoneButton
 import com.cramdown.sorta.ui.sources.ReaderNavBar
+import com.cramdown.sorta.ui.LocalWardLook
+import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.Dispatchers
@@ -86,19 +88,26 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     var legend by remember { mutableStateOf(false) }
     var folderLooks by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
-        when {
-            demo != null -> DemoMap(demo, recenter, settings.readout)
-            book.notes.isEmpty() -> Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)).padding(bottom = hidden), contentAlignment = Alignment.Center) {
-                WardEmptyState(Icons.Outlined.Lightbulb, "Dump your first idea",
-                    "Every note appears here as a point in space, joined to the notes it links to. Type one in the bar below.")
+    // the space is always night, whatever the phone's setting: the map, its tools and the bars'
+    // icons (iOS Graph3DView's colorScheme .dark); the empty page and the sheets follow the
+    // phone, as there
+    val outer = LocalWardLook.current
+    val night = demo != null || book.notes.isNotEmpty()
+    SortaTheme(dark = night || outer.dark, section = outer.section) {
+        Box(Modifier.fillMaxSize()) {
+            when {
+                demo != null -> DemoMap(demo, recenter, settings.readout)
+                book.notes.isEmpty() -> Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)).padding(bottom = hidden), contentAlignment = Alignment.Center) {
+                    WardEmptyState(Icons.Outlined.Lightbulb, "Dump your first idea",
+                        "Every note appears here as a point in space, joined to the notes it links to. Type one in the bar below.")
+                }
+                else -> NotesMap(book, settings, theme, recenter, open)
             }
-            else -> NotesMap(book, settings, theme, recenter, open)
-        }
-        if (!covered) Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
-            IdeaToolCluster {
-                SpaceLookTool(book, settings, theme, showLegend = { legend = true }, showFolderLooks = { folderLooks = true }, openFolder = openFolder)
-                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { recenter++ }
+            if (!covered) Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
+                IdeaToolCluster {
+                    SpaceLookTool(book, settings, theme, showLegend = { legend = true }, showFolderLooks = { folderLooks = true }, openFolder = openFolder)
+                    IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { recenter++ }
+                }
             }
         }
     }

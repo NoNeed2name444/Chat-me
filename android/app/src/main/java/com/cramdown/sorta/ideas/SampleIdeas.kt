@@ -9,6 +9,8 @@ import com.cramdown.sorta.data.Note
  * inside it, and Femoral; a Cardiology folder of 14 more; a bridging idea; and two ideas in
  * no folder. Stethoscore's medical examples, kept as test data: only the instrumented tests
  * and a launch under MainActivity's map-preview extra read them, never a screen a user reaches.
+ * The board places past the examples' are Sorta's (Stethoscore left Cardiology in one pile in
+ * the middle): no card on another, and no link under a third card.
  */
 object SampleIdeas {
     /** A new book holding every sample idea, as iOS's makeStore() fills its store. */
@@ -125,11 +127,12 @@ object SampleIdeas {
     /** GraphPreview.addCardiology. */
     private fun cardiology(book: IdeaBook) {
         val folder = book.createFolder("Cardiology")
-        fun add(title: String, kind: NoteKind, body: String): Note =
-            book.create(title, body, kind, folder.id, BoardPoint(0.0, 0.0))
+        // on the board in three rows under the examples, the hub in the middle
+        fun add(title: String, kind: NoteKind, x: Double, y: Double, body: String): Note =
+            book.create(title, body, kind, folder.id, BoardPoint(x, y))
 
         // a long read: a ringed gas giant
-        val heartFailure = add("Heart failure", NoteKind.PAGE, """
+        val heartFailure = add("Heart failure", NoteKind.PAGE, 0.0, 740.0, """
         Heart failure is a syndrome, not a diagnosis: the heart cannot pump enough blood for the body's needs, or manages only at raised filling pressures. It is common, and most admissions are older people with other illnesses too.
 
         Types
@@ -165,24 +168,24 @@ object SampleIdeas {
         - A salt and fluid plan, flu and pneumococcal vaccines, cardiac rehabilitation, and advance care planning.
         - Review within two weeks of discharge.
         """.trimIndent())
-        add("BNP", NoteKind.IDEA, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
-        add("Loop diuretics", NoteKind.IDEA, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
-        add("ACE inhibitors", NoteKind.IDEA, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
-        add("Hypokalaemia", NoteKind.IDEA, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
-        val acs = add("Acute coronary syndrome", NoteKind.PAGE, """
+        add("BNP", NoteKind.IDEA, 240.0, 740.0, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
+        add("Loop diuretics", NoteKind.IDEA, -240.0, 920.0, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
+        add("ACE inhibitors", NoteKind.IDEA, 240.0, 920.0, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
+        add("Hypokalaemia", NoteKind.IDEA, 0.0, 920.0, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
+        val acs = add("Acute coronary syndrome", NoteKind.PAGE, -240.0, 560.0, """
         [[STEMI]], [[NSTEMI]] and unstable angina. [[Troponin]] tells them apart.
         """.trimIndent())
-        add("STEMI", NoteKind.IDEA, "ST elevation: primary PCI. Part of [[Acute coronary syndrome]].")
-        add("NSTEMI", NoteKind.IDEA, "Raised [[Troponin]] without ST elevation.")
-        add("Troponin", NoteKind.IDEA, "Rises in 3 hours, peaks at 24. [[Acute coronary syndrome]].")
-        val af = add("Atrial fibrillation", NoteKind.PAGE, """
+        add("STEMI", NoteKind.IDEA, -470.0, 560.0, "ST elevation: primary PCI. Part of [[Acute coronary syndrome]].")
+        add("NSTEMI", NoteKind.IDEA, -470.0, 740.0, "Raised [[Troponin]] without ST elevation.")
+        add("Troponin", NoteKind.IDEA, -240.0, 740.0, "Rises in 3 hours, peaks at 24. [[Acute coronary syndrome]].")
+        val af = add("Atrial fibrillation", NoteKind.PAGE, 470.0, 560.0, """
         Irregularly irregular. Rate or rhythm control; [[CHA2DS2-VASc]] for anticoagulation.
         """.trimIndent())
-        add("CHA2DS2-VASc", NoteKind.IDEA, "Stroke risk in [[Atrial fibrillation]].")
-        val murmurs = add("Murmurs", NoteKind.PAGE, "Aortic stenosis, mitral regurgitation - and [[Heart failure]] as the end point.")
+        add("CHA2DS2-VASc", NoteKind.IDEA, 470.0, 740.0, "Stroke risk in [[Atrial fibrillation]].")
+        val murmurs = add("Murmurs", NoteKind.PAGE, 240.0, 560.0, "Aortic stenosis, mitral regurgitation - and [[Heart failure]] as the end point.")
         // two notes with no links yet
-        add("Heart sounds", NoteKind.IDEA, "S1 and S2; listen at the apex for S3.")
-        add("Syncope", NoteKind.IDEA, "Cardiac or not? Exertional syncope needs an echo.")
+        add("Heart sounds", NoteKind.IDEA, -470.0, 920.0, "S1 and S2; listen at the apex for S3.")
+        add("Syncope", NoteKind.IDEA, 470.0, 920.0, "Cardiac or not? Exertional syncope needs an echo.")
         book.link(acs.id, heartFailure.id)
         book.link(af.id, heartFailure.id)
         book.link(murmurs.id, af.id)
@@ -199,12 +202,12 @@ object SampleIdeas {
         val examples = book.folders.firstOrNull { it.name == "Examples" && it.parentId == null } ?: return
         book.create("Expansile cough impulse", """
         Felt over an [[Indirect inguinal hernia]], a [[Direct inguinal hernia]] and a [[Femoral hernia]]. A groin lump with a cough impulse is a hernia until shown otherwise.
-        """.trimIndent(), NoteKind.IDEA, examples.id, BoardPoint(0.0, -300.0))
+        """.trimIndent(), NoteKind.IDEA, examples.id, BoardPoint(0.0, -360.0))
         book.create("Richter's hernia", """
         Only part of the bowel wall is trapped, so it can strangulate without obstructing. Most often through the femoral ring: see [[Femoral hernia]].
-        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(300.0, 300.0))
+        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(280.0, 180.0))
         book.create("Pericarditis", """
         Sharp chest pain, better sitting forward; saddle-shaped ST elevation in many leads and PR depression. Not a [[STEMI]].
-        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(-300.0, 300.0))
+        """.trimIndent(), NoteKind.IDEA, null, BoardPoint(-470.0, 420.0))
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -112,7 +113,8 @@ private const val CARD_HEIGHT = 88.0
         }
     }
 
-    Box(Modifier.fillMaxSize().onSizeChanged { size = it }) {
+    // clipped, as iOS's board is: a card moved past the edge goes under it, not over the bars
+    Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { size = it }) {
         val ink = wardColor(WardToken.inkSecondary)
         val chosenInk = wardColor(WardToken.primaryInk)
         // the board itself: pan, pinch, double-tap

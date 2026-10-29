@@ -61,9 +61,11 @@ const val LINES_PICKER_WIDTH = 200
                                value: String? = null, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val held by source.collectIsPressedAsState()
-    // a 44 circle (WardControlSize.buttonSmall, iOS's tool) in Android's 48 target
+    // a 44 circle (WardControlSize.buttonSmall, iOS's tool) in Android's 48 target, a control's face
+    // as iOS's (WardPressFace): on its small rim with the section's ink edge. The reference's
+    // Android drew the wide shade with no edge, which read as a gradient and, at night, as the page
     Box(modifier.minimumInteractiveComponentSize().size(WardControlSize.buttonSmall.wardDp).capPop(held)
-        .wardRelief(pressed = active || held, radius = WardControlSize.buttonSmall / 2, lift = WardLift.high, fill = WardToken.raised, control = false)
+        .wardRelief(pressed = active || held, radius = WardControlSize.buttonSmall / 2, lift = WardLift.high, fill = WardToken.surface)
         .clickable(source, indication = null, role = Role.Button, onClick = onClick)
         .semantics { contentDescription = label; selected = active; if (value != null) stateDescription = value },
         contentAlignment = Alignment.Center) {

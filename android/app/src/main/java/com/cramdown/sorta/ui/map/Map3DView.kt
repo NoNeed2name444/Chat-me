@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -61,6 +62,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
+import com.cramdown.sorta.map.LabelBox
+import com.cramdown.sorta.map.LabelRoom
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
@@ -193,11 +196,14 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val maxHz = remember(modes) { RefreshRate.maxHz(modes, display?.refreshRate ?: 60f) }
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
     var screenNodes by remember { mutableStateOf<List<ScreenNode>>(emptyList()) }
+    // the names drawn last frame, which count a little bigger in this one (LabelRoom.HOLD)
+    val named = remember(scene) { HashSet<Int>() }
     var drawn by remember { mutableStateOf(MapDrawn()) }
     val hz = remember { floatArrayOf(display?.refreshRate ?: 60f) }
     val tree = scene.tree
     val camera = remember(scene) {
-        // the whole map in view on a portrait screen (about 3:4), with room for the readout
+        // the whole map in view on a portrait screen (about 3:4), with room for the readout, until
+        // the view's own shape is known (HomeView.fit)
         // the Neurons map looks down at 35 degrees (GraphTilt's Neurons angle)
         val pitch = if (scene.theme == MapTheme.NEURONS) NEURONS_PITCH else 0.7f
         OrbitCamera(target = Vec3(tree.cx[0], tree.cy[0], tree.cz[0]), pitch = pitch).apply {
@@ -205,7 +211,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
             minDistance = scene.nodeRadius * 4; maxDistance = max(tree.radius[0], 1f) * 80
         }
     }
-    val home = remember(scene) { Triple(camera.target, camera.distance, camera.yaw to camera.pitch) }
+    val home = remember(scene) { HomeView(camera) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val renderer = remember(scene) {
         GlMapRenderer(
@@ -222,7 +228,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val gles3 = remember(context) { supportsGles3(context) }
     val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { loop.touched(); synchronized(camera) { camera.target = home.first; camera.distance = home.second; camera.yaw = home.third.first; camera.pitch = home.third.second } }
+        if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
     }
 
     // Ask the window for the highest refresh mode at this resolution while the map is shown.
@@ -237,7 +243,8 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val drawnNow = drawn
-    Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }) {
+    Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }
+        .onSizeChanged { if (synchronized(camera) { home.fit(camera, scene.viewRadius, it.width, it.height) }) loop.moved() }) {
         if (!gles3) {
             // white on the map's own night blue, which stays dark by day
             Text("This device can’t draw the 3D map.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
@@ -310,21 +317,31 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
                 }
             },
         ) {
-            // labels grow with their node's size on screen: no fading, only size
+            // labels grow with their node's size on screen: no fading, only size. Biggest first, and
+            // a name with no room clear of those placed waits (LabelRoom)
             if (scene.titles.isEmpty()) return@Canvas
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     color = android.graphics.Color.rgb(225, 235, 249); textAlign = android.graphics.Paint.Align.CENTER
                     typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 }
-                for (node in screenNodes) {
-                    if (!node.crisp) continue
+                val gap = 2.dp.toPx()
+                val placed = ArrayList<LabelBox>()
+                val order = screenNodes.filter { it.crisp }.sortedByDescending { if (it.index in named) it.pixels * LabelRoom.HOLD else it.pixels }
+                named.clear()
+                for (node in order) {
                     val textSize = (node.pixels * 0.9f).coerceAtMost(12.sp.toPx())
                     if (textSize < 5f) continue
                     paint.textSize = textSize
                     val title = scene.titles.getOrNull(node.index) ?: continue
                     val label = if (title.length > 23) title.take(22) + "…" else title
-                    canvas.nativeCanvas.drawText(label, node.x, node.y + node.pixels / 2 + textSize * 1.4f, paint)
+                    val baseline = node.y + node.pixels / 2 + textSize * 1.4f
+                    val metrics = paint.fontMetrics
+                    val box = LabelBox(node.x, baseline + (metrics.ascent + metrics.descent) / 2, paint.measureText(label), metrics.descent - metrics.ascent)
+                    if (!LabelRoom.fits(box, placed, gap)) continue
+                    placed.add(box)
+                    named.add(node.index)
+                    canvas.nativeCanvas.drawText(label, node.x, baseline, paint)
                 }
             }
         }
@@ -333,7 +350,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
             IconButton(onClick = {
                 loop.touched()
-                synchronized(camera) { camera.target = home.first; camera.distance = home.second; camera.yaw = home.third.first; camera.pitch = home.third.second }
+                synchronized(camera) { home.restore(camera) }
             }) { Icon(Icons.Rounded.CenterFocusStrong, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }
@@ -373,6 +390,30 @@ private fun requestFrameRate(surface: Surface, hz: Float) {
  * asks for one frame. Idle maps stop after a quiet second with three frames finished in it
  * (FrameQuiet); a touch restarts at once.
  */
+/**
+ * The camera's first view, which Recentre goes back to. [fit] sizes it to the view's own shape
+ * once that is known, and again when it changes (a turn, a fold): the whole map in view across the
+ * narrower side. Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's map off at
+ * the sides and left a tablet's small.
+ */
+private class HomeView(camera: OrbitCamera) {
+    private val target = camera.target
+    private var distance = camera.distance
+    private val yaw = camera.yaw
+    private val pitch = camera.pitch
+
+    fun restore(camera: OrbitCamera) { camera.target = target; camera.distance = distance; camera.yaw = yaw; camera.pitch = pitch }
+
+    /** Fits to a [width] x [height] view; a camera still at home moves with it, and then this returns true. */
+    fun fit(camera: OrbitCamera, radius: Float, width: Int, height: Int): Boolean {
+        if (width <= 0 || height <= 0) return false
+        val there = camera.target == target && camera.distance == distance && camera.yaw == yaw && camera.pitch == pitch
+        distance = max(camera.fitDistance(radius, aspect = width.toFloat() / height), 4f)
+        if (there) restore(camera)
+        return there
+    }
+}
+
 private class FrameLoop(
     private val renderer: GlMapRenderer,
     private val continuous: Boolean,
@@ -390,7 +431,9 @@ private class FrameLoop(
 
     fun start() { if (!running) { running = true; active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
     fun stop() { running = false; Choreographer.getInstance().removeFrameCallback(this) }
-    fun touched() { autoOrbit = false; active(System.nanoTime()); if (!running && view != null) start() }
+    fun touched() { autoOrbit = false; moved() }
+    /** The camera moved by itself (HomeView.fit): draw again, and keep any orbit going. */
+    fun moved() { active(System.nanoTime()); if (!running && view != null) start() }
 
     private fun active(nanos: Long) { lastActive = nanos; finishedAtActive = renderer.finished }
 

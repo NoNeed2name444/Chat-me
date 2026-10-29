@@ -136,6 +136,24 @@ nonisolated enum GraphPerfLabelSpots {
     }
 }
 
+/// Which of the chosen names go on screen: in the chooser's order (the
+/// selection, then nearest first), each one whose box is clear of every
+/// name placed before it, so the names in a crowd do not print over one
+/// another. A box is its centre and size, in points. Sorta's rule: the
+/// reference placed every chosen name.
+nonisolated enum GraphPerfLabelRoom {
+    typealias Box = (x: Float, y: Float, width: Float, height: Float)
+    /// The clear space kept between two names.
+    static let gap: Float = 2
+
+    static func fits(_ box: Box, among placed: [Box]) -> Bool {
+        placed.allSatisfy { p in
+            abs(box.x - p.x) * 2 >= box.width + p.width + 2 * gap
+                || abs(box.y - p.y) * 2 >= box.height + p.height + 2 * gap
+        }
+    }
+}
+
 /// Each place the fast map's path to the screen can stop: the build, the
 /// renderer's shaders and pipelines, its buffers, and frames that end
 /// before they are drawn. Each was a silent return (an NSLog at most, and

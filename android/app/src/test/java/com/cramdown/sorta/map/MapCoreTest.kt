@@ -53,6 +53,26 @@ class MapMathTest {
     }
 }
 
+/** The same boxes as iOS's P6 room checks (GraphPerfTests). */
+class LabelRoomTest {
+    private val placed = listOf(LabelBox(100f, 100f, 60f, 16f))
+
+    @Test fun theFirstNameAlwaysHasRoom() {
+        assertTrue(LabelRoom.fits(LabelBox(0f, 0f, 500f, 40f), emptyList(), gap = 2f))
+    }
+
+    @Test fun aNameClearOfAPlacedOneByTheGapHasRoom() {
+        assertTrue(LabelRoom.fits(LabelBox(100f, 118f, 60f, 16f), placed, gap = 2f))
+        assertTrue(LabelRoom.fits(LabelBox(162f, 100f, 60f, 16f), placed, gap = 2f))
+    }
+
+    @Test fun aNameOverAPlacedOneOrInsideItsGapWaits() {
+        assertFalse(LabelRoom.fits(LabelBox(120f, 110f, 60f, 16f), placed, gap = 2f))
+        assertFalse(LabelRoom.fits(LabelBox(161f, 100f, 60f, 16f), placed, gap = 2f))
+        assertFalse(LabelRoom.fits(LabelBox(100f, 117f, 60f, 16f), placed, gap = 2f))
+    }
+}
+
 class GraphAndOctreeTest {
     private fun note(id: String, vararg links: String) = object : NoteLike {
         override val id = id; override val title = "Note $id"; override val links = links.toList(); override val tags = listOf("t")

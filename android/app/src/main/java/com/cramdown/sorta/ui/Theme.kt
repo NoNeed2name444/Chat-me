@@ -91,13 +91,21 @@ fun wardColorScheme(look: WardLook): ColorScheme {
 @Composable fun SortaTheme(dark:Boolean=false, section:WardSection=WardSection.outside, content:@Composable ()->Unit) {
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
+        // the bars' icons for this look while it is up, and back as they were when it goes: a
+        // theme inside another (the 3D maps' night, IdeasSpace) holds them while it is shown
+        DisposableEffect(view, dark) {
             val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
                 .filterIsInstance<Activity>().firstOrNull()
-            activity?.let {
-                WindowCompat.getInsetsController(it.window, view).apply {
-                    isAppearanceLightStatusBars = !dark
-                    isAppearanceLightNavigationBars = !dark
+            val bars = activity?.let { WindowCompat.getInsetsController(it.window, view) }
+            val before = bars?.let { it.isAppearanceLightStatusBars to it.isAppearanceLightNavigationBars }
+            bars?.apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+            onDispose {
+                if (bars != null && before != null) {
+                    bars.isAppearanceLightStatusBars = before.first
+                    bars.isAppearanceLightNavigationBars = before.second
                 }
             }
         }

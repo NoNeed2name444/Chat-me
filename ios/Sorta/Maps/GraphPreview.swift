@@ -163,7 +163,9 @@ enum GraphPreview {
     /// The groin hernia examples (Examples, Inguinal with its Anatomy
     /// inside, Femoral), the bridging idea, a Cardiology folder of 14 more
     /// (one linked from Examples) and two ideas in no folder, on a file in
-    /// the temporary folder.
+    /// the temporary folder. The board places past the examples' are
+    /// Sorta's (Stethoscore left Cardiology in one pile in the middle): no
+    /// card on another, and no link under a third card.
     @MainActor
     static func makeStore() -> NoteStore {
         let name = "sorta-graph-preview-\(UUID().uuidString).json"
@@ -191,11 +193,12 @@ enum GraphPreview {
     @MainActor
     private static func addCardiology(to store: NoteStore) {
         let folder = store.createFolder(name: "Cardiology")
-        func add(_ title: String, _ kind: NoteKind, _ body: String) -> Note {
-            store.create(title: title, body: body, kind: kind, folderId: folder.id, at: (x: 0, y: 0))
+        // on the board in three rows under the examples, the hub in the middle
+        func add(_ title: String, _ kind: NoteKind, x: Double, y: Double, _ body: String) -> Note {
+            store.create(title: title, body: body, kind: kind, folderId: folder.id, at: (x: x, y: y))
         }
         // a long read: a ringed gas giant
-        let heartFailure = add("Heart failure", .page, """
+        let heartFailure = add("Heart failure", .page, x: 0, y: 740, """
         Heart failure is a syndrome, not a diagnosis: the heart cannot pump enough blood for the body's needs, or manages only at raised filling pressures. It is common, and most admissions are older people with other illnesses too.
 
         Types
@@ -231,24 +234,24 @@ enum GraphPreview {
         - A salt and fluid plan, flu and pneumococcal vaccines, cardiac rehabilitation, and advance care planning.
         - Review within two weeks of discharge.
         """)
-        _ = add("BNP", .idea, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
-        _ = add("Loop diuretics", .idea, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
-        _ = add("ACE inhibitors", .idea, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
-        _ = add("Hypokalaemia", .idea, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
-        let acs = add("Acute coronary syndrome", .page, """
+        _ = add("BNP", .idea, x: 240, y: 740, "Raised in [[Heart failure]]; a normal level makes it unlikely.")
+        _ = add("Loop diuretics", .idea, x: -240, y: 920, "Furosemide for congestion in [[Heart failure]]. Watch [[Hypokalaemia]].")
+        _ = add("ACE inhibitors", .idea, x: 240, y: 920, "Prognostic in [[Heart failure]]. Cough; check [[Hypokalaemia]] the other way.")
+        _ = add("Hypokalaemia", .idea, x: 0, y: 920, "Flat T waves, U waves. Risk with [[Loop diuretics]].")
+        let acs = add("Acute coronary syndrome", .page, x: -240, y: 560, """
         [[STEMI]], [[NSTEMI]] and unstable angina. [[Troponin]] tells them apart.
         """)
-        _ = add("STEMI", .idea, "ST elevation: primary PCI. Part of [[Acute coronary syndrome]].")
-        _ = add("NSTEMI", .idea, "Raised [[Troponin]] without ST elevation.")
-        _ = add("Troponin", .idea, "Rises in 3 hours, peaks at 24. [[Acute coronary syndrome]].")
-        let af = add("Atrial fibrillation", .page, """
+        _ = add("STEMI", .idea, x: -470, y: 560, "ST elevation: primary PCI. Part of [[Acute coronary syndrome]].")
+        _ = add("NSTEMI", .idea, x: -470, y: 740, "Raised [[Troponin]] without ST elevation.")
+        _ = add("Troponin", .idea, x: -240, y: 740, "Rises in 3 hours, peaks at 24. [[Acute coronary syndrome]].")
+        let af = add("Atrial fibrillation", .page, x: 470, y: 560, """
         Irregularly irregular. Rate or rhythm control; [[CHA2DS2-VASc]] for anticoagulation.
         """)
-        _ = add("CHA2DS2-VASc", .idea, "Stroke risk in [[Atrial fibrillation]].")
-        let murmurs = add("Murmurs", .page, "Aortic stenosis, mitral regurgitation - and [[Heart failure]] as the end point.")
+        _ = add("CHA2DS2-VASc", .idea, x: 470, y: 740, "Stroke risk in [[Atrial fibrillation]].")
+        let murmurs = add("Murmurs", .page, x: 240, y: 560, "Aortic stenosis, mitral regurgitation - and [[Heart failure]] as the end point.")
         // two notes with no links yet
-        _ = add("Heart sounds", .idea, "S1 and S2; listen at the apex for S3.")
-        _ = add("Syncope", .idea, "Cardiac or not? Exertional syncope needs an echo.")
+        _ = add("Heart sounds", .idea, x: -470, y: 920, "S1 and S2; listen at the apex for S3.")
+        _ = add("Syncope", .idea, x: 470, y: 920, "Cardiac or not? Exertional syncope needs an echo.")
         store.link(acs.id, heartFailure.id)
         store.link(af.id, heartFailure.id)
         store.link(murmurs.id, af.id)
@@ -267,13 +270,13 @@ enum GraphPreview {
         guard let examples = store.folders.first(where: { $0.name == "Examples" && $0.parentId == nil }) else { return }
         store.create(title: "Expansile cough impulse", body: """
         Felt over an [[Indirect inguinal hernia]], a [[Direct inguinal hernia]] and a [[Femoral hernia]]. A groin lump with a cough impulse is a hernia until shown otherwise.
-        """, kind: .idea, folderId: examples.id, at: (x: 0, y: -300))
+        """, kind: .idea, folderId: examples.id, at: (x: 0, y: -360))
         store.create(title: "Richter's hernia", body: """
         Only part of the bowel wall is trapped, so it can strangulate without obstructing. Most often through the femoral ring: see [[Femoral hernia]].
-        """, kind: .idea, folderId: nil, at: (x: 300, y: 300))
+        """, kind: .idea, folderId: nil, at: (x: 280, y: 180))
         store.create(title: "Pericarditis", body: """
         Sharp chest pain, better sitting forward; saddle-shaped ST elevation in many leads and PR depression. Not a [[STEMI]].
-        """, kind: .idea, folderId: nil, at: (x: -300, y: 300))
+        """, kind: .idea, folderId: nil, at: (x: -470, y: 420))
     }
 }
 

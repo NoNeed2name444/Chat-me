@@ -552,7 +552,10 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         self.rig = rig
         self.lines = lines
         self.lineMaterial = looks.linkMaterial
-        self.lively = lively && !Self.freeze
+        // the start below goes by this too: frozen, every note starts at home
+        // and full size, as with Reduce Motion, since the pops never run
+        let lively: Bool = lively && !Self.freeze
+        self.lively = lively
         self.hotRing = looks.hotRing
         self.hotDisk = looks.hotDisk
         self.clocked = looks.clocked

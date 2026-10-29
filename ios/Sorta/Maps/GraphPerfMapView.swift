@@ -564,8 +564,10 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
 
     /// The nearest few bodies on screen carry their names (GraphPerfLabelChooser,
     /// the tier's budget), as the other themes' bodies do; the chosen one
-    /// has the pill instead. Only on a map small enough to scan each frame
-    /// (GraphPerfLabelSpots.limit): never on the demos.
+    /// has the pill instead. A name with no room, clear of the pill and of
+    /// the nearer names, waits (GraphPerfLabelRoom). Only on a map small
+    /// enough to scan each frame (GraphPerfLabelSpots.limit): never on the
+    /// demos.
     private func updateLabels() {
         guard let engine, !showsMillion, let whole = engine.mapBounds, whole.bodies <= GraphPerfLabelSpots.limit,
               bounds.width > 1, bounds.height > 1 else {
@@ -588,8 +590,12 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
             .filter { $0.index != engine.selected }
         labelChooser.budget = engine.tier.labelBudget
         let shown: [Int] = labelChooser.choose(spots)
-        for (k, body) in shown.enumerated() {
-            let label: UILabel = nameLabel(k)
+        let pill = pillBack.frame
+        var placed: [GraphPerfLabelRoom.Box] = pillBack.isHidden ? []
+            : [(Float(pill.midX), Float(pill.midY), Float(pill.width), Float(pill.height))]
+        var used = 0
+        for body in shown {
+            let label: UILabel = nameLabel(used)
             let title: String = engine.title(body)
             if label.text != title {
                 label.text = title
@@ -597,12 +603,17 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
             }
             let at = projected[body]
             let w: CGFloat = min(label.bounds.width, bounds.width - 24)
-            label.bounds = CGRect(x: 0, y: 0, width: w, height: label.bounds.height)
             let x: CGFloat = min(max(CGFloat(at.x), w / 2 + 12), bounds.width - w / 2 - 12)
-            label.center = CGPoint(x: x, y: CGFloat(at.y) + 16)
+            let y: CGFloat = CGFloat(at.y) + 16
+            let box: GraphPerfLabelRoom.Box = (Float(x), Float(y), Float(w), Float(label.bounds.height))
+            guard GraphPerfLabelRoom.fits(box, among: placed) else { continue }
+            placed.append(box)
+            label.bounds = CGRect(x: 0, y: 0, width: w, height: label.bounds.height)
+            label.center = CGPoint(x: x, y: y)
             label.isHidden = false
+            used += 1
         }
-        hideLabels(from: shown.count)
+        hideLabels(from: used)
     }
 
     private func nameLabel(_ k: Int) -> UILabel {
