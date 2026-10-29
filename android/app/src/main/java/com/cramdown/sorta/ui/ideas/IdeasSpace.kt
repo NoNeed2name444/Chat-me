@@ -189,7 +189,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
     val scene by produceState<MapScene?>(null, size) { value = withContext(Dispatchers.Default) { DemoScenes.get(size) } }
     val ready = scene
     if (ready == null) { Building(size); return }
-    Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(size)} synthetic notes, not your notes",
+    Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(size)} made-up notes, not your notes",
         continuous = true, autoOrbit = true, showReadout = readout, showControls = false, recenter = recenter, corner = 0.dp)
 }
 

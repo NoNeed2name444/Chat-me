@@ -219,7 +219,7 @@ private const val CARD_HEIGHT = 88.0
                 .heightIn(min = WardControlSize.target.wardDp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                 Icon(Icons.Outlined.Route, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(18.0)))
-                Text(if (source == null) "Tap a card to start a connection." else "Tap another card to connect them, or to part them.",
+                Text(if (source == null) "Tap a card to start a connection." else "Tap another card to connect or disconnect them.",
                     Modifier.weight(1f, fill = false), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
                 if (source != null) WardTextButton("Cancel", { source = null }, kind = WardButtonKind.quiet, fills = false)
             }
@@ -254,11 +254,12 @@ private const val CARD_HEIGHT = 88.0
         .wardRaised(WardRadius.card, if (lifted) WardLift.high else WardLift.low, fill = WardToken.raised)
         .clip(shape).background(tone.copy(alpha = 0.14f))
         .then(if (chosen) Modifier.border(2.dp, chosenInk, shape) else Modifier)
-        .padding(10.dp)
+        .padding(WardSpace.m.wardDp)
         .semantics { contentDescription = "${note.title.ifEmpty { "Untitled" }}, $caption" },
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(kind.icon, null, tint = tone, modifier = Modifier.size(12.dp))
+        verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+            // grows with the reader's font scale, as iOS's symbol follows the caption
+            Icon(kind.icon, null, tint = tone, modifier = Modifier.size(wardGlyph(12.0)))
             Text(caption, style = WardTextStyle.caption2.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(note.title.ifEmpty { "Untitled" }, style = WardTextStyle.subheadline.textStyle().copy(fontWeight = FontWeight.Medium),

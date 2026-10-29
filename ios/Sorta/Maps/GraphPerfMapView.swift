@@ -156,7 +156,7 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
         metal.delegate = renderer
         addSubview(metal)
         if renderer == nil {
-            unavailable.text = "This device cannot draw the fast map."
+            unavailable.text = "This device can\u{2019}t draw the fast map."
             unavailable.textColor = .secondaryLabel
             unavailable.textAlignment = .center
             unavailable.numberOfLines = 0

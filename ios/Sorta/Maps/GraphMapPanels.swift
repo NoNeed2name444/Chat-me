@@ -133,7 +133,7 @@ struct GraphPeekCardView: View {
                             .lineLimit(1)
                     }
                     .buttonStyle(WardChipButtonStyle())
-                    .accessibilityHint("Selects it on the map")
+                    .accessibilityHint("Selects it on the map.")
                 }
                 if content.moreLinks > 0 {
                     Text("+\(content.moreLinks) more")

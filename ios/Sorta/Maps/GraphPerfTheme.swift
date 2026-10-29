@@ -60,7 +60,7 @@ struct GraphPerfSpace: View {
                      command: command, chosen: chosen, linksFor: linksFor, touch: touch, tier: tier, bold: bold,
                      contrast: contrast == .increased, reduceMotion: reduceMotion, onStats: { stats = $0 })
         #else
-        Text("This device cannot draw the fast map.")
+        Text("This device can\u{2019}t draw the fast map.")
         #endif
     }
 

@@ -171,7 +171,7 @@ struct GraphStyleTool: View {
         .foregroundStyle(IdeaToolFace.ink(active: custom))
         .ideaToolRelief(active: custom)
         .accessibilityLabel("Look")
-        .accessibilityHint("Choose the map's theme - space, neurons or performance - how notes look in space, the cells' states in neurons, and curved or straight lines.")
+        .accessibilityHint("Choose the map\u{2019}s theme, how its notes look, and curved or straight lines.")
     }
 
     /// The Space theme's own choices: the Universe or one style for all,

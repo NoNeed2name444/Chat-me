@@ -205,7 +205,7 @@ struct Graph3DView: View {
                             presenting: deleting) { target in
             Button("Delete", role: .destructive) { delete(target) }
         } message: { target in
-            Text(target.folder ? "The folder goes; its notes and folders move up a level." : "This can't be undone.")
+            Text(target.folder ? "Its notes and folders move up a level." : "This can\u{2019}t be undone.")
         }
         // a chosen body deleted or gone: let it go
         .onChange(of: notes.notes) { _, _ in forgetGone() }

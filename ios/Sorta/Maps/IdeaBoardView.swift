@@ -144,10 +144,11 @@ struct IdeaBoardView: View {
                 }
 
                 if notes.notes.isEmpty {
-                    // the kit's empty state's gap and message type (WardEmptyState)
+                    // the kit's empty state's gap and message type (WardEmptyState);
+                    // a regular glyph, as light as Android's outlined one
                     VStack(spacing: WardSpace.m) {
                         Image(systemName: "hand.tap")
-                            .wardFont(.title2)
+                            .wardFont(.title2.weight(.regular))
                         Text("Double-tap anywhere to put an idea there.")
                             .wardFont(.subheadline)
                             .multilineTextAlignment(.center)
@@ -200,7 +201,7 @@ struct IdeaBoardView: View {
         let place: String = notes.folder(note.folderId)?.name ?? note.kind.label
         let title: String = note.title.isEmpty ? "Untitled" : note.title
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: WardSpace.xs) {
             HStack(spacing: WardSpace.xs) {
                 Image(systemName: note.kind.symbol)
                 Text(place)
@@ -214,7 +215,7 @@ struct IdeaBoardView: View {
                 .lineLimit(4)
                 .multilineTextAlignment(.leading)
         }
-        .padding(10)
+        .padding(WardSpace.m)
         .frame(width: Self.cardWidth, alignment: .leading)
         .background {
             // the folder's faint wash on the card's own relief
@@ -258,7 +259,7 @@ struct IdeaBoardView: View {
     /// thumb.
     private var hint: some View {
         let words: String = source == nil ? "Tap a card to start a connection."
-                                          : "Tap another card to connect them, or to part them."
+                                          : "Tap another card to connect or disconnect them."
         // one height with Cancel or without it, so the capsule doesn't jump
         // when a card is picked; Cancel drops the pick, and the Connect tool
         // ends connecting

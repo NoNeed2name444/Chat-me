@@ -250,7 +250,7 @@ struct GraphLegendContent {
                        tint: beamTint, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
     ]
 
-    private static let spaceFooter: String = "Inner orbits turn faster. Touch and hold for a name. Tap a note twice to open it. Tap a star or black hole twice to fly in, twice again to open the folder. Drag a star and its planets follow."
+    private static let spaceFooter: String = "Inner orbits turn faster. Tap a note twice to open it; hold it to move it or for its options. Tap a star or black hole twice to fly in, twice again to open the folder. Drag a star and its planets follow."
 
     static let space: GraphLegendContent = GraphLegendContent(
         rungs: spaceRungs, ladderCaption: "Bigger bodies hold more.",
@@ -306,7 +306,7 @@ struct GraphLegendContent {
                        tint: amber, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
     ]
 
-    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Touch and hold for a name. Tap a note twice to open it. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Drag a cell and everything inside it follows."
+    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Tap a note twice to open it; hold it to move it or for its options. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Drag a cell and everything inside it follows."
 
     /// The Neurons (GraphNeurons): one line per kind of cell.
     static let neurons: GraphLegendContent = GraphLegendContent(
@@ -429,7 +429,8 @@ struct GraphEmptyHint: View {
     private var words: String {
         switch theme {
         case .space: return "No galaxies yet: your notes orbit one star. Add a folder to light your first black hole."
-        case .neurons: return "No cells yet. Add a folder to grow your first one."
+        // notes in no folder share one cell (GraphNeurons), so there is always one
+        case .neurons: return "No folders yet: every note shares one cell. Add a folder to grow a cell of its own."
         case .performance: return "No folders yet: every note shares one cluster. Add a folder to start a cluster of its own."
         }
     }

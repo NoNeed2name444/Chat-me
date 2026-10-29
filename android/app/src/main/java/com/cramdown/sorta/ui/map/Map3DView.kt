@@ -240,7 +240,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }) {
         if (!gles3) {
             // white on the map's own night blue, which stays dark by day
-            Text("This device has no OpenGL ES 3, which the 3D map needs.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
+            Text("This device can’t draw the 3D map.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
                 style = WardType.body.textStyle(), color = Color.White, textAlign = TextAlign.Center)
             return@Box
         }
