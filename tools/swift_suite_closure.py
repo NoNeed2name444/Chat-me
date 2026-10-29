@@ -24,7 +24,7 @@ Static: no compiler, no network, the standard library only. Exit 0 prints
 import argparse, os, re, subprocess, sys
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-VARS = {"W": "ios/Sorta/Ward", "S": "ios/Sorta/Shared"}
+VARS = {"W": "ios/Sorta/Ward", "S": "ios/Sorta/Shared", "M": "ios/Sorta/Maps"}
 TESTS = "ios/UnitTests/Suites"
 
 # What each build can import. macOS: every Apple module but iOS's own, and none

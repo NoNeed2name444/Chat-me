@@ -19,6 +19,15 @@ targets:
     platform: iOS
     sources:
       - path: Sorta
+        excludes:
+          - Resources/Earth
+      # The Earth maps the Space theme's rocky planets wear (NASA imagery;
+      # where each comes from and its licence: the folder's SOURCES.md), as
+      # a folder, so they sit in Earth/ in the app (GraphEarth.swift), as
+      # Stethoscore has them (its project.yml:39-44)
+      - path: Sorta/Resources/Earth
+        type: folder
+        buildPhase: resources
       # The icon and the alternate icons, for the builds the owner installs:
       # tools/private/wire_art.py copies them in, and those builds name the
       # icon on the xcodebuild line. Never committed, so other builds have no

@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 SUITES = os.path.join(ROOT, "tools/swift_suites.txt")
 MAC_ONLY = os.path.join(ROOT, "tools/swift_suites_mac_only.txt")
-VARS = {"W": "ios/Sorta/Ward", "S": "ios/Sorta/Shared"}
+VARS = {"W": "ios/Sorta/Ward", "S": "ios/Sorta/Shared", "M": "ios/Sorta/Maps"}
 TESTS = "ios/UnitTests/Suites"
 BUILD = os.path.join(ROOT, "ios/build/swift-suites")
 

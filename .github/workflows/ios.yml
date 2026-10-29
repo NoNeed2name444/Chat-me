@@ -16,9 +16,13 @@ concurrency:
 jobs:
   suites:
     runs-on: ubuntu-latest
-    # the swift:6.1 image builds the seven Ward suites in a few minutes
-    timeout-minutes: 20
-    container: swift:6.1-noble
+    # the swift:6.1 image built the seven Ward suites in a few minutes; the
+    # 26 map suites (S03) come with them, so about twice a guess of 20
+    timeout-minutes: 45
+    # 6.4.1, as Stethoscore's suites ran on 6.4: on 6.1, three map suites
+    # (graphchunks, graphperf, graphtour) stop with "unable to type-check
+    # this expression in reasonable time"; on 6.4.1 all 33 pass
+    container: swift:6.4.1-noble
     # the container's default shell is sh, which has no pipefail
     defaults:
       run:
@@ -114,6 +118,65 @@ jobs:
         if: ${{ always() }}
         with:
           name: sorta-ios
+          path: |
+            build.log
+            results/
+            shots/
+          if-no-files-found: ignore
+          retention-days: 7
+  # The maps' own tests (GraphPreviewUITests: each theme at rest, flown in,
+  # touched, its legend and look menu, bodies dying, and the depth fade, with
+  # testDepthGlide), one at a time on an iPhone, beside the build job. Their
+  # normal time is set by the first green run; until then, the limit is
+  # about twice a guess of an hour for 30 tests and the build.
+  maps:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Pick the simulator
+        id: sim
+        run: python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The maps' tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 100
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone maps
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for bundle in results/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            name=$(basename "$bundle" .xcresult)
+            mkdir -p "shots/$name"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
+          done
+          ls -R shots 2>/dev/null | head -200 || echo "no screenshots"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-ios-maps
           path: |
             build.log
             results/

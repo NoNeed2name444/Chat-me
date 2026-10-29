@@ -12,9 +12,14 @@
 # 40718963474 the iPad booted beside the running iPhone, in 6 minutes the
 # first time and in 11 the second.
 #
-#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad
+#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad [kit|maps]
+#
+# kit (the default): the launch tests, the look kit's gallery and the maps'
+# renders, by day and by night, and the unit tests. maps: each of the maps'
+# tests (GraphPreviewUITests), one at a time; the maps are always night.
 set -euo pipefail
 kind="$1"
+set_="${2:-kit}"
 : "${UDID:?the simulator to run on}"
 mkdir -p ../results
 booting=$SECONDS
@@ -24,11 +29,28 @@ failed=0
 # Each run is <appearance>:<target>/<class>/<test>, or <appearance>:<target>
 # for a whole unit-test bundle. The gallery's screenshots are step 2's
 # renders of the look kit, by day and by night.
-for run in light:SortaUITests/LaunchTests/testLightPageIsBone \
-           dark:SortaUITests/LaunchTests/testDarkPageIsAubergine \
-           light:SortaUITests/GalleryTests/testGalleryRenders \
-           dark:SortaUITests/GalleryTests/testGalleryRenders \
-           light:SortaUnitTests; do
+case "$set_" in
+  kit)
+    runs=(light:SortaUITests/LaunchTests/testLightPageIsBone
+          dark:SortaUITests/LaunchTests/testDarkPageIsAubergine
+          light:SortaUITests/GalleryTests/testGalleryRenders
+          dark:SortaUITests/GalleryTests/testGalleryRenders
+          light:SortaUITests/MapRenderTests/testEachThemeRenders
+          dark:SortaUITests/MapRenderTests/testEachThemeRenders
+          light:SortaUnitTests)
+    allowance=300 ;;
+  maps)
+    runs=()
+    for t in $(grep -oE 'func test[A-Za-z0-9_]+' UITests/GraphPreviewUITests.swift | awk '{print $2}'); do
+      runs+=("dark:SortaUITests/GraphPreviewUITests/$t")
+    done
+    # the depth tests take a still at each of many poses, so a map test may
+    # take longer than a kit test; none was timed in Stethoscore's runs
+    allowance=900
+    echo "$kind: ${#runs[@]} map tests" ;;
+  *) echo "::error::no test set $set_"; exit 2 ;;
+esac
+for run in "${runs[@]}"; do
   look="${run%%:*}"
   only="${run#*:}"
   test="${only##*/}"
@@ -47,8 +69,8 @@ for run in light:SortaUITests/LaunchTests/testLightPageIsBone \
     -resultBundlePath "../results/$kind-$name.xcresult" \
     "-only-testing:$only" \
     -test-timeouts-enabled YES \
-    -default-test-execution-time-allowance 300 \
-    -maximum-test-execution-time-allowance 300 \
+    -default-test-execution-time-allowance "$allowance" \
+    -maximum-test-execution-time-allowance "$allowance" \
     CODE_SIGNING_ALLOWED=NO \
     test-without-building 2>&1 | tee "$log" | grep --line-buffered -E "error:|Test [Cc]ase|TEST |\*\* " || true
   if [ "$only" = "$test" ]; then

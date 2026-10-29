@@ -42,8 +42,26 @@ PICTURES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".bmp", 
             ".ico", ".icns", ".svg", ".pdf", ".ai", ".psd", ".sketch", ".icon", ".car",
             ".mp4", ".mov", ".m4v"}
 # Pictures that may go, by path and SHA-256, each checked first not to be
-# the art. Empty until the map step adds NASA's Earth maps.
-PICTURES_ALLOWED: dict[str, str] = {}
+# the art: NASA's Earth maps, which the Space theme's rocky planets wear
+# (their SOURCES.md is beside them), the same four on each platform.
+PICTURES_ALLOWED: dict[str, str] = {
+    "ios/Sorta/Resources/Earth/earth-clouds.jpg":
+        "7ea152a06e44cff883fe280fee996d3c9cf9d558827c140180c94433b6b5744c",
+    "ios/Sorta/Resources/Earth/earth-day.jpg":
+        "2aeaece0d5025a2ea2dd8603b0814b2cf4059a225f53ecaed769b9e710524261",
+    "ios/Sorta/Resources/Earth/earth-lights.jpg":
+        "e44c2770729bd1a1dd824831a87de82bd6b09bc9c3ef822c8ab42eb10c5d3207",
+    "ios/Sorta/Resources/Earth/earth-water.png":
+        "5b50011605d81ba17708472b60cf512d6e3054f77f4afcdd5c5730e6d7109356",
+    "android/app/src/main/assets/earth/earth-clouds.jpg":
+        "7ea152a06e44cff883fe280fee996d3c9cf9d558827c140180c94433b6b5744c",
+    "android/app/src/main/assets/earth/earth-day.jpg":
+        "2aeaece0d5025a2ea2dd8603b0814b2cf4059a225f53ecaed769b9e710524261",
+    "android/app/src/main/assets/earth/earth-lights.jpg":
+        "e44c2770729bd1a1dd824831a87de82bd6b09bc9c3ef822c8ab42eb10c5d3207",
+    "android/app/src/main/assets/earth/earth-water.png":
+        "5b50011605d81ba17708472b60cf512d6e3054f77f4afcdd5c5730e6d7109356",
+}
 DRAWING = re.compile(rb"<vector\b|<animated-vector\b|<adaptive-icon\b|android:pathData")
 # built in two halves, so this file never matches itself
 SESSION_LINK = re.compile(rb"cc:" + rb"//")
