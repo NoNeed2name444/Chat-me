@@ -34,10 +34,10 @@ final class GalleryTests: XCTestCase {
         // the round button moves under it: a chip as tall as two lines of
         // text means the word was broken ("Pinne / d", ios run 40816579370)
         let chips = app.buttons.matching(NSPredicate(format: "label == %@", "Pinned"))
-        let add = app.buttons.matching(NSPredicate(format: "label == %@", "Add"))
+        let rounds = app.buttons.matching(NSPredicate(format: "label == %@", "Add"))
         XCTAssertEqual(chips.count, 6, "the chip at rest, held and disabled, chosen or not")
-        XCTAssertEqual(add.count, 6, "the round button at rest, held and disabled, chosen or not")
-        let circle = add.firstMatch.frame
+        XCTAssertEqual(rounds.count, 6, "the round button at rest, held and disabled, chosen or not")
+        let circle = rounds.firstMatch.frame
         XCTAssertEqual(circle.width, circle.height, accuracy: 1, "the round button is round")
         for i in 0..<chips.count {
             let chip = chips.element(boundBy: i).frame
