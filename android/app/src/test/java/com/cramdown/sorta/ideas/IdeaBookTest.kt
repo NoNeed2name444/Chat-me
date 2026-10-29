@@ -213,8 +213,8 @@ class IdeaBookTest {
         assertEquals("vignette.space.theme", GraphTheme.KEY)
         assertEquals("unknown is Space", GraphTheme.SPACE, GraphTheme.stored("galaxy"))
         assertEquals(GraphTheme.PERFORMANCE, GraphTheme.stored("performance"))
-        assertEquals("Neurons is not ported: Space", GraphTheme.SPACE, GraphTheme.stored("neurons"))
-        assertEquals(listOf("Space", "Performance"), GraphTheme.offered.map { it.title })
+        assertEquals("Neurons is ported: Neurons", GraphTheme.NEURONS, GraphTheme.stored("neurons"))
+        assertEquals(listOf("Space", "Neurons", "Performance"), GraphTheme.offered.map { it.title })
         assertEquals(listOf("Space of ideas", "Network of ideas", "Fast map of ideas"), GraphTheme.entries.map { it.mapLabel })
     }
 

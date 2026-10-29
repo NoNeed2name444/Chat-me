@@ -48,6 +48,10 @@ nonisolated final class GraphSpaceDepthStage: @unchecked Sendable {
     private var shownOpacity: [Float]
     private var shownLevel: [SpaceBodyLevel?]
     private(set) var band: SpaceDepthBand = .off
+    /// The framing Graph3DView last made (GraphSim.setDepthFrame): the
+    /// band's end is a share of its reach. Until the first, the keeper's
+    /// own default.
+    var frame: GraphDepthFrame = .whole(0.4)
     private var shownUniform = SIMD4<Float>(-1, -1, -1, -1)
     private var shownFocal: Float = -1
 
@@ -132,7 +136,7 @@ nonisolated final class GraphSpaceDepthStage: @unchecked Sendable {
                 width: Float, height: Float, focus: SIMD3<Float>, position: [SIMD3<Float>],
                 visible: [Bool], ghost: [Bool], chosen: Int?) {
         let focusDepth: Float = SpaceDepth.depth(of: focus, eye: eye, forward: forward)
-        band = SpaceDepth.band(focusDepth: focusDepth, tier: tier, contrast: contrast)
+        band = SpaceDepth.band(focusDepth: focusDepth, frame: frame, tier: tier, contrast: contrast)
         let focal: Float = SpaceDepth.focal(viewHeight: height, fovY: fovY)
         handOver(band.uniform, focal: focal)
         let far: Float = band.culls ? band.end * 1.5 : 1e9

@@ -26,7 +26,18 @@ import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.rawValue
 import com.cramdown.sorta.ideas.spaceStyle
+import com.cramdown.sorta.ideas.NoteKind
+import com.cramdown.sorta.ideas.noteKind
+import com.cramdown.sorta.map.AnatomyInput
+import com.cramdown.sorta.map.AnatomyNote
+import com.cramdown.sorta.map.GraphUniverse
 import com.cramdown.sorta.map.MapGraph
+import com.cramdown.sorta.map.NeuronScene
+import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.map.UniverseEdge
+import com.cramdown.sorta.map.UniverseFolder
+import com.cramdown.sorta.map.UniverseInput
+import com.cramdown.sorta.map.UniverseNote
 import com.cramdown.sorta.map.NoteLike
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SyntheticGraph
@@ -100,8 +111,12 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     val edges = remember(notes) { book.allEdges() }
     val main = settings.nodeStyle
     val folderRaw = settings.folderStyles
-    val scene by produceState<MapScene?>(null, notes, theme, main, folderRaw) {
+    // Neurons: the cells opened on the map, outermost first (tapping a cell opens it; Recentre closes them all)
+    var openPath by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(recenter) { openPath = emptyList() }
+    val scene by produceState<MapScene?>(null, notes, theme, main, folderRaw, openPath) {
         value = withContext(Dispatchers.Default) {
+            if (theme == GraphTheme.NEURONS) return@withContext MapScene.neurons(NeuronScene.of(neuronsInput(book, edges, openPath)))
             val out = HashMap<String, MutableList<String>>()
             for ((a, b) in edges) out.getOrPut(a) { ArrayList() }.add(b)
             val performance = theme == GraphTheme.PERFORMANCE
@@ -123,8 +138,39 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     val description = "${theme.mapLabel}: ${notes.size} ${if (notes.size == 1) "note" else "notes"}, ${edges.size} ${if (edges.size == 1) "link" else "links"}. " +
         "Tap a note to open it. Drag to turn, pinch to zoom."
     Map3DView(ready, Modifier.fillMaxSize(), description = description,
-        onOpenNode = { index -> ready.ids.getOrNull(index)?.let(open) },
+        onOpenNode = { index ->
+            val body = ready.neurons?.plan?.bodies?.getOrNull(index)
+            when {
+                body == null -> ready.ids.getOrNull(index)?.let(open)
+                body.kind == ThemeBodyKind.NOTE -> notes.firstOrNull { it.id.equals(body.id, ignoreCase = true) }?.let { open(it.id) }
+                body.kind == ThemeBodyKind.FOLDER -> book.folders.firstOrNull { it.id.equals(body.id, ignoreCase = true) }?.let { folder ->
+                    openPath = book.path(folder.id).map { it.id.uppercase() }
+                }
+                else -> {}
+            }
+        },
         showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp)
+}
+
+/**
+ * What the Neurons plan reads (iOS Graph3DView.universeInput and anatomyInput): every note, folder
+ * and link, with ids uppercased as iOS's UUID strings are (the plan sorts and seeds by them), the
+ * notes' words, kind and creation (seconds from 1 Jan 2001), and each note's text, tags and links.
+ */
+private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open: List<String>): UniverseInput {
+    val epoch2001 = 978_307_200.0
+    val notes = book.notes.map { n ->
+        UniverseNote(n.id.uppercase(), n.title, n.noteKind == NoteKind.PAGE, n.folderId?.uppercase(),
+            GraphUniverse.wordCount(n.body), n.createdAt / 1000.0 - epoch2001)
+    }
+    val folders = book.folders.map { UniverseFolder(it.id.uppercase(), it.name, it.parentId?.uppercase()) }
+    val index = book.titleIndex()
+    val anatomy = AnatomyInput(book.notes.map { n ->
+        AnatomyNote(n.id.uppercase(), n.title, n.body, n.noteKind == NoteKind.PAGE, n.folderId?.uppercase(), n.tags,
+            null, n.links.map { it.uppercase() }, book.resolve(n.body, index).map { it.uppercase() }, n.createdAt / 1000.0 - epoch2001)
+    }, folders)
+    return UniverseInput(notes, folders, edges.map { UniverseEdge(it.first.uppercase(), it.second.uppercase()) },
+        anatomy = anatomy, open = open)
 }
 
 /** A seeded demo map (GraphPerfDemo): synthetic notes, not the user's, turning by itself. */

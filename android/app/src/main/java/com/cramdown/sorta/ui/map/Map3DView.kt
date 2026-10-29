@@ -66,6 +66,7 @@ import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.RefreshRate
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.SpaceStyle
+import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.grouped
 import java.util.Locale
@@ -75,8 +76,30 @@ import kotlin.math.max
 /** A map ready to draw: its octree, how big a node is, and the notes behind the nodes. */
 /** [viewRadius] holds 95% of the nodes: the home view frames those, not a few far outliers. */
 /** [theme] says how its notes are drawn; in [MapTheme.SPACE] each node's group is its SpaceStyle code. */
-class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>, val ids: List<String>, val viewRadius: Float = tree.radius[0], val theme: MapTheme = MapTheme.PLAIN) {
+class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>, val ids: List<String>, val viewRadius: Float = tree.radius[0], val theme: MapTheme = MapTheme.PLAIN,
+               /** [MapTheme.NEURONS]: the cells and links NeuronGl draws; the tree then only holds their places, by body. */
+               val neurons: NeuronScene? = null) {
     companion object {
+        /**
+         * The Neurons map: node i is the plan's body i at its home (labels, taps and the home view
+         * read the tree; NeuronGl draws the bodies where they drift). [ids] and [titles] by body.
+         */
+        fun neurons(scene: NeuronScene): MapScene {
+            val bodies = scene.plan.bodies
+            val positions = FloatArray(bodies.size * 3)
+            for (i in bodies.indices) {
+                val p = scene.plan.position(i, 0.0)
+                positions[3 * i] = p.x; positions[3 * i + 1] = p.y; positions[3 * i + 2] = p.z
+            }
+            val edges = IntArray(scene.plan.links.size * 2)
+            for ((k, link) in scene.plan.links.withIndex()) { edges[2 * k] = link.a; edges[2 * k + 1] = link.b }
+            val graph = MapGraph(positions, ByteArray(bodies.size), edges, bodies.map { it.label }, bodies.map { it.id })
+            val tree = Octree.build(graph, 4096)
+            val sizes = bodies.map { it.sphere }.sorted()
+            val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
+            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene)
+        }
+
         fun viewRadius(tree: Octree): Float {
             val n = tree.nodeCount
             if (n < 50) return tree.radius[Octree.ROOT]
@@ -111,6 +134,9 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
         }
     }
 }
+
+/** The Neurons map's camera pitch: 35 degrees down (GraphTilt.angle for Neurons). */
+private const val NEURONS_PITCH = (35.0 * Math.PI / 180.0).toFloat()
 
 /** True when this device can run the OpenGL ES 3.0 map. */
 fun supportsGles3(context: Context): Boolean {
@@ -167,7 +193,9 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val tree = scene.tree
     val camera = remember(scene) {
         // the whole map in view on a portrait screen (about 3:4), with room for the readout
-        OrbitCamera(target = Vec3(tree.cx[0], tree.cy[0], tree.cz[0]), pitch = 0.7f).apply {
+        // the Neurons map looks down at 35 degrees (GraphTilt's Neurons angle)
+        val pitch = if (scene.theme == MapTheme.NEURONS) NEURONS_PITCH else 0.7f
+        OrbitCamera(target = Vec3(tree.cx[0], tree.cy[0], tree.cz[0]), pitch = pitch).apply {
             distance = max(fitDistance(scene.viewRadius, aspect = 0.75f), 4f)
             minDistance = scene.nodeRadius * 4; maxDistance = max(tree.radius[0], 1f) * 80
         }
@@ -182,6 +210,8 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
             theme = scene.theme, assets = context.assets,
             density = context.resources.displayMetrics.density, contrast = increaseContrast(context),
             onDrawn = { d -> mainHandler.post { drawn = d } },
+            viewRadius = scene.viewRadius,
+            neurons = scene.neurons, lively = android.animation.ValueAnimator.areAnimatorsEnabled(),
         )
     }
     val gles3 = remember(context) { supportsGles3(context) }

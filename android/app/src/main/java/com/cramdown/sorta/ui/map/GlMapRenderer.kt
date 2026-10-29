@@ -11,6 +11,9 @@ import com.cramdown.sorta.map.FrameStats
 import com.cramdown.sorta.map.GuardBand
 import com.cramdown.sorta.map.LodSelector
 import com.cramdown.sorta.map.MapPalette
+import com.cramdown.sorta.map.NeuronDepth
+import com.cramdown.sorta.map.NeuronPalette
+import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Mat4
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
@@ -92,8 +95,8 @@ data class MapDrawn(
     }
 }
 
-/** How the map draws its notes: plain coloured points, or the Space theme's bodies. */
-enum class MapTheme { PLAIN, SPACE }
+/** How the map draws its notes: plain coloured points, the Space theme's bodies, or the Neurons theme's cells (NeuronGl). */
+enum class MapTheme { PLAIN, SPACE, NEURONS }
 
 /**
  * A node's place on screen, for labels and taps (real notes only). [crisp] is false where the
@@ -135,7 +138,15 @@ class GlMapRenderer(
     private val contrast: Boolean = false,
     /** Called on the GL thread each time the [MapDrawn] record changes (a few times per context). */
     private val onDrawn: ((MapDrawn) -> Unit)? = null,
+    /** The ball the home view frames ([MapScene.viewRadius]): the depth fade's reach. */
+    private val viewRadius: Float = tree.radius[0],
+    /** The Neurons theme's cells and links ([MapTheme.NEURONS]); its notes are drawn by NeuronGl, not as points. */
+    neurons: NeuronScene? = null,
+    /** Whether the map moves on its own (off when the system's animations are off): the Neurons' states and impulses. */
+    lively: Boolean = true,
 ) : GLSurfaceView.Renderer {
+    private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null) NeuronGl(neurons, lively) else null
+    private val neuronLively = lively
     private val space = theme == MapTheme.SPACE
     private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius) else null
     private val spaceGl: SpaceGl? = if (space) SpaceGl(assets) else null
@@ -247,6 +258,7 @@ class GlMapRenderer(
         cache = newCache()
         lod = LodSelector(tree, cache)
         if (bodies != null) spaceGl?.create(bodies, budget.detail)
+        neuronGl?.create()
         // a new context: its frames are counted afresh
         record = MapDrawn(renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "", maxPointSize = maxPointSize,
             bodyStyles = bodies?.enabled?.count { it } ?: 0)
@@ -275,7 +287,12 @@ class GlMapRenderer(
             forward = camera.forward()
         }
         // the depth fade follows what the camera looks at: its orbit target
-        band = if (space) SpaceDepth.band(SpaceDepth.depth(target, eye, forward), tier, contrast) else SpaceDepthBand.OFF
+        val focusDepth = SpaceDepth.depth(target, eye, forward)
+        if (neuronGl != null) {
+            drawNeurons(neuronGl, start, vsync, intervalMs, eye, view, proj, focal, focusDepth)
+            return
+        }
+        band = if (space) SpaceDepth.band(focusDepth, SpaceDepth.reach(focusDepth, viewRadius), tier, contrast) else SpaceDepthBand.OFF
         bandUniform = band.uniform
         val moved = lastEye?.let { (eye - it).length() + (target - (lastTarget ?: target)).length() } ?: 0f
         if (dt > 0f) {
@@ -325,6 +342,53 @@ class GlMapRenderer(
             ))
         }
         record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000)
+        if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+    }
+
+    /**
+     * The Neurons theme's frame: no octree points, links or summaries, only NeuronGl's cells and
+     * links over the fluid, faded by the Neurons band (NeuronDepth), always night.
+     */
+    private fun drawNeurons(gl: NeuronGl, start: Long, vsync: Long, intervalMs: Double, eye: Vec3, view: FloatArray,
+                            proj: FloatArray, focal: Float, focusDepth: Float) {
+        band = NeuronDepth.band(focusDepth, SpaceDepth.reach(focusDepth, viewRadius), tier, contrast)
+        bandUniform = band.uniform
+        viewProj = Mat4.multiply(proj, view)
+        val seconds = (System.nanoTime() - startNanos) / 1e9
+        clock = (seconds % SpaceOptics.CLOCK_PERIOD).toFloat()
+        val moved = lastEye?.let { (eye - it).length() } ?: 0f
+        lastEye = eye
+        animating = neuronLively || moved > 1e-5f
+        val deep = NeuronPalette.deep
+        GLES30.glClearColor(deep.x, deep.y, deep.z, 1f)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
+        gl.draw(view, proj, eye, clock, if (neuronLively) seconds else 0.0, bandUniform)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+        val count = gl.bodyCount
+        onScreenNodes?.let { callback ->
+            val out = ArrayList<ScreenNode>(count)
+            val time = if (neuronLively) seconds else 0.0
+            for (i in 0 until count) {
+                val p = gl.position(i, time)
+                Mat4.project(viewProj, p.x, p.y, p.z, clip)
+                if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
+                val sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width
+                val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
+                out.add(ScreenNode(i, sx, sy, gl.size(i) * focal / clip[3] * 2f, band.crisp(clip[3]) || band == SpaceDepthBand.OFF))
+            }
+            callback(out)
+        }
+        val workMs = (System.nanoTime() - start) / 1e6
+        budget.onFrame(intervalMs, workMs)
+        stats.add(vsync, intervalMs, workMs)
+        if (vsync - lastReadout > 250_000_000L) {
+            lastReadout = vsync
+            onReadout(MapReadout(fps = stats.fps(vsync), displayMaxHz = displayMaxHz, displayHz = displayHz(),
+                frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = gl.linkCount,
+                drawnNodes = count, detail = budget.detail, bodies = count))
+        }
+        record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
     }
 

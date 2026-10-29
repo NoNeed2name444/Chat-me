@@ -10,9 +10,9 @@
 // morphing noise octaves (D12), and a stale focus behind the eye fading
 // nothing (D13).
 //
-// Compiled with GraphSpaceDepth.swift, GraphPerfLOD.swift,
-// GraphPerfCamera.swift, GraphicsQuality.swift, GraphShaderKit.swift and
-// GraphSpaceShaders.swift (Foundation only).
+// Compiled with GraphSpaceDepth.swift, GraphDepthFade.swift, GraphTilt.swift,
+// GraphPerfLOD.swift, GraphPerfCamera.swift, GraphicsQuality.swift,
+// GraphShaderKit.swift and GraphSpaceShaders.swift (Foundation only).
 import Foundation
 
 var failures: [String] = []
@@ -23,6 +23,10 @@ func check(_ label: String, _ ok: Bool, _ detail: String = "") {
 }
 
 func near(_ a: Float, _ b: Float, _ tolerance: Float = 1e-5) -> Bool { abs(a - b) <= tolerance }
+
+// the tilted default view: its far edge 1.3 times the focus's depth
+// (plan.md, lines 2160-2165, has 1.24 to 1.32)
+let framing: GraphDepthFrame = .whole(0.3)
 
 // MARK: D1 the curve
 
@@ -48,10 +52,10 @@ check("D1 a band never set fades nothing", SpaceDepthBand.off.fade(1000) == 0 &&
 var focusCrisp = true
 var sameAtEveryScale = true
 for focus in [Float(0.01), 0.3, 1, 7, 40, 900] {
-    let b: SpaceDepthBand = SpaceDepth.band(focusDepth: focus, tier: .high)
+    let b: SpaceDepthBand = SpaceDepth.band(focusDepth: focus, frame: framing, tier: .high)
     let focusOK: Bool = b.fade(focus) == 0 && b.crisp(focus) && !b.gone(focus)
     if !focusOK { focusCrisp = false }
-    let unit: SpaceDepthBand = SpaceDepth.band(focusDepth: 1, tier: .high)
+    let unit: SpaceDepthBand = SpaceDepth.band(focusDepth: 1, frame: framing, tier: .high)
     for z in stride(from: Float(0), through: 4, by: 0.25) where focus >= SpaceDepth.nearestFocus {
         if !near(b.fade(z * focus), unit.fade(z), 1e-4) { sameAtEveryScale = false }
     }
@@ -68,7 +72,7 @@ check("D2 depth is view-space z: a body off to the side at the same z fades the 
       straight == 10 && aside == 10, "\(straight) \(aside)")
 // turning: the far side comes forward and sharpens, the near side goes back
 let farSide = SIMD3<Float>(0, 0, -8)
-let b10: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, tier: .high)
+let b10: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, frame: framing, tier: .high)
 let before: Float = b10.fade(SpaceDepth.depth(of: farSide, eye: eye, forward: ahead))
 let turnedEye = SIMD3<Float>(0, 0, -10)
 let turnedAhead = SIMD3<Float>(0, 0, 1)
@@ -80,16 +84,24 @@ check("D2 turned round the focus, the far side sharpens and the near side fades"
 
 // MARK: D3 the Graphics setting sets the reach
 
-let high: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, tier: .high)
-let smooth: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, tier: .smooth)
+let high: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, frame: framing, tier: .high)
+let smooth: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, frame: framing, tier: .smooth)
 check("D3 Smooth pulls the end in (less drawn), High pushes it out",
       smooth.end < high.end && smooth.start > 10 && high.start > 10, "\(smooth) \(high)")
 check("D3 every tier reaches the background, so what is past it is not drawn", high.culls && smooth.culls)
+// the fault testDepthGlide caught: the band ended past the view's far
+// edge, so it culled nothing. Space's GraphDepthBand ends inside it.
+let farEdge: Float = 10 * (1 + framing.reach)
+check("D3 the band ends inside the default view, so its far strip is culled",
+      high.gone(farEdge) && smooth.gone(farEdge) && !high.gone(high.end - 0.01), "\(high) \(smooth) \(farEdge)")
+check("D3 on High it ends at 0.85 of the reach past the focus, on Smooth at 0.75",
+      near(high.end, 10 * (1 + 0.85 * 0.3), 1e-4) && near(smooth.end, 10 * (1 + 0.75 * 0.3), 1e-4)
+      && near(high.start, 10 * (1 + 0.2 * 0.3), 1e-4), "\(high) \(smooth)")
 
 // MARK: D4 Increase Contrast
 
-let plain: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, tier: .high)
-let contrast: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, tier: .high, contrast: true)
+let plain: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, frame: framing, tier: .high)
+let contrast: SpaceDepthBand = SpaceDepth.band(focusDepth: 10, frame: framing, tier: .high, contrast: true)
 check("D4 with Increase Contrast the fade starts later and stops short of the sky",
       contrast.start > plain.start && contrast.fade(1e6) < 1 && contrast.fade(1e6) > 0.3)
 check("D4 nothing stopped short is culled or dissolved", !contrast.culls && !contrast.gone(1e6)
@@ -285,13 +297,13 @@ let staleDepth: Float = SpaceDepth.depth(of: SIMD3<Float>(0, 0, 0), eye: staleEy
 var staleOff = staleDepth < 0
 for depth in [staleDepth, -0.01, 0, SpaceDepth.nearestFocus, Float.nan, -Float.infinity] {
     for tier in [GraphicsTier.high, .smooth] {
-        for lifted in [false, true] where SpaceDepth.band(focusDepth: depth, tier: tier, contrast: lifted) != .off {
+        for lifted in [false, true] where SpaceDepth.band(focusDepth: depth, frame: framing, tier: tier, contrast: lifted) != .off {
             staleOff = false
         }
     }
 }
 check("D13 a focus behind the eye, on it or not a number sets no band", staleOff, "\(staleDepth)")
-let stale: SpaceDepthBand = SpaceDepth.band(focusDepth: staleDepth, tier: .high)
+let stale: SpaceDepthBand = SpaceDepth.band(focusDepth: staleDepth, frame: framing, tier: .high)
 var nothingLost = true
 for z in [Float(0.01), 0.13, 1, 5, 50, 5000] {
     if stale.fade(z) != 0 || stale.gone(z) || stale.dissolve(z) != 1 || !stale.crisp(z) || stale.light(z) != 1 {
@@ -299,7 +311,7 @@ for z in [Float(0.01), 0.13, 1, 5, 50, 5000] {
     }
 }
 check("D13 then every body ahead stays crisp and drawn, names and all: the map never goes blank", nothingLost)
-let justAhead: SpaceDepthBand = SpaceDepth.band(focusDepth: SpaceDepth.nearestFocus * 1.01, tier: .high)
+let justAhead: SpaceDepthBand = SpaceDepth.band(focusDepth: SpaceDepth.nearestFocus * 1.01, frame: framing, tier: .high)
 check("D13 a focus just ahead of the nearest still sets its band",
       justAhead.culls && justAhead.crisp(SpaceDepth.nearestFocus) && justAhead.gone(1))
 

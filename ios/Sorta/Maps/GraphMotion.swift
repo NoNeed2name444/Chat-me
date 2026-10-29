@@ -1038,6 +1038,15 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         lock.unlock()
     }
 
+    /// A framing or fly-in done (GraphDepth.framed): the Space depth band's
+    /// end follows its reach.
+    func setDepthFrame(_ frame: GraphDepthFrame) {
+        lock.lock()
+        depth?.frame = frame
+        depthStale = true
+        lock.unlock()
+    }
+
     /// Gives note `i` the bright ring and disk, and the one that had them
     /// back its own. Main thread, without the lock.
     private func highlight(_ i: Int?) {

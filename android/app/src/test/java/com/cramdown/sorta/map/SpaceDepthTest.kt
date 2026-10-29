@@ -25,6 +25,8 @@ import kotlin.math.tan
 class SpaceDepthTest {
     private fun near(a: Float, b: Float, tolerance: Float = 1e-5f) = abs(a - b) <= tolerance
     private val pi = PI.toFloat()
+    /** The default view's reach: its far edge 1.3 times the focus's depth (iOS plan.md has 1.24 to 1.32). */
+    private val REACH = 0.3f
 
     // ---- D1 the curve ----
 
@@ -54,9 +56,9 @@ class SpaceDepthTest {
         var focusCrisp = true
         var sameAtEveryScale = true
         for (focus in listOf(0.01f, 0.3f, 1f, 7f, 40f, 900f)) {
-            val b = SpaceDepth.band(focus, GraphicsTier.HIGH)
+            val b = SpaceDepth.band(focus, REACH, GraphicsTier.HIGH)
             if (!(b.fade(focus) == 0f && b.crisp(focus) && !b.gone(focus))) focusCrisp = false
-            val unit = SpaceDepth.band(1f, GraphicsTier.HIGH)
+            val unit = SpaceDepth.band(1f, REACH, GraphicsTier.HIGH)
             if (focus >= SpaceDepth.NEAREST_FOCUS) {
                 var z = 0f
                 while (z <= 4f) {
@@ -74,7 +76,7 @@ class SpaceDepthTest {
         assertTrue("D2 depth is view-space z: a body off to the side at the same z fades the same: $straight $aside",
             straight == 10f && aside == 10f)
         val farSide = Vec3(0f, 0f, -8f)
-        val b10 = SpaceDepth.band(10f, GraphicsTier.HIGH)
+        val b10 = SpaceDepth.band(10f, REACH, GraphicsTier.HIGH)
         val before = b10.fade(SpaceDepth.depth(farSide, eye, ahead))
         val turnedEye = Vec3(0f, 0f, -10f)
         val turnedAhead = Vec3(0f, 0f, 1f)
@@ -88,40 +90,56 @@ class SpaceDepthTest {
     @Test fun d2FocusAtOrBehindTheEyeIsOff() {
         for (focus in listOf(0f, -0.01f, -3f, -900f, Float.NEGATIVE_INFINITY)) {
             for (tier in GraphicsTier.entries) {
-                assertEquals("D2 focus at $focus has no band", SpaceDepthBand.OFF, SpaceDepth.band(focus, tier))
-                assertEquals("D2 nor with Increase Contrast", SpaceDepthBand.OFF, SpaceDepth.band(focus, tier, contrast = true))
+                assertEquals("D2 focus at $focus has no band", SpaceDepthBand.OFF, SpaceDepth.band(focus, REACH, tier))
+                assertEquals("D2 nor with Increase Contrast", SpaceDepthBand.OFF, SpaceDepth.band(focus, REACH, tier, contrast = true))
             }
         }
-        val off = SpaceDepth.band(-5f, GraphicsTier.HIGH)
+        val off = SpaceDepth.band(-5f, REACH, GraphicsTier.HIGH)
         assertTrue("D2 so nothing in front fades, culls or dissolves",
             off.fade(1e6f) == 0f && !off.culls && !off.gone(1e6f) && off.dissolve(1e6f) == 1f && off.crisp(0f))
         // a focus just in front still has its band, at the nearest focus
-        val tiny = SpaceDepth.band(0.001f, GraphicsTier.HIGH)
+        val tiny = SpaceDepth.band(0.001f, REACH, GraphicsTier.HIGH)
         assertTrue("D2 a focus just in front of the eye keeps the nearest band",
-            near(tiny.start, SpaceDepth.NEAREST_FOCUS * 1.15f) && tiny.culls)
+            near(tiny.start, SpaceDepth.NEAREST_FOCUS * (1f + 0.2f * REACH)) && tiny.culls)
         // eye walked past the focus: the camera's own target behind it
         val eye = Vec3(0f, 0f, -2f)
         val forward = Vec3(0f, 0f, -1f)
         val behind = SpaceDepth.depth(Vec3(0f, 0f, 0f), eye, forward)
         assertTrue("D2 a focus behind the eye has negative depth: $behind", behind < 0f)
-        assertEquals(SpaceDepthBand.OFF, SpaceDepth.band(behind, GraphicsTier.SMOOTH))
+        assertEquals(SpaceDepthBand.OFF, SpaceDepth.band(behind, REACH, GraphicsTier.SMOOTH))
     }
 
     // ---- D3 the tier sets the reach ----
 
     @Test fun d3TierReach() {
-        val high = SpaceDepth.band(10f, GraphicsTier.HIGH)
-        val smooth = SpaceDepth.band(10f, GraphicsTier.SMOOTH)
+        val high = SpaceDepth.band(10f, REACH, GraphicsTier.HIGH)
+        val smooth = SpaceDepth.band(10f, REACH, GraphicsTier.SMOOTH)
         assertTrue("D3 Smooth pulls the end in (less drawn), High pushes it out: $smooth $high",
             smooth.end < high.end && smooth.start > 10f && high.start > 10f)
         assertTrue("D3 every tier reaches the background, so what is past it is not drawn", high.culls && smooth.culls)
+        // the fault iOS's testDepthGlide caught: the band ended past the view's far edge, so it
+        // culled nothing. Space's band ends inside it.
+        val farEdge = 10f * (1f + REACH)
+        assertTrue("D3 the band ends inside the default view, so its far strip is culled: $high $smooth $farEdge",
+            high.gone(farEdge) && smooth.gone(farEdge) && !high.gone(high.end - 0.01f))
+        assertTrue("D3 on High it ends at 0.85 of the reach past the focus, on Smooth at 0.75: $high $smooth",
+            near(high.end, 10f * (1f + 0.85f * REACH), 1e-4f) && near(smooth.end, 10f * (1f + 0.75f * REACH), 1e-4f)
+                && near(high.start, 10f * (1f + 0.2f * REACH), 1e-4f))
+    }
+
+    @Test fun d3ReachFromTheFramedBall() {
+        assertTrue("D3 the deepest point lies the framed ball's radius past the focus",
+            near(SpaceDepth.reach(10f, 3f), 0.3f))
+        assertTrue("D3 the reach is kept within iOS's range",
+            SpaceDepth.reach(10f, 0.1f) == SpaceDepth.NEAREST_REACH && SpaceDepth.reach(1f, 50f) == SpaceDepth.FURTHEST_REACH
+                && SpaceDepth.reach(Float.NaN, 3f) == SpaceDepth.FURTHEST_REACH)
     }
 
     // ---- D4 Increase Contrast ----
 
     @Test fun d4IncreaseContrast() {
-        val plain = SpaceDepth.band(10f, GraphicsTier.HIGH)
-        val contrast = SpaceDepth.band(10f, GraphicsTier.HIGH, contrast = true)
+        val plain = SpaceDepth.band(10f, REACH, GraphicsTier.HIGH)
+        val contrast = SpaceDepth.band(10f, REACH, GraphicsTier.HIGH, contrast = true)
         assertTrue("D4 with Increase Contrast the fade starts later and stops short of the sky",
             contrast.start > plain.start && contrast.fade(1e6f) < 1f && contrast.fade(1e6f) > 0.3f)
         assertTrue("D4 nothing stopped short is culled or dissolved",
@@ -131,7 +149,7 @@ class SpaceDepthTest {
     // ---- D5 fully faded is not drawn, with no pop ----
 
     @Test fun d5GoneWithNoPop() {
-        val plain = SpaceDepth.band(10f, GraphicsTier.HIGH)
+        val plain = SpaceDepth.band(10f, REACH, GraphicsTier.HIGH)
         assertTrue("D5 past the end is gone, before it is not", plain.gone(plain.end) && !plain.gone(plain.end - 0.01f))
         var dissolveSmooth = true
         var lastDissolve = 1f
@@ -326,7 +344,7 @@ class SpaceDepthTest {
         fun depth(node: Int) = vp[3] * tree.positions[3 * node] + vp[7] * tree.positions[3 * node + 1] + vp[11] * tree.positions[3 * node + 2] + vp[15]
         val unfaded = SpaceBodies(tree, nodeRadius = 0.5f)
         val all = unfaded.update(plan, vp, camera.eye(), camera.right(), camera.up(), focal, 96, 0f)
-        val band = SpaceDepth.band(SpaceDepth.depth(camera.target, camera.eye(), camera.forward()), GraphicsTier.HIGH)
+        val band = SpaceDepth.band(SpaceDepth.depth(camera.target, camera.eye(), camera.forward()), REACH, GraphicsTier.HIGH)
         assertTrue("without a band the far suns are bodies too", (0 until all).any { band.gone(depth(unfaded.nodes[it])) })
         val faded = SpaceBodies(tree, nodeRadius = 0.5f)
         val kept = faded.update(plan, vp, camera.eye(), camera.right(), camera.up(), focal, 96, 0f, band)

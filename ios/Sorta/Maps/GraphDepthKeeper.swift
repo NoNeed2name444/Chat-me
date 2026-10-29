@@ -482,8 +482,9 @@ enum GraphDepth {
     }
 
     /// A framing or fly-in done on `view` (Graph3DView): the band follows its
-    /// reach, `out` counts against `window`, and the meter starts again.
+    /// reach (Space's on its own stage too), `out` counts against `window`, and the meter starts again.
     static func framed(_ frame: GraphDepthFrame, on view: SCNView, window: GraphWindow?) {
+        (view.delegate as? GraphSim)?.setDepthFrame(frame)
         guard let scene = view.scene, let keeper = held[ObjectIdentifier(scene)]?.keeper else { return }
         keeper.framed(frame, window: window)
     }

@@ -120,10 +120,11 @@ suite graphperf GraphPerfTests.swift $M/GraphPerfGraph.swift $M/GraphPerfSynthet
       $M/GraphPerfScene.swift $M/GraphPerfShaders.swift
 # the Space theme's depth fade and near-only loading: the fade curve, the
 # band following the camera's focus, the Graphics setting's reach,
-# Increase Contrast, culling past the band with no pop, shader detail by
+# Increase Contrast, culling past the band (inside the view) with no pop, shader detail by
 # size on screen (whole up close), the point level's gap, the view volume
 # (the Performance theme's), and the shaders' fade and detail pieces
-suite spacedepth SpaceDepthTests.swift $M/GraphSpaceDepth.swift $M/GraphPerfLOD.swift \
+suite spacedepth SpaceDepthTests.swift $M/GraphSpaceDepth.swift $M/GraphDepthFade.swift $M/GraphTilt.swift \
+      $M/GraphTheme.swift $M/GraphPerfLOD.swift \
       $M/GraphPerfCamera.swift $S/Space/GraphicsQuality.swift $M/GraphShaderKit.swift \
       $M/GraphSpaceShaders.swift
 # the million map's chunks (plans 4e, 4f): the octree, 16-bit positions,

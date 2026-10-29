@@ -84,22 +84,8 @@ nonisolated enum SpaceBodyLevel: Sendable, Equatable {
 nonisolated enum SpaceDepth {
     // MARK: the band
 
-    /// The band in multiples of the focus's view depth, per Graphics tier:
-    /// High reaches further (more drawn), Smooth pulls the end in (less
-    /// drawn). The start sits behind the focus, so what the camera looks
-    /// at is always crisp, at every zoom.
-    static func reach(_ tier: GraphicsTier) -> (start: Float, end: Float) {
-        switch tier {
-        case .high: return (1.15, 2.6)
-        case .smooth: return (1.1, 2.0)
-        }
-    }
-
     /// k: a little slower to start than linear, as deep water.
     static let exponent: Float = 1.25
-    /// Increase Contrast: the fade starts later and stops short.
-    static let contrastStart: Float = 1.25
-    static let contrastCap: Float = 0.7
     /// The nearest a focus may lie along the view (scene units) and still
     /// set a band. One this near, at the eye or behind it is stale (the
     /// camera moved past what it last looked at): a band scaled from it
@@ -107,17 +93,21 @@ nonisolated enum SpaceDepth {
     static let nearestFocus: Float = 0.05
 
     /// The band for a camera whose focus (its orbit target, or the body it
-    /// flew to) lies `focusDepth` along its view. Start and end scale with
-    /// it, so zooming in on one small body looks the same as the whole map.
-    /// `off` for a focus at most `nearestFocus` ahead, behind the eye or
-    /// not a number.
-    static func band(focusDepth: Float, tier: GraphicsTier, contrast: Bool = false) -> SpaceDepthBand {
-        guard focusDepth.isFinite, focusDepth > nearestFocus else { return .off }
-        let d: Float = focusDepth
-        let r = reach(tier)
-        let start: Float = r.start * (contrast ? contrastStart : 1)
-        return SpaceDepthBand(start: d * start, end: d * r.end, exponent: exponent,
-                              cap: contrast ? contrastCap : 1)
+    /// flew to) lies `focusDepth` along its view, in `frame` (the framing
+    /// Graph3DView last made): Space's GraphDepthBand at the Graphics tier,
+    /// so it ends inside the view and culls its far strip (past 0.85 of
+    /// the reach on High, 0.75 on Smooth). Increase Contrast starts it
+    /// later and stops it short. Start and end scale with the focus, so
+    /// zooming in on one small body looks the same as the whole map, and
+    /// the start sits behind the focus, so what the camera looks at is
+    /// always crisp. `off` for a focus at most `nearestFocus` ahead,
+    /// behind the eye or not a number.
+    static func band(focusDepth: Float, frame: GraphDepthFrame, tier: GraphicsTier,
+                     contrast: Bool = false) -> SpaceDepthBand {
+        guard focusDepth.isFinite, focusDepth > nearestFocus,
+              let planned = GraphDepthBand.of(.space, tier: tier, contrast: contrast) else { return .off }
+        let (start, end): (Float, Float) = planned.span(focus: focusDepth, frame: frame)
+        return SpaceDepthBand(start: start, end: end, exponent: exponent, cap: planned.most)
     }
 
     /// The view depth of `point`: how far along the camera's unit

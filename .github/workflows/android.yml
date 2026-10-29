@@ -50,14 +50,19 @@ jobs:
           gradle-version: '9.7.1'
       - name: Build the APK and run the unit tests
         working-directory: android
-        run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
+        run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
       - name: The APK
         run: python3 tools/check_apk.py "$ANDROID_HOME/build-tools/37.0.0/aapt2" android/app/build/outputs/apk/debug/app-debug.apk
       - name: The tests that ran
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect ChunkCacheTest=5 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=6 --expect IdeaBookTest=17 --expect IdeasReadoutTest=1 --expect LaunchTest=10 --expect LineStyleTest=6 --expect LodSelectorTest=9 --expect MapDrawnTest=3 --expect MapMathTest=4 --expect SpaceDepthTest=14 --expect SpaceStyleTest=20 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect ChunkCacheTest=5 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=6 --expect IdeaBookTest=17 --expect IdeasReadoutTest=1 --expect LaunchTest=10 --expect LineStyleTest=6 --expect LodSelectorTest=9 --expect MapDrawnTest=3 --expect MapMathTest=4 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=16 --expect NeuronMembraneTest=7 --expect SpaceDepthTest=15 --expect SpaceStyleTest=20 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sorta-android-apks
+          path: android/app/build/outputs/apk/
+          retention-days: 3
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
@@ -67,4 +72,127 @@ jobs:
             android/app/build/test-results/
             android/app/build/outputs/roborazzi/
           if-no-files-found: ignore
+          retention-days: 7
+  # The maps' renders on an emulator (MapRenderTest), a phone and a tablet:
+  # GL draws only on a real surface, which the unit tests' Robolectric has
+  # not. The emulator steps are Stethoscore's screenshots job
+  # (reference/stethoscore-aec2af1c/.github/workflows/android.yml and
+  # android/scripts/capture-screenshots.sh). Not yet timed: Stethoscore's
+  # job had 40 minutes, so this one does until its first green run.
+  renders:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, tablet]
+    name: renders (${{ matrix.device }})
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '15859902'
+          packages: 'platform-tools'
+      - name: The command-line tools that know Android 17
+        run: |
+          tools="$(dirname "$(dirname "$(command -v sdkmanager)")")"
+          echo "sdkmanager from $tools"
+          if [ "$tools" != "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            mv "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/preinstalled-backup"
+            ln -s "$tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - uses: actions/download-artifact@v8
+        with:
+          name: sorta-android-apks
+          path: android/built-apks
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Choose the device profile
+        id: profile
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          mkdir -p android/test-results
+          avdmanager list device -c > android/test-results/device-ids.txt
+          case "$DEVICE" in
+            phone) candidates='pixel_6' ;;
+            tablet) candidates='pixel_tablet medium_tablet' ;;
+          esac
+          profile=''
+          for c in $candidates; do
+            if grep -qxF "$c" android/test-results/device-ids.txt; then profile=$c; break; fi
+          done
+          [ -n "$profile" ] || { echo "::error::no profile for $DEVICE among: $candidates"; exit 1; }
+          echo "$DEVICE -> $profile" | tee android/test-results/profile.txt
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+      - name: The render script
+        run: |
+          # the emulator runner runs each line of its script on its own, so
+          # the steps go in one script
+          cat > "$RUNNER_TEMP/renders.sh" <<'SCRIPT'
+          set -euo pipefail
+          device="$1"
+          mkdir -p renders test-results
+          trap 'adb logcat -d > test-results/logcat.txt 2>&1 || true' EXIT
+          adb wait-for-device
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]
+          # system crash and not-responding dialogs stay off the screen; the
+          # test checks for them too
+          adb shell settings put global hide_error_dialogs 1
+          adb shell settings put secure anr_show_background 0
+          sleep 20
+          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null || true
+          adb shell getprop ro.build.version.sdk | tee test-results/android-sdk.txt
+          adb shell settings put system font_scale 1.0
+          adb install -r -t built-apks/debug/app-debug.apk
+          adb install -r -t built-apks/androidTest/debug/app-debug-androidTest.apk
+          source=app/src/androidTest/java/com/cramdown/sorta/MapRenderTest.kt
+          tests=$(grep -c '@Test' "$source")
+          echo "expecting OK ($tests tests) and $tests renders" | tee test-results/expected.txt
+          [ "$tests" -gt 0 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation.txt
+          echo "the renders took $((SECONDS - started)) seconds" | tee test-results/time.txt
+          # pulled first, so a failed run still uploads what it took
+          adb pull /sdcard/Download/sorta-renders/. renders/ || true
+          grep -qF "OK ($tests tests)" test-results/instrumentation.txt
+          test "$(find renders -name '*.png' | wc -l)" -eq "$tests"
+          SCRIPT
+      - name: The renders
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: '37.0'
+          target: google_apis
+          arch: x86_64
+          profile: ${{ steps.profile.outputs.profile }}
+          disable-animations: true
+          ram-size: 4096M
+          disk-size: 8G
+          cores: 2
+          emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -no-snapshot
+          working-directory: android
+          script: bash "$RUNNER_TEMP/renders.sh" ${{ matrix.device }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-android-renders-${{ matrix.device }}
+          path: |
+            android/renders/
+            android/test-results/
           retention-days: 7

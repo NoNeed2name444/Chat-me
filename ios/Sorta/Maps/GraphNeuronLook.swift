@@ -64,7 +64,7 @@ import simd
 /// What kind of cell a body is drawn as (its material and arbor).
 nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
     /// A whole cell (a top-level folder, or the home cell): a soma round a
-    /// nucleus, crowned with dendrites.
+    /// nucleus, its links its dendrites (NeuronArbor.branches).
     case cell
     /// A part of a cell (a folder inside it): a clear sphere inside, with
     /// no processes of its own.
@@ -73,11 +73,11 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
     case vesicle
     /// An idea, inside its folder.
     case granule
-    /// A free note with links: one long leading process ending in a fan.
+    /// A free note with links.
     case receptor
-    /// A free note with no links: a small cell of many fine processes.
+    /// A free note with no links.
     case drifter
-    /// A free pacemaker: two long dendrites, opposite.
+    /// A free pacemaker.
     case bipolar
 
     static func of(_ role: NeuronRole) -> NeuronCellKind {
@@ -346,7 +346,7 @@ final class GraphNeuronLook: GraphThemeLook {
                 skin.categoryBitMask = 2
                 soma.simdOrientation = turn
                 soma.addChildNode(skin)
-            } else {
+            } else if !NeuronArbor.branches(kind, variant: variant, rich: budget.tier == .high).isEmpty {
                 let made = SCNNode(geometry: arborGeometry(kind: kind, variant: variant, slot: dyeSlot, idea: idea))
                 made.simdScale = SIMD3<Float>(size, size, size)
                 made.simdOrientation = turn
@@ -1034,90 +1034,15 @@ nonisolated struct NeuronOpening {
 
 @MainActor
 enum NeuronArbor {
-    /// The branches for a kind of cell (three variants each), each from
-    /// 0.9 of the radius (a cell's from 0.75, inside its glass), every tip
-    /// within the map's reach (GraphNeurons.reach for a cell and a
-    /// receptor, about 1.15 radii for a drifter and a bipolar cell):
-    /// a cell's crown of dendrites as in the owner's close-up - thick glass
-    /// tubes round it in the plane facing the camera (tilting a little out
-    /// of it), each flaring into a trumpet where it leaves the soma (the
-    /// trumpets together the glass body the soma sits in, webbed between)
-    /// and tapering only a little, its tip faded out by the shader; a
-    /// receptor's leading process ending in a fan, and a short one behind;
-    /// a drifter's many fine processes; a bipolar cell's two opposite ones.
-    /// What floats inside a cell has none. `rich` adds a cell a dendrite
-    /// and the others side branches.
+    /// The branches a kind of cell grows of its own: none. A process exists
+    /// only where it attaches to something (the owner, 29 Oct), and a
+    /// cell's links are already dendrites that leave it through a mouth in
+    /// its membrane (GraphLinkBridge), so a cell is its soma and its links,
+    /// and a free note its soma alone. Stethoscore crowned a cell with six
+    /// or seven dendrites that led nowhere, gave a receptor a fan, a
+    /// drifter fine processes and a bipolar cell two long ones.
     static func branches(_ kind: NeuronCellKind, variant: Int, rich: Bool) -> [NeuronBranch] {
-        var random = UniverseRandom(UInt64(kind.rawValue * 31 + variant) &* 0x9E37_79B9 &+ 7)
-        var out: [NeuronBranch] = []
-        func add(_ dir: SIMD3<Float>, length: Float, thick: Float, sides: Int, from: Float = 0.9,
-                 tipShare: Float = 0.12, flare: Float = 0, planar: Bool = false) {
-            let d: SIMD3<Float> = simd_normalize(dir)
-            let start: SIMD3<Float> = d * from
-            // a crown in the plane wanders in it, so its bends show
-            let side: SIMD3<Float> = planar
-                ? GraphLinkCurve.unit(GraphLinkCurve.cross(d, SIMD3<Float>(0, 0, 1)), or: SIMD3<Float>(1, 0, 0))
-                : GraphLinkCurve.perpendicular(to: d)
-            let wander: Float = Float(random.signed()) * 0.3 * length
-            let bend: SIMD3<Float> = start + d * (length * 0.5) + side * wander
-            let lean: SIMD3<Float> = side * (wander * 0.6)
-            let end: SIMD3<Float> = start + d * length + lean
-            out.append(NeuronBranch(start: start, bend: bend, end: end, r0: thick, r1: thick * tipShare, s0: 0, s1: 1,
-                                    flare: flare))
-            guard sides > 0 && (rich || sides > 1) else { return }
-            for k in 0..<sides {
-                let t: Float = 0.4 + 0.25 * Float(k) + 0.1 * Float(random.unit())
-                let at: SIMD3<Float> = curve(start, bend, end, min(t, 0.85))
-                let twist: Float = Float(random.unit()) * 2 * Float.pi
-                let axis: SIMD3<Float> = GraphLinkCurve.rotate(side, about: d, by: twist)
-                let out2: SIMD3<Float> = GraphLinkCurve.rotate(d, about: axis, by: 0.7 + 0.3 * Float(random.unit()))
-                // a side branch's tip stays inside the reach too
-                let room: Float = max(Float(GraphNeurons.reach) - 0.03 - simd_length(at), 0.04)
-                let reach: Float = min(length * (0.35 + 0.15 * Float(random.unit())), room)
-                let mid: SIMD3<Float> = at + out2 * (reach * 0.5)
-                let tip: SIMD3<Float> = at + out2 * reach
-                let r: Float = thick * (1 - t) * 0.75
-                out.append(NeuronBranch(start: at, bend: mid, end: tip, r0: r, r1: r * 0.15, s0: t, s1: 1))
-            }
-        }
-        let extra: Int = rich ? 1 : 0
-        switch kind {
-        case .cell:
-            let count: Int = 6 + extra
-            // the longest a dendrite from 0.75 can be with its tip in reach
-            let most: Float = Float(GraphNeurons.reach) - 0.75 - 0.05
-            for k in 0..<count {
-                let a: Float = 2 * Float.pi * (Float(k) + 0.35 * Float(random.signed())) / Float(count)
-                let dir = SIMD3<Float>(cos(a), sin(a), 0.35 * Float(random.signed()))
-                let length: Float = min(1.0 + 0.2 * Float(random.unit()), most)
-                add(dir, length: length, thick: 0.3, sides: 0, from: 0.75, tipShare: 0.7, flare: 0.5,
-                    planar: true)
-            }
-        case .receptor:
-            add(SIMD3<Float>(0, 1, 0), length: 0.65, thick: 0.24, sides: 0)
-            let tip: SIMD3<Float> = out.last?.end ?? SIMD3<Float>(0, 1.55, 0)
-            for k in 0..<4 {
-                let a: Float = Float(k) * Float.pi / 2
-                let dir = SIMD3<Float>(cos(a) * 0.7, 1, sin(a) * 0.7)
-                let end: SIMD3<Float> = tip + simd_normalize(dir) * 0.15
-                let mid: SIMD3<Float> = (tip + end) * 0.5
-                out.append(NeuronBranch(start: tip, bend: mid, end: end, r0: 0.07, r1: 0.03, s0: 0.8, s1: 1))
-            }
-            add(SIMD3<Float>(0, -1, 0), length: 0.4, thick: 0.17, sides: 0)
-        case .drifter:
-            for k in 0..<12 {
-                let d: SIMD3<Float> = GraphUniverse.float3(ThemeLayout.fibonacci(k, 12))
-                add(d, length: 0.2 + 0.05 * Float(random.unit()), thick: 0.09, sides: 0)
-            }
-        case .bipolar:
-            add(SIMD3<Float>(0, 1, 0.1), length: 0.25, thick: 0.2, sides: 0)
-            add(SIMD3<Float>(0, -1, -0.1), length: 0.22, thick: 0.18, sides: 0)
-            add(SIMD3<Float>(1, 0, 0.3), length: 0.12, thick: 0.12, sides: 0)
-            add(SIMD3<Float>(-1, 0.2, -0.3), length: 0.12, thick: 0.12, sides: 0)
-        case .part, .vesicle, .granule:
-            break
-        }
-        return out
+        []
     }
 
     static func curve(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ c: SIMD3<Float>, _ t: Float) -> SIMD3<Float> {

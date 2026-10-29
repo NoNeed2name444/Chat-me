@@ -44,6 +44,13 @@ dependencies {
     // renders of the states gallery to PNG (WardGalleryRenderTest)
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.77.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // the maps' renders on an emulator (MapRenderTest; ci/public/android.yml's renders job), as
+    // Stethoscore's ScreenshotTest ran them
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.04.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }

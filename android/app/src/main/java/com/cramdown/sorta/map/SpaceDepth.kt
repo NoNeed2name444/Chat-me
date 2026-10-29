@@ -112,35 +112,55 @@ object SpaceDepth {
     // ---- the band ----
 
     /**
-     * The band in multiples of the focus's view depth, per Graphics tier. The start sits
-     * behind the focus, so what the camera looks at is always crisp, at every zoom.
+     * Space's band as shares of the framing's reach R (iOS GraphDepthBand.spaceHigh and
+     * spaceSmooth): the fade runs from F(1 + aR) to F(1 + bR), F the focus's depth, so it ends
+     * inside the view and culls the far strip, past 0.85 of the reach on High and 0.75 on
+     * Smooth. The start sits behind the focus, so what the camera looks at is always crisp.
      */
-    fun reach(tier: GraphicsTier): Pair<Float, Float> = when (tier) {
-        GraphicsTier.HIGH -> 1.15f to 2.6f
-        GraphicsTier.SMOOTH -> 1.1f to 2.0f
+    fun shares(tier: GraphicsTier): Pair<Float, Float> = when (tier) {
+        GraphicsTier.HIGH -> 0.20f to 0.85f
+        GraphicsTier.SMOOTH -> 0.20f to 0.75f
     }
 
     /** k: a little slower to start than linear, as deep water. */
     const val EXPONENT = 1.25f
-    /** Increase Contrast: the fade starts later and stops short. */
-    const val CONTRAST_START = 1.25f
-    const val CONTRAST_CAP = 0.7f
+    /** Increase Contrast: a and b this much later, and fading at most this far; nothing is culled. */
+    const val CONTRAST_LATER = 1.35f
+    const val CONTRAST_CAP = 0.6f
+    /** The reach is kept within these, as iOS's GraphTilt.reachRange keeps it. */
+    const val NEAREST_REACH = 0.15f
+    const val FURTHEST_REACH = 1.0f
     /** The focus is never taken as nearer than this, so a camera on its target still has a band. */
     const val NEAREST_FOCUS = 0.05f
 
     /**
-     * The band for a camera whose focus lies [focusDepth] along its view. Start and end scale
-     * with it, so zooming in on one small body looks the same as the whole map. A focus at or
-     * behind the eye (depth 0 or less) has no band in front of the camera to follow, so
-     * nothing fades: [SpaceDepthBand.OFF]. (iOS clamped such a focus up to [NEAREST_FOCUS],
-     * which faded everything past a twentieth of a unit; the fix is ported here.)
+     * How far past the focus the view reaches, as a share of the focus's depth: (deepest /
+     * focus) - 1, iOS's GraphTiltFit.reach. Android frames the map round its [radius] (the
+     * ball [Map3DView] frames), so the deepest point lies [radius] past the focus.
      */
-    fun band(focusDepth: Float, tier: GraphicsTier, contrast: Boolean = false): SpaceDepthBand {
+    fun reach(focusDepth: Float, radius: Float): Float {
+        val d = max(if (focusDepth.isFinite()) focusDepth else NEAREST_FOCUS, NEAREST_FOCUS)
+        val r = radius / d
+        return if (r.isFinite()) r.coerceIn(NEAREST_REACH, FURTHEST_REACH) else FURTHEST_REACH
+    }
+
+    /**
+     * The band for a camera whose focus lies [focusDepth] along its view, in a framing that
+     * reaches [reach] past it ([SpaceDepth.reach]). Start and end scale with the focus, so
+     * zooming in on one small body looks the same as the whole map. A focus at or behind the
+     * eye (depth 0 or less) has no band in front of the camera to follow, so nothing fades:
+     * [SpaceDepthBand.OFF]. (iOS clamped such a focus up to [NEAREST_FOCUS], which faded
+     * everything past a twentieth of a unit; the fix is ported here.)
+     */
+    fun band(focusDepth: Float, reach: Float, tier: GraphicsTier, contrast: Boolean = false): SpaceDepthBand {
         if (focusDepth <= 0f) return SpaceDepthBand.OFF
         val d = max(if (focusDepth.isFinite()) focusDepth else NEAREST_FOCUS, NEAREST_FOCUS)
-        val (rs, re) = reach(tier)
-        val start = rs * (if (contrast) CONTRAST_START else 1f)
-        return SpaceDepthBand(d * start, d * re, EXPONENT, if (contrast) CONTRAST_CAP else 1f)
+        val r = if (reach.isFinite()) reach.coerceIn(NEAREST_REACH, FURTHEST_REACH) else FURTHEST_REACH
+        val (a0, b0) = shares(tier)
+        val later = if (contrast) CONTRAST_LATER else 1f
+        val start = d * (1f + a0 * later * r)
+        val end = start + d * max((b0 - a0) * later, 0.00001f) * r
+        return SpaceDepthBand(start, end, EXPONENT, if (contrast) CONTRAST_CAP else 1f)
     }
 
     /** The view depth of [point]: how far along the camera's unit [forward] from its [eye]. */

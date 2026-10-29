@@ -14,11 +14,10 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     PERFORMANCE("performance", "Performance");
 
     /**
-     * Whether it can be chosen. Neurons (GraphNeurons, its planner, cells and shaders) is not
-     * ported to Android yet, so the Look menu does not offer it and a stored "neurons" reads
-     * as the standard.
+     * Whether it can be chosen: every theme, now Neurons is ported too (map/Neurons.kt and its
+     * look, membrane and shaders, drawn by NeuronGl), so the Look menu offers all three.
      */
-    val isReady: Boolean get() = this != NEURONS
+    val isReady: Boolean get() = true
 
     val legendTitle: String get() = when (this) {
         SPACE -> "How your universe is built"
