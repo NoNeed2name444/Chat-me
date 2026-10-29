@@ -48,6 +48,9 @@ dependencies {
     // Stethoscore's ScreenshotTest ran them
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // ui-test-junit4 alone brings Espresso 3.5, which looks up InputManager.getInstance by reflection;
+    // Android 17 has none, so every test failed before it began (run 40848934413)
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
