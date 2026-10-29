@@ -6,16 +6,21 @@ import XCTest
 /// map-board. The 3D maps are always night; the board follows the phone.
 ///
 /// Light or dark is set on the simulator from outside, as for LaunchTests
-/// (tools/run_ui_tests.sh), so this test does not set an appearance.
+/// (tools/run_ui_tests.sh), so this test does not set an appearance. The 3D
+/// maps are shot still (-graphFreeze), so each device shows the same moment.
 final class MapRenderTests: XCTestCase {
     func testEachThemeRenders() throws {
         for theme in ["space", "neurons", "performance"] {
             let app = XCUIApplication()
             app.keepTraceOffConsole()
-            app.launchArguments += ["-graphPreview", "-graphPreviewTheme", theme]
+            // -graphFreeze: the map as Reduce Motion shows it, every link
+            // whole and every body at its size. GraphSim steps its motion at
+            // most 0.05 s a frame, so on a slow simulator the links were
+            // caught still growing in (run 40841930118, the iPad's Neurons)
+            app.launchArguments += ["-graphPreview", "-graphPreviewTheme", theme, "-graphFreeze"]
             app.launch()
             XCTAssertTrue(app.otherElements["graph3D"].waitForExistence(timeout: 60), "the \(theme) map is on screen")
-            // the bodies settle into place and the first orbits run
+            // the scene is built and drawn
             sleep(4)
             keep("map-\(theme)")
             app.terminate()
