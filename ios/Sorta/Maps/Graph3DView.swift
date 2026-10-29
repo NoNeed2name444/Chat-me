@@ -1604,6 +1604,10 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
         coordinator.apply(filter)
+        // the design preview's hold is sent once the scene is built, and can
+        // be sent before SwiftUI makes this view for it: the line above then
+        // counts it as seen, and it is lost (Chat-me copy daa2707, maps re-run)
+        if case .previewHold = command.kind { coordinator.run(command.kind) }
         return view
     }
 
