@@ -52,6 +52,12 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         ITSAppUsesNonExemptEncryption: false
+        # The kit's type (WardFont): Nunito, with Arabic in Baloo Bhaijaan 2,
+        # both SIL OFL 1.1 (their OFL files are beside them in Sorta/Fonts)
+        UIAppFonts:
+          - Nunito[wght].ttf
+          - Nunito-Italic[wght].ttf
+          - BalooBhaijaan2[wght].ttf
         # Sorta's own links: sorta://...
         CFBundleURLTypes:
           - CFBundleURLName: com.cramdown.sorta
@@ -64,6 +70,22 @@ targets:
         # compiler stops when the catalog has none. These builds have none;
         # the builds with the art name it on the xcodebuild line.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  # The look kit's SwiftUI checks (touch targets, fonts), run in the app.
+  # The Foundation-only suites in UnitTests/Suites belong to no target:
+  # tools/swift_suites.py builds them with swiftc.
+  SortaUnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UnitTests/SortaUnitTests
+    dependencies:
+      - target: Sorta
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta.unittests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Sorta.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sorta
+        BUNDLE_LOADER: $(TEST_HOST)
   SortaUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -81,9 +103,11 @@ schemes:
     build:
       targets:
         Sorta: all
+        SortaUnitTests: [test]
         SortaUITests: [test]
     test:
       targets:
+        - SortaUnitTests
         - SortaUITests
     run:
       config: Debug

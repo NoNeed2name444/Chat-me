@@ -1,7 +1,8 @@
 # Sorta's iOS app, on every copy pushed to Chat-me's sorta branch
 # (tools/mirror_chatme.py): the project generated, built for the simulator,
-# the app's Info.plist checked, and the launch tests run on an iPhone and an
-# iPad. Chat-me is public, so its standard runners cost nothing; no secret is
+# the app's Info.plist checked, and the launch, gallery and unit tests run on
+# an iPhone and an iPad. The look kit's Foundation-only suites run on Linux
+# (tools/swift_suites.py). Chat-me is public, so its standard runners cost nothing; no secret is
 # used. A second run of the same copy is a re-run of this one.
 name: iOS
 on:
@@ -13,12 +14,28 @@ concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  suites:
+    runs-on: ubuntu-latest
+    # the swift:6.1 image builds the seven Ward suites in a few minutes
+    timeout-minutes: 20
+    container: swift:6.1-noble
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Python
+        run: apt-get update -q && apt-get install -yq python3 > /dev/null
+      - name: The look kit's suites
+        run: |
+          set -o pipefail
+          python3 tools/swift_suites.py | tee -a "$GITHUB_STEP_SUMMARY"
   build:
     runs-on: macos-latest
-    # about twice the 19 minutes run 40718963474 took the first time
-    timeout-minutes: 40
+    # each simulator now runs five tests, not two; about twice the 16 minutes
+    # step 1's runs took, plus the gallery and unit tests
+    timeout-minutes: 70
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # What the runner offers for the iPhone Duo, Xcode 27.1 and a foldable
@@ -66,14 +83,14 @@ jobs:
       # 9, most of it the simulator's first boot, so each may take twice that
       - name: Launch tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 18
+        timeout-minutes: 30
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone
       - name: Launch tests on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 18
+        timeout-minutes: 30
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}
@@ -89,7 +106,7 @@ jobs:
             xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
           done
           ls -R shots 2>/dev/null || echo "no screenshots"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: sorta-ios

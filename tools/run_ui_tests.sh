@@ -21,10 +21,19 @@ booting=$SECONDS
 xcrun simctl bootstatus "$UDID" -b > /dev/null
 echo "$kind: the simulator booted in $((SECONDS - booting)) seconds"
 failed=0
-for run in light:testLightPageIsBone dark:testDarkPageIsAubergine; do
+# Each run is <appearance>:<target>/<class>/<test>, or <appearance>:<target>
+# for a whole unit-test bundle. The gallery's screenshots are step 2's
+# renders of the look kit, by day and by night.
+for run in light:SortaUITests/LaunchTests/testLightPageIsBone \
+           dark:SortaUITests/LaunchTests/testDarkPageIsAubergine \
+           light:SortaUITests/GalleryTests/testGalleryRenders \
+           dark:SortaUITests/GalleryTests/testGalleryRenders \
+           light:SortaUnitTests; do
   look="${run%%:*}"
-  test="${run#*:}"
-  log="../results/$kind-$look.log"
+  only="${run#*:}"
+  test="${only##*/}"
+  name="$look-${only//\//-}"
+  log="../results/$kind-$name.log"
   xcrun simctl ui "$UDID" appearance "$look"
   now=$(xcrun simctl ui "$UDID" appearance | tr -d '[:space:]')
   echo "$kind: the simulator's appearance is $now, for $test"
@@ -35,14 +44,21 @@ for run in light:testLightPageIsBone dark:testDarkPageIsAubergine; do
   fi
   xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
     -destination "id=$UDID" -derivedDataPath build \
-    -resultBundlePath "../results/$kind-$look.xcresult" \
-    "-only-testing:SortaUITests/LaunchTests/$test" \
+    -resultBundlePath "../results/$kind-$name.xcresult" \
+    "-only-testing:$only" \
     -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 300 \
     -maximum-test-execution-time-allowance 300 \
     CODE_SIGNING_ALLOWED=NO \
     test-without-building 2>&1 | tee "$log" | grep --line-buffered -E "error:|Test [Cc]ase|TEST |\*\* " || true
-  if grep -qE "LaunchTests[ .]$test.*passed" "$log" && grep -qE "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" "$log"; then
+  if [ "$only" = "$test" ]; then
+    # a whole bundle: every case passed, and none failed
+    passed_by_name=$(grep -cE "Test [Cc]ase .*passed" "$log" || true)
+    grep -qE "Test [Cc]ase .*failed" "$log" && passed_by_name=0
+  else
+    passed_by_name=$(grep -cE "[ .]$test.*passed" "$log" || true)
+  fi
+  if [ "$passed_by_name" -gt 0 ] && grep -qE "\*\* TEST (EXECUTE )?SUCCEEDED \*\*" "$log"; then
     echo "$kind: $test passed"
   else
     echo "::error::$kind: $test did not pass"
