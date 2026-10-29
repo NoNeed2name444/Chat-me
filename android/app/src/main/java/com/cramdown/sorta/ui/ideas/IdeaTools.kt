@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -108,6 +109,8 @@ const val LINES_PICKER_WIDTH = 200
 @Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var name by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
     val blank = name.isBlank()
     fun submit() { if (!blank) { onConfirm(name); onDismiss() } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -115,10 +118,13 @@ const val LINES_PICKER_WIDTH = 200
         ReaderNavBar(title,
             leading = { WardTextButton("Cancel", onDismiss, kind = WardButtonKind.quiet, fills = false) },
             trailing = { WardTextButton(confirm, ::submit, kind = WardButtonKind.compact, fills = false, enabled = !blank) })
+        // the kit's field (WardTextField), which takes no keyboard action: its 48 target and focus ring
         Box(Modifier.padding(WardSpace.gutter.wardDp)) {
             androidx.compose.foundation.text.BasicTextField(name, { name = it },
-                Modifier.fillMaxWidth().focusRequester(focus).semantics { contentDescription = prompt },
-                singleLine = true, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
+                Modifier.fillMaxWidth().focusRequester(focus).minimumInteractiveComponentSize()
+                    .wardFocusRing(RoundedCornerShape(WardRadius.field.wardDp), focused, wardColor(WardControlStates.focusInk))
+                    .semantics { contentDescription = prompt },
+                singleLine = true, interactionSource = source, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(wardColor(WardToken.primaryInk)),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { submit() }),
                 decorationBox = { inner ->
