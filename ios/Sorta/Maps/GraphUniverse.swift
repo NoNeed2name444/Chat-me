@@ -212,7 +212,8 @@ nonisolated struct UniversePlan: Sendable {
 }
 
 nonisolated enum GraphUniverse {
-    /// The home star's id, when there are no folders.
+    /// The home's id: the home star (or cell) of a vault with no folders,
+    /// and the Neurons cell the notes in no folder gather in.
     static let homeID: UUID = UUID(uuidString: "00000000-0000-0000-0000-00000000A11C") ?? UUID()
     static let golden: Double = 2.3999632297
     /// Word counts at which a note steps up a size.
@@ -497,13 +498,14 @@ nonisolated struct UniversePlace: Sendable {
 }
 
 /// The plan's working state. Notes are 0..<n, containers 0..<c (the folders,
-/// and the home star when there are none).
+/// then the home: the home star when there are none, or the cell the
+/// Neurons gather the notes in no folder in).
 nonisolated struct UniversePlanner: Sendable {
     let input: UniverseInput
     let noteList: [UniverseNote]
     let folderList: [UniverseFolder]
     let hasFolders: Bool
-    /// The home star's container index, or -1.
+    /// The home's container index (after the folders), or -1.
     let homeC: Int
     /// The link length's two halves (UniverseInput.tightness, .stretch).
     let tight: Double
@@ -546,7 +548,10 @@ nonisolated struct UniversePlanner: Sendable {
     var cFrame: [UniverseFrame] = []
     var cHome: [SIMD3<Double>] = []
 
-    init(_ input: UniverseInput) {
+    /// `gatherLoose`: the notes in no folder (or in one that is gone) share a
+    /// home of their own beside the folders, as the Neurons draw them (the
+    /// owner, 29 Oct: no small free cells), instead of floating free.
+    init(_ input: UniverseInput, gatherLoose: Bool = false) {
         self.input = input
         // a fixed order, whatever order they came in; duplicates dropped
         var seenNotes = Set<UUID>()
@@ -560,7 +565,9 @@ nonisolated struct UniversePlanner: Sendable {
         noteList = notes
         folderList = folders
         hasFolders = !folders.isEmpty
-        homeC = folders.isEmpty ? folders.count : -1
+        let ids = Set<UUID>(folders.map(\.id))
+        let loose: Bool = notes.contains { note in note.folder.map { !ids.contains($0) } ?? true }
+        homeC = folders.isEmpty || (gatherLoose && loose) ? folders.count : -1
         tight = input.tightness
         stretch = input.stretch
     }
@@ -568,7 +575,7 @@ nonisolated struct UniversePlanner: Sendable {
     // MARK: names and seeds
 
     func cName(_ c: Int) -> String {
-        c < folderList.count ? folderList[c].name : "Ideas"
+        c < folderList.count ? folderList[c].name : (hasFolders ? "Unsorted" : "Ideas")
     }
 
     func cID(_ c: Int) -> UUID {
@@ -617,7 +624,7 @@ nonisolated struct UniversePlanner: Sendable {
 
     mutating func buildTree() {
         let f: Int = folderList.count
-        cCount = hasFolders ? f : 1
+        cCount = homeC >= 0 ? f + 1 : f
         var index: [UUID: Int] = [:]
         for (i, folder) in folderList.enumerated() { index[folder.id] = i }
         parent = [Int](repeating: -1, count: cCount)
@@ -657,15 +664,14 @@ nonisolated struct UniversePlanner: Sendable {
         for c in 0..<cCount where parent[c] >= 0 { children[parent[c]].append(c) }
         for c in 0..<cCount { children[c].sort { lessC($0, $1) } }
         kids = children
-        // each note's home container
+        // each note's home container: its folder, else the home (-1 when
+        // there is none: a loose note)
         noteHome = []
         for note in noteList {
-            if !hasFolders {
-                noteHome.append(homeC)
-            } else if let folder = note.folder, let at = index[folder] {
+            if let folder = note.folder, let at = index[folder] {
                 noteHome.append(at)
             } else {
-                noteHome.append(-1)
+                noteHome.append(homeC)
             }
         }
         count = [Int](repeating: 0, count: cCount)

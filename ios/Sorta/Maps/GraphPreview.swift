@@ -43,7 +43,7 @@ import SwiftUI
 ///   Cardiology and Examples as two cells, Inguinal and Femoral as parts
 ///   inside Examples with Anatomy inside Inguinal, pages as vesicles and
 ///   ideas as granules inside the folders that hold them, and the two
-///   loose notes as free cells at the edge. Flying in to a cell opens it.
+///   loose notes in a third cell, Unsorted. Flying in to a cell opens it.
 ///   `-graphPreviewFly` and `-graphPreviewLegend` work with it too.
 /// - `-graphPreviewCells <state>` shows every Neurons cell in that state
 ///   (firing, releasing, pacemaker, migrating, engulfing or resting).

@@ -17,15 +17,17 @@ import Foundation
 // - insides load only when opened (UniverseInput.open): a closed cell is
 //   its soma alone, an opened one shows its parts and notes, and an
 //   opened part its own;
-// - a note in no folder is a free cell at the edge: a receptor when it
-//   has links (it sends in), a drifting cell when it has none;
+// - the notes in no folder share one cell of their own, the home cell
+//   (Unsorted), on the sheet with the others and opened as they are (the
+//   owner, 29 Oct: no small free cells; they were receptors and drifting
+//   cells at the sheet's edge);
 // - with no folders at all, one home cell holds every note, always open.
 //
 // Links are the cells' own processes: one per pair of ends, gathered from
 // every note link between them, none dropped. Inside one cell each end is
 // the deepest shown body holding its note; between cells each end is the
-// cell itself (or the free note), opened or not, so a link joins the two
-// membranes and never crosses one to reach inside. Each grows out of the
+// cell itself, opened or not, so a link joins the two membranes and never
+// crosses one to reach inside. Each grows out of the
 // sending side (the one with more links) as one piece with it and ends on
 // the other; its strength (GraphAnatomy) sets its width, and what it
 // carries (excitatory, inhibitory, modulatory) its dye.
@@ -48,31 +50,25 @@ nonisolated enum NeuronRole: Int, Sendable, CaseIterable {
     case cell = 0
     /// A folder inside a cell or inside a part: an organelle inside it.
     case part = 1
-    /// The one cell of a vault with no folders.
+    /// The home cell: the one cell of a vault with no folders, or the one
+    /// the notes in no folder share.
     case home = 2
     /// A page, inside the folder that holds it.
     case vesicle = 3
     /// An idea, inside the folder that holds it.
     case granule = 4
-    /// A note in no folder with no links: a free cell drifting at the edge.
-    case drifter = 5
-    /// A note in no folder with links: a free cell at the edge, sending in.
-    case receptor = 6
 
     /// Which end of a link sends when the ranks decide (ThemeBody.rank).
     var rank: Int {
         switch self {
         case .cell, .home: return 7
-        case .part, .receptor: return 6
+        case .part: return 6
         case .vesicle: return 5
         case .granule: return 3
-        case .drifter: return 1
         }
     }
 
     var isContainer: Bool { self == .cell || self == .part || self == .home }
-
-    var isFree: Bool { self == .drifter || self == .receptor }
 }
 
 nonisolated enum GraphNeurons {
@@ -138,16 +134,6 @@ nonisolated enum GraphNeurons {
         return page ? 0.07 + 0.003 * level : 0.05 + 0.002 * level
     }
 
-    /// A note in no folder: a receptor bigger than a drifting cell.
-    static func freeSphere(receptor: Bool, page: Bool) -> Double {
-        (receptor ? 0.16 : 0.12) + (page ? 0.03 : 0)
-    }
-
-    /// How far a free cell drifts.
-    static func freeDrift(receptor: Bool) -> Double {
-        receptor ? 0.03 : 0.06
-    }
-
     // MARK: planning
 
     static func plan(_ input: UniverseInput) -> ThemePlan {
@@ -163,8 +149,7 @@ nonisolated enum GraphNeurons {
         counts[NeuronRole.cell.rawValue] += counts[NeuronRole.home.rawValue]
         let words: [(NeuronRole, String, String)] = [
             (.cell, "cell", "cells"), (.part, "part", "parts"), (.vesicle, "vesicle", "vesicles"),
-            (.granule, "granule", "granules"), (.receptor, "receptor", "receptors"),
-            (.drifter, "free cell", "free cells")
+            (.granule, "granule", "granules")
         ]
         var parts: [String] = []
         for (role, one, many) in words {
@@ -232,8 +217,6 @@ nonisolated struct NeuronPlanner: Sendable {
     var cWorld: [SIMD3<Double>] = []
     /// The notes each container holds itself.
     var notesIn: [[Int]] = []
-    /// The free cells' room, for the framing.
-    var looseBalls: [ThemeBall] = []
     // the output
     var bodies: [ThemeBody] = []
     var noteBody: [Int] = []
@@ -241,7 +224,7 @@ nonisolated struct NeuronPlanner: Sendable {
     var systems: [[SIMD3<Float>]] = []
 
     init(_ input: UniverseInput) {
-        tree = UniversePlanner(input)
+        tree = UniversePlanner(input, gatherLoose: true)
     }
 
     mutating func run() -> ThemePlan {
@@ -258,10 +241,8 @@ nonisolated struct NeuronPlanner: Sendable {
         cBody = [Int](repeating: -1, count: tree.cCount)
         for c in tops { emitTop(c) }
         let regions: [Int] = tops.map { cBody[$0] }
-        placeLoose()
         var balls: [ThemeBall] = []
         for c in tops { balls.append(ThemeBall(c: cWorld[c], r: topReach(c) + 0.1)) }
-        for ball in looseBalls { balls.append(ThemeBall(c: ball.c, r: ball.r + 0.1)) }
         let envelope: [SIMD3<Float>] = ThemeLayout.points(balls, around: SIMD3<Double>(0, 0, 0))
         return ThemePlan(bodies: bodies, links: processes(), envelope: envelope, systems: systems,
                          regions: regions, summary: GraphNeurons.summary(bodies))
@@ -311,7 +292,8 @@ nonisolated struct NeuronPlanner: Sendable {
     /// A container shows when it is top level or inside an opened one, and
     /// opens when it shows and its folder is in UniverseInput.open (the
     /// home cell of a vault with no folders is always open: it is the
-    /// vault).
+    /// vault; the one the notes in no folder share opens by
+    /// GraphUniverse.homeID, as a folder's cell does by its id).
     mutating func markShown() {
         let wanted = Set<UUID>(tree.input.open)
         shown = [Bool](repeating: false, count: tree.cCount)
@@ -431,7 +413,7 @@ nonisolated struct NeuronPlanner: Sendable {
     /// its parts first, each with its own insides, then its notes.
     mutating func emitContainer(_ c: Int, radius: Double, parent: Int, region: Int, orbit: GraphOrbit,
                                 axis: SIMD3<Double>) {
-        let role: NeuronRole = !tree.hasFolders ? .home : (tree.depth[c] == 0 ? .cell : .part)
+        let role: NeuronRole = c == tree.homeC ? .home : (tree.depth[c] == 0 ? .cell : .part)
         let index: Int = bodies.count
         let base: SIMD3<Float> = parent >= 0 ? bodies[parent].home : SIMD3<Float>(0, 0, 0)
         let mine: Int = region >= 0 ? region : index
@@ -461,7 +443,7 @@ nonisolated struct NeuronPlanner: Sendable {
         }
     }
 
-    /// A note's body: inside its folder, or free at the edge.
+    /// A note's body, inside the container that holds it.
     mutating func emitNote(_ i: Int, role: NeuronRole, radius: Double, parent: Int, region: Int, orbit: GraphOrbit,
                            axis: SIMD3<Double>) {
         let note: UniverseNote = tree.noteList[i]
@@ -622,95 +604,13 @@ nonisolated struct NeuronPlanner: Sendable {
         return least
     }
 
-    // MARK: free cells
-
-    /// The notes in no folder: free cells round the sheet's edge, a
-    /// receptor out beyond the cell it links to most (receptors facing
-    /// one cell fanned either side), the rest spread round the edge, each
-    /// slid outward until it clears everything placed.
-    mutating func placeLoose() {
-        let loose: [Int] = (0..<tree.noteList.count).filter { tree.noteHome[$0] < 0 }.sorted { tree.lessN($0, $1) }
-        guard !loose.isEmpty else { return }
-        var placed: [ThemeBall] = tops.map { ThemeBall(c: cWorld[$0], r: topReach($0)) }
-        var low = SIMD3<Double>(0, 0, 0)
-        var high = SIMD3<Double>(0, 0, 0)
-        if let first = placed.first {
-            low = first.c - SIMD3<Double>(repeating: first.r)
-            high = first.c + SIMD3<Double>(repeating: first.r)
-        }
-        for ball in placed {
-            low = pointwiseMin(low, ball.c - SIMD3<Double>(repeating: ball.r))
-            high = pointwiseMax(high, ball.c + SIMD3<Double>(repeating: ball.r))
-        }
-        let centre: SIMD3<Double> = (low + high) * 0.5
-        let half: SIMD3<Double> = (high - low) * 0.5
-        let margin: Double = 0.5 * max(biggest, GraphNeurons.cellSphere(count: 0)) * tree.input.spacing
-        let ax: Double = half.x * 2.0.squareRoot() + margin
-        let ay: Double = half.y * 2.0.squareRoot() + margin
-        var facing: [Int: Int] = [:]
-        for (k, i) in loose.enumerated() {
-            let receptor: Bool = !tree.nbr[i].isEmpty
-            var angle: Double = 0.5 + GraphUniverse.golden * Double(k)
-            let toward: Int = receptor ? favouriteTop(i) : -1
-            if toward >= 0 {
-                // out beyond that cell (fanned), unless it is the sheet's
-                // middle: then round it like the rest, still facing it
-                let d: SIMD3<Double> = cWorld[toward] - centre
-                if d.x * d.x + d.y * d.y > 1e-6 {
-                    let j: Int = facing[toward, default: 0]
-                    facing[toward] = j + 1
-                    angle = atan2(d.y / ay, d.x / ax) + 0.35 * Double((j + 1) / 2) * (j % 2 == 0 ? 1 : -1)
-                }
-            }
-            let sphere: Double = GraphNeurons.freeSphere(receptor: receptor, page: tree.noteList[i].isPage)
-            let amp: Double = GraphNeurons.freeDrift(receptor: receptor)
-            let reach: Double = sphere * (receptor ? GraphNeurons.reach : 1.15) + amp * GraphNeurons.wobbleBound
-            var random = UniverseRandom(tree.nSeed(i) ^ 0x10C5)
-            let flat = SIMD3<Double>(ax * cos(angle), ay * sin(angle), 0)
-            let start: SIMD3<Double> = centre + flat + SIMD3<Double>(0, 0, random.signed() * 0.15)
-            var out: SIMD3<Double> = GraphUniverse.normalize(flat)
-            if GraphUniverse.length(out) < 0.5 { out = SIMD3<Double>(1, 0, 0) }
-            let s: Double = ThemeLayout.slide([ThemeBall(c: start, r: reach)], along: out, start: 0, step: 0.04,
-                                              placed: placed, gap: 0.04)
-            let at: SIMD3<Double> = start + out * s
-            placed.append(ThemeBall(c: at, r: reach))
-            looseBalls.append(ThemeBall(c: at, r: reach))
-            var axis: SIMD3<Double> = out
-            if toward >= 0 {
-                let d: SIMD3<Double> = GraphUniverse.normalize(cWorld[toward] - at)
-                if GraphUniverse.length(d) > 0.5 { axis = d }
-            }
-            emitNote(i, role: receptor ? .receptor : .drifter, radius: sphere, parent: -1, region: -1,
-                     orbit: drift(at, amp: Float(amp), seed: tree.nSeed(i)), axis: axis)
-        }
-    }
-
-    /// The top cell a free note links to most (both ways), or -1.
-    func favouriteTop(_ i: Int) -> Int {
-        var with: [Int: Int] = [:]
-        for link in noteLinks where link.from == i || link.to == i {
-            let other: Int = link.from == i ? link.to : link.from
-            let home: Int = tree.noteHome[other]
-            guard home >= 0 else { continue }
-            with[tree.top[home], default: 0] += link.strength
-        }
-        var best: Int = -1
-        var most: Int = 0
-        for (t, s) in with where s > most || (s == most && best >= 0 && tree.lessC(t, best)) {
-            best = t
-            most = s
-        }
-        return best
-    }
-
     // MARK: processes
 
     /// The cells' processes: one per pair of ends with note links between
     /// them, gathered from every note link, none dropped. Inside one cell
     /// each end is the deepest shown body holding its note; a link that
-    /// leaves a cell starts on the cell itself (a free note is its own
-    /// end), so its tube joins the cell's membrane instead of crossing it
-    /// to a part or note inside. It runs from the side with more links
+    /// leaves a cell starts on the cell itself, so its tube joins the
+    /// cell's membrane instead of crossing it to a part or note inside. It runs from the side with more links
     /// (ties by name); its strength is the links' mean strength plus a
     /// little for how many, and its dye the kind most of their strength
     /// carries.
@@ -725,7 +625,7 @@ nonisolated struct NeuronPlanner: Sendable {
             var x: Int = shownBody(link.from)
             var y: Int = shownBody(link.to)
             guard x >= 0, y >= 0, x != y else { continue }
-            if bodies[x].region < 0 || bodies[x].region != bodies[y].region {
+            if bodies[x].region != bodies[y].region {
                 x = outermost(x)
                 y = outermost(y)
             }
@@ -759,7 +659,7 @@ nonisolated struct NeuronPlanner: Sendable {
             }
             let from: Int = sends ? key.a : key.b
             let to: Int = sends ? key.b : key.a
-            let inside: Bool = bodies[from].region >= 0 && bodies[from].region == bodies[to].region
+            let inside: Bool = bodies[from].region == bodies[to].region
             out.append(ThemeLink(a: from, b: to, kind: inside ? 5 : 6, centre: -1, tag: kind.rawValue,
                                  width: Float(0.55 + 0.12 * Double(strength))))
         }
@@ -779,10 +679,9 @@ nonisolated struct NeuronPlanner: Sendable {
         return c >= 0 ? cBody[c] : -1
     }
 
-    /// The cell holding shown body b (a cell's region is its own body), or
-    /// b itself when it floats free.
+    /// The cell holding shown body b (a cell's region is its own body).
     func outermost(_ b: Int) -> Int {
-        bodies[b].region >= 0 ? bodies[b].region : b
+        bodies[b].region
     }
 
     /// Bodies by name, then id.

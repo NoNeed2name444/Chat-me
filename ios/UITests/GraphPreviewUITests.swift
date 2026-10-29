@@ -136,12 +136,11 @@ final class GraphPreviewUITests: XCTestCase {
 
     // MARK: the Neurons theme
 
-    /// The whole map as cells, all closed: Cardiology and Examples as two
-    /// big cells with their dendrites, an axon growing out of one to a
-    /// synapse on the other where their notes link, and the two loose
-    /// notes as free cells; impulses running along the axons at their own
-    /// random times - so the second picture differs from the first - and
-    /// in landscape.
+    /// The whole map as cells, all closed: Cardiology, Examples and
+    /// Unsorted (the two loose notes) as three big cells, a dendrite
+    /// joining two of them wherever their notes link; impulses running
+    /// along the links at their own random times - so the second picture
+    /// differs from the first - and in landscape.
     func testNeuronsAtRest() {
         let app = XCUIApplication()
         app.keepTraceOffConsole()

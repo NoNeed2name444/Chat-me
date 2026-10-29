@@ -33,8 +33,6 @@ object NeuronPalette {
         Dye(Vec3(1.0f, 0.74f, 0.28f), Vec3(0.35f, 1.0f, 0.5f)),
         Dye(Vec3(0.66f, 0.5f, 1.0f), Vec3(0.25f, 0.92f, 1.0f)),
     )
-    val receptor = Vec3(1.0f, 0.84f, 0.48f)
-    val drifter = Vec3(0.62f, 0.8f, 0.98f)
     val interior = Vec3(0.2f, 0.07f, 0.46f)
     val heart = Vec3(0.52f, 0.24f, 0.98f)
     val nucleus = Vec3(0.82f, 0.36f, 1.0f)
@@ -45,19 +43,15 @@ object NeuronPalette {
     const val IDEA_LEAN = 0.45f
     val glowViolet = Vec3(0.78f, 0.34f, 0.95f)
 
+    /** A dye slot's membrane colour: 0..4 the cells' (round again past five); [idea] leans to the accent. */
     fun dye(slot: Int, idea: Boolean = false): Vec3 {
-        if (slot == 5) return receptor
-        if (slot == 6) return drifter
         val pair = dyes[max(slot, 0) % dyes.size]
         if (!idea) return pair.main
         return pair.main + (pair.accent - pair.main) * IDEA_LEAN
     }
 
-    fun glow(slot: Int, idea: Boolean = false): Vec3 {
-        val own = dye(slot, idea)
-        if (slot == 5 || slot == 6) return own
-        return own * 0.5f + glowViolet * 0.5f
-    }
+    /** A dye slot's glow: its dye halfway to the violet. */
+    fun glow(slot: Int, idea: Boolean = false): Vec3 = dye(slot, idea) * 0.5f + glowViolet * 0.5f
 }
 
 /** A cell's state: one biological process each, mirroring one space style (iOS NeuronState). */
@@ -77,11 +71,9 @@ enum class NeuronState(val rawValue: String, val code: Int, val style: SpaceStyl
         fun of(style: SpaceStyle): NeuronState = entries.first { it.style == style }
         fun raw(value: String): NeuronState? = entries.firstOrNull { it.rawValue == value }
         val menuOrder: List<NeuronState> get() = SpaceStyle.menuOrder.map { of(it) }
-        fun natural(role: NeuronRole): NeuronState = when (role) {
-            NeuronRole.RECEPTOR -> MIGRATING
-            NeuronRole.DRIFTER -> ENGULFING
-            else -> RESTING
-        }
+        /** A role's state when nothing is chosen: every one rests (the free cells were the ones that moved). */
+        @Suppress("UNUSED_PARAMETER")
+        fun natural(role: NeuronRole): NeuronState = RESTING
         val beatPeriod: Float get() = SpaceOptics.PULSAR_PERIOD
     }
 }
@@ -178,12 +170,9 @@ enum class NeuronCellKind(val nucleus: Float, val wobble: Float, val fill: Float
     CELL(0.3f, 0.025f, 1f),
     PART(0f, 0.035f, 0.45f),
     VESICLE(0f, 0.04f, 0.2f),
-    GRANULE(0.5f, 0.02f, 0.8f),
-    RECEPTOR(0.4f, 0.04f, 1f),
-    DRIFTER(0.3f, 0.06f, 1f),
-    BIPOLAR(0.4f, 0.04f, 1f);
+    GRANULE(0.5f, 0.02f, 0.8f);
 
-    val branches: Boolean get() = this == CELL || this == RECEPTOR || this == DRIFTER || this == BIPOLAR
+    val branches: Boolean get() = this == CELL
     val holds: Boolean get() = this == CELL || this == PART
 
     companion object {
@@ -192,19 +181,6 @@ enum class NeuronCellKind(val nucleus: Float, val wobble: Float, val fill: Float
             NeuronRole.PART -> PART
             NeuronRole.VESICLE -> VESICLE
             NeuronRole.GRANULE -> GRANULE
-            NeuronRole.RECEPTOR -> RECEPTOR
-            NeuronRole.DRIFTER -> DRIFTER
-        }
-
-        /** The shape a state gives a free note; a cell and what floats in one keep their own. */
-        fun shape(kind: NeuronCellKind, state: NeuronState): NeuronCellKind {
-            if (kind != RECEPTOR && kind != DRIFTER && kind != BIPOLAR) return kind
-            return when (state) {
-                NeuronState.PACEMAKER -> BIPOLAR
-                NeuronState.MIGRATING -> RECEPTOR
-                NeuronState.ENGULFING -> DRIFTER
-                else -> kind
-            }
         }
     }
 }
@@ -240,15 +216,6 @@ data class Quat(val x: Float, val y: Float, val z: Float, val w: Float) {
             val s = sin(angle / 2)
             return Quat(n.x * s, n.y * s, n.z * s, cos(angle / 2))
         }
-
-        /** The shortest turn carrying unit `from` to unit `to` (simd_quatf(from:to:)). */
-        fun fromTo(from: Vec3, to: Vec3): Quat {
-            val d = from.dot(to)
-            if (d < -0.999999f) return angleAxis(FPI, NeuronGeometry.perpendicular(from))
-            val c = from.cross(to)
-            val s = sqrt((1 + d) * 2)
-            return Quat(c.x / s, c.y / s, c.z / s, s / 2)
-        }
     }
 }
 
@@ -272,8 +239,8 @@ object NeuronArbor {
     /**
      * The branches a kind of cell grows of its own: none. A process exists only where it
      * attaches to something (the owner, 29 Oct), and a cell's links are already dendrites that
-     * leave it through a mouth in its membrane, so a cell is its soma and its links, and a free
-     * note its soma alone. Stethoscore's iOS crowned a cell with six or seven dendrites that led
+     * leave it through a mouth in its membrane, so a cell is its soma and its links.
+     * Stethoscore's iOS crowned a cell with six or seven dendrites that led
      * nowhere, gave a receptor a fan, a drifter fine processes and a bipolar cell two long ones.
      */
     @Suppress("UNUSED_PARAMETER")
@@ -433,16 +400,13 @@ class NeuronLookPlan(val plan: ThemePlan, val cells: NeuronStateChoice = NeuronS
         bodies = plan.bodies.indices.map { look(it) }
     }
 
-    fun slot(body: ThemeBody): Int {
-        if (body.region >= 0) return slotOf[body.region] ?: 0
-        return if (body.role == NeuronRole.DRIFTER.code) 6 else 5
-    }
+    fun slot(body: ThemeBody): Int = slotOf[body.region] ?: 0
 
     private fun look(index: Int): NeuronBodyLook {
         val body = plan.bodies[index]
         val role = NeuronRole.of(body.role) ?: NeuronRole.GRANULE
         val state = cells.state(index, plan)
-        val kind = NeuronCellKind.shape(NeuronCellKind.of(role), state)
+        val kind = NeuronCellKind.of(role)
         val idea = kind == NeuronCellKind.PART || kind == NeuronCellKind.GRANULE
         val inner = body.parent >= 0
         val open = kind.holds && holding.contains(index)
@@ -453,7 +417,7 @@ class NeuronLookPlan(val plan: ThemePlan, val cells: NeuronStateChoice = NeuronS
         val whole = kind == NeuronCellKind.CELL
         val variant = (body.seed % 3uL).toInt()
         if (kind.branches) {
-            val turn = arborTurn(kind, body.axis, random)
+            val turn = arborTurn(kind, random)
             if (whole) somaTurn = turn
             else if (NeuronArbor.branches(kind, variant, tier == GraphicsTier.HIGH).isNotEmpty()) arborTurn = turn
         }
@@ -491,18 +455,12 @@ class NeuronLookPlan(val plan: ThemePlan, val cells: NeuronStateChoice = NeuronS
             return Quat.angleAxis(spin, axis)
         }
 
-        fun arborTurn(kind: NeuronCellKind, axis: Vec3, random: UniverseRandom): Quat {
-            if (kind == NeuronCellKind.CELL) {
-                val spin = random.unit().toFloat() * 2 * FPI
-                val tip = 0.2f * random.signed().toFloat()
-                return Quat.angleAxis(tip, Vec3(1f, 0f, 0f)) * Quat.angleAxis(spin, Vec3(0f, 0f, 1f))
-            }
-            if (kind != NeuronCellKind.RECEPTOR && kind != NeuronCellKind.BIPOLAR) return randomTurn(random)
-            val up = Vec3(0f, 1f, 0f)
-            val size = axis.length()
-            val to = if (size > 0.0001f) axis * (1f / size) else up
-            val twist = random.unit().toFloat() * 2 * FPI
-            return Quat.angleAxis(twist, to) * Quat.fromTo(up, to)
+        /** A cell's crown stays in the plane facing the camera (the sheet's), turned about the view and tipped a little. */
+        fun arborTurn(kind: NeuronCellKind, random: UniverseRandom): Quat {
+            if (kind != NeuronCellKind.CELL) return randomTurn(random)
+            val spin = random.unit().toFloat() * 2 * FPI
+            val tip = 0.2f * random.signed().toFloat()
+            return Quat.angleAxis(tip, Vec3(1f, 0f, 0f)) * Quat.angleAxis(spin, Vec3(0f, 0f, 1f))
         }
     }
 }

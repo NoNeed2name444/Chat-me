@@ -85,7 +85,13 @@ check("T3 Space: Gas giant · Page", card("space", "gasGiant", page: true).kind 
 check("T3 Space: Rocky planet · Idea", card("space", "rocky").kind == "Rocky planet \u{00B7} Idea")
 check("T3 Neurons: Granule · Idea", card("neurons", "4").kind == "Granule \u{00B7} Idea")
 check("T3 Neurons: Vesicle · Page", card("neurons", "3", page: true).kind == "Vesicle \u{00B7} Page")
-check("T3 Neurons: Receptor · Idea", card("neurons", "6").kind == "Receptor \u{00B7} Idea")
+check("T3 Neurons: a role with no word of its own is just its type", card("neurons", "6").kind == "Idea")
+check("T3 Neurons: Unsorted, beside folders, is a Cell of the notes in no folder",
+      GraphPeek.content(GraphPeekInput(theme: "neurons", role: "2", folder: true, home: true, unsorted: true,
+                                       title: "Unsorted")).kind == "Cell \u{00B7} No folder")
+check("T3 Neurons with no folders: the one cell holds all notes",
+      GraphPeek.content(GraphPeekInput(theme: "neurons", role: "2", folder: true, home: true,
+                                       title: "Ideas")).kind == "Cell \u{00B7} All notes")
 var single = GraphPeekInput(theme: "space", role: "", folder: false, title: "x", page: false)
 single.lookName = "Pulsar"
 check("T3 a single look names its style", GraphPeek.content(single).kind == "Pulsar \u{00B7} Idea")

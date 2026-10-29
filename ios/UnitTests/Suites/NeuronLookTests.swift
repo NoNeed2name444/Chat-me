@@ -6,9 +6,8 @@
 //   interior a deep violet brightening to violet at its heart (the owner's
 //   close-up);
 // - the cell states: six, one for each space style and back again, each its
-//   own shader number; the Look menu in the space styles' order; natural
-//   states follow biology (a receptor migrates, a drifter engulfs, the
-//   rest rest); a pacemaker beats with the pulsar's period;
+//   own shader number; the Look menu in the space styles' order; left
+//   alone, everything rests; a pacemaker beats with the pulsar's period;
 // - the choice: one state for every note, one per cell winning over it,
 //   containers always resting, stored strings read back the same and
 //   anything unreadable skipped;
@@ -61,17 +60,16 @@ let firstIdea: SIMD3<Float> = NeuronPalette.dye(slot: 0, idea: true)
 let accent: SIMD3<Float> = NeuronPalette.dyes[0].accent
 check("N1 an idea leans to its cell's accent",
       simd_distance_f(firstIdea, accent) < simd_distance_f(first, accent) && firstIdea != first)
-check("N1 slots wrap round, 5 and 6 a receptor's and a drifter's",
-      NeuronPalette.dye(slot: 5) == NeuronPalette.receptor && NeuronPalette.dye(slot: 6) == NeuronPalette.drifter
+check("N1 slots wrap round past five",
+      NeuronPalette.dye(slot: 5) == NeuronPalette.dye(slot: 0) && NeuronPalette.dye(slot: 6) == NeuronPalette.dye(slot: 1)
       && NeuronPalette.dye(slot: 7) == NeuronPalette.dye(slot: 2))
-check("N1 a cell's glow leans to the violet, a receptor's and a drifter's keep their own",
-      (0..<5).allSatisfy { slot in
+check("N1 every cell's glow leans to the violet",
+      (0..<7).allSatisfy { slot in
           [false, true].allSatisfy { idea in
               let glow: SIMD3<Float> = NeuronPalette.glow(slot: slot, idea: idea)
               return glow.z > glow.y && onScreen(glow) && glow != NeuronPalette.dye(slot: slot, idea: idea)
           }
-      }
-      && NeuronPalette.glow(slot: 5) == NeuronPalette.receptor && NeuronPalette.glow(slot: 6) == NeuronPalette.drifter)
+      })
 // cells 0 and 1 with their ideas: all four target colours
 let two: [SIMD3<Float>] = [NeuronPalette.dyes[0].main, NeuronPalette.dyes[0].accent,
                            NeuronPalette.dyes[1].main, NeuronPalette.dyes[1].accent]
@@ -96,10 +94,7 @@ check("N2 the menu in the space styles' order",
 check("N2 each its own title, process and symbol",
       Set(NeuronState.allCases.map(\.title)).count == 6 && Set(NeuronState.allCases.map(\.process)).count == 6
       && Set(NeuronState.allCases.map(\.symbol)).count == 6)
-let resting: [NeuronRole] = [.cell, .part, .home, .vesicle, .granule]
-check("N2 natural: a receptor migrates, a drifter engulfs, the rest rest",
-      NeuronState.natural(.receptor) == .migrating && NeuronState.natural(.drifter) == .engulfing
-      && resting.allSatisfy { NeuronState.natural($0) == .resting })
+check("N2 natural: left alone, every role rests", NeuronRole.allCases.allSatisfy { NeuronState.natural($0) == .resting })
 check("N2 a pacemaker beats with the pulsar's period", NeuronState.beatPeriod == SpaceOptics.pulsarPeriod)
 
 // MARK: N3 the choice
@@ -117,10 +112,11 @@ for k in 0..<11 { edges.append(UniverseEdge(a: fixedID(k + 1), b: fixedID(((k * 
 var input = UniverseInput(notes: notes, folders: [UniverseFolder(id: folderA, name: "Examples", parent: nil),
                                                   UniverseFolder(id: folderB, name: "Cardiology", parent: nil)],
                           edges: edges, seedByName: true)
-check("N3 a closed cell shows nothing inside",
-      GraphNeurons.plan(input).bodies.filter { $0.kind == .note }.count == 2)
-// Both cells opened, so the notes inside them are planned too.
-input.open = [folderA, folderB]
+check("N3 a closed cell shows nothing inside, Unsorted's two notes too",
+      GraphNeurons.plan(input).bodies.filter { $0.kind == .note }.isEmpty)
+// Every cell opened (Unsorted by the home id), so the notes inside them are
+// planned too.
+input.open = [folderA, folderB, GraphUniverse.homeID]
 let plan: ThemePlan = GraphNeurons.plan(input)
 let noteIndices: [Int] = plan.bodies.indices.filter { plan.bodies[$0].kind == .note }
 let containers: [Int] = plan.bodies.indices.filter { plan.bodies[$0].kind != .note }

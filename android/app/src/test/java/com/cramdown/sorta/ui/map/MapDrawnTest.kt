@@ -1,7 +1,9 @@
 package com.cramdown.sorta.ui.map
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The record ScreenshotTest waits on before it looks at the map (MapDrawn, Map3DView's MapDrawnKey). */
@@ -41,5 +43,19 @@ class MapDrawnTest {
         }
         assertEquals(MapDrawn.ENOUGH + 1, changes)
         assertEquals(MapDrawn(MapDrawn.ENOUGH, MapDrawn.ENOUGH, 3, 16, 32, 1080, 1950, "SwiftShader", 1f, 6), d)
+    }
+
+    @Test fun anIdleMapStopsAfterAQuietSecondWithThreeFramesFinished() {
+        val second = 1_000_000_000L
+        // a phone: three frames inside the first 50 ms, so the quiet second decides
+        assertFalse(FrameQuiet.settled(second - 1, 60))
+        assertTrue(FrameQuiet.settled(second, MapDrawn.ENOUGH))
+        // the emulator's software GL, whose first frame took 1.4 s: a quiet second, but too few frames
+        assertFalse(FrameQuiet.settled(1_500_000_000L, 1))
+        assertFalse(FrameQuiet.settled(4 * second, MapDrawn.ENOUGH - 1))
+        assertTrue(FrameQuiet.settled(4 * second, MapDrawn.ENOUGH))
+        // a surface that never draws stops after ten quiet seconds
+        assertFalse(FrameQuiet.settled(10 * second - 1, 0))
+        assertTrue(FrameQuiet.settled(10 * second, 0))
     }
 }

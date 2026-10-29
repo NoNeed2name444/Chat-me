@@ -39,16 +39,16 @@ class NeuronLookTest {
         val firstIdea = NeuronPalette.dye(0, idea = true)
         val accent = NeuronPalette.dyes[0].accent
         check("N1 an idea leans to its cell's accent", distance(firstIdea, accent) < distance(first, accent) && firstIdea != first)
-        check("N1 slots wrap round, 5 and 6 a receptor's and a drifter's",
-            NeuronPalette.dye(5) == NeuronPalette.receptor && NeuronPalette.dye(6) == NeuronPalette.drifter
+        check("N1 slots wrap round past five",
+            NeuronPalette.dye(5) == NeuronPalette.dye(0) && NeuronPalette.dye(6) == NeuronPalette.dye(1)
                 && NeuronPalette.dye(7) == NeuronPalette.dye(2))
-        check("N1 a cell's glow leans to the violet, a receptor's and a drifter's keep their own",
-            (0 until 5).all { slot ->
+        check("N1 every cell's glow leans to the violet",
+            (0 until 7).all { slot ->
                 listOf(false, true).all { idea ->
                     val glow = NeuronPalette.glow(slot, idea)
                     glow.z > glow.y && onScreen(glow) && glow != NeuronPalette.dye(slot, idea)
                 }
-            } && NeuronPalette.glow(5) == NeuronPalette.receptor && NeuronPalette.glow(6) == NeuronPalette.drifter)
+            })
         val two = listOf(NeuronPalette.dyes[0].main, NeuronPalette.dyes[0].accent, NeuronPalette.dyes[1].main, NeuronPalette.dyes[1].accent)
         val hasAll = two.any { it.y > 0.9f && it.x < 0.5f } && two.any { it.z > 0.9f && it.x < 0.4f } &&
             two.any { it.x > 0.9f && it.z > 0.6f } && two.any { it.x > 0.9f && it.z < 0.4f }
@@ -63,10 +63,7 @@ class NeuronLookTest {
         check("N2 the menu in the space styles' order", NeuronState.menuOrder.map { it.style } == SpaceStyle.menuOrder)
         check("N2 each its own title, process and symbol", all.map { it.title }.toSet().size == 6 &&
             all.map { it.process }.toSet().size == 6 && all.map { it.symbol }.toSet().size == 6)
-        val resting = listOf(NeuronRole.CELL, NeuronRole.PART, NeuronRole.HOME, NeuronRole.VESICLE, NeuronRole.GRANULE)
-        check("N2 natural: a receptor migrates, a drifter engulfs, the rest rest",
-            NeuronState.natural(NeuronRole.RECEPTOR) == NeuronState.MIGRATING && NeuronState.natural(NeuronRole.DRIFTER) == NeuronState.ENGULFING
-                && resting.all { NeuronState.natural(it) == NeuronState.RESTING })
+        check("N2 natural: left alone, every role rests", NeuronRole.entries.all { NeuronState.natural(it) == NeuronState.RESTING })
         check("N2 a pacemaker beats with the pulsar's period", NeuronState.beatPeriod == SpaceOptics.PULSAR_PERIOD)
         done()
     }
@@ -81,8 +78,10 @@ class NeuronLookTest {
         val edges = (0 until 11).map { k -> UniverseEdge(fixedID(k + 1), fixedID(((k * 5) % 12) + 1)) }
         val closed = UniverseInput(notes, listOf(UniverseFolder(folderA, "Examples", null), UniverseFolder(folderB, "Cardiology", null)),
             edges, seedByName = true)
-        check("N3 a closed cell shows nothing inside", GraphNeurons.plan(closed).bodies.count { it.kind == ThemeBodyKind.NOTE } == 2)
-        val plan = GraphNeurons.plan(closed.copy(open = listOf(folderA, folderB)))
+        check("N3 a closed cell shows nothing inside, Unsorted's two notes too",
+            GraphNeurons.plan(closed).bodies.none { it.kind == ThemeBodyKind.NOTE })
+        // every cell open, Unsorted by the home's id
+        val plan = GraphNeurons.plan(closed.copy(open = listOf(folderA, folderB, GraphUniverse.HOME_ID)))
         val noteIndices = plan.bodies.indices.filter { plan.bodies[it].kind == ThemeBodyKind.NOTE }
         val containers = plan.bodies.indices.filter { plan.bodies[it].kind != ThemeBodyKind.NOTE }
         val regionA = plan.bodies.indexOfFirst { it.id == folderA }

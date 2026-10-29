@@ -363,7 +363,8 @@ private fun requestFrameRate(surface: Surface, hz: Float) {
 
 /**
  * Drives frames from Choreographer: each vsync hands its timestamp to the renderer and
- * asks for one frame. Idle maps stop after a quiet second; a touch restarts at once.
+ * asks for one frame. Idle maps stop after a quiet second with three frames finished in it
+ * (FrameQuiet); a touch restarts at once.
  */
 private class FrameLoop(
     private val renderer: GlMapRenderer,
@@ -375,12 +376,16 @@ private class FrameLoop(
     var view: GLSurfaceView? = null
     private var running = false
     private var lastActive = 0L
+    /** The renderer's finished frames when the map last moved. */
+    private var finishedAtActive = 0
     private var lastFrame = 0L
     private var frames = 0
 
-    fun start() { if (!running) { running = true; lastActive = System.nanoTime(); Choreographer.getInstance().postFrameCallback(this) } }
+    fun start() { if (!running) { running = true; active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
     fun stop() { running = false; Choreographer.getInstance().removeFrameCallback(this) }
-    fun touched() { autoOrbit = false; lastActive = System.nanoTime(); if (!running && view != null) start() }
+    fun touched() { autoOrbit = false; active(System.nanoTime()); if (!running && view != null) start() }
+
+    private fun active(nanos: Long) { lastActive = nanos; finishedAtActive = renderer.finished }
 
     override fun doFrame(frameTimeNanos: Long) {
         if (!running) return
@@ -389,7 +394,9 @@ private class FrameLoop(
         lastFrame = frameTimeNanos
         renderer.vsyncNanos = frameTimeNanos
         view?.requestRender()
-        if (renderer.animating || autoOrbit) lastActive = frameTimeNanos
-        if (continuous || frameTimeNanos - lastActive < 1_000_000_000L) Choreographer.getInstance().postFrameCallback(this) else running = false
+        if (renderer.animating || autoOrbit) active(frameTimeNanos)
+        if (continuous || !FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)) {
+            Choreographer.getInstance().postFrameCallback(this)
+        } else running = false
     }
 }

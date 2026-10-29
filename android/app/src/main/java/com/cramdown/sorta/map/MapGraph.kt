@@ -51,7 +51,12 @@ class MapGraph(
             return MapGraph(positions, groups, edges, notes.map { it.title }, notes.map { it.id })
         }
 
-        /** Fibonacci sphere start, then spring steps (links pull, every pair pushes) when the map is small. */
+        /**
+         * Fibonacci sphere start, then spring steps (links pull, every pair pushes, and a faint pull
+         * to the centre, as iOS's ForceLayout3D has) when the map is small. Without that pull, loose
+         * ideas pushed each other some 35 link lengths out, and the home view, framing them all,
+         * drew every note under the size at which Space shows its body.
+         */
         fun layout(n: Int, edges: IntArray, steps: Int = 300): FloatArray {
             val p = FloatArray(n * 3)
             if (n == 0) return p
@@ -82,6 +87,8 @@ class MapGraph(
                     force[3 * i] += dx * k; force[3 * i + 1] += dy * k; force[3 * i + 2] += dz * k
                     force[3 * j] -= dx * k; force[3 * j + 1] -= dy * k; force[3 * j + 2] -= dz * k
                 }
+                // and everything, faintly, to the centre, so loose ideas do not wander off (iOS ForceLayout3D)
+                for (k in 0 until n * 3) force[k] -= p[k] * CENTRE_PULL
                 val cool = 0.5f * (1 - step.toFloat() / steps) + 0.02f
                 for (k in 0 until n * 3) p[k] += force[k].coerceIn(-1f, 1f) * cool
             }
@@ -96,6 +103,9 @@ class MapGraph(
         }
 
         const val PALETTE_SIZE = 6
+
+        /** The layout's pull to the centre per step, a fraction of a note's distance from it (iOS ForceLayout3D's 0.05). */
+        const val CENTRE_PULL = 0.05f
     }
 }
 

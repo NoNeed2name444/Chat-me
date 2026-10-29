@@ -17,17 +17,15 @@ import Foundation
 //                                bands, vesicles drifting out - volume
 //                                transmission, spreading as a gas does
 //   pacemaker  (the pulsar's)    a steady beat, twice a turn of two sweeping
-//                                lobes, a ring wave each beat, its bipolar
-//                                dendrites turning
+//                                lobes, a ring wave each beat
 //   migrating  (the comet's)     a leading process with its growth cone, a
 //                                trailing one, the nucleus stepping forward
 //                                (nucleokinesis)
 //   engulfing  (the black hole's) a phagocyte: debris spiralling into a dark
 //                                phagosome ringed with light
 //
-// Natural states follow biology where a role is one of them: a receptor
-// (the space's comet) migrates in along its leading process, a drifting
-// free cell (a microglial cell) engulfs; everything else rests. The Look
+// Left alone, everything rests (a receptor migrated and a drifting free
+// cell engulfed, until the free cells went: the owner, 29 Oct). The Look
 // menu sets one state for every note, or one per cell (NeuronStateChoice),
 // as the space's looks do.
 //
@@ -44,9 +42,6 @@ nonisolated enum NeuronPalette {
         (SIMD3<Float>(1.0, 0.74, 0.28), SIMD3<Float>(0.35, 1.0, 0.5)),
         (SIMD3<Float>(0.66, 0.5, 1.0), SIMD3<Float>(0.25, 0.92, 1.0))
     ]
-    /// A receptor's gold, a drifting free cell's pale ice.
-    static let receptor = SIMD3<Float>(1.0, 0.84, 0.48)
-    static let drifter = SIMD3<Float>(0.62, 0.8, 0.98)
     /// The soma's interior, as in the owner's close-up: a deep violet; the
     /// nucleus's chromatin between it and the brighter heart violet, its
     /// nucleolus the violet-magenta (the soma's tint B).
@@ -65,10 +60,8 @@ nonisolated enum NeuronPalette {
     static let ideaLean: Float = 0.45
 
     /// A dye slot's membrane colour: 0...4 the cells' (round again past
-    /// five), 5 a receptor's, 6 a drifter's; `idea` leans to the accent.
+    /// five); `idea` leans to the accent.
     static func dye(slot: Int, idea: Bool = false) -> SIMD3<Float> {
-        if slot == 5 { return receptor }
-        if slot == 6 { return drifter }
         let pair = dyes[max(slot, 0) % dyes.count]
         guard idea else { return pair.main }
         return pair.main + (pair.accent - pair.main) * ideaLean
@@ -78,12 +71,9 @@ nonisolated enum NeuronPalette {
     /// one with its violet nucleus.
     static let glowViolet = SIMD3<Float>(0.78, 0.34, 0.95)
 
-    /// A dye slot's glow: a cell's dye halfway to the violet; a receptor's
-    /// and a drifter's keep their own colour.
+    /// A dye slot's glow: its dye halfway to the violet.
     static func glow(slot: Int, idea: Bool = false) -> SIMD3<Float> {
-        let own: SIMD3<Float> = dye(slot: slot, idea: idea)
-        if slot == 5 || slot == 6 { return own }
-        return own * 0.5 + glowViolet * 0.5
+        dye(slot: slot, idea: idea) * 0.5 + glowViolet * 0.5
     }
 }
 
@@ -174,15 +164,10 @@ nonisolated enum NeuronState: String, CaseIterable, Sendable, Identifiable {
         GraphNodeStyle.menuOrder.map { NeuronState.of($0) }
     }
 
-    /// A role's state when nothing is chosen: biology's, where a role is
-    /// one - a receptor migrating in, a drifter (a microglial cell)
-    /// engulfing - and rest everywhere else.
+    /// A role's state when nothing is chosen: every one rests (the free
+    /// cells were the ones that migrated and engulfed).
     static func natural(_ role: NeuronRole) -> NeuronState {
-        switch role {
-        case .receptor: return .migrating
-        case .drifter: return .engulfing
-        default: return .resting
-        }
+        .resting
     }
 
     /// How long a pacemaker takes to turn once: the pulsar's period, so the

@@ -220,8 +220,11 @@ nonisolated struct GraphPeekInput: Sendable {
     /// is empty.
     var lookName: String = ""
     var folder: Bool
-    /// The one container of a vault with no folders.
+    /// The home: the one container of a vault with no folders, or (beside
+    /// folders) the Neurons cell its notes in no folder share.
     var home: Bool = false
+    /// Whether the home is beside folders, holding only the notes in none.
+    var unsorted: Bool = false
     var title: String
     var page: Bool = false
     var body: String = ""
@@ -265,8 +268,7 @@ nonisolated enum GraphPeek {
         switch theme {
         case "neurons":
             let words: [String: String] = [
-                "0": "Cell", "1": "Cell part", "2": "Cell", "3": "Vesicle", "4": "Granule",
-                "5": "Drifting cell", "6": "Receptor"
+                "0": "Cell", "1": "Cell part", "2": "Cell", "3": "Vesicle", "4": "Granule"
             ]
             return words[role]
         default:
@@ -278,9 +280,10 @@ nonisolated enum GraphPeek {
         }
     }
 
-    /// The plain type.
-    static func plainType(folder: Bool, home: Bool, page: Bool) -> String {
-        if home { return "All notes" }
+    /// The plain type: the home beside folders as the Move menu names
+    /// where its notes are.
+    static func plainType(folder: Bool, home: Bool, unsorted: Bool = false, page: Bool) -> String {
+        if home { return unsorted ? "No folder" : "All notes" }
         if folder { return "Folder" }
         return page ? "Page" : "Idea"
     }
@@ -309,7 +312,7 @@ nonisolated enum GraphPeek {
 
     /// The card for `input`.
     static func content(_ input: GraphPeekInput) -> GraphPeekContent {
-        let plain: String = plainType(folder: input.folder, home: input.home, page: input.page)
+        let plain: String = plainType(folder: input.folder, home: input.home, unsorted: input.unsorted, page: input.page)
         let theme: String? = roleWord(theme: input.theme, role: input.role, folder: input.folder, home: input.home)
         let own: String = theme ?? (input.lookName.isEmpty ? plain : input.lookName)
         let kind: String = own == plain ? plain : own + " \u{00B7} " + plain

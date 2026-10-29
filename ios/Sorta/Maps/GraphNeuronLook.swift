@@ -38,16 +38,13 @@ import simd
 // Colours are the close-up's violet and gold on dark teal-navy
 // (NeuronPalette): each cell keeps a touch of its own dye (green, cyan,
 // pink, amber, violet) in its nucleus and at its edge, its parts and ideas
-// leaning to the dye's accent; receptors gold, drifting cells pale ice;
-// links glass like the dendrites, gold filaments strongest near both
+// leaning to the dye's accent; links glass like the dendrites, gold filaments strongest near both
 // cells, impulses amber in a warm orange halo.
 //
-// Each cell shows a state (NeuronState, chosen in the Look menu or by its
-// role): resting, firing, releasing, pacemaker, migrating, engulfing - the
-// space styles' six, each a process of its own in the soma and halo
-// shaders, and in its shape and motion here: a free pacemaker's bipolar
-// arbor turning, a migrating cell's leading process, an engulfing cell's
-// fine processes closing and opening.
+// Each cell shows a state (NeuronState, chosen in the Look menu; left
+// alone it rests): resting, firing, releasing, pacemaker, migrating,
+// engulfing - the space styles' six, each a process of its own in the soma
+// and halo shaders, and in its motion here.
 //
 // Nothing is made per cell but its nodes and a container's own soma
 // material (each opens on its own): other materials are one per (dye, kind
@@ -73,12 +70,6 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
     case vesicle
     /// An idea, inside its folder.
     case granule
-    /// A free note with links.
-    case receptor
-    /// A free note with no links.
-    case drifter
-    /// A free pacemaker.
-    case bipolar
 
     static func of(_ role: NeuronRole) -> NeuronCellKind {
         switch role {
@@ -86,8 +77,6 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
         case .part: return .part
         case .vesicle: return .vesicle
         case .granule: return .granule
-        case .receptor: return .receptor
-        case .drifter: return .drifter
         }
     }
 
@@ -95,10 +84,9 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
     /// and a vesicle are clear).
     var nucleus: Float {
         switch self {
-        case .cell, .drifter: return 0.3
+        case .cell: return 0.3
         case .part, .vesicle: return 0
         case .granule: return 0.5
-        case .receptor, .bipolar: return 0.4
         }
     }
 
@@ -107,9 +95,8 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
         switch self {
         case .cell: return 0.025
         case .part: return 0.035
-        case .vesicle, .receptor, .bipolar: return 0.04
+        case .vesicle: return 0.04
         case .granule: return 0.02
-        case .drifter: return 0.06
         }
     }
 
@@ -117,7 +104,7 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
     /// vesicle's thin, so what floats in them, and behind, shows through.
     var fill: Float {
         switch self {
-        case .cell, .receptor, .drifter, .bipolar: return 1
+        case .cell: return 1
         case .part: return 0.45
         case .vesicle: return 0.2
         case .granule: return 0.8
@@ -126,7 +113,7 @@ nonisolated enum NeuronCellKind: Int, CaseIterable, Sendable {
 
     /// Whether it grows processes of its own (what floats inside a cell
     /// has none).
-    var branches: Bool { self == .cell || self == .receptor || self == .drifter || self == .bipolar }
+    var branches: Bool { self == .cell }
 
     /// Whether things float inside it once it is opened.
     var holds: Bool { self == .cell || self == .part }
@@ -261,12 +248,10 @@ final class GraphNeuronLook: GraphThemeLook {
         slotsFor = plan.bodies.count
     }
 
-    /// A body's dye slot: its region's place in the plan (5 dyes round), 5
-    /// for a receptor, 6 for a drifting cell.
+    /// A body's dye slot: its region's place in the plan (5 dyes round).
     private func slot(_ body: ThemeBody, plan: ThemePlan) -> Int {
         learn(plan)
-        if body.region >= 0 { return slotOf[body.region] ?? 0 }
-        return body.role == NeuronRole.drifter.rawValue ? 6 : 5
+        return slotOf[body.region] ?? 0
     }
 
     /// A cell's membrane colour: its slot's dye, an idea's (and a part's)
@@ -283,20 +268,6 @@ final class GraphNeuronLook: GraphThemeLook {
 
     // MARK: a cell
 
-    /// The shape a state gives a free note: a pacemaker bipolar (two long
-    /// dendrites), a migrating one a leading process (the receptor's), an
-    /// engulfing one many fine processes (the drifter's). A cell and what
-    /// floats inside one keep their own.
-    static func shape(_ kind: NeuronCellKind, state: NeuronState) -> NeuronCellKind {
-        guard kind == .receptor || kind == .drifter || kind == .bipolar else { return kind }
-        switch state {
-        case .pacemaker: return .bipolar
-        case .migrating: return .receptor
-        case .engulfing: return .drifter
-        case .resting, .firing, .releasing: return kind
-        }
-    }
-
     func makeBody(_ body: ThemeBody, index: Int, plan: ThemePlan) -> GraphThemeParts {
         learn(plan)
         let node = SCNNode()
@@ -307,7 +278,7 @@ final class GraphNeuronLook: GraphThemeLook {
         }
         let role: NeuronRole = NeuronRole(rawValue: body.role) ?? .granule
         let state: NeuronState = cells.state(of: index, in: plan)
-        let kind: NeuronCellKind = Self.shape(NeuronCellKind.of(role), state: state)
+        let kind: NeuronCellKind = NeuronCellKind.of(role)
         // a part and an idea lean to the region's accent
         let idea: Bool = kind == .part || kind == .granule
         let inner: Bool = body.parent >= 0
@@ -328,7 +299,7 @@ final class GraphNeuronLook: GraphThemeLook {
         var arbor: SCNNode?
         if kind.branches {
             let variant: Int = Int(body.seed % 3)
-            let turn: simd_quatf = Self.arborTurn(kind, axis: body.axis, random: &random)
+            let turn: simd_quatf = Self.arborTurn(kind, random: &random)
             if whole(kind) {
                 // the soma and its dendrites one membrane, a child of the
                 // soma (so it breathes, swells and moves with it), the soma
@@ -431,8 +402,8 @@ final class GraphNeuronLook: GraphThemeLook {
     /// cell: its membrane breathes in the shader):
     /// - firing: the soma twitches at each spike of a burst, then rests;
     /// - releasing: the soma swells slowly and gives, as it lets go;
-    /// - pacemaker: the bipolar arbor turns steadily, the soma kicks each
-    ///   beat (twice a turn of NeuronState.beatPeriod, as the halo's);
+    /// - pacemaker: the soma kicks each beat (twice a turn of
+    ///   NeuronState.beatPeriod, as the halo's), an arbor turning steadily;
     /// - migrating: the nucleus steps forward along the leading process and
     ///   the process draws after it (nucleokinesis) - inside a cell, where
     ///   nothing wanders off, a gentle pulse instead;
@@ -520,11 +491,9 @@ final class GraphNeuronLook: GraphThemeLook {
         return simd_quatf(angle: spin, axis: simd_normalize(axis))
     }
 
-    /// A receptor's leading process and a bipolar cell's long dendrites
-    /// point along the body's axis (the arbor's +y), twisted at random
-    /// about it; every other arbor turned anyhow.
-    private static func arborTurn(_ kind: NeuronCellKind, axis: SIMD3<Float>,
-                                  random: inout UniverseRandom) -> simd_quatf {
+    /// A cell's crown kept in the sheet's plane; every other arbor turned
+    /// anyhow.
+    private static func arborTurn(_ kind: NeuronCellKind, random: inout UniverseRandom) -> simd_quatf {
         if kind == .cell {
             // a cell's crown stays in the plane facing the camera (the
             // sheet's), turned about the view and tipped a little
@@ -533,13 +502,7 @@ final class GraphNeuronLook: GraphThemeLook {
             let turn = simd_quatf(angle: spin, axis: SIMD3<Float>(0, 0, 1))
             return simd_quatf(angle: tip, axis: SIMD3<Float>(1, 0, 0)) * turn
         }
-        guard kind == .receptor || kind == .bipolar else { return randomTurn(&random) }
-        let up = SIMD3<Float>(0, 1, 0)
-        let size: Float = simd_length(axis)
-        let to: SIMD3<Float> = size > 0.0001 ? axis / size : up
-        let twist: Float = Float(random.unit()) * 2 * Float.pi
-        let along = simd_quatf(from: up, to: to)
-        return simd_quatf(angle: twist, axis: to) * along
+        return randomTurn(&random)
     }
 
     // MARK: materials
@@ -1037,8 +1000,8 @@ enum NeuronArbor {
     /// The branches a kind of cell grows of its own: none. A process exists
     /// only where it attaches to something (the owner, 29 Oct), and a
     /// cell's links are already dendrites that leave it through a mouth in
-    /// its membrane (GraphLinkBridge), so a cell is its soma and its links,
-    /// and a free note its soma alone. Stethoscore crowned a cell with six
+    /// its membrane (GraphLinkBridge), so a cell is its soma and its links.
+    /// Stethoscore crowned a cell with six
     /// or seven dendrites that led nowhere, gave a receptor a fan, a
     /// drifter fine processes and a bipolar cell two long ones.
     static func branches(_ kind: NeuronCellKind, variant: Int, rich: Bool) -> [NeuronBranch] {

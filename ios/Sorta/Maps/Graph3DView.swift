@@ -578,7 +578,9 @@ struct Graph3DView: View {
     private func title(_ id: UUID) -> String {
         if let note = notes.note(id) { return note.title.isEmpty ? "Untitled" : note.title }
         if let folder = notes.folder(id) { return folder.name }
-        return "Ideas"
+        // the home: the vault itself, or (beside folders) the Neurons cell
+        // its notes in no folder share
+        return notes.folders.isEmpty ? "Ideas" : "Unsorted"
     }
 
     private func isFolder(_ id: UUID, in built: GraphScene?) -> Bool {
@@ -598,9 +600,13 @@ struct Graph3DView: View {
             let home: Bool = id == GraphUniverse.homeID
             let folderID: UUID? = home ? nil : id
             var input = GraphPeekInput(theme: themeName, role: role, folder: true, home: home, title: title(id))
-            input.notes = home ? notes.notes.count : notes.count(in: id)
-            input.subfolders = notes.subfolders(of: folderID).count
-            let inside: [Note] = home ? notes.notes : notes.contents(of: folderID)
+            input.unsorted = home && !notes.folders.isEmpty
+            // the home holds the notes in no folder (with no folders, all
+            // of them), and never a folder
+            let inside: [Note] = home ? notes.notes.filter { notes.folder($0.folderId) == nil }
+                : notes.contents(of: folderID)
+            input.notes = home ? inside.count : notes.count(in: id)
+            input.subfolders = home ? 0 : notes.subfolders(of: folderID).count
             let newest: [Note] = inside.sorted { $0.createdAt > $1.createdAt }
             input.recent = newest.prefix(3).map(\.title)
             return GraphPeek.content(input)
@@ -2660,11 +2666,17 @@ struct GraphSCNView: UIViewRepresentable {
             let world: SIMD3<Float> = sim.world.presentation.simdConvertPosition(local, to: nil)
             let p: SCNVector3 = view.projectPoint(SCNVector3(x: world.x, y: world.y, z: world.z))
             guard p.z > 0, p.z < 1 else { return nil }
+            // past a side counts as off screen too, as in Performance's
+            // screenPoint(of:): a planet just beyond the edge after a fly-in
+            // is in front of the eye but not drawn
+            let size: CGSize = view.bounds.size
+            guard p.x >= 0, p.y >= 0, CGFloat(p.x) <= size.width, CGFloat(p.y) <= size.height else { return nil }
             return CGPoint(x: CGFloat(p.x), y: CGFloat(p.y))
         }
 
         /// A body's frame for VoiceOver: 44 points round where it is drawn;
-        /// none past the depth fade's end, where it is not drawn (plan 4f).
+        /// none off screen or past the depth fade's end, where it is not
+        /// drawn (plan 4f).
         func voiceFrame(_ i: Int) -> CGRect {
             guard let sim, sim.isPickable(i), let at = screenPoint(i) else { return .zero }
             return CGRect(x: at.x - 22, y: at.y - 22, width: 44, height: 44)

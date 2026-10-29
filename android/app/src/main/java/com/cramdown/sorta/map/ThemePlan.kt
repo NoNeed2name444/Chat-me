@@ -161,8 +161,14 @@ internal fun lessPair(a: Pair<String, String>, b: Pair<String, String>): Boolean
     return if (f != 0) f < 0 else a.second < b.second
 }
 
-/** The Universe planner's folder tree and links (iOS UniversePlanner: init, buildTree, buildLinks). */
-class UniverseTree(val input: UniverseInput) {
+/**
+ * The Universe planner's folder tree and links (iOS UniversePlanner: init, buildTree, buildLinks). Containers
+ * are the folders, then the home: the home star when there are none, or the cell the Neurons gather the
+ * notes in no folder in. [gatherLoose]: the notes in no folder (or in one that is gone) share a home of their
+ * own beside the folders, as the Neurons draw them (the owner, 29 Oct: no small free cells), instead of
+ * floating free.
+ */
+class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
     val noteList: List<UniverseNote>
     val folderList: List<UniverseFolder>
     val hasFolders: Boolean
@@ -183,10 +189,12 @@ class UniverseTree(val input: UniverseInput) {
         val seenFolders = HashSet<String>()
         folderList = input.folders.filter { seenFolders.add(it.id) }.sortedBy { it.id }
         hasFolders = folderList.isNotEmpty()
-        homeC = if (folderList.isEmpty()) folderList.size else -1
+        val ids = folderList.mapTo(HashSet()) { it.id }
+        val loose = noteList.any { note -> note.folder?.let { !ids.contains(it) } ?: true }
+        homeC = if (folderList.isEmpty() || (gatherLoose && loose)) folderList.size else -1
     }
 
-    fun cName(c: Int): String = if (c < folderList.size) folderList[c].name else "Ideas"
+    fun cName(c: Int): String = if (c < folderList.size) folderList[c].name else if (hasFolders) "Unsorted" else "Ideas"
     fun cID(c: Int): String = if (c < folderList.size) folderList[c].id else GraphUniverse.HOME_ID
     fun liftKey(c: Int): String = if (input.seedByName) cName(c) else cID(c)
     fun cSeed(c: Int): ULong = GraphUniverse.fnv(liftKey(c))
@@ -198,7 +206,7 @@ class UniverseTree(val input: UniverseInput) {
 
     fun buildTree() {
         val f = folderList.size
-        cCount = if (hasFolders) f else 1
+        cCount = if (homeC >= 0) f + 1 else f
         val index = HashMap<String, Int>()
         folderList.forEachIndexed { i, folder -> index[folder.id] = i }
         parent = IntArray(cCount) { -1 }
@@ -232,10 +240,8 @@ class UniverseTree(val input: UniverseInput) {
         val children = List(cCount) { ArrayList<Int>() }
         for (c in 0 until cCount) if (parent[c] >= 0) children[parent[c]].add(c)
         kids = children.map { list -> list.sortedWith { a, b -> if (lessC(a, b)) -1 else if (lessC(b, a)) 1 else 0 } }
-        noteHome = IntArray(noteList.size) { i ->
-            val note = noteList[i]
-            if (!hasFolders) homeC else note.folder?.let { index[it] } ?: -1
-        }
+        // each note's home container: its folder, else the home (-1 when there is none: a loose note)
+        noteHome = IntArray(noteList.size) { i -> noteList[i].folder?.let { index[it] } ?: homeC }
         count = IntArray(cCount)
         for (h in noteHome) {
             if (h < 0) continue

@@ -29,7 +29,8 @@ class NeuronHierarchyTest {
     private fun distance(a: Vec3, b: Vec3): Float = (a - b).length()
     private fun size(a: Vec3): Float = a.length()
     private fun planOpen(input: UniverseInput, open: List<String>): ThemePlan = GraphNeurons.plan(input.copy(open = open))
-    private fun allOpen(input: UniverseInput): ThemePlan = planOpen(input, input.folders.map { it.id })
+    /** The plan with every folder opened, and the home cell. */
+    private fun allOpen(input: UniverseInput): ThemePlan = planOpen(input, input.folders.map { it.id } + GraphUniverse.HOME_ID)
     private fun width(strength: Int): Float = (0.55 + 0.12 * strength).toFloat()
 
     private fun insides(plan: ThemePlan): List<List<Int>> {
@@ -56,12 +57,12 @@ class NeuronHierarchyTest {
             val role = roleOf(body)
             if (!(body.sphere > 0 && body.sphere.isFinite())) { problems.add("${body.title} has no size"); continue }
             when (body.kind) {
-                ThemeBodyKind.NOTE -> if (role !in listOf(NeuronRole.VESICLE, NeuronRole.GRANULE, NeuronRole.RECEPTOR, NeuronRole.DRIFTER)) problems.add("${body.title} a note as $role")
+                ThemeBodyKind.NOTE -> if (role !in listOf(NeuronRole.VESICLE, NeuronRole.GRANULE)) problems.add("${body.title} a note as $role")
                 ThemeBodyKind.FOLDER -> if (role != NeuronRole.CELL && role != NeuronRole.PART) problems.add("${body.title} a folder as $role")
                 ThemeBodyKind.HOME -> if (role != NeuronRole.HOME || body.id != GraphUniverse.HOME_ID) problems.add("${body.title} a home as $role")
             }
-            val free = role == NeuronRole.CELL || role == NeuronRole.HOME || role.isFree
-            if (free != (body.parent < 0)) problems.add("${body.title} as $role with parent ${body.parent}")
+            val top = role == NeuronRole.CELL || role == NeuronRole.HOME
+            if (top != (body.parent < 0)) problems.add("${body.title} as $role with parent ${body.parent}")
             if (body.parent < 0) continue
             if (body.parent >= k) { problems.add("${body.title} before what holds it"); continue }
             val holder = bodies[body.parent]
@@ -82,10 +83,6 @@ class NeuronHierarchyTest {
         }
         val tops = bodies.filter { it.parent < 0 && roleOf(it).isContainer }
         for (a in tops) for (b in tops) if (a.count > b.count && a.sphere < b.sphere) problems.add("${a.title} (${a.count} notes) smaller than ${b.title} (${b.count})")
-        val receptors = bodies.filter { roleOf(it) == NeuronRole.RECEPTOR }.map { it.sphere }
-        val drifters = bodies.filter { roleOf(it) == NeuronRole.DRIFTER }.map { it.sphere }
-        val drifter = drifters.maxOrNull(); val receptor = receptors.minOrNull()
-        if (drifter != null && receptor != null && drifter >= receptor) problems.add("a drifting cell $drifter as big as a receptor $receptor")
         return problems
     }
 
@@ -148,16 +145,18 @@ class NeuronHierarchyTest {
         return problems
     }
 
+    /** The body each note shows as: its own, else the nearest folder round it that shows (for a note in no folder, or in one that is gone, the home cell). */
     private fun shownBodies(input: UniverseInput, plan: ThemePlan): Map<String, Int> {
         val byID = HashMap<String, Int>()
         for ((k, body) in plan.bodies.withIndex()) byID[body.id] = k
         val parentOf = HashMap<String, String>()
         for (folder in input.folders) folder.parent?.let { parentOf[folder.id] = it }
+        val folderIDs = input.folders.map { it.id }.toSet()
         val out = HashMap<String, Int>()
         for (note in input.notes) {
             byID[note.id]?.let { out[note.id] = it }
             if (out.containsKey(note.id)) continue
-            if (input.folders.isEmpty()) { byID[GraphUniverse.HOME_ID]?.let { out[note.id] = it }; continue }
+            if (note.folder == null || note.folder !in folderIDs) { byID[GraphUniverse.HOME_ID]?.let { out[note.id] = it }; continue }
             var at = note.folder
             var steps = 0
             while (at != null && steps <= input.folders.size + 1) {
@@ -245,14 +244,18 @@ class NeuronHierarchyTest {
 
     @Test fun t1PreviewClosedAndOpened() {
         val closed = GraphNeurons.plan(preview)
-        check("T1 closed: two cells and two receptors", closed.summary == "2 cells, 2 receptors", closed.summary)
+        check("T1 closed: three cells", closed.summary == "3 cells", closed.summary)
         check("T1 closed: the top folders are the cells", titles(closed, NeuronRole.CELL) == setOf("Examples", "Cardiology"), "${titles(closed, NeuronRole.CELL)}")
-        check("T1 closed: the linked loose notes are receptors", titles(closed, NeuronRole.RECEPTOR) == setOf("Richter's hernia", "Pericarditis"), "${titles(closed, NeuronRole.RECEPTOR)}")
+        val unsorted = bodyNamed(closed, "Unsorted")
+        check("T1 closed: the two loose notes share one cell, Unsorted, on the sheet",
+            unsorted != null && titles(closed, NeuronRole.HOME) == setOf("Unsorted") && closed.bodies[unsorted].id == GraphUniverse.HOME_ID
+                && closed.bodies[unsorted].kind == ThemeBodyKind.HOME && closed.bodies[unsorted].count == 2
+                && closed.bodies[unsorted].parent < 0 && closed.bodies[unsorted].depth == 0, "${titles(closed, NeuronRole.HOME)}")
         check("T1 closed: nothing shows inside a closed cell", closed.bodies.all { it.parent < 0 })
-        check("T1 the cells are the regions", closed.regions.map { closed.bodies[it].title }.sorted() == listOf("Cardiology", "Examples")
+        check("T1 the cells are the regions", closed.regions.map { closed.bodies[it].title }.sorted() == listOf("Cardiology", "Examples", "Unsorted")
             && closed.regions.all { closed.bodies[it].region == it })
         val openOne = planOpen(preview, listOf(EXAMPLES))
-        check("T1 Examples opened: its two parts and three notes show", openOne.summary == "2 cells, 2 parts, 1 vesicle, 2 granules, 2 receptors", openOne.summary)
+        check("T1 Examples opened: its two parts and three notes show", openOne.summary == "3 cells, 2 parts, 1 vesicle, 2 granules", openOne.summary)
         check("T1 Examples opened: Inguinal and Femoral are parts", titles(openOne, NeuronRole.PART) == setOf("Inguinal", "Femoral"), "${titles(openOne, NeuronRole.PART)}")
         check("T1 Examples opened: Groin hernia a vesicle, its ideas granules",
             titles(openOne, NeuronRole.VESICLE) == setOf("Groin hernia") && titles(openOne, NeuronRole.GRANULE) == setOf("Hernia repair", "Expansile cough impulse"),
@@ -261,31 +264,38 @@ class NeuronHierarchyTest {
         check("T1 Examples opened: all of it inside Examples",
             openOne.bodies.all { it.parent < 0 || it.parent == examplesBody } && openOne.bodies.count { it.parent == examplesBody } == 5)
         val openTwo = planOpen(preview, listOf(EXAMPLES, INGUINAL))
-        check("T1 Inguinal opened too: Anatomy and Inguinal's notes show", openTwo.summary == "2 cells, 3 parts, 4 vesicles, 4 granules, 2 receptors", openTwo.summary)
+        check("T1 Inguinal opened too: Anatomy and Inguinal's notes show", openTwo.summary == "3 cells, 3 parts, 4 vesicles, 4 granules", openTwo.summary)
         val anatomy = bodyNamed(openTwo, "Anatomy")
         check("T1 Anatomy is a part inside Inguinal", anatomy != null && openTwo.bodies[anatomy].parent == bodyNamed(openTwo, "Inguinal")
             && roleOf(openTwo.bodies[anatomy]) == NeuronRole.PART)
-        check("T1 a part inside a closed cell stays shut", planOpen(preview, listOf(INGUINAL)).summary == "2 cells, 2 receptors")
+        check("T1 a part inside a closed cell stays shut", planOpen(preview, listOf(INGUINAL)).summary == "3 cells")
         check("T1 the order folders are opened in changes nothing", planOpen(preview, listOf(INGUINAL, EXAMPLES)).bodies == openTwo.bodies)
         val openAll = allOpen(preview)
-        check("T1 all opened: every note shows inside its folder", openAll.summary == "2 cells, 3 parts, 9 vesicles, 19 granules, 2 receptors", openAll.summary)
+        check("T1 all opened: every note shows inside its folder", openAll.summary == "3 cells, 3 parts, 9 vesicles, 21 granules", openAll.summary)
         val misplaced = ArrayList<String>()
         for (note in preview.notes) {
             val k = bodyNamed(openAll, note.title)
             if (k == null) { misplaced.add(note.title + " missing"); continue }
             val body = openAll.bodies[k]
             val holder = if (body.parent >= 0) openAll.bodies[body.parent].id else null
-            if (holder != note.folder) misplaced.add(note.title)
-            val want = if (note.folder == null) NeuronRole.RECEPTOR else if (note.isPage) NeuronRole.VESICLE else NeuronRole.GRANULE
+            if (holder != (note.folder ?: GraphUniverse.HOME_ID)) misplaced.add(note.title)
+            val want = if (note.isPage) NeuronRole.VESICLE else NeuronRole.GRANULE
             if (roleOf(body) != want) misplaced.add(note.title + " as ${roleOf(body)}")
         }
-        check("T1 all opened: each note in the folder that holds it, a page a vesicle", misplaced.isEmpty(), few(misplaced))
+        check("T1 all opened: each note in the folder that holds it (Unsorted when none), a page a vesicle", misplaced.isEmpty(), few(misplaced))
+        val openHome = planOpen(preview, listOf(GraphUniverse.HOME_ID))
+        val unsortedOpen = bodyNamed(openHome, "Unsorted") ?: -1
+        check("T1 Unsorted opened: its two ideas show inside it, as granules",
+            openHome.summary == "3 cells, 2 granules" && titles(openHome, NeuronRole.GRANULE) == setOf("Richter's hernia", "Pericarditis")
+                && openHome.bodies.filter { it.parent >= 0 }.all { it.parent == unsortedOpen }, openHome.summary)
+        check("T1 opening Unsorted moves nothing shown", movedProblems(closed, openHome).isEmpty(), few(movedProblems(closed, openHome)))
         check("T1 each body after what holds it", openAll.bodies.withIndex().all { (k, b) -> b.parent < k })
         check("T1 a container's framing holds it; a note has none", openAll.systems.size == openAll.bodies.size
             && openAll.bodies.zip(openAll.systems).all { (b, s) -> if (b.kind == ThemeBodyKind.NOTE) s.isEmpty() else s.size == 6 })
         check("T1 the preview's ladder holds, open and closed",
-            ladderProblems(closed).isEmpty() && ladderProblems(openOne).isEmpty() && ladderProblems(openAll).isEmpty(),
-            few(ladderProblems(closed) + ladderProblems(openOne) + ladderProblems(openAll)))
+            ladderProblems(closed).isEmpty() && ladderProblems(openOne).isEmpty() && ladderProblems(openHome).isEmpty()
+                && ladderProblems(openAll).isEmpty(),
+            few(ladderProblems(closed) + ladderProblems(openOne) + ladderProblems(openHome) + ladderProblems(openAll)))
         check("T1 nothing inside meets or leaves its cell", insideProblems(openAll).isEmpty(), few(insideProblems(openAll)))
         check("T1 no cells meet", meetProblems(openAll).isEmpty(), few(meetProblems(openAll)))
         check("T1 the framing holds every cell", envelopeProblems(openAll).isEmpty(), few(envelopeProblems(openAll)))
@@ -300,16 +310,16 @@ class NeuronHierarchyTest {
         val openTwo = planOpen(preview, listOf(EXAMPLES, INGUINAL))
         val openAll = allOpen(preview)
         check("T2 closed: every link carried once", processProblems(preview, closed).isEmpty(), few(processProblems(preview, closed)))
-        check("T2 closed: three processes into cells, one from each receptor and one from Examples to Cardiology",
+        check("T2 closed: three processes into cells, two from Unsorted and one from Examples to Cardiology",
             closed.links.size == 3 && closed.links.all { roleOf(closed.bodies[it.b]) == NeuronRole.CELL && it.kind == 6 }
-                && closed.links.count { roleOf(closed.bodies[it.a]) == NeuronRole.RECEPTOR } == 2
+                && closed.links.count { roleOf(closed.bodies[it.a]) == NeuronRole.HOME } == 2
                 && closed.links.any { closed.bodies[it.a].title == "Examples" && closed.bodies[it.b].title == "Cardiology" }, "${closed.links}")
         check("T2 Examples opened: every link carried once", processProblems(preview, openOne).isEmpty(), few(processProblems(preview, openOne)))
         val examplesBody = bodyNamed(openOne, "Examples") ?: -1
-        val richter = bodyNamed(openOne, "Richter's hernia") ?: -1
+        val unsortedOne = bodyNamed(openOne, "Unsorted") ?: -1
         val femoral = bodyNamed(openOne, "Femoral") ?: -1
         check("T2 a link from outside joins the opened cell's membrane, not the part inside",
-            openOne.links.any { it.a == richter && it.b == examplesBody && it.kind == 6 }
+            openOne.links.any { it.a == unsortedOne && it.b == examplesBody && it.kind == 6 }
                 && openOne.links.none { (it.a == femoral || it.b == femoral) && it.kind == 6 },
             "${openOne.links.filter { it.kind == 6 }.map { openOne.bodies[it.a].title + ">" + openOne.bodies[it.b].title }}")
         val groin = bodyNamed(openOne, "Groin hernia") ?: -1
@@ -371,7 +381,7 @@ class NeuronHierarchyTest {
         for (seed in 0 until 160) {
             val vault = randomVault(seed.toULong() * 7919uL + 13uL, 60, 12)
             val dice = Dice(seed.toULong() + 99uL)
-            val some = vault.folders.map { it.id }.filter { dice.unit() < 0.5 }
+            val some = (vault.folders.map { it.id } + GraphUniverse.HOME_ID).filter { dice.unit() < 0.5 }
             val shut = GraphNeurons.plan(vault)
             val half = planOpen(vault, some)
             val full = allOpen(vault)
@@ -386,14 +396,17 @@ class NeuronHierarchyTest {
             if (movedSeen.size < 3) movedSeen += (movedProblems(shut, half) + movedProblems(half, full)).take(1).map { "seed $seed: $it" }
             val notes = full.bodies.count { it.kind == ThemeBodyKind.NOTE }
             val folders = full.bodies.count { it.kind != ThemeBodyKind.NOTE }
-            val wantFolders = if (vault.folders.isEmpty()) (if (vault.notes.isEmpty()) 0 else 1) else vault.folders.size
+            // every folder, and the home cell when a note is in no folder (or in one that is gone)
+            val folderIDs = vault.folders.map { it.id }.toSet()
+            val anyLoose = vault.notes.any { note -> note.folder?.let { it !in folderIDs } ?: true }
+            val wantFolders = vault.folders.size + (if (anyLoose) 1 else 0)
             if ((notes != vault.notes.size || folders != wantFolders) && shownSeen.size < 3)
                 shownSeen.add("seed $seed: $notes of ${vault.notes.size} notes, $folders of $wantFolders folders")
         }
-        check("T3 all opened, every note and folder shows", shownSeen.isEmpty(), few(shownSeen))
+        check("T3 all opened, every note and folder shows, and Unsorted when a note is in none", shownSeen.isEmpty(), few(shownSeen))
         check("T3 the ladder holds in 160 random vaults, closed, half open and open", ladderSeen.isEmpty(), few(ladderSeen))
         check("T3 nothing leaves its membrane, enters a nucleus or meets a sibling, drifting for two minutes", insideSeen.isEmpty(), few(insideSeen))
-        check("T3 no two cells or free cells meet", meetSeen.isEmpty(), few(meetSeen))
+        check("T3 no two cells meet", meetSeen.isEmpty(), few(meetSeen))
         check("T3 every link carried by exactly one process", processSeen.isEmpty(), few(processSeen))
         check("T3 opening moves nothing already shown", movedSeen.isEmpty(), few(movedSeen))
         check("T3 the framing holds every cell", envelopeSeen.isEmpty(), few(envelopeSeen))
@@ -417,9 +430,11 @@ class NeuronHierarchyTest {
         check("T4 closing hides only what was inside", closed.bodies.map { it.id }.toSet() == openAll.bodies.filter { it.parent < 0 }.map { it.id }.toSet())
         check("T4 opening keeps the framing", closed.envelope == openAll.envelope)
         val unlinked = allOpen(UniverseInput(preview.notes, preview.folders, emptyList(), seedByName = true))
-        check("T4 without links: no processes, the loose notes drift free",
-            unlinked.links.isEmpty() && titles(unlinked, NeuronRole.DRIFTER) == setOf("Richter's hernia", "Pericarditis")
-                && titles(unlinked, NeuronRole.RECEPTOR).isEmpty(), unlinked.summary)
+        val unlinkedHome = bodyNamed(unlinked, "Unsorted") ?: -1
+        check("T4 without links: no processes, the loose notes still in Unsorted",
+            unlinked.links.isEmpty() && unlinkedHome >= 0 && unlinked.bodies[unlinkedHome].count == 2
+                && unlinked.bodies.filter { it.parent == unlinkedHome }.map { it.title }.toSet() == setOf("Richter's hernia", "Pericarditis"),
+            unlinked.summary)
         done()
     }
 
@@ -557,7 +572,7 @@ class NeuronHierarchyTest {
         check("T6 folders and no notes: cells and parts only",
             GraphNeurons.plan(bareInput).summary == "2 cells" && allOpen(bareInput).summary == "2 cells, 1 part", allOpen(bareInput).summary)
 
-        // forty loose notes round one cell: twenty linked into it, twenty not
+        // forty loose notes beside one cell, twenty linked into it, twenty not: all forty in Unsorted, one cell beside it
         val looseNotes = ArrayList<UniverseNote>(); val looseEdges = ArrayList<UniverseEdge>()
         for (k in 0 until 4) looseNotes.add(UniverseNote(fixedID(880 + k), "Hub note $k", false, fixedID(879), 50, k.toDouble()))
         for (k in 0 until 40) {
@@ -566,25 +581,27 @@ class NeuronHierarchyTest {
         }
         val looseInput = UniverseInput(looseNotes, listOf(UniverseFolder(fixedID(879), "Hub", null)), looseEdges, seedByName = true)
         val loosePlan = GraphNeurons.plan(looseInput)
-        check("T6 forty loose: twenty receptors, twenty free cells", loosePlan.summary == "1 cell, 20 receptors, 20 free cells", loosePlan.summary)
+        check("T6 forty loose: two cells, Hub and Unsorted, and nothing else",
+            loosePlan.summary == "2 cells" && titles(loosePlan, NeuronRole.CELL) == setOf("Hub") && titles(loosePlan, NeuronRole.HOME) == setOf("Unsorted"),
+            loosePlan.summary)
         check("T6 forty loose: no two meet", meetProblems(loosePlan).isEmpty(), few(meetProblems(loosePlan)))
         check("T6 forty loose: the framing holds them", envelopeProblems(loosePlan).isEmpty(), few(envelopeProblems(loosePlan)))
         val hub = bodyNamed(loosePlan, "Hub")
-        if (hub != null) {
+        val home = bodyNamed(loosePlan, "Unsorted")
+        if (hub != null && home != null) {
             val hubBody = loosePlan.bodies[hub]
-            val turned = loosePlan.bodies.filter { roleOf(it) == NeuronRole.RECEPTOR }.mapNotNull { body ->
-                val to = (hubBody.home - body.home) * (1f / distance(hubBody.home, body.home))
-                if (body.axis.dot(to) > 0.9f) null else body.title
-            }
-            check("T6 forty loose: each receptor faces the cell it sends to", turned.isEmpty(), "$turned")
-            val crowding = loosePlan.bodies.filter { roleOf(it).isFree }.mapNotNull { body ->
-                if (distance(hubBody.home, body.home) >= hubBody.sphere * GraphNeurons.REACH.toFloat() + body.sphere) null else body.title
-            }
-            check("T6 forty loose: all clear of the cell's processes", crowding.isEmpty(), "$crowding")
-            check("T6 forty loose: every process runs from a receptor into the cell",
-                loosePlan.links.size == 20 && loosePlan.links.all { roleOf(loosePlan.bodies[it.a]) == NeuronRole.RECEPTOR && it.b == hub && it.kind == 6 },
-                "${loosePlan.links.size}")
-        } else check("T6 forty loose: the hub cell", false, loosePlan.summary)
+            val homeBody = loosePlan.bodies[home]
+            check("T6 forty loose: Unsorted holds all forty, so it is the bigger cell",
+                homeBody.id == GraphUniverse.HOME_ID && homeBody.count == 40 && homeBody.sphere > hubBody.sphere,
+                "${homeBody.count} ${homeBody.sphere} ${hubBody.sphere}")
+            val to = (hubBody.home - homeBody.home) * (1f / distance(hubBody.home, homeBody.home))
+            check("T6 forty loose: Unsorted faces the cell it sends to", homeBody.axis.dot(to) > 0.9f, "${homeBody.axis}")
+            check("T6 forty loose: the two cells clear of each other's processes",
+                distance(hubBody.home, homeBody.home) >= (hubBody.sphere + homeBody.sphere) * GraphNeurons.REACH.toFloat(),
+                "${distance(hubBody.home, homeBody.home)}")
+            check("T6 forty loose: the twenty links make one process, from Unsorted into Hub",
+                loosePlan.links.size == 1 && loosePlan.links.all { it.a == home && it.b == hub && it.kind == 6 }, "${loosePlan.links.size}")
+        } else check("T6 forty loose: the two cells", false, loosePlan.summary)
         val looseOpen = allOpen(looseInput)
         check("T6 forty loose, opened: every link carried, nothing meets",
             processProblems(looseInput, looseOpen).isEmpty() && meetProblems(looseOpen).isEmpty() && insideProblems(looseOpen).isEmpty(),

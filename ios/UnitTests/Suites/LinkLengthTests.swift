@@ -353,11 +353,9 @@ func nAmp(_ body: ThemeBody) -> Float {
     return 0
 }
 
-/// How far an outer body reaches, wobble and all: a cell's or a
-/// receptor's processes, a little round a drifting free cell.
+/// How far an outer body reaches, wobble and all: a cell's processes.
 func nReach(_ body: ThemeBody) -> Float {
-    let share: Float = nRole(body) == .drifter ? 1.15 : Float(GraphNeurons.reach)
-    return body.sphere * share + nAmp(body) * Float(GraphNeurons.wobbleBound)
+    body.sphere * Float(GraphNeurons.reach) + nAmp(body) * Float(GraphNeurons.wobbleBound)
 }
 
 /// Whether body x holds body y, at any depth.

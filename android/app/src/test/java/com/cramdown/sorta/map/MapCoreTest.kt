@@ -66,6 +66,19 @@ class GraphAndOctreeTest {
         assertTrue(g.positions.all { it.isFinite() })
     }
 
+    @Test fun looseIdeasStayNearTheMiddle() {
+        // a chain of 20 notes and 10 with no links, about the sample ideas' size: the centre's pull
+        // keeps them within 30 of the middle (66 without it), and no two closer than a link's rest length
+        val chain = (0 until 20).map { if (it < 19) note("c$it", "c${it + 1}") else note("c$it") }
+        val g = MapGraph.fromNotes(chain + (0 until 10).map { note("l$it") })
+        val p = g.positions
+        fun gap(i: Int, j: Int) = Vec3(p[3 * i] - p[3 * j], p[3 * i + 1] - p[3 * j + 1], p[3 * i + 2] - p[3 * j + 2]).length()
+        val reach = (0 until g.nodeCount).maxOf { Vec3(p[3 * it], p[3 * it + 1], p[3 * it + 2]).length() }
+        assertTrue("every note within 30 of the middle: $reach", reach < 30f)
+        val closest = (0 until g.nodeCount).minOf { i -> (0 until g.nodeCount).filter { it != i }.minOf { gap(i, it) } }
+        assertTrue("no two notes closer than 2: $closest", closest > 2f)
+    }
+
     @Test fun syntheticMillionIsSeededAndSized() {
         val a = SyntheticGraph.make(nodes = 20_000)
         val b = SyntheticGraph.make(nodes = 20_000)

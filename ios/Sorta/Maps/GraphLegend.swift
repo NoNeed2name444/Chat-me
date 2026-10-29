@@ -256,17 +256,13 @@ struct GraphLegendContent {
     private static let tealBody: Color = teal.opacity(0.3)
     private static let tealRing: Color = teal.opacity(0.8)
     private static let tealFaint: Color = teal.opacity(0.6)
-    private static let gliaGel: Color = Color(white: 0.75).opacity(0.4)
     private static let interTint: Color = Color(red: 1.0, green: 0.42, blue: 0.78)
     private static let stateTint: Color = Color(red: 0.82, green: 0.36, blue: 1.0)
-    private static let gliaTint: Color = Color(white: 0.8)
     private static let crossTint: Color = Color(red: 0.75, green: 0.58, blue: 1.0)
-    private static let receptorTint: Color = Color(red: 1.0, green: 0.82, blue: 0.45)
 
     private static let neuronRungs: [GraphLegendRung] = [
         GraphLegendRung(caption: "Cell", size: 30, fill: tealGel, ring: teal, halo: true),
         GraphLegendRung(caption: "Part", size: 22, fill: greenGel, ring: green, halo: true),
-        GraphLegendRung(caption: "Free", size: 15, fill: gliaGel, ring: .clear),
         GraphLegendRung(caption: "Page", size: 12, fill: tealBody, ring: tealRing, halo: true),
         GraphLegendRung(caption: "Idea", size: 9, fill: tealBody, ring: tealFaint, halo: true)
     ]
@@ -284,17 +280,14 @@ struct GraphLegendContent {
         GraphLegendRow(symbol: "aqi.medium", name: "Granule",
                        text: "An idea: a small bright granule inside the folder that holds it. Brighter means more links.",
                        tint: interTint, how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
-        GraphLegendRow(symbol: "antenna.radiowaves.left.and.right", name: "Receptor",
-                       text: "A note in no folder with links: a free cell at the edge, its leading process reaching in to the cells it links to.",
-                       tint: receptorTint, how: "A note in no folder (Move \u{203A} No folder)."),
-        GraphLegendRow(symbol: "allergens", name: "Drifting cell",
-                       text: "A note in no folder and no links: a small glial cell drifting at the edge.",
-                       tint: gliaTint, how: "A note in no folder with no links."),
+        GraphLegendRow(symbol: "tray.fill", name: "Unsorted",
+                       text: "The notes in no folder share one cell, opened like the others. Move a note into a folder and it joins that folder\u{2019}s cell.",
+                       tint: teal, how: "Move a note \u{203A} No folder."),
         GraphLegendRow(symbol: "arrow.up.left.and.arrow.down.right", name: "Opening a cell",
                        text: "A cell shows its insides only when you open it: its parts and notes grow out from its heart one after another, and fold back in when you leave.",
                        tint: crossTint, how: "Tap a cell twice to fly in and open it."),
         GraphLegendRow(symbol: "sparkles", name: "Cell states",
-                       text: "Each note shows a state, as the space\u{2019}s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, a receptor migrates and a drifting cell engulfs.",
+                       text: "Each note shows a state, as the space\u{2019}s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, every note rests.",
                        tint: stateTint, how: "Look \u{203A} Cells: one state for every note, or Cell by cell for one folder."),
         GraphLegendRow(symbol: "bolt.horizontal.fill", name: "Axons and synapses",
                        text: "Links. Each grows out of its cell as part of it, thick where it leaves and tapering to a synapse on the cell it reaches; impulses run along it. Inside an open cell, links between its notes run inside it.",
@@ -306,7 +299,7 @@ struct GraphLegendContent {
     /// The Neurons (GraphNeurons): one line per kind of cell.
     static let neurons: GraphLegendContent = GraphLegendContent(
         rungs: neuronRungs, ladderCaption: "Bigger cells hold more.",
-        ladderLabel: "Size ladder: cell, part, free cell, page, idea",
+        ladderLabel: "Size ladder: cell, part, page, idea",
         rows: neuronRows, footer: neuronFooter)
 }
 

@@ -1,16 +1,13 @@
 package com.cramdown.sorta.map
 
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cbrt
 import kotlin.math.ceil
-import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 // The Neurons theme's plan, ported from iOS (GraphNeurons, GraphNeuronImpulses): the ideas'
@@ -20,25 +17,28 @@ import kotlin.math.sqrt
 // - a folder inside it is a part inside its nucleus, a folder inside that a smaller part;
 // - a note is a vesicle (a page) or a granule (an idea) inside the folder that holds it;
 // - insides show only while their folder is opened (UniverseInput.open);
-// - a note in no folder is a free cell at the edge: a receptor with links, a drifter without;
+// - the notes in no folder share one cell of their own, the home cell (Unsorted), on the sheet with the
+//   others and opened as they are (the owner, 29 Oct: no small free cells; they were receptors and
+//   drifting cells at the sheet's edge);
 // - with no folders, one home cell holds every note, always open.
 //
 // Links are the cells' processes: one per pair of ends, none dropped. Pure and deterministic.
 
-/** What each body is in the Neurons theme (ThemeBody.role). */
+/**
+ * What each body is in the Neurons theme (ThemeBody.role). HOME is the home cell: the one cell of a vault
+ * with no folders, or the one the notes in no folder share.
+ */
 enum class NeuronRole(val code: Int) {
-    CELL(0), PART(1), HOME(2), VESICLE(3), GRANULE(4), DRIFTER(5), RECEPTOR(6);
+    CELL(0), PART(1), HOME(2), VESICLE(3), GRANULE(4);
 
     val rank: Int get() = when (this) {
         CELL, HOME -> 7
-        PART, RECEPTOR -> 6
+        PART -> 6
         VESICLE -> 5
         GRANULE -> 3
-        DRIFTER -> 1
     }
 
     val isContainer: Boolean get() = this == CELL || this == PART || this == HOME
-    val isFree: Boolean get() = this == DRIFTER || this == RECEPTOR
 
     companion object {
         fun of(code: Int): NeuronRole? = entries.firstOrNull { it.code == code }
@@ -80,10 +80,6 @@ object GraphNeurons {
         return if (page) 0.07 + 0.003 * level else 0.05 + 0.002 * level
     }
 
-    fun freeSphere(receptor: Boolean, page: Boolean): Double = (if (receptor) 0.16 else 0.12) + (if (page) 0.03 else 0.0)
-
-    fun freeDrift(receptor: Boolean): Double = if (receptor) 0.03 else 0.06
-
     fun plan(input: UniverseInput): ThemePlan {
         if (input.notes.isEmpty() && input.folders.isEmpty()) return ThemePlan.EMPTY
         return NeuronPlanner(input).run()
@@ -97,7 +93,6 @@ object GraphNeurons {
         val words = listOf(
             Triple(NeuronRole.CELL, "cell", "cells"), Triple(NeuronRole.PART, "part", "parts"),
             Triple(NeuronRole.VESICLE, "vesicle", "vesicles"), Triple(NeuronRole.GRANULE, "granule", "granules"),
-            Triple(NeuronRole.RECEPTOR, "receptor", "receptors"), Triple(NeuronRole.DRIFTER, "free cell", "free cells"),
         )
         val parts = ArrayList<String>()
         for ((role, one, many) in words) {
@@ -110,7 +105,7 @@ object GraphNeurons {
 
 /** The plan's working state, on the Universe planner's tree. */
 class NeuronPlanner(input: UniverseInput) {
-    val tree = UniverseTree(input)
+    val tree = UniverseTree(input, gatherLoose = true)
     var shown = BooleanArray(0)
     var opened = BooleanArray(0)
     var noteLinks: List<NeuronNoteLink> = emptyList()
@@ -122,7 +117,6 @@ class NeuronPlanner(input: UniverseInput) {
     var cSphere = DoubleArray(0)
     var cWorld: Array<D3> = emptyArray()
     var notesIn: List<ArrayList<Int>> = emptyList()
-    val looseBalls = ArrayList<ThemeBall>()
     val bodies = ArrayList<ThemeBody>()
     var noteBody = IntArray(0)
     var cBody = IntArray(0)
@@ -145,10 +139,8 @@ class NeuronPlanner(input: UniverseInput) {
         cBody = IntArray(tree.cCount) { -1 }
         for (c in tops) emitTop(c)
         val regions = tops.map { cBody[it] }
-        placeLoose()
         val balls = ArrayList<ThemeBall>()
         for (c in tops) balls.add(ThemeBall(cWorld[c], topReach(c) + 0.1))
-        for (ball in looseBalls) balls.add(ThemeBall(ball.c, ball.r + 0.1))
         val envelope = ThemeLayout.points(balls, D3.ZERO)
         return ThemePlan(bodies.toList(), processes(), envelope, systems.toList(), regions, GraphNeurons.summary(bodies))
     }
@@ -184,6 +176,12 @@ class NeuronPlanner(input: UniverseInput) {
         noteLinks = out
     }
 
+    /**
+     * A container shows when it is top level or inside an opened one, and opens when it shows and its
+     * folder is in UniverseInput.open (the home cell of a vault with no folders is always open: it is the
+     * vault; the one the notes in no folder share opens by GraphUniverse.HOME_ID, as a folder's cell does by
+     * its id).
+     */
     fun markShown() {
         val wanted = tree.input.open.toHashSet()
         shown = BooleanArray(tree.cCount)
@@ -288,7 +286,7 @@ class NeuronPlanner(input: UniverseInput) {
     }
 
     fun emitContainer(c: Int, radius: Double, parent: Int, region: Int, orbit: GraphOrbit, axis: D3) {
-        val role = if (!tree.hasFolders) NeuronRole.HOME else if (tree.depth[c] == 0) NeuronRole.CELL else NeuronRole.PART
+        val role = if (c == tree.homeC) NeuronRole.HOME else if (tree.depth[c] == 0) NeuronRole.CELL else NeuronRole.PART
         val index = bodies.size
         val base = if (parent >= 0) bodies[parent].home else Vec3.ZERO
         val mine = if (region >= 0) region else index
@@ -388,73 +386,6 @@ class NeuronPlanner(input: UniverseInput) {
         return Pair(items.map { NeuronItem(it.container, it.note, 0.0) }, 0.0)
     }
 
-    // free cells
-
-    fun placeLoose() {
-        val loose = (0 until tree.noteList.size).filter { tree.noteHome[it] < 0 }.sortedWith(nOrder)
-        if (loose.isEmpty()) return
-        val placed = ArrayList(tops.map { ThemeBall(cWorld[it], topReach(it)) })
-        var lx = 0.0; var ly = 0.0; var hx = 0.0; var hy = 0.0
-        placed.firstOrNull()?.let { f -> lx = f.c.x - f.r; ly = f.c.y - f.r; hx = f.c.x + f.r; hy = f.c.y + f.r }
-        var lz = placed.firstOrNull()?.let { it.c.z - it.r } ?: 0.0
-        var hz = placed.firstOrNull()?.let { it.c.z + it.r } ?: 0.0
-        for (ball in placed) {
-            lx = min(lx, ball.c.x - ball.r); ly = min(ly, ball.c.y - ball.r); lz = min(lz, ball.c.z - ball.r)
-            hx = max(hx, ball.c.x + ball.r); hy = max(hy, ball.c.y + ball.r); hz = max(hz, ball.c.z + ball.r)
-        }
-        val centre = D3((lx + hx) * 0.5, (ly + hy) * 0.5, (lz + hz) * 0.5)
-        val halfX = (hx - lx) * 0.5
-        val halfY = (hy - ly) * 0.5
-        val margin = 0.5 * max(biggest, GraphNeurons.cellSphere(0)) * tree.input.spacing
-        val ax = halfX * sqrt(2.0) + margin
-        val ay = halfY * sqrt(2.0) + margin
-        val facing = HashMap<Int, Int>()
-        loose.forEachIndexed { k, i ->
-            val receptor = tree.nbr[i].isNotEmpty()
-            var angle = 0.5 + GraphUniverse.GOLDEN * k
-            val toward = if (receptor) favouriteTop(i) else -1
-            if (toward >= 0) {
-                val d = cWorld[toward] - centre
-                if (d.x * d.x + d.y * d.y > 1e-6) {
-                    val j = facing[toward] ?: 0
-                    facing[toward] = j + 1
-                    angle = atan2(d.y / ay, d.x / ax) + 0.35 * ((j + 1) / 2).toDouble() * (if (j % 2 == 0) 1 else -1)
-                }
-            }
-            val sphere = GraphNeurons.freeSphere(receptor, tree.noteList[i].isPage)
-            val amp = GraphNeurons.freeDrift(receptor)
-            val reach = sphere * (if (receptor) GraphNeurons.REACH else 1.15) + amp * GraphNeurons.WOBBLE_BOUND
-            val random = UniverseRandom(tree.nSeed(i) xor 0x10C5uL)
-            val flat = D3(ax * cos(angle), ay * sin(angle), 0.0)
-            val start = centre + flat + D3(0.0, 0.0, random.signed() * 0.15)
-            var out = GraphUniverse.normalize(flat)
-            if (GraphUniverse.length(out) < 0.5) out = D3(1.0, 0.0, 0.0)
-            val s = ThemeLayout.slide(listOf(ThemeBall(start, reach)), out, 0.0, 0.04, placed, 0.04)
-            val at = start + out * s
-            placed.add(ThemeBall(at, reach))
-            looseBalls.add(ThemeBall(at, reach))
-            var axis = out
-            if (toward >= 0) {
-                val d = GraphUniverse.normalize(cWorld[toward] - at)
-                if (GraphUniverse.length(d) > 0.5) axis = d
-            }
-            emitNote(i, if (receptor) NeuronRole.RECEPTOR else NeuronRole.DRIFTER, sphere, -1, -1,
-                drift(at, amp.toFloat(), tree.nSeed(i)), axis)
-        }
-    }
-
-    fun favouriteTop(i: Int): Int {
-        val with = HashMap<Int, Int>()
-        for (link in noteLinks) {
-            if (link.from != i && link.to != i) continue
-            val other = if (link.from == i) link.to else link.from
-            val home = tree.noteHome[other]
-            if (home < 0) continue
-            with[tree.top[home]] = (with[tree.top[home]] ?: 0) + link.strength
-        }
-        return favourite(with)
-    }
-
     // processes
 
     fun processes(): List<ThemeLink> {
@@ -464,7 +395,7 @@ class NeuronPlanner(input: UniverseInput) {
             var x = shownBody(link.from)
             var y = shownBody(link.to)
             if (x < 0 || y < 0 || x == y) continue
-            if (bodies[x].region < 0 || bodies[x].region != bodies[y].region) { x = outermost(x); y = outermost(y) }
+            if (bodies[x].region != bodies[y].region) { x = outermost(x); y = outermost(y) }
             if (x < y) forward.getOrPut(Pair(x, y)) { ArrayList() }.add(link)
             else backward.getOrPut(Pair(y, x)) { ArrayList() }.add(link)
         }
@@ -485,7 +416,7 @@ class NeuronPlanner(input: UniverseInput) {
             else if (weight[2] > weight[0] && weight[2] > weight[1]) kind = FiberKind.MODULATORY
             val from = if (sends) key.first else key.second
             val to = if (sends) key.second else key.first
-            val inside = bodies[from].region >= 0 && bodies[from].region == bodies[to].region
+            val inside = bodies[from].region == bodies[to].region
             out.add(ThemeLink(from, to, if (inside) 5 else 6, -1, kind.code, (0.55 + 0.12 * strength).toFloat()))
         }
         return out
@@ -499,7 +430,8 @@ class NeuronPlanner(input: UniverseInput) {
         return if (c >= 0) cBody[c] else -1
     }
 
-    fun outermost(b: Int): Int = if (bodies[b].region >= 0) bodies[b].region else b
+    /** The cell holding shown body b (a cell's region is its own body). */
+    fun outermost(b: Int): Int = bodies[b].region
 
     fun lessBody(x: Int, y: Int): Boolean =
         lessPair(Pair(bodies[x].title.lowercase(), bodies[x].id), Pair(bodies[y].title.lowercase(), bodies[y].id))

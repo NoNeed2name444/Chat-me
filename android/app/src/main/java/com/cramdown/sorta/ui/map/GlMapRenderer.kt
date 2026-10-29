@@ -95,6 +95,22 @@ data class MapDrawn(
     }
 }
 
+/**
+ * When an idle map stops drawing (Map3DView's frame loop): once nothing has moved for a second
+ * and it has finished [MapDrawn.ENOUGH] frames since, so the last of them shows it settled even
+ * where one frame takes longer than that second (a software GL builds each shader on its first
+ * draw, and a still Neurons map once stopped after two frames). Ten quiet seconds stop it
+ * regardless, so a surface that never draws does not keep the loop running.
+ */
+object FrameQuiet {
+    const val QUIET_NANOS = 1_000_000_000L
+    const val GIVE_UP_NANOS = 10_000_000_000L
+
+    /** [stillNanos] since the map last moved; [finishedSince] frames finished since then. */
+    fun settled(stillNanos: Long, finishedSince: Int): Boolean =
+        stillNanos >= QUIET_NANOS && (finishedSince >= MapDrawn.ENOUGH || stillNanos >= GIVE_UP_NANOS)
+}
+
 /** How the map draws its notes: plain coloured points, the Space theme's bodies, or the Neurons theme's cells (NeuronGl). */
 enum class MapTheme { PLAIN, SPACE, NEURONS }
 
@@ -178,6 +194,8 @@ class GlMapRenderer(
     private var lod = LodSelector(tree, cache)
 
     @Volatile var animating = true; private set
+    /** Frames finished (their draw calls issued) on every context so far, for the frame loop's quiet rule (FrameQuiet). */
+    @Volatile var finished = 0; private set
     private var frame = 0
     private var lastVsync = 0L
     private var lastReadout = 0L
@@ -343,6 +361,7 @@ class GlMapRenderer(
         }
         record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+        finished++
     }
 
     /**
@@ -390,6 +409,7 @@ class GlMapRenderer(
         }
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+        finished++
     }
 
     // ---- uploads ----
