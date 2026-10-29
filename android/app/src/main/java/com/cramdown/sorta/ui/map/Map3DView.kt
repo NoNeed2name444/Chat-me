@@ -175,7 +175,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     /** The speed readout at the top left (a debug tool: off unless asked for), and the zoom and recentre buttons at the bottom right. */
     showReadout: Boolean = false,
     showControls: Boolean = true,
-    /** Each change puts the camera back to its first view (Ideas' Back to the middle). */
+    /** Each change puts the camera back to its first view (the Recentre tool). */
     recenter: Int = 0,
     corner: androidx.compose.ui.unit.Dp = 24.dp,
 ) {

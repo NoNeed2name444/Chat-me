@@ -39,8 +39,8 @@ import com.cramdown.sorta.ui.sources.wardRowTile
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 
-// The canvas tools (IdeaTools.swift, fed0105): the Board's (Back to the middle,
-// Connect, Look) and the Space's, a vertical cluster of 44-point circles at the
+// The canvas tools (IdeaTools.swift, fed0105): the Board's (Look, Connect,
+// Recentre) and the Space's, a vertical cluster of 44-point circles at the
 // bottom-trailing corner, each raised off the base on the floating plane, pressed
 // in while held or while the tool is on, its glyph the section's accent then and
 // Biro Grey at rest. Also the naming sheet (NameSheet) and "Move to".
@@ -128,7 +128,7 @@ const val LINES_PICKER_WIDTH = 200
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun MoveSheet(book: IdeaBook, onDismiss: () -> Unit, onMove: (String?) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = wardColor(WardToken.background)) {
-        ReaderNavBar("Move to", trailing = { WardTextButton("Cancel", onDismiss, kind = WardButtonKind.quiet, fills = false) })
+        ReaderNavBar("Move to", leading = { WardTextButton("Cancel", onDismiss, kind = WardButtonKind.quiet, fills = false) })
         val choices: List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "No folder") +
             book.folderOutline().map { (folder, depth) -> folder.id to IdeaBook.indented(folder.name, depth) }
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {

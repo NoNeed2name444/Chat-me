@@ -302,7 +302,7 @@ nonisolated enum IdeaLinkShape {
     }
 }
 
-/// The board's opening view and "Back to the middle" (IdeaBoardView): the
+/// The board's opening view and Recentre (IdeaBoardView): the
 /// zoom and pan that put every card on screen, clear of the edges, the tool
 /// circles and the bottom glass. Never zoomed in past 1, nor out past the
 /// board's own floor. The board draws a card's centre at

@@ -197,7 +197,7 @@ object IdeaLinkShape {
 }
 
 /**
- * The board's opening view and "Back to the middle": the zoom and pan that put every card on
+ * The board's opening view and Recentre: the zoom and pan that put every card on
  * screen, clear of the edges, the tools and the bottom bar. Never zoomed in past 1, nor out past
  * the board's floor. A card's centre is drawn at (width / 2 + panX + x * zoom, midY + panY + y * zoom),
  * midY the middle of the part not under the bar.

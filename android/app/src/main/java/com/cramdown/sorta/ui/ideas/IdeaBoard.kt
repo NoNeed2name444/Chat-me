@@ -223,7 +223,7 @@ private const val CARD_HEIGHT = 88.0
                 IdeaToolButton(Icons.Outlined.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
                     connecting = !connecting; source = null
                 }
-                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Back to the middle") { fitAll() }
+                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { fitAll() }
             }
         }
     }

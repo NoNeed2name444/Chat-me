@@ -23,7 +23,7 @@ import SwiftUI
 ///
 /// The canvas runs on under the bottom glass, but its middle - where the
 /// board's origin sits - is the middle of the part that is not under glass.
-/// It opens, and "Back to the middle" returns, with every card in view
+/// It opens, and Recentre returns, with every card in view
 /// (IdeaBoardFit), clear of the edges and the tool circles.
 struct IdeaBoardView: View {
     @EnvironmentObject private var notes: NoteStore
@@ -80,15 +80,16 @@ struct IdeaBoardView: View {
             }
         }
         .ideaTools {
-            IdeaToolButton(symbol: "scope", label: "Back to the middle") {
-                moved = false
-                withAnimation(Motion.gentle(.snappy(duration: 0.25))) { fitAll() }
-            }
+            // Look first and Recentre last, as on the map and on Android
+            IdeaBoardLookTool()
             IdeaToolButton(symbol: connectSymbol, label: connectLabel, active: connecting) {
                 connecting.toggle()
                 source = nil
             }
-            IdeaBoardLookTool()
+            IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") {
+                moved = false
+                withAnimation(Motion.gentle(.snappy(duration: 0.25))) { fitAll() }
+            }
         }
         .sensoryFeedback(.selection, trigger: source)
         .sheet(item: $adding) { spot in
