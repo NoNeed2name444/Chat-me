@@ -458,18 +458,6 @@ final class GraphPreviewUITests: XCTestCase {
         }
     }
 
-
-    @discardableResult
-    private func press(_ target: XCUIElement) -> Bool {
-        guard target.exists else { return false }
-        if target.isHittable {
-            target.tap()
-            return true
-        }
-        target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        return true
-    }
-
     // MARK: the depth fade (plan 4f)
 
     /// The depth fade in each SceneKit theme, on and off (`-graphDepthOff`),
