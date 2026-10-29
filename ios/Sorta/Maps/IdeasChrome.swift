@@ -15,10 +15,10 @@ enum IdeaIndent {
 struct IdeasTitlePill: View {
     var body: some View {
         Text("Ideas")
-            .font(.headline)
+            .wardFont(.headline)
             .foregroundStyle(Color.wardInk)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 9)
+            .padding(.horizontal, WardSpace.gutter)
+            .padding(.vertical, WardSpace.s)
             .wardInset(in: Capsule())
             .accessibilityAddTraits(.isHeader)
     }

@@ -21,7 +21,7 @@ struct IdeaToolCluster<Content: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: WardSpace.l) {
             content
         }
     }
@@ -33,8 +33,8 @@ struct IdeaToolFace: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.body.weight(.medium))
-            .frame(width: 44, height: 44)
+            .wardFont(.body.weight(.medium))
+            .frame(width: WardControlSize.target, height: WardControlSize.target)
             .contentShape(Circle())
     }
 
@@ -101,6 +101,10 @@ extension View {
 /// stored choice as Settings > Look and feel (GraphLineStyle); the map
 /// redraws its links on the next frame, the board at once.
 struct IdeaLinesPicker: View {
+    /// The two segments' width in a small popover or menu, on both
+    /// platforms.
+    static let segmentedWidth: CGFloat = 200
+
     @AppStorage(SpaceSettings.straightLinesKey) private var straightLines: Bool = false
     /// Two segments side by side, for the board's small popover.
     var segmented: Bool = false
@@ -174,8 +178,8 @@ struct IdeaBoardLookTool: View {
         .buttonStyle(IdeaToolStyle(active: straight))
         .popover(isPresented: $showing, arrowEdge: .trailing) {
             IdeaLinesPicker(segmented: true)
-                .frame(width: 200)
-                .padding(12)
+                .frame(width: IdeaLinesPicker.segmentedWidth)
+                .padding(WardSpace.m)
                 .presentationCompactAdaptation(.popover)
                 .presentationBackground(Color.wardBackground)
         }

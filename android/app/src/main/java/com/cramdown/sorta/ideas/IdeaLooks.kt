@@ -32,13 +32,15 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         PERFORMANCE -> "Fast map of ideas"
     }
 
+    /**
+     * How to touch Android's map, which TalkBack reads after [mapLabel] too: a tap opens (there is
+     * no card and no hold, IdeasSpace), one finger turns, two slide and pinch.
+     */
     val hint: String get() = when (this) {
-        SPACE -> "Tap a body to preview it on a card; tap again, or Open, to read it. " +
-            "Hold a body to move it, or hold it still for its options. Drag to turn, pinch to zoom."
-        NEURONS -> "Tap a cell to preview it on a card; tap again, or Open, to read it. " +
-            "Hold a cell to move it, or hold it still for its options. Drag to turn, pinch to zoom."
-        PERFORMANCE -> "Tap a point to preview it on a card; tap again, or Open, to read it. " +
-            "Hold a point for its options. Drag to turn, two fingers to slide, pinch to zoom."
+        SPACE -> "Tap a body to open its note. Drag to turn, two fingers to slide, pinch to zoom."
+        NEURONS -> "Tap a cell or a part to open it, and a note inside to read it. Recentre closes them again. " +
+            "Drag to turn, two fingers to slide, pinch to zoom."
+        PERFORMANCE -> "Tap a point to open its note. Drag to turn, two fingers to slide, pinch to zoom."
     }
 
     val cardTitle: String get() = when (this) {
@@ -47,19 +49,20 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         PERFORMANCE -> "Your notes, built for speed"
     }
 
+    /** What the map is made of on Android: Space's bodies come from links (the Universe is not ported, GraphStyleChoice.codes). */
     val cardText: String get() = when (this) {
-        SPACE -> "Top-level folders are black holes, folders are stars, pages are gas giants " +
-            "and ideas are rocky planets. Bigger holds more."
+        SPACE -> "Every note is a body, and its links choose which: a comet has none, a pulsar one, " +
+            "a rocky planet two, a gas giant three or four, a sun five to seven and a black hole eight or more."
         NEURONS -> "Top-level folders are cells, folders are the parts inside them, " +
-            "pages are vesicles and ideas granules. Links grow out of the cells as axons carrying impulses."
+            "pages are vesicles and ideas granules. Notes in no folder share one cell. " +
+            "Links grow out of the cells as axons carrying impulses."
         PERFORMANCE -> "Every note is a point and every link a line, drawn so 100,000 fit at once. " +
             "Each top-level folder has its own colour; far away a folder’s notes merge into one glow."
     }
 
     val cardSteps: List<String> get() = when (this) {
-        SPACE -> listOf("Tap + › New folder: a new galaxy round its black hole.",
-            "Tap + › New page for a gas giant, New idea for a rocky planet.",
-            "Type [[ and a note’s title in a note: a link joins them.")
+        SPACE -> listOf("Type [[ and a note’s title in a note: a link joins them, and each note’s links choose its body.",
+            "Look › Bodies: one body for every note, or Folder looks for one folder’s notes.")
         NEURONS -> listOf("Tap + › New folder: a new cell.",
             "Tap + › New page for a vesicle, New idea for a granule.",
             "Type [[ and a note’s title in a note: an axon joins them.")

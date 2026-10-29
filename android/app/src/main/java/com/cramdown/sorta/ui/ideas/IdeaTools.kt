@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,8 +47,11 @@ import com.cramdown.sorta.ui.wardColor
 
 /** A vertical cluster of tool circles, 16 apart, each with its own relief. */
 @Composable fun IdeaToolCluster(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+    Column(modifier.padding(WardSpace.gutter.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.l.wardDp), content = content)
 }
+
+/** The Lines picker's width in a menu, on both platforms (iOS IdeaLinesPicker.segmentedWidth). */
+const val LINES_PICKER_WIDTH = 200
 
 /** A tool's glyph ink: the accent while on, Biro Grey at rest. */
 @Composable fun ideaToolInk(active: Boolean) = wardColor(if (active) WardToken.primaryInk else WardToken.inkSecondary)
@@ -58,12 +61,13 @@ import com.cramdown.sorta.ui.wardColor
                                value: String? = null, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val held by source.collectIsPressedAsState()
-    Box(modifier.minimumInteractiveComponentSize().size(44.dp).capPop(held)
-        .wardRelief(pressed = active || held, radius = 22.0, lift = WardLift.high, fill = WardToken.raised, control = false)
+    // a 44 circle (WardControlSize.buttonSmall, iOS's tool) in Android's 48 target
+    Box(modifier.minimumInteractiveComponentSize().size(WardControlSize.buttonSmall.wardDp).capPop(held)
+        .wardRelief(pressed = active || held, radius = WardControlSize.buttonSmall / 2, lift = WardLift.high, fill = WardToken.raised, control = false)
         .clickable(source, indication = null, role = Role.Button, onClick = onClick)
         .semantics { contentDescription = label; selected = active; if (value != null) stateDescription = value },
         contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = ideaToolInk(active), modifier = Modifier.size(20.dp))
+        Icon(icon, null, tint = ideaToolInk(active), modifier = Modifier.size(wardGlyph(20.0)))
     }
 }
 
@@ -83,9 +87,9 @@ import com.cramdown.sorta.ui.wardColor
     var showing by remember { mutableStateOf(false) }
     val straight = settings.lineStyle.isStraight
     Box {
-        IdeaToolButton(Icons.Rounded.Palette, "Look", active = straight, value = if (straight) "Straight lines" else "Curved lines") { showing = true }
+        IdeaToolButton(Icons.Outlined.Palette, "Look", active = straight, value = if (straight) "Straight lines" else "Curved lines") { showing = true }
         DropdownMenu(showing, { showing = false }, containerColor = wardColor(WardToken.background)) {
-            IdeaLinesPicker(settings, Modifier.width(200.dp).padding(12.dp))
+            IdeaLinesPicker(settings, Modifier.width(LINES_PICKER_WIDTH.dp).padding(WardSpace.m.wardDp))
         }
     }
 }
@@ -130,11 +134,11 @@ import com.cramdown.sorta.ui.wardColor
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
             items(choices) { (id, name) ->
                 Box(Modifier.fillMaxWidth().clickable(role = Role.Button) { onMove(id); onDismiss() }.wardRowTile()) {
-                    Text(name, Modifier.padding(vertical = 6.dp), style = WardType.body.textStyle(), color = wardColor(WardToken.primaryInk),
+                    Text(name, Modifier.padding(vertical = WardSpace.s.wardDp), style = WardType.body.textStyle(), color = wardColor(WardToken.primaryInk),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(WardSpace.xl.wardDp))
     }
 }

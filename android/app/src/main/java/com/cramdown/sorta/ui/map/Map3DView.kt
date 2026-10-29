@@ -327,7 +327,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
             IconButton(onClick = {
                 loop.touched()
                 synchronized(camera) { camera.target = home.first; camera.distance = home.second; camera.yaw = home.third.first; camera.pitch = home.third.second }
-            }) { Icon(Icons.Rounded.CenterFocusStrong, "Recenter map", tint = Color.White) }
+            }) { Icon(Icons.Rounded.CenterFocusStrong, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }
     }

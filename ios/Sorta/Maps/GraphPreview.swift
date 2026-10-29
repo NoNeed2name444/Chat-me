@@ -353,8 +353,8 @@ struct GraphPreviewBar: View {
                 Button {
                 } label: {
                     Image(systemName: "chevron.backward")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 44, height: 44)
+                        .wardFont(.body.weight(.semibold))
+                        .frame(width: WardControlSize.target, height: WardControlSize.target)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .circle)
@@ -364,6 +364,6 @@ struct GraphPreviewBar: View {
         }
         .foregroundStyle(.primary)
         .padding(.horizontal, WardSpace.gutter)
-        .padding(.top, 4)
+        .padding(.top, WardSpace.xs)
     }
 }

@@ -155,7 +155,7 @@ struct Graph3DView: View {
                 // out; Sorta's kit has no spinner (WardKitPortTest), so the
                 // wait says what is happening, as Android's does
                 Text("Laying out your notes")
-                    .font(.subheadline)
+                    .wardFont(.subheadline)
                     .foregroundStyle(Color.wardInkSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -268,7 +268,7 @@ struct Graph3DView: View {
         .overlay {
             if filter != .all && shownCount == 0 {
                 Text("Nothing here for this filter.")
-                    .font(.footnote)
+                    .wardFont(.footnote)
                     .foregroundStyle(Color.wardInkSecondary)
                     .allowsHitTesting(false)
             }
@@ -277,19 +277,20 @@ struct Graph3DView: View {
             // a near-empty map with no folders yet: how to start a collection
             if notes.folders.isEmpty && notes.notes.count < 25 && !GraphPreview.isOn {
                 GraphEmptyHint(theme: built.theme) { addingFolder = true }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
+                    .padding(.horizontal, WardSpace.xl)
+                    .padding(.top, WardSpace.m)
             } else if let id = flownRegion, let name = built.names[id] {
                 GraphRegionPill(text: name)
-                    .padding(.top, 8)
+                    .padding(.top, WardSpace.s)
                     .transition(.identity)
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: flownRegion)
         .overlay(alignment: .bottomLeading) {
             if built.universe && hintShown(built.theme) && !GraphPreview.isOn && !selection.cardShown && !tuningLinks {
-                // sized to what the round tools (44 points, 12 from the
-                // card) leave, so it never runs under them on a phone
+                // sized to what the round tools (44 points in a 16-point
+                // margin, 12 from the card) leave, so it never runs under
+                // them on a phone
                 GraphUniverseHint(theme: built.theme, steps: !cardSeen(built.theme),
                                   touch: !GraphMapTouch.seen(touchSeen, built.theme), more: {
                     markCardSeen(built.theme)
@@ -299,8 +300,8 @@ struct Graph3DView: View {
                 })
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, WardSpace.gutter)
-                .padding(.trailing, 16 + 44 + 12)
-                .padding(.bottom, 16)
+                .padding(.trailing, WardSpace.gutter + WardControlSize.target + WardSpace.m)
+                .padding(.bottom, WardSpace.l)
             }
         }
         .overlay(alignment: .bottom) {
@@ -338,7 +339,7 @@ struct Graph3DView: View {
     /// bottom of the map, clear of the round tools, sliding up.
     @ViewBuilder
     private func bottomPanels(_ built: GraphScene?) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: WardSpace.m) {
             if tuningLinks {
                 GraphLinkLengthBar(value: linkBinding, done: { tuningLinks = false })
                     .transition(.move(edge: .bottom))
@@ -362,8 +363,8 @@ struct Graph3DView: View {
             }
         }
         .padding(.horizontal, WardSpace.gutter)
-        .padding(.trailing, 44 + 12)
-        .padding(.bottom, 16)
+        .padding(.trailing, WardControlSize.target + WardSpace.m)
+        .padding(.bottom, WardSpace.l)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: selection.selected)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: selection.cardShown)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: tuningLinks)
@@ -379,12 +380,15 @@ struct Graph3DView: View {
                 let size: CGSize = geo.size
                 let at: CGPoint = target.point ?? CGPoint(x: size.width / 2, y: size.height * 0.6)
                 let items: [String] = GraphPeek.menu(folder: target.folder, home: target.home)
-                let tall: CGFloat = CGFloat(items.count) * 44 + 40
-                let x: CGFloat = min(max(at.x, 131), max(size.width - 131, 131))
-                let below: Bool = at.y + 24 + tall < size.height
+                // about a target per row and the title's line, held a finger's
+                // width off where it was held and a gutter off the sides
+                let tall: CGFloat = CGFloat(items.count) * WardControlSize.target + WardSpace.xl + WardSpace.l
+                let side: CGFloat = GraphNodeMenuView.width / 2 + WardSpace.gutter
+                let x: CGFloat = min(max(at.x, side), max(size.width - side, side))
+                let below: Bool = at.y + WardSpace.xl + tall < size.height
                 let half: CGFloat = tall / 2
-                let under: CGFloat = at.y + 24 + half
-                let over: CGFloat = max(at.y - 24 - half, half + 8)
+                let under: CGFloat = at.y + WardSpace.xl + half
+                let over: CGFloat = max(at.y - WardSpace.xl - half, half + WardSpace.s)
                 let y: CGFloat = below ? under : over
                 ZStack {
                     Color.black.opacity(0.001)

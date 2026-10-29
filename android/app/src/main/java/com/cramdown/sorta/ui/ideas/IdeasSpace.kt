@@ -5,12 +5,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.rounded.CenterFocusStrong
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -97,7 +97,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
         if (!covered) Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
             IdeaToolCluster {
                 SpaceLookTool(book, settings, theme, showLegend = { legend = true }, showFolderLooks = { folderLooks = true }, openFolder = openFolder)
-                IdeaToolButton(Icons.Rounded.CenterFocusStrong, "Recentre") { recenter++ }
+                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Recentre") { recenter++ }
             }
         }
     }
@@ -136,20 +136,30 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     val ready = scene
     if (ready == null) { Building(null); return }
     val description = "${theme.mapLabel}: ${notes.size} ${if (notes.size == 1) "note" else "notes"}, ${edges.size} ${if (edges.size == 1) "link" else "links"}. " +
-        "Tap a note to open it. Drag to turn, pinch to zoom."
+        theme.hint
     Map3DView(ready, Modifier.fillMaxSize(), description = description,
         onOpenNode = { index ->
             val body = ready.neurons?.plan?.bodies?.getOrNull(index)
             when {
                 body == null -> ready.ids.getOrNull(index)?.let(open)
                 body.kind == ThemeBodyKind.NOTE -> notes.firstOrNull { it.id.equals(body.id, ignoreCase = true) }?.let { open(it.id) }
-                body.kind == ThemeBodyKind.FOLDER -> book.folders.firstOrNull { it.id.equals(body.id, ignoreCase = true) }?.let { folder ->
-                    openPath = book.path(folder.id).map { it.id.uppercase() }
-                }
-                else -> {}
+                else -> cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it }
             }
         },
         showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp)
+}
+
+/**
+ * The cells a tap on a Neurons container opens, outermost first: a folder's path, or the
+ * Unsorted cell (the home, which holds the notes in no folder and is in no folder itself).
+ * Null for a note, or for a folder the book no longer has.
+ */
+internal fun cellsOpenedBy(kind: ThemeBodyKind, id: String, book: IdeaBook): List<String>? = when (kind) {
+    ThemeBodyKind.HOME -> listOf(GraphUniverse.HOME_ID)
+    ThemeBodyKind.FOLDER -> book.folders.firstOrNull { it.id.equals(id, ignoreCase = true) }?.let { folder ->
+        book.path(folder.id).map { it.id.uppercase() }
+    }
+    ThemeBodyKind.NOTE -> null
 }
 
 /**
@@ -184,7 +194,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
 
 @Composable private fun Building(size: Int?) {
     Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
             Text(if (size == null) "Laying out your notes" else "Building ${grouped(size)} notes and their links",
                 style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
         }
@@ -202,7 +212,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
 ) {
     var showing by remember { mutableStateOf(false) }
     Box {
-        IdeaToolButton(Icons.Rounded.Palette, "Look", value = theme.title) { showing = true }
+        IdeaToolButton(Icons.Outlined.Palette, "Look", value = theme.title) { showing = true }
         DropdownMenu(showing, { showing = false }, containerColor = wardColor(WardToken.background)) {
             MenuHeader("Theme")
             GraphTheme.offered.forEach { t ->
@@ -225,21 +235,22 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
             }
             HorizontalDivider()
             MenuHeader("Lines")
-            IdeaLinesPicker(settings, Modifier.width(220.dp).padding(horizontal = 12.dp, vertical = 4.dp))
+            IdeaLinesPicker(settings, Modifier.width(LINES_PICKER_WIDTH.dp).padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.xs.wardDp))
             HorizontalDivider()
             Choice(theme.legendTitle, Icons.Outlined.Info, false) { showing = false; showLegend() }
         }
     }
 }
 
+/** A group's name in a menu, lined up with the items' own 12 (DropdownMenuItem's padding). */
 @Composable private fun MenuHeader(text: String) {
-    WardSmallCapsText(text, Modifier.padding(horizontal = 16.dp, vertical = 6.dp).semantics { heading() })
+    WardSmallCapsText(text, Modifier.padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp).semantics { heading() })
 }
 
 @Composable private fun Choice(title: String, icon: ImageVector, chosen: Boolean, onClick: () -> Unit) {
     DropdownMenuItem({ Text(title, color = wardColor(WardToken.ink)) }, onClick,
         leadingIcon = { Icon(icon, null, tint = wardColor(WardToken.inkSecondary)) },
-        trailingIcon = if (chosen) ({ Icon(Icons.Rounded.Check, "Chosen", tint = wardColor(WardToken.primaryInk)) }) else null)
+        trailingIcon = if (chosen) ({ Icon(Icons.Outlined.Check, "Chosen", tint = wardColor(WardToken.primaryInk)) }) else null)
 }
 
 /** The theme's legend (GraphThemeCard): what the map is made of, and how to grow it. */
@@ -254,7 +265,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
                 Text("${i + 1}. $step", style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
             }
             Text(theme.hint, style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(WardSpace.xl.wardDp))
         }
     }
 }
@@ -270,7 +281,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
     }
     ModalBottomSheet(onDismissRequest = onDone, containerColor = wardColor(WardToken.background)) {
         ReaderNavBar("Folder looks", trailing = { ReaderDoneButton(onClick = onDone) })
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = WardSpace.m.wardDp)) {
             book.subfolders(null).forEach { folder ->
                 var menu by remember(folder.id) { mutableStateOf(false) }
                 val chosen = looks[folder.id]
@@ -284,7 +295,7 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(WardSpace.xl.wardDp))
         }
     }
 }

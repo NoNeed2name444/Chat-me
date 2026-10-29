@@ -199,12 +199,21 @@ struct GraphStyleTool: View {
         }
     }
 
+    /// The Cells choice for all notes. Left alone, every note rests
+    /// (NeuronState.natural), so the picker shows that as Resting, and
+    /// choosing Resting stores nothing chosen, as before.
+    private var cellChoice: Binding<String> {
+        Binding(
+            get: { cellState.wrappedValue == NeuronStateChoice.naturalValue ? NeuronState.resting.rawValue : cellState.wrappedValue },
+            set: { cellState.wrappedValue = $0 == NeuronState.resting.rawValue ? NeuronStateChoice.naturalValue : $0 }
+        )
+    }
+
     /// The Neurons' own choices: each cell's state (the space styles'
     /// six, each a process of its own) for all notes, and one per cell.
     @ViewBuilder
     private var cellLooks: some View {
-        Picker("Cells", selection: cellState) {
-            Label("Natural", systemImage: "sparkles").tag(NeuronStateChoice.naturalValue)
+        Picker("Cells", selection: cellChoice) {
             ForEach(NeuronState.menuOrder) { state in
                 Label(state.title, systemImage: state.symbol).tag(state.rawValue)
             }

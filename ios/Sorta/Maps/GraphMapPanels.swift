@@ -42,6 +42,17 @@ struct GraphOptionsTarget: Identifiable, Equatable {
     var point: CGPoint? = nil
 }
 
+/// The widths of the panels over the map: none spreads wider than a
+/// phone's on a broad window.
+enum GraphPanel {
+    /// The peek card and the Link length bar.
+    static let maxWidth: CGFloat = 520
+    /// The first-run card, sized so it clears the round tools on a phone.
+    static let hintWidth: CGFloat = 320
+    /// The hint over a map with no folders yet.
+    static let emptyHintWidth: CGFloat = 340
+}
+
 // MARK: - The peek card
 
 /// A small soft card raised high at the bottom: what the chosen body is,
@@ -63,21 +74,20 @@ struct GraphPeekCardView: View {
     let option: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: WardSpace.s) {
             header
             ForEach(Array(content.lines.enumerated()), id: \.offset) { _, line in
                 Text(line)
-                    .font(.subheadline)
+                    .wardFont(.subheadline)
                     .foregroundStyle(Color.wardInkSecondary)
                     .lineLimit(2)
             }
             if !content.chips.isEmpty { chipRow }
             buttons
         }
-        .padding(WardSpace.gutter)
-        .frame(maxWidth: 520, alignment: .leading)
-        .wardRaised(in: RoundedRectangle(cornerRadius: 24, style: .continuous), lift: .high)
-        .contentShape(RoundedRectangle(cornerRadius: 24))
+        .wardCard(lift: .high)
+        .frame(maxWidth: GraphPanel.maxWidth, alignment: .leading)
+        .contentShape(RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous))
         .onTapGesture(perform: open)
         .simultaneousGesture(swipeUp)
         .modifier(GraphZoomSource(zoom: zoom))
@@ -89,19 +99,20 @@ struct GraphPeekCardView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
+            // 2, under the scale's 4, so the lines read as one item (WardRow)
             VStack(alignment: .leading, spacing: 2) {
                 Text(content.title)
-                    .font(.headline)
+                    .wardFont(.headline)
                     .foregroundStyle(Color.wardInk)
                     .lineLimit(2)
                     .accessibilityIdentifier("graphPeekTitle")
                 Text(content.kind)
-                    .font(.caption)
+                    .wardFont(.caption)
                     .foregroundStyle(Color.wardInkSecondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: WardSpace.s)
             Image(systemName: "chevron.up")
-                .font(.caption.weight(.semibold))
+                .wardFont(.caption.weight(.semibold))
                 .foregroundStyle(Color.wardInkSecondary)
                 .accessibilityHidden(true)
         }
@@ -112,13 +123,13 @@ struct GraphPeekCardView: View {
     /// up with the words above.
     private var chipRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: WardSpace.s) {
                 ForEach(content.chips, id: \.id) { item in
                     Button {
                         chip(item.id)
                     } label: {
                         Text(item.title)
-                            .font(.caption)
+                            .wardFont(.caption)
                             .lineLimit(1)
                     }
                     .buttonStyle(WardChipButtonStyle())
@@ -126,18 +137,18 @@ struct GraphPeekCardView: View {
                 }
                 if content.moreLinks > 0 {
                     Text("+\(content.moreLinks) more")
-                        .font(.caption)
+                        .wardFont(.caption)
                         .foregroundStyle(Color.wardInkSecondary)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, WardSpace.s)
         }
-        .padding(.horizontal, -8)
+        .padding(.horizontal, -WardSpace.s)
     }
 
     @ViewBuilder
     private var buttons: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: WardSpace.s) {
             Button(content.primary, systemImage: folder ? "folder" : "doc.text", action: open)
                 .buttonStyle(.wardCompact)
                 .accessibilityIdentifier("graphPeekOpen")
@@ -156,9 +167,9 @@ struct GraphPeekCardView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.body.weight(.semibold))
+                        .wardFont(.body.weight(.semibold))
                         .foregroundStyle(Color.wardInk)
-                        .frame(width: 44, height: 44)
+                        .frame(width: WardControlSize.target, height: WardControlSize.target)
                         .contentShape(Circle())
                 }
                 .wardRaised(in: Circle(), lift: .low)
@@ -196,6 +207,10 @@ private struct GraphZoomSource: ViewModifier {
 /// The options held on a body, as a soft raised list next to where it was
 /// held, its rows parted by etched grooves.
 struct GraphNodeMenuView: View {
+    /// The list's width; Graph3DView keeps it this far and a gutter from
+    /// the screen's sides.
+    static let width: CGFloat = 230
+
     let title: String
     let items: [String]
     let pick: (String) -> Void
@@ -203,11 +218,11 @@ struct GraphNodeMenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title)
-                .font(.footnote.weight(.semibold))
+                .wardFont(.footnote.weight(.semibold))
                 .foregroundStyle(Color.wardInkSecondary)
                 .lineLimit(1)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, WardSpace.l)
+                .padding(.vertical, WardSpace.s)
             ForEach(items, id: \.self) { item in
                 let role: ButtonRole? = item == "Delete" ? ButtonRole.destructive : nil
                 WardEtch()
@@ -215,17 +230,18 @@ struct GraphNodeMenuView: View {
                     pick(item)
                 } label: {
                     Label(item, systemImage: Self.symbol(item))
+                        .wardFont(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
+                        .padding(.horizontal, WardSpace.l)
+                        .padding(.vertical, WardSpace.m)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(item == "Delete" ? Color.wardDanger : Color.wardInk)
             }
         }
-        .frame(width: 230)
-        .wardRaised(in: RoundedRectangle(cornerRadius: 18, style: .continuous), lift: .high)
+        .frame(width: Self.width)
+        .wardRaised(in: RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous), lift: .high)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("graphNodeMenu")
     }
@@ -272,6 +288,7 @@ struct GraphNotePicker: View {
                 .wardRowBackground()
             }
             .wardForm()
+            .wardFont(.body)
             .searchable(text: $query)
             .navigationTitle("Link to")
             .navigationBarTitleDisplayMode(.inline)
@@ -310,6 +327,7 @@ struct GraphFolderPicker: View {
                 }
             }
             .wardForm()
+            .wardFont(.body)
             .navigationTitle("Move to")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -341,20 +359,20 @@ struct GraphLinkLengthBar: View {
 
     var body: some View {
         let shown: Double = dragging ?? value
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: WardSpace.s) {
             HStack {
                 Text("Link length")
-                    .font(.subheadline.weight(.semibold))
+                    .wardFont(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.wardInk)
                 Spacer()
                 Text(GraphLinkLength.spoken(shown))
-                    .font(.footnote.monospacedDigit())
+                    .wardFont(.footnote.monospacedDigit())
                     .foregroundStyle(Color.wardInkSecondary)
                 Button("Done", action: done)
                     .buttonStyle(.wardCompact)
                     .accessibilityIdentifier("linkLengthDone")
             }
-            HStack(spacing: 10) {
+            HStack(spacing: WardSpace.m) {
                 Button {
                     commit(shown - GraphLinkLength.step)
                 } label: {
@@ -366,9 +384,9 @@ struct GraphLinkLengthBar: View {
                        step: GraphLinkLength.step) {
                     Text("Link length")
                 } minimumValueLabel: {
-                    Text("Shorter").font(.caption2).foregroundStyle(Color.wardInkSecondary)
+                    Text("Shorter").wardFont(.caption2).foregroundStyle(Color.wardInkSecondary)
                 } maximumValueLabel: {
-                    Text("Longer").font(.caption2).foregroundStyle(Color.wardInkSecondary)
+                    Text("Longer").wardFont(.caption2).foregroundStyle(Color.wardInkSecondary)
                 } onEditingChanged: { editing in
                     if !editing, let held = dragging {
                         dragging = nil
@@ -386,9 +404,8 @@ struct GraphLinkLengthBar: View {
                 .accessibilityLabel("Longer")
             }
         }
-        .padding(WardSpace.gutter)
-        .frame(maxWidth: 520)
-        .wardRaised(in: RoundedRectangle(cornerRadius: 20, style: .continuous), lift: .high)
+        .wardCard(lift: .high)
+        .frame(maxWidth: GraphPanel.maxWidth)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("linkLengthBar")
     }
@@ -429,11 +446,11 @@ struct GraphRegionPill: View {
 
     var body: some View {
         Text(text)
-            .font(.subheadline.weight(.semibold))
+            .wardFont(.subheadline.weight(.semibold))
             .foregroundStyle(Color.wardInk)
             .lineLimit(1)
             .padding(.horizontal, WardSpace.gutter)
-            .padding(.vertical, 8)
+            .padding(.vertical, WardSpace.s)
             .wardInset(in: Capsule())
             .accessibilityAddTraits(.isHeader)
             .accessibilityLabel("Zoomed in to " + text)

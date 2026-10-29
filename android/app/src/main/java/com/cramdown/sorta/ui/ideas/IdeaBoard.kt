@@ -9,8 +9,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CenterFocusStrong
-import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -220,10 +220,10 @@ private const val CARD_HEIGHT = 88.0
         Box(Modifier.align(Alignment.BottomEnd).padding(bottom = hidden)) {
             IdeaToolCluster {
                 IdeaBoardLookTool(settings)
-                IdeaToolButton(Icons.Rounded.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
+                IdeaToolButton(Icons.Outlined.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
                     connecting = !connecting; source = null
                 }
-                IdeaToolButton(Icons.Rounded.CenterFocusStrong, "Back to the middle") { fitAll() }
+                IdeaToolButton(Icons.Outlined.CenterFocusStrong, "Back to the middle") { fitAll() }
             }
         }
     }

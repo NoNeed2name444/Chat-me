@@ -1,7 +1,10 @@
 package com.cramdown.sorta.ideas
 
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.map.GraphUniverse
 import com.cramdown.sorta.map.SpaceStyle
+import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.ui.ideas.cellsOpenedBy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -131,6 +134,19 @@ class IdeaBookTest {
         b.deleteFolder(deep.id)
         assertEquals("its notes move up", top.id, b.note(note.id)!!.folderId)
         assertEquals("indented with em spaces", "  Valves", IdeaBook.indented("Valves", 2))
+    }
+
+    @Test fun aTapOpensTheCellsOnTheWayIn() {
+        val b = book()
+        val top = b.createFolder("Cardio")
+        val inner = b.createFolder("Valves", top.id)
+        b.create("Loose")
+        assertEquals("a part opens with every cell round it, outermost first", listOf(top.id, inner.id).map { it.uppercase() },
+            cellsOpenedBy(ThemeBodyKind.FOLDER, inner.id.uppercase(), b))
+        assertEquals("Unsorted, which is in no folder, opens too", listOf(GraphUniverse.HOME_ID),
+            cellsOpenedBy(ThemeBodyKind.HOME, GraphUniverse.HOME_ID, b))
+        assertNull("a folder gone from the book opens nothing", cellsOpenedBy(ThemeBodyKind.FOLDER, id(9), b))
+        assertNull("a note is read, not opened", cellsOpenedBy(ThemeBodyKind.NOTE, id(1), b))
     }
 
     @Test fun aLoopInTheParentsStops() {

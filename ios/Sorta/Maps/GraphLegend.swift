@@ -23,36 +23,45 @@ struct GraphLegendSheet: View {
                 }
                 Section {
                     ForEach(content.rows, id: \.name) { row in
-                        HStack(alignment: .top, spacing: 14) {
+                        HStack(alignment: .top, spacing: WardSpace.m) {
                             Image(systemName: row.symbol)
-                                .font(.title3)
+                                .wardFont(.title3)
                                 .foregroundStyle(row.tint)
                                 .frame(width: 30)
                                 .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(row.name).font(.headline)
+                            // 2, under the scale's 4, so the lines read as one item (WardRow)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.name)
+                                    .wardFont(.headline)
+                                    .foregroundStyle(Color.wardInk)
                                 Text(row.text)
-                                    .font(.subheadline)
+                                    .wardFont(.subheadline)
                                     .foregroundStyle(Color.wardInkSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                                 if !row.how.isEmpty {
-                                    Label(row.how, systemImage: "plus.circle")
-                                        .font(.footnote.weight(.medium))
-                                        .foregroundStyle(row.tint)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                    // the words in ink, the colour on the glyph alone
+                                    Label {
+                                        Text(row.how)
+                                            .foregroundStyle(Color.wardInk)
+                                    } icon: {
+                                        Image(systemName: "plus.circle")
+                                            .foregroundStyle(row.tint)
+                                    }
+                                    .wardFont(.footnote.weight(.medium))
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, WardSpace.xs)
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(Self.spoken(row))
                         .wardRowBackground()
                     }
                 } footer: {
                     Text(content.footer)
-                        .font(.footnote)
+                        .wardFont(.footnote)
                         .foregroundStyle(Color.wardInkSecondary)
-                        .padding(.top, 6)
+                        .padding(.top, WardSpace.s)
                 }
             }
             .wardForm()
@@ -72,28 +81,29 @@ struct GraphLegendSheet: View {
     /// Five circles, biggest to smallest, captioned: what holds more is
     /// bigger.
     private var ladder: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: WardSpace.m) {
             HStack(alignment: .top, spacing: 0) {
                 ForEach(content.rungs, id: \.caption) { rung in
-                    VStack(spacing: 8) {
+                    VStack(spacing: WardSpace.s) {
                         rungCircle(rung)
                             .frame(height: 36)
                         // two lines rather than cut short or shrunk
                         Text(rung.caption)
-                            .font(.caption)
+                            .wardFont(.caption)
                             .foregroundStyle(Color.wardInkSecondary)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, WardSpace.xs)
                 }
             }
             Text(content.ladderCaption)
-                .font(.footnote.weight(.semibold))
+                .wardFont(.footnote.weight(.semibold))
+                .foregroundStyle(Color.wardInk)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, WardSpace.s)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.ladderLabel)
     }
@@ -369,30 +379,30 @@ struct GraphUniverseHint: View {
     private static let touchSymbols: [String] = ["hand.tap", "doc.text", "hand.draw"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: WardSpace.m) {
             Text(steps ? theme.cardTitle : "Touching the map")
-                .font(.headline)
+                .wardFont(.headline)
             if touch {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: WardSpace.s) {
                     ForEach(Array(GraphPeek.coachLines.enumerated()), id: \.offset) { k, line in
                         Label(line, systemImage: Self.touchSymbols[k % Self.touchSymbols.count])
-                            .font(.subheadline)
+                            .wardFont(.subheadline)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .accessibilityIdentifier("touchHint")
             }
             if steps {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: WardSpace.s) {
                     ForEach(theme.cardSteps, id: \.self) { step in
                         Label(step, systemImage: "plus.circle")
-                            .font(.subheadline)
+                            .wardFont(.subheadline)
                             .foregroundStyle(Color.wardInkSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
-            HStack(spacing: 10) {
+            HStack(spacing: WardSpace.s) {
                 Button("Full list", action: more)
                     .buttonStyle(.wardQuiet)
                 Button("Got it", action: done)
@@ -400,9 +410,8 @@ struct GraphUniverseHint: View {
             }
         }
         .foregroundStyle(Color.wardInk)
-        .padding(WardSpace.gutter)
-        .frame(maxWidth: 320, alignment: .leading)
-        .wardRaised(in: RoundedRectangle(cornerRadius: 22, style: .continuous), lift: .high)
+        .wardCard(lift: .high)
+        .frame(maxWidth: GraphPanel.hintWidth, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("universeHint")
     }
@@ -426,9 +435,9 @@ struct GraphEmptyHint: View {
     private var button: String { "Add folder" }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: WardSpace.s) {
             Text(words)
-                .font(.subheadline)
+                .wardFont(.subheadline)
                 .foregroundStyle(Color.wardInkSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -436,9 +445,10 @@ struct GraphEmptyHint: View {
                 .buttonStyle(.wardQuiet)
                 .accessibilityIdentifier("graphAddFolder")
         }
-        .padding(WardSpace.gutter)
-        .frame(maxWidth: 340)
-        .wardRaised(in: RoundedRectangle(cornerRadius: 20, style: .continuous), lift: .high)
+        // centred in the card, which lays its words out from the leading edge
+        .frame(maxWidth: .infinity)
+        .wardCard(lift: .high)
+        .frame(maxWidth: GraphPanel.emptyHintWidth)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("graphEmptyHint")
     }
