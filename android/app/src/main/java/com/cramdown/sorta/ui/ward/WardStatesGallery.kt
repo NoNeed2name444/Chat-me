@@ -3,6 +3,8 @@ package com.cramdown.sorta.ui.ward
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -99,9 +101,18 @@ enum class WardGalleryColumn(val title: Int) {
     }
 }
 
-/** A chip that is a button and a round button, chosen or not. */
+/**
+ * A chip that is a button and a round button, chosen or not. They flow, so
+ * where a column is too narrow for both (a folded phone, 360 dp) the circle
+ * takes the next line instead of being squeezed out of round.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable private fun ChipAndCircle(chosen: Boolean, enabled: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         WardChipButton(stringResource(R.string.ward_gallery_chip), {}, on = chosen, enabled = enabled)
         WardCircleButton(Icons.Rounded.Add, stringResource(R.string.ward_gallery_add), {}, on = chosen, enabled = enabled)
     }

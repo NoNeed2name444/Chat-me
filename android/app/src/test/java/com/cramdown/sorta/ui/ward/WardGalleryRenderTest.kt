@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import com.cramdown.sorta.ui.SortaTheme
@@ -44,6 +45,18 @@ class WardGalleryRenderTest {
             }
         }
         compose.waitForIdle()
+
+        // every round button keeps its round face, however narrow the column
+        // (on a folded phone a squeezed circle once drew as a tall oval)
+        val circles = compose.onAllNodes(hasContentDescription("Add")).fetchSemanticsNodes()
+        check("$name: the gallery has its six round buttons", circles.size == 6, "${circles.size}")
+        val face = WardControlSize.buttonSmall * compose.density.density
+        for ((i, node) in circles.withIndex()) {
+            val (w, h) = node.size.width to node.size.height
+            check("$name: round button ${i + 1} is round", kotlin.math.abs(w - h) <= 1, "$w x $h px")
+            check("$name: round button ${i + 1} keeps its ${WardControlSize.buttonSmall.toInt()} dp face", w >= face - 1 && h >= face - 1, "$w x $h px")
+        }
+
         val file = File("build/outputs/roborazzi/gallery_$name.png")
         compose.onRoot().captureRoboImage(file.path)
         check("$name: the PNG is written", file.isFile && file.length() > 0, file.absolutePath)
