@@ -28,8 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -242,9 +242,9 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
                 .wardChosenEdge(shape, on, chosenInk)
                 .wardPressFace(shape, WardLift.low, wardDepth(look.stand.isPressedIn))
                 .padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp),
-            horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(18.dp))
+            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(wardGlyph(18.0)))
             if (text != null) Text(text, style = WardType.chip.textStyle(), color = ink, maxLines = 1)
         }
     }
@@ -279,7 +279,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
             .selectable(on, enabled = enabled, role = Role.Button, interactionSource = source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription, tint = wardColor(look.glyph!!), modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription, tint = wardColor(look.glyph!!), modifier = Modifier.size(wardGlyph(20.0)))
     }
 }
 
@@ -317,7 +317,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     val look = WardControl.tile.look(if (enabled) WardControlState.rest else WardControlState.disabled)
     Column(Modifier.fillMaxWidth().defaultMinSize(minHeight = 64.dp).padding(horizontal = WardSpace.s.wardDp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp, Alignment.CenterVertically)) {
-        Icon(icon, null, tint = wardColor(look.glyph!!), modifier = Modifier.size(22.dp))
+        Icon(icon, null, tint = wardColor(look.glyph!!), modifier = Modifier.size(wardGlyph(22.0)))
         Text(title, style = WardTextStyle.subheadline.textStyle(WardWeight.semibold), color = wardColor(look.words!!),
             maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -332,23 +332,23 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
             .wardInset(CircleShape)
             .padding(horizontal = WardSpace.s.wardDp, vertical = WardSpace.xs.wardDp)
             .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Icon(icon, null, tint = tone.color(), modifier = Modifier.size(12.dp))
+        if (icon != null) Icon(icon, null, tint = tone.color(), modifier = Modifier.size(wardGlyph(12.0)))
         Text(text, style = WardType.statusChip.textStyle(), color = tone.ink())
     }
 }
 
 /** A pill: bold coral words (primaryInk) and a glyph in the icon's coral (accent) in a pressed-in capsule. */
-@Composable fun WardPill(text: String, modifier: Modifier = Modifier, icon: ImageVector? = Icons.Rounded.Schedule) {
+@Composable fun WardPill(text: String, modifier: Modifier = Modifier, icon: ImageVector? = Icons.Outlined.Schedule) {
     Row(
         modifier
             .wardInset(CircleShape)
             .padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp)
             .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Icon(icon, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(14.dp))
+        if (icon != null) Icon(icon, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(14.0)))
         Text(text, style = WardType.pill.textStyle(), color = wardColor(WardToken.primaryInk))
     }
 }
@@ -392,7 +392,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     val touch = wardTouch(source, enabled)
     val look = WardControl.toggle.look(WardControlState(isChosen = checked, isHeld = touch.held, isEnabled = enabled))
     // the knob crosses as iOS's does (.snappy(duration: 0.2)), never past its end; with animations off it is simply there
-    val travel by animateDpAsState(if (checked) (WardControlSize.toggleWidth - WardControlSize.knob - 8).wardDp else 0.dp,
+    val travel by animateDpAsState(if (checked) (WardControlSize.toggleWidth - WardControlSize.knob - 2 * WardSpace.xs).wardDp else 0.dp,
         wardSpring(WardMotion.toggle, wardReduceMotion()), label = "knob")
     val track = CircleShape
     Row(
@@ -409,8 +409,8 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
                 .wardInset(track, control = true),
         ) {
             // the tint is in the track at once, solid; only the knob moves
-            if (checked) Box(Modifier.matchParentSize().padding(3.dp).background(wardColor(look.face), track))
-            val knob = Modifier.padding(4.dp).offset(x = travel).size(WardControlSize.knob.wardDp)
+            if (checked) Box(Modifier.matchParentSize().padding(WardControlSize.trackInset.wardDp).background(wardColor(look.face), track))
+            val knob = Modifier.padding(WardSpace.xs.wardDp).offset(x = travel).size(WardControlSize.knob.wardDp)
             when (val stand = look.knobStand) {
                 WardStand.Flat -> Box(knob.background(wardColor(WardToken.surface), CircleShape)
                     .border(WardControlStates.knobEdgeWidth.wardDp, wardColor(look.mark!!), CircleShape))
@@ -440,7 +440,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     Row(
         modifier.minimumInteractiveComponentSize()
             .wardRelief(CircleShape, WardLift.low, control = true).padding(WardControlSize.segmentedPadding.wardDp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp),
     ) {
         for (option in options) {
             val chosen = option == selection
@@ -504,7 +504,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
         decorationBox = { inner ->
             Row(Modifier.fillMaxWidth().wardField(), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (leadingIcon != null) Icon(leadingIcon, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(18.dp))
+                if (leadingIcon != null) Icon(leadingIcon, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(18.0)))
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, style = WardType.body.textStyle(), color = wardDisabledInk())
                     inner()
@@ -591,7 +591,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
 
 /** A row's trailing chevron, in Biro Grey. */
 @Composable fun WardChevron() {
-    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(18.dp))
+    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(18.0)))
 }
 
 /** Dp of a scale step, for callers outside ui/ward. */

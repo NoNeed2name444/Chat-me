@@ -26,7 +26,7 @@ struct WardEmptyState<Actions: View>: View {
         VStack(spacing: WardSpace.m) {
             WardIconSquare(symbol: symbol, tone: tone, size: 56)
             Text(title)
-                .wardFont(.title3)
+                .wardFont(.title)
                 .foregroundStyle(Color.wardInk)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
@@ -75,7 +75,7 @@ struct WardBanner: View {
                         .wardFont(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.wardPrimaryInk)
                         // the words draw small; the target is 44 by 44
-                        .frame(minWidth: 44, minHeight: 44)
+                        .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -224,18 +224,18 @@ struct WardFilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: WardSpace.xs) {
                 if let symbol { Image(systemName: symbol).imageScale(.small) }
                 Text(text)
             }
-            .wardFont(.subheadline.weight(.semibold))
+            .wardFont(.chip)
             .foregroundStyle(selected ? Color.wardPrimaryInk : Color.wardInk)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 36)
+            .padding(.horizontal, WardSpace.m)
+            .frame(minHeight: WardControlSize.filterChip)
             .wardRelief(in: Capsule(), pressed: selected)
             // the chip draws 36 points tall; the tap target is the full 44
             // by 44
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

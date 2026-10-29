@@ -10,7 +10,7 @@ import XCTest
 @MainActor
 final class WardFontTests: XCTestCase {
     static let styles: [WardFont] = [
-        .largeTitle, .title, .title2, .title3, .headline, .body, .callout, .subheadline, .footnote, .caption, .caption2,
+        .largeTitle, .title, .title1, .title2, .title3, .headline, .body, .callout, .subheadline, .footnote, .caption, .caption2,
     ]
 
     func testBothFamiliesLoadByName() {

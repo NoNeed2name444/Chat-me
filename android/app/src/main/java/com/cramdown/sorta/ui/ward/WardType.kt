@@ -160,6 +160,12 @@ fun wardTypography(): Typography = Typography(
     labelSmall = WardTextStyle.caption2.textStyle(WardWeight.semibold),
 )
 
+/**
+ * A glyph [points] across at the default text size, grown with the reader's
+ * font scale (sp to dp), as an iOS symbol follows Dynamic Type.
+ */
+@Composable fun wardGlyph(points: Double): Dp = with(LocalDensity.current) { points.sp.toDp() }
+
 /** Whether the reader's font scale is at iOS's accessibility sizes. */
 @Composable fun wardAccessibilitySize(): Boolean = WardType.isAccessibilitySize(LocalDensity.current.fontScale.toDouble())
 

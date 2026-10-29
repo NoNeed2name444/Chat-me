@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,7 +50,7 @@ import com.cramdown.sorta.ui.ward.wardDp
         content = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (leading != null) leading()
-                else if (onBack != null) WardCircleButton(Icons.AutoMirrored.Rounded.ArrowBack, back, onBack)
+                else if (onBack != null) WardCircleButton(Icons.AutoMirrored.Outlined.ArrowBack, back, onBack)
             }
             Text(title, Modifier.semantics { heading() }, style = WardType.headline.textStyle(), color = wardColor(WardToken.ink),
                 textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)

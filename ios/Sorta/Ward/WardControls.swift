@@ -240,20 +240,20 @@ private struct WardButtonFace: View {
     }
     private var font: WardFont {
         switch kind {
-        case .primary: return .headline.weight(.bold)
-        case .secondary, .destructive: return .headline
-        case .compact, .quiet: return .subheadline.weight(.semibold)
+        case .primary: return .buttonPrimary
+        case .secondary, .destructive: return .button
+        case .compact, .quiet: return .buttonSmall
         }
     }
     private var small: Bool { kind == .compact || kind == .quiet }
     private var maxWidth: CGFloat? {
         if !fills || small { return nil }
-        return span == .broad ? 360 : .infinity
+        return span == .broad ? WardControlSize.buttonMaxWidth : .infinity
     }
 
     var body: some View {
         let compact: Bool = small
-        let height: CGFloat = compact ? 44 : 56
+        let height: CGFloat = compact ? WardControlSize.buttonSmall : WardControlSize.button
         let shape = RoundedRectangle(cornerRadius: height / 2, style: .continuous)
         // the one main button stands a step higher than the rest
         let lift: WardLift = kind == .primary ? .high : compact ? .low : .mid
@@ -287,7 +287,8 @@ private struct WardButtonFace: View {
             .foregroundStyle(ink)
             .padding(.horizontal, small ? WardSpace.m : WardSpace.xl)
             .padding(.vertical, small ? WardSpace.s : WardSpace.m)
-            .frame(minWidth: small ? 44 : 56, maxWidth: maxWidth, minHeight: small ? 44 : 56)
+            .frame(minWidth: small ? WardControlSize.buttonSmall : WardControlSize.button, maxWidth: maxWidth,
+                   minHeight: small ? WardControlSize.buttonSmall : WardControlSize.button)
     }
 
 }
@@ -360,7 +361,7 @@ private struct WardChipButtonFace: View {
         // chosen stays pressed in, disabled too
         let down: Bool = on || held
         label
-            .wardFont(.subheadline.weight(.semibold))
+            .wardFont(.chip)
             .foregroundStyle(ink)
             .padding(.horizontal, WardSpace.m)
             .padding(.vertical, WardSpace.s)
@@ -368,7 +369,7 @@ private struct WardChipButtonFace: View {
                 WardPressFace(shape: Capsule(), lift: .low, pressed: down)
                     .wardChosenEdge(Capsule(), on, color: chosenInk)
             }
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
             .contentShape(Rectangle())
             .animation(reduceMotion ? nil : .wardShade(down: down), value: down)
             .contentShape(.hoverEffect, Capsule())
@@ -406,7 +407,7 @@ private struct WardItemButtonFace<S: InsettableShape>: View {
         let held: Bool = enabled && (pressed || showsPressed)
         label
             // never under 44 by 44 points, whatever the label
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
             .contentShape(shape)
             .background {
                 // a chosen item already stands in its hollow
@@ -445,7 +446,7 @@ private struct WardPanelButtonFace<S: InsettableShape>: View {
         let held: Bool = enabled && (pressed || showsPressed)
         label
             // never under 44 by 44 points, whatever the label
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
             .contentShape(shape)
             .background {
                 WardPressFace(shape: shape, lift: enabled ? lift : .low, pressed: chosen || held)
@@ -507,9 +508,9 @@ private struct WardCircleButtonFace: View {
         // chosen stays pressed in, disabled too
         let down: Bool = on || held
         label
-            .wardFont(.body.weight(.semibold))
+            .wardFont(.circleGlyph)
             .foregroundStyle(ink)
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: WardControlSize.buttonSmall, minHeight: WardControlSize.buttonSmall)
             .background {
                 WardPressFace(shape: Circle(), lift: enabled ? lift : .low, pressed: down)
                     .wardChosenEdge(Circle(), on)
@@ -534,11 +535,11 @@ struct WardChip: View {
     var symbol: String?
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: WardSpace.xs) {
             if let symbol { Image(systemName: symbol).imageScale(.small).foregroundStyle(tone.color) }
             Text(text)
         }
-        .wardFont(.caption.weight(.semibold))
+        .wardFont(.statusChip)
         .foregroundStyle(tone.ink)
         .padding(.horizontal, WardSpace.s)
         .padding(.vertical, WardSpace.xs)
@@ -554,14 +555,14 @@ struct WardPill: View {
     var symbol: String? = "clock"
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: WardSpace.xs) {
             if let symbol { Image(systemName: symbol).imageScale(.small).foregroundStyle(Color.wardGlyph) }
             Text(text)
                 // every line it wraps to, whole, as HomePill: a narrow row
                 // at the largest sizes would otherwise cut it to one
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .wardFont(.subheadline.weight(.bold))
+        .wardFont(.pill)
         .foregroundStyle(Color.wardPrimaryInk)
         .padding(.horizontal, WardSpace.m)
         .padding(.vertical, WardSpace.s)
@@ -587,7 +588,7 @@ struct WardTimerPill: View {
             ? String(localized: "Time's up", comment: "A timer that has reached zero")
             : clock
         let label = Label(text, systemImage: "timer")
-            .wardFont(.subheadline.weight(.semibold).monospacedDigit())
+            .wardFont(.timer)
             .foregroundStyle(low ? Color.wardDanger : Color.wardInk)
         if well {
             label
@@ -607,16 +608,16 @@ struct WardTimerPill: View {
 struct WardIconSquare: View {
     let symbol: String
     var tone: WardTone = .primary
-    var size: CGFloat = 40
+    var size: CGFloat = WardControlSize.iconSquare
     var selected = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: min(WardRadius.icon, size * 0.28), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: WardControlSize.iconRadius(size), style: .continuous)
         Image(systemName: symbol)
-            .font(.system(size: size * 0.42, weight: .semibold))
+            .font(.system(size: size * WardControlSize.iconGlyph, weight: .semibold))
             .foregroundStyle(selected ? Color.wardPrimaryInk : tone.color)
             .frame(width: size, height: size)
-            .wardRelief(in: shape, lift: size >= 56 ? .mid : .low, pressed: selected, control: false)
+            .wardRelief(in: shape, lift: WardControlSize.iconLift(size), pressed: selected, control: false)
             .accessibilityHidden(true)
     }
 }
@@ -652,19 +653,22 @@ private struct WardToggleFace: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             ZStack(alignment: on ? .trailing : .leading) {
                 // The tint is in the track at once, solid; only the knob
-                // moves. Disabled, the on-track is Biro Grey.
+                // moves. Its colour is the on-track's in the state model
+                // (WardControl.toggle): the section's accent, Biro Grey
+                // when disabled. The on look's even while off, where the
+                // fill is hidden, so turning on never animates the colour.
                 Capsule()
-                    .fill(enabled ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.wardDisabledInk))
-                    .padding(3)
+                    .fill(Color.ward(WardControl.toggle.look(WardControlState(isChosen: true, isEnabled: enabled)).face))
+                    .padding(WardControlSize.trackInset)
                     .animation(nil) { $0.opacity(on ? 1 : 0) }
                 knob(on: on, held: held)
-                    .padding(4)
+                    .padding(WardSpace.xs)
             }
-            .frame(width: 52, height: 32)
+            .frame(width: WardControlSize.toggleWidth, height: WardControlSize.toggleHeight)
             .wardInset(in: Capsule(), control: true)
         }
         // the whole row is the target: never under 44 points tall
-        .frame(minHeight: 44)
+        .frame(minHeight: WardControlSize.target)
         .contentShape(Rectangle())
         .onTapGesture {
             if enabled { configuration.isOn.toggle() }
@@ -706,7 +710,7 @@ private struct WardToggleFace: View {
                 }
                 .animation(nil) { $0.opacity(flat ? 1 : 0) }
         }
-        .frame(width: 24, height: 24)
+        .frame(width: WardControlSize.knob, height: WardControlSize.knob)
     }
 }
 
@@ -745,7 +749,7 @@ struct WardSegmented<Value: Hashable, Label: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: WardSpace.xs) {
             ForEach(options, id: \.self) { option in
                 let chosen: Bool = option == selection
                 Button {
@@ -757,7 +761,7 @@ struct WardSegmented<Value: Hashable, Label: View>: View {
                 .accessibilityAddTraits(chosen ? .isSelected : [])
             }
         }
-        .padding(4)
+        .padding(WardControlSize.segmentedPadding)
         .wardRaised(in: Capsule(), lift: .low, control: true)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: selection)
         .sensoryFeedback(.selection, trigger: selection)
@@ -791,13 +795,13 @@ private struct WardSegmentFace: View {
         // chosen stays pressed in, disabled too
         let down: Bool = chosen || held
         label
-            .wardFont(.subheadline.weight(chosen ? .semibold : .regular))
+            .wardFont(chosen ? .segmentChosen : .segment)
             .contentTransition(.identity)
             .foregroundStyle(ink)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
             .padding(.horizontal, WardSpace.m)
-            .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44)
+            .frame(minWidth: WardControlSize.target, maxWidth: .infinity, minHeight: WardControlSize.segment)
             .background {
                 // a well pressed into the capsule, there at once
                 if down {

@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.List
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -70,7 +70,7 @@ enum class WardGalleryColumn(val title: Int) {
                 WardToggle(true, {}, enabled = e, modifier = Modifier.semantics { contentDescription = name }) }
             States { e ->
                 WardSegmented(0, listOf(0, 1), {}, enabled = e) { option, _, color ->
-                    Icon(if (option == 0) Icons.AutoMirrored.Rounded.List else Icons.Rounded.GridView,
+                    Icon(if (option == 0) Icons.AutoMirrored.Outlined.List else Icons.Outlined.GridView,
                         stringResource(if (option == 0) R.string.ward_gallery_list else R.string.ward_gallery_grid), tint = color)
                 }
             }
@@ -114,7 +114,7 @@ enum class WardGalleryColumn(val title: Int) {
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         WardChipButton(stringResource(R.string.ward_gallery_chip), {}, on = chosen, enabled = enabled)
-        WardCircleButton(Icons.Rounded.Add, stringResource(R.string.ward_gallery_add), {}, on = chosen, enabled = enabled)
+        WardCircleButton(Icons.Outlined.Add, stringResource(R.string.ward_gallery_add), {}, on = chosen, enabled = enabled)
     }
 }
 
@@ -125,5 +125,5 @@ val WardSection.galleryTitle: Int get() = when (this) {
 
 /** The section's glyph: a light bulb, for ideas. */
 val WardSection.galleryIcon: ImageVector get() = when (this) {
-    WardSection.sorta -> Icons.Rounded.Lightbulb
+    WardSection.sorta -> Icons.Outlined.Lightbulb
 }

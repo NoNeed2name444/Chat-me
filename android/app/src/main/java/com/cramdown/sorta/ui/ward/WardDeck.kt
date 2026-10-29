@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -184,7 +184,7 @@ internal fun LayoutCoordinates.wardWindowRect(density: Float): WardRect {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { WardUnlit {
                 WardButtonBox({ folded = false }, Modifier.semantics { contentDescription = show },
                     kind = WardButtonKind.secondary, fills = false) {
-                    Icon(Icons.Rounded.KeyboardArrowUp, null, Modifier.size(16.dp))
+                    Icon(Icons.Outlined.KeyboardArrowUp, null, Modifier.size(wardGlyph(16.0)))
                 }
             } }
         } else {
@@ -218,7 +218,7 @@ internal fun LayoutCoordinates.wardWindowRect(density: Float): WardRect {
             Box(Modifier.size(44.dp, 28.dp).capPop(held)
                 .wardFocusRing(CircleShape, focused, wardColor(WardControlStates.focusInk))
                 .wardPressFace(CircleShape, WardLift.low, wardDepth(held)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(18.dp), tint = wardColor(WardToken.ink))
+                Icon(Icons.Outlined.KeyboardArrowDown, null, Modifier.size(wardGlyph(18.0)), tint = wardColor(WardToken.ink))
             }
         }
     }

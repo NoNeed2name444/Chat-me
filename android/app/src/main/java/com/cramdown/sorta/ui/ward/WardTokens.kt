@@ -132,13 +132,21 @@ object WardControlSize {
     const val target = 48.0
     /** A broad screen's widest button. */
     const val buttonMaxWidth = 360.0
-    /** A segment's least height, and the segmented capsule's padding. */
-    const val segment = 36.0
-    const val segmentedPadding = 4.0
+    /** A segment's least height, as iOS's, and the segmented capsule's padding. */
+    const val segment = 44.0
+    const val segmentedPadding = WardSpace.xs
+    /** A filter chip's capsule, in a full target. */
+    const val filterChip = 36.0
     /** The switch: its track and knob. */
     const val toggleWidth = 52.0
     const val toggleHeight = 32.0
     const val knob = 24.0
+    /**
+     * The switch's tint, inset 3 inside the track: off the scale on
+     * purpose, a point less than the knob's inset (WardSpace.xs), so the
+     * tint shows round the knob.
+     */
+    const val trackInset = 3.0
     /** An icon square, and its glyph's share of it. */
     const val iconSquare = 40.0
     const val iconGlyph = 0.42

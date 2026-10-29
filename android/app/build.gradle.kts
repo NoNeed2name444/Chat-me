@@ -32,7 +32,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
-    // the look kit (ui/ward): Material 3's theme and sheets, the rounded icons, and the window's fold (WindowShape)
+    // the look kit (ui/ward): Material 3's theme and sheets, the outlined and rounded icons, and the window's fold (WindowShape)
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.window:window:1.5.1")

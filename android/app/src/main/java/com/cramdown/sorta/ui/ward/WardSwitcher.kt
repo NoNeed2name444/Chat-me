@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,12 +76,12 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
                     .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp).padding(horizontal = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)) {
                     val ink = if (chosen) tint else wardColor(WardToken.ink)
-                    Icon(item.icon, null, tint = ink, modifier = Modifier.size(20.dp))
+                    Icon(item.icon, null, tint = ink, modifier = Modifier.size(wardGlyph(20.0)))
                     Text(item.title, style = WardTextStyle.caption2.textStyle(WardWeight.bold), color = ink, maxLines = 1)
                 }
             }
             IconButton(onClick = collapse, Modifier.semantics { testTag = toggleTag }) {
-                Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.ward_switcher_hide), tint = wardColor(WardToken.ink), modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.KeyboardArrowDown, stringResource(R.string.ward_switcher_hide), tint = wardColor(WardToken.ink), modifier = Modifier.size(wardGlyph(18.0)))
             }
         }
     }
@@ -97,10 +97,10 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
         Box(Modifier.size(48.dp).combinedClickable(role = Role.Button, onLongClick = { menu = true }, onClick = expand)
             .semantics { contentDescription = name; testTag = toggleTag }
             .wardRaised(24.0, WardLift.high, fill = WardToken.raised), contentAlignment = Alignment.Center) {
-            Icon(chosen.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(22.dp))
+            Icon(chosen.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(22.0)))
             // the small chevron at the top trailing corner, tucked 2 points in
             Box(Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 2.dp).wardRaised(8.0, WardLift.low).padding(3.dp)) {
-                Icon(Icons.Rounded.KeyboardArrowUp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(9.dp))
+                Icon(Icons.Outlined.KeyboardArrowUp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(9.0)))
             }
         }
         DropdownMenu(menu, { menu = false }) {
@@ -120,9 +120,9 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
             val chosen = item.value == selection
             Row(Modifier.fillMaxWidth().selectable(chosen, role = Role.Button) { choose(item.value) }.wardRowTile().heightIn(min = 56.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Icon(item.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(26.dp))
+                Icon(item.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(26.0)))
                 Text(item.title, Modifier.weight(1f), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
-                if (chosen) Icon(Icons.Rounded.Check, null, tint = wardColor(WardToken.primaryInk))
+                if (chosen) Icon(Icons.Outlined.Check, null, tint = wardColor(WardToken.primaryInk))
             }
         }
         Spacer(Modifier.height(24.dp))

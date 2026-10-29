@@ -85,7 +85,7 @@ import com.cramdown.sorta.ui.wardColor
 ) {
     Row(modifier.fillMaxWidth().wardInset(WardRadius.field, fill = WardControlStates.wellFill).padding(WardSpace.m.wardDp)
         .semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-        Icon(icon, null, tint = tone.color(), modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = tone.color(), modifier = Modifier.size(wardGlyph(18.0)))
         Text(text, Modifier.weight(1f), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
         if (actionTitle != null && action != null) Text(actionTitle, Modifier.minimumInteractiveComponentSize()
             .clickable(role = Role.Button, onClick = action).wrapContentSize(),
@@ -133,10 +133,10 @@ import com.cramdown.sorta.ui.wardColor
     val ink = if (selected) wardColor(WardToken.primaryInk) else wardColor(WardToken.ink)
     Box(modifier.defaultMinSize(minHeight = WardControlSize.target.wardDp).selectable(selected, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center) {
-        Row(Modifier.heightIn(min = WardControlSize.segment.wardDp).wardPressFace(CircleShape, WardLift.low, wardDepth(selected))
+        Row(Modifier.heightIn(min = WardControlSize.filterChip.wardDp).wardPressFace(CircleShape, WardLift.low, wardDepth(selected))
             .padding(horizontal = WardSpace.m.wardDp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(14.dp))
+            horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(wardGlyph(14.0)))
             Text(text, style = WardTextStyle.subheadline.textStyle(WardWeight.semibold), color = ink, maxLines = 1)
         }
     }

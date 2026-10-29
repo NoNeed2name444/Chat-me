@@ -382,8 +382,10 @@ extension View {
 
 /// The type: Nunito, with Arabic drawn in Baloo Bhaijaan 2 (the fonts in
 /// Sorta/Fonts, named in UIAppFonts). Every font is a text style's: its size
-/// is the style's at the default text size, scaled by Dynamic Type with the
-/// style's own curve (UIFontMetrics), and one weight bolder under Bold Text.
+/// is the system's own for that style at the reader's text size, so it
+/// follows Dynamic Type point for point (UIFontMetrics' scaling of the
+/// default size drifted up to 6 points from the system's at AX5), and one
+/// weight bolder under Bold Text.
 /// Use it with `.wardFont(_:)`, which reads the view's text size.
 struct WardFont: Equatable {
     /// The families' names as the font files give them.
@@ -395,16 +397,36 @@ struct WardFont: Equatable {
     var monospacedDigits = false
 
     static let largeTitle = WardFont(style: .largeTitle, weight: .bold)
-    static let title = WardFont(style: .title1, weight: .bold)
+    /// The kit's title, as Android's WardType.title: title 3 semibold, the
+    /// heading of an empty state or a card. The system's Title 1 style is
+    /// `title1`.
+    static let title = WardFont(style: .title3, weight: .semibold)
+    static let title1 = WardFont(style: .title1, weight: .bold)
     static let title2 = WardFont(style: .title2, weight: .bold)
     static let title3 = WardFont(style: .title3, weight: .semibold)
-    static let headline = WardFont(style: .headline, weight: .bold)
+    /// Semibold, as Android's WardType.headline.
+    static let headline = WardFont(style: .headline, weight: .semibold)
     static let body = WardFont(style: .body, weight: .regular)
     static let callout = WardFont(style: .callout, weight: .regular)
     static let subheadline = WardFont(style: .subheadline, weight: .regular)
     static let footnote = WardFont(style: .footnote, weight: .regular)
     static let caption = WardFont(style: .caption1, weight: .regular)
     static let caption2 = WardFont(style: .caption2, weight: .regular)
+
+    // the controls' own faces (WardControls), as Android's WardType names them
+    static let buttonPrimary = WardFont(style: .headline, weight: .bold)
+    static let button = WardFont(style: .headline, weight: .semibold)
+    static let buttonSmall = WardFont(style: .subheadline, weight: .semibold)
+    static let chip = WardFont(style: .subheadline, weight: .semibold)
+    static let statusChip = WardFont(style: .caption1, weight: .semibold)
+    static let pill = WardFont(style: .subheadline, weight: .bold)
+    /// Android sets the timer in the system monospace; iOS keeps Nunito
+    /// with digits all one width.
+    static let timer = WardFont(style: .subheadline, weight: .semibold, monospacedDigits: true)
+    static let segment = WardFont(style: .subheadline, weight: .regular)
+    static let segmentChosen = WardFont(style: .subheadline, weight: .semibold)
+    static let circleGlyph = WardFont(style: .body, weight: .semibold)
+    static let smallCaps = WardFont(style: .caption1, weight: .semibold)
 
     func weight(_ weight: UIFont.Weight) -> WardFont {
         var font = self
@@ -441,7 +463,7 @@ struct WardFont: Equatable {
     /// by Dynamic Type; bolder when `boldText`.
     func uiFont(compatibleWith traits: UITraitCollection? = nil, boldText: Bool = false) -> UIFont {
         let standard = UITraitCollection(preferredContentSizeCategory: .large)
-        let size = UIFont.preferredFont(forTextStyle: style, compatibleWith: standard).pointSize
+        let size = UIFont.preferredFont(forTextStyle: style, compatibleWith: traits ?? standard).pointSize
         let drawn = boldText ? Self.bolder(weight) : weight
         let wght = 0x77676874 // 'wght'
         var attributes: [UIFontDescriptor.AttributeName: Any] = [
@@ -462,8 +484,7 @@ struct WardFont: Equatable {
                 UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
             ]]
         }
-        let font = UIFont(descriptor: UIFontDescriptor(fontAttributes: attributes), size: size)
-        return UIFontMetrics(forTextStyle: style).scaledFont(for: font, compatibleWith: traits ?? standard)
+        return UIFont(descriptor: UIFontDescriptor(fontAttributes: attributes), size: size)
     }
 
     /// The SwiftUI font at a Dynamic Type size.
@@ -510,6 +531,47 @@ enum WardRadius {
     static let field = CGFloat(WardScale.m)
     static let icon = CGFloat(WardScale.m)
     static let bar = CGFloat(WardScale.xl)
+}
+
+/// The controls' sizes, in points: WardControls', as Android's
+/// WardControlSize names them.
+enum WardControlSize {
+    /// A button, a field's row: 56 tall; compact and quiet, 44.
+    static let button: CGFloat = 56
+    static let buttonSmall: CGFloat = 44
+    /// The least tap target: 44 on iOS (Android's is 48, Android's own).
+    static let target: CGFloat = 44
+    /// A broad screen's widest button.
+    static let buttonMaxWidth: CGFloat = 360
+    /// A segment's least height, and the segmented capsule's padding.
+    static let segment: CGFloat = 44
+    static let segmentedPadding = WardSpace.xs
+    /// A filter chip's capsule, in a full target.
+    static let filterChip: CGFloat = 36
+    /// The switch: its track and knob.
+    static let toggleWidth: CGFloat = 52
+    static let toggleHeight: CGFloat = 32
+    static let knob: CGFloat = 24
+    /// The switch's tint, inset 3 inside the track: off the scale on
+    /// purpose, a point less than the knob's inset (WardSpace.xs), so the
+    /// tint shows round the knob.
+    static let trackInset: CGFloat = 3
+    /// An icon square, and its glyph's share of it.
+    static let iconSquare: CGFloat = 40
+    static let iconGlyph: CGFloat = 0.42
+    static let iconRadiusShare: CGFloat = 0.28
+    /// A ring's arc.
+    static let ringLine: CGFloat = 8
+    static let ringNumeral: CGFloat = 26
+
+    /// An icon square's corner: WardRadius.icon, or less on a small one.
+    static func iconRadius(_ size: CGFloat) -> CGFloat { min(WardRadius.icon, size * iconRadiusShare) }
+
+    /// An icon square stands at mid from 56 points up, low under it.
+    static func iconLift(_ size: CGFloat) -> WardLift { size >= 56 ? .mid : .low }
+
+    /// A ring's groove clearance either side of the arc.
+    static func ringClear(_ lineWidth: CGFloat) -> CGFloat { min(2, lineWidth / 3) }
 }
 
 /// The root of the shift: the window's light or dark (the system's, or
@@ -646,7 +708,7 @@ struct WardSmallCaps: ViewModifier {
     var font: WardFont
     var colour: Color
 
-    init(font: WardFont = .caption.weight(.semibold), colour: Color = .wardInkSecondary) {
+    init(font: WardFont = .smallCaps, colour: Color = .wardInkSecondary) {
         self.font = font
         self.colour = colour
     }
