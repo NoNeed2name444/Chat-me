@@ -13,6 +13,9 @@ struct RootView: View {
     var body: some View {
         if Self.showsGallery {
             WardStatesGallery(section: .sorta)
+                // the status bar's area solid in the page colour, so the
+                // rows scrolled under it don't show through its time
+                .wardMasthead()
                 .background { WardBackground() }
                 .wardLookRoot()
                 // the accent as the tint, and the soft switch and progress
