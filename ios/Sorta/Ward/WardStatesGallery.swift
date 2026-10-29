@@ -96,16 +96,22 @@ struct WardStatesGallery: View {
         }
     }
 
-    /// A chip that is a button and a round button, chosen or not.
+    /// A chip that is a button and a round button, chosen or not: side by
+    /// side where a column has room, else the round button under the chip,
+    /// so the chip's word is never broken (a phone's third, 120 points, is
+    /// too narrow for both).
     private func chipAndCircle(chosen: Bool) -> some View {
-        HStack(spacing: WardSpace.s) {
-            Button("Pinned") {}
-                .buttonStyle(WardChipButtonStyle(on: chosen))
-            Button {} label: {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(WardCircleButtonStyle(on: chosen))
-            .accessibilityLabel("Add")
+        let chip = Button("Pinned") {}
+            .buttonStyle(WardChipButtonStyle(on: chosen))
+            .fixedSize()
+        let circle = Button {} label: {
+            Image(systemName: "plus")
+        }
+        .buttonStyle(WardCircleButtonStyle(on: chosen))
+        .accessibilityLabel("Add")
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: WardSpace.s) { chip; circle }
+            VStack(spacing: WardSpace.s) { chip; circle }
         }
     }
 

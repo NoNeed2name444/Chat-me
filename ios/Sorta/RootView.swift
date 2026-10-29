@@ -15,6 +15,9 @@ struct RootView: View {
             WardStatesGallery(section: .sorta)
                 .background { WardBackground() }
                 .wardLookRoot()
+                // the accent as the tint, and the soft switch and progress
+                // bar, as at Stethoscore's root (RedPenApp.swift:283)
+                .wardControls()
         } else {
             Color("Page")
                 .ignoresSafeArea()
