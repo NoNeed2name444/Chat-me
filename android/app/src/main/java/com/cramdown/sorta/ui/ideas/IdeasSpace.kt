@@ -132,8 +132,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} notes"
     var openPath by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(recenter) { openPath = emptyList() }
     val scene by produceState<MapScene?>(null, notes, theme, main, folderRaw, openPath) {
-        value = withContext(Dispatchers.Default) {
-            if (theme == GraphTheme.NEURONS) return@withContext MapScene.neurons(NeuronScene.of(neuronsInput(book, edges, openPath)))
+        value = builtOffMain {
+            if (theme == GraphTheme.NEURONS) return@builtOffMain MapScene.neurons(NeuronScene.of(neuronsInput(book, edges, openPath)))
             val out = HashMap<String, MutableList<String>>()
             for ((a, b) in edges) out.getOrPut(a) { ArrayList() }.add(b)
             val performance = theme == GraphTheme.PERFORMANCE
@@ -201,9 +201,19 @@ private fun neuronsInput(book: IdeaBook, edges: List<Pair<String, String>>, open
         anatomy = anatomy, open = open)
 }
 
+/**
+ * Builds a scene on a worker thread and hands it back on the main one. Under a UI test's
+ * unconfined dispatcher the coroutine would otherwise go on on the worker and recompose the map
+ * there, which broke the composition when its screen closed (the tablet's MapRenderTest, c8186ce).
+ */
+private suspend fun <T> builtOffMain(build: () -> T): T {
+    val built = withContext(Dispatchers.Default) { build() }
+    return withContext(Dispatchers.Main.immediate) { built }
+}
+
 /** A seeded demo map (GraphPerfDemo): synthetic notes, not the user's, turning by itself. */
 @Composable private fun DemoMap(size: Int, recenter: Int, readout: Boolean, onShown: (Boolean) -> Unit) {
-    val scene by produceState<MapScene?>(null, size) { value = withContext(Dispatchers.Default) { DemoScenes.get(size) } }
+    val scene by produceState<MapScene?>(null, size) { value = builtOffMain { DemoScenes.get(size) } }
     val ready = scene
     MapShown(ready != null, onShown)
     if (ready == null) { Building(size); return }
