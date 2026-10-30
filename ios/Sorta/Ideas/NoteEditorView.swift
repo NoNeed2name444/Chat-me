@@ -232,10 +232,22 @@ struct NoteEditorView: View {
             : AnyLayout(HStackLayout(spacing: WardSpace.m))
         return layout {
             NoteModePicker(reading: $reading)
-            Button(IdeasWords.linkTo, action: startLinking)
-                .buttonStyle(.wardCompact)
+            linkButton
                 .accessibilityIdentifier("editor-link")
             if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+        }
+    }
+
+    /// Link to an idea…: at the accessibility sizes its words wrap, so the
+    /// whole button stays on the screen.
+    @ViewBuilder
+    private var linkButton: some View {
+        if typeSize.isAccessibilitySize {
+            Button(IdeasWords.linkTo, action: startLinking)
+                .buttonStyle(WrappingCompactButtonStyle())
+        } else {
+            Button(IdeasWords.linkTo, action: startLinking)
+                .buttonStyle(.wardCompact)
         }
     }
 

@@ -72,8 +72,13 @@ struct IdeasView: View {
         VStack(spacing: 0) {
             captureStrip
             if showsEmpty {
-                emptyLines
-                Spacer(minLength: 0)
+                // the lines scroll, so at the largest sizes they take the
+                // room left under the well rather than squeezing the well
+                ScrollView {
+                    emptyLines
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollEdgeEffectHidden(true, for: .top)
             } else {
                 list
             }
@@ -131,6 +136,8 @@ struct IdeasView: View {
     /// strip's foot, and a hairline shows there while it is scrolled.
     private var captureStrip: some View {
         CaptureWell(draft: $draft, capturing: $capturing, save: capture, sortIt: captureAndSort)
+            // always its whole height: the prompt wraps at the largest sizes
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, WardSpace.gutter)
             .padding(.vertical, WardSpace.s)
             .background(Color.wardBackground)

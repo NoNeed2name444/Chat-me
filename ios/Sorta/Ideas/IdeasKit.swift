@@ -196,6 +196,44 @@ private struct SortItFace: View {
     }
 }
 
+/// The kit's compact button (`.wardCompact`) whose words wrap: the kit's
+/// small capsule always takes its words' one-line width, so at the largest
+/// text sizes a long label ran past the screen's edges. Same face, ink,
+/// type and measures (WardButtonFace's compact case), in the width offered.
+struct WrappingCompactButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        WrappingCompactFace(label: configuration.label, pressed: configuration.isPressed)
+    }
+}
+
+private struct WrappingCompactFace: View {
+    let label: ButtonStyleConfiguration.Label
+    let pressed: Bool
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let down: Bool = enabled && pressed
+        let shape = RoundedRectangle(cornerRadius: WardControlSize.buttonSmall / 2, style: .continuous)
+        label
+            .wardFont(.buttonSmall)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(enabled ? Color.wardPrimaryInk : Color.wardDisabledInk)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, WardSpace.m)
+            .padding(.vertical, WardSpace.s)
+            .frame(minWidth: WardControlSize.buttonSmall, minHeight: WardControlSize.buttonSmall)
+            .background {
+                WardPressFace(shape: shape, lift: .low, pressed: down, fill: Color.wardSurface)
+            }
+            .contentShape(shape)
+            .animation(reduceMotion ? nil : .wardShade(down: down), value: down)
+            .contentShape(.hoverEffect, shape)
+            .hoverEffect(.highlight)
+            .capPop(down)
+    }
+}
+
 /// A line of news at the foot of the Sort screen: Undo after a filing or a
 /// delete, or the store's one notice at launch.
 struct IdeasNotice: Identifiable {
