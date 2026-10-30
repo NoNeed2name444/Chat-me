@@ -192,8 +192,11 @@ final class IdeasBehaviourTests: XCTestCase {
         app.captureIdea("Plant bulbs")
         app.makeFolder("Raised beds")
         app.upRow.tap()
+        XCTAssertTrue(app.folderRow("Garden").waitForExistence(timeout: 10), "back at the top")
+        XCTAssertFalse(app.upRow.exists, "no up row at the top")
 
         app.folderRow("Garden").press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons[IdeasText.renameFolder].firstMatch.waitForExistence(timeout: 5), "the folder's menu is open")
         app.buttons[IdeasText.renameFolder].firstMatch.tap()
         XCTAssertTrue(app.nameField.waitForExistence(timeout: 10), "the naming sheet is open")
         app.nameField.replaceText(with: "Back garden")

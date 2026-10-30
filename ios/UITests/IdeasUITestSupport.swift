@@ -113,6 +113,14 @@ extension XCUIApplication {
         typeName(name)
         buttons[IdeasText.create].firstMatch.tap()
         XCTAssertTrue(folderRow(name).waitForExistence(timeout: 10), "the folder \(name) is listed")
+        // the sheet goes and capture takes the caret back, its keyboard
+        // rising: a tap on the list before both are at rest did nothing
+        // (the up row, Chat-me run 41026251727)
+        let gone = NSPredicate(format: "exists == false")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: nameField)], timeout: 10),
+                       .completed, "the naming sheet has gone")
+        if keyboards.firstMatch.exists { _ = keyboards.firstMatch.settledFrame }
+        _ = folderRow(name).settledFrame
     }
 
     /// Types a name into the naming sheet's field once the keyboard is up
