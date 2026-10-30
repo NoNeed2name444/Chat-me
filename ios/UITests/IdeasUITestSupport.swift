@@ -125,6 +125,9 @@ extension XCUIApplication {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         _ = keyboards.firstMatch.settledFrame
         _ = nameField.settledFrame
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nameField)], timeout: 10),
+                       .completed, "the name field has the caret")
         nameField.typeText(name)
         XCTAssertEqual(nameField.value as? String, name, "the name is in the field")
     }

@@ -394,7 +394,9 @@ private sealed class FolderPrompt {
         // at the accessibility sizes the words wrap; Return still saves (a typed line break is taken as it)
         val change: (String) -> Unit = { text -> if (ax && '\n' in text) { onDraft(text.replace("\n", "")); onDone() } else onDraft(text) }
         BasicTextField(draft, change, modifier.focusRequester(focus).semantics { testTag = IdeasTags.FIELD; contentDescription = placeholder },
-            singleLine = !ax, interactionSource = source,
+            // two lines at most where it wraps: past them a long draft scrolls in the field, so Sort it
+            // under the well stays above the keyboard (as on iOS, 080365f)
+            singleLine = !ax, maxLines = if (ax) 2 else 1, interactionSource = source,
             textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
             cursorBrush = SolidColor(wardColor(WardToken.primaryInk)),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),

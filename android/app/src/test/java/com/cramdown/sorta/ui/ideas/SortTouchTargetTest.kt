@@ -20,6 +20,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -83,6 +84,32 @@ class SortTouchTargetTest {
 
     @Config(qualifiers = "w360dp-h748dp-port-xxhdpi")
     @Test fun everyTargetAndEveryWordFitsOnAFoldedPhoneAtBothSizes() = all("folded phone")
+
+    /** At font scale 2 the well stacks and its field wraps: a long draft stops at two lines and scrolls, so Sort it stays whole under it. */
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test fun aLongDraftAtFontScale2StopsAtTwoLines() = checks {
+        val model = IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, false))
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(2f)) {
+                SortaTheme { WindowShapeHost { IdeasView(model, start = IdeasStart()) } }
+            }
+        }
+        compose.waitForIdle()
+        val well = compose.onNode(hasTestTag(IdeasTags.CAPTURE))
+        val blank = well.fetchSemanticsNode().size.height
+        val field = compose.onNode(hasTestTag(IdeasTags.FIELD))
+        field.performTextInput("Oil the gate and the shed's hinges. ".repeat(4))
+        compose.waitForIdle()
+        val layout = layoutOf(field.fetchSemanticsNode())
+        check("the field lays out its words", layout != null)
+        if (layout == null) return@checks
+        val line = layout.getLineBottom(0) - layout.getLineTop(0)
+        val long = well.fetchSemanticsNode().size.height
+        check("the well grows by a line at most: the field stops at two", long <= blank + line * 1.5f,
+            "$blank px blank, $long px with the draft, a line ${f2(line.toDouble())} px")
+        val sortIt = compose.onAllNodes(hasClickAction() and hasText(s(R.string.capture_sort), substring = true)).fetchSemanticsNodes()
+        check("Sort it is there, whole", sortIt.size == 1 && wholly(sortIt.first()), "${sortIt.size} found")
+    }
 
     private fun all(device: String) = checks {
         val list = screens
