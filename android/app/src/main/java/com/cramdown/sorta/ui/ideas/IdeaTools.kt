@@ -35,6 +35,9 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.ui.res.stringResource
+import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ui.sources.ReaderNavBar
@@ -47,7 +50,8 @@ import com.cramdown.sorta.ui.wardColor
 // bottom-trailing corner (the board's on the trailing edge, centred, in a broad
 // window, as iOS's IdeaToolsPlacement), each raised off the base on the floating
 // plane, pressed in while held or while the tool is on, its glyph the section's
-// accent then and Biro Grey at rest. Also the naming sheet (NameSheet) and "Move to".
+// accent then and Biro Grey at rest. Also the naming sheet (NameSheet), the board's
+// "Move to" (MoveSheet), and the Sort screen's folder chooser (FolderChooser).
 
 /** A vertical cluster of tool circles, 16 apart, each with its own relief. */
 @Composable fun IdeaToolCluster(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -116,7 +120,7 @@ const val LINES_PICKER_WIDTH = 200
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
         ReaderNavBar(title,
-            leading = { WardTextButton("Cancel", onDismiss, kind = WardButtonKind.quiet, fills = false) },
+            leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) },
             trailing = { WardTextButton(confirm, ::submit, kind = WardButtonKind.compact, fills = false, enabled = !blank) })
         // the kit's field (WardTextField), which takes no keyboard action: its 48 target and focus ring
         Box(Modifier.padding(WardSpace.gutter.wardDp)) {
@@ -156,5 +160,63 @@ const val LINES_PICKER_WIDTH = 200
             }
         }
         Spacer(Modifier.height(WardSpace.xl.wardDp))
+    }
+}
+
+/** The test tag on the folder chooser's content. */
+const val FOLDER_CHOOSER_TAG = "folder-chooser"
+
+/**
+ * The folder chooser (S05): Stethoscore's move choices (reference/stethoscore-aec2af1c/ios/RedPen/
+ * Features/Notes/IdeasView.swift:380-392, moveChoices and indented; Android ui/ideas/IdeasView.kt:159
+ * and MoveSheet) as a sheet. To sort first, which takes the idea out of its folder; then every folder,
+ * nested, in the store's outline; then New folder, which [onNewFolder] names, makes and files the idea
+ * in. The row the idea is in now ([current]) is pressed in and selected. The person picks: nothing is
+ * suggested. MoveSheet stays as it is for the board. [version] is the book's (IdeasModel.version), so
+ * the sheet follows its changes.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun FolderChooser(book: IdeaBook, current: String?, version: Int = 0, onDismiss: () -> Unit, onChoose: (String?) -> Unit, onNewFolder: () -> Unit) {
+    // all the way up, so a short window shows every row it can rather than half a sheet
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = wardColor(WardToken.background)) {
+        Column(Modifier.fillMaxWidth().semantics { testTag = FOLDER_CHOOSER_TAG }) {
+            ReaderNavBar(stringResource(R.string.chooser_title),
+                leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) })
+            val toSort = stringResource(R.string.chooser_to_sort)
+            val toSortSpoken = stringResource(R.string.chooser_to_sort_spoken)
+            val newFolder = stringResource(R.string.chooser_new_folder)
+            val newHint = stringResource(R.string.chooser_new_folder_hint)
+            val outline = remember(book, version) { book.folderOutline() }
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = IdeasLayout.chooserMaxHeight.dp)) {
+                item { ChooserRow(toSort, chosen = current == null, spoken = toSortSpoken) { onChoose(null) } }
+                items(outline, key = { it.first.id }) { (folder, depth) ->
+                    val inside = book.folder(folder.parentId)?.name?.let { stringResource(R.string.chooser_inside, it) }
+                    ChooserRow(IdeaBook.indented(folder.name, depth), chosen = current == folder.id, spoken = folder.name, value = inside) {
+                        onChoose(folder.id)
+                    }
+                }
+                item { ChooserRow(newFolder, chosen = false, spoken = newFolder, hint = newHint, icon = Icons.Outlined.CreateNewFolder, onClick = onNewFolder) }
+            }
+            Spacer(Modifier.height(WardSpace.xl.wardDp))
+        }
+    }
+}
+
+/** One row of the chooser: a tile, pressed in when it is where the idea is now. */
+@Composable private fun ChooserRow(text: String, chosen: Boolean, spoken: String, value: String? = null, hint: String? = null,
+                                   icon: ImageVector? = null, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth()
+        .clickable(role = Role.Button, onClickLabel = hint, onClick = onClick)
+        .wardRowTile(inset = chosen)
+        .semantics(mergeDescendants = true) {
+            contentDescription = spoken
+            selected = chosen
+            if (value != null) stateDescription = value
+        },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+        if (icon != null) Icon(icon, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(20.0)))
+        Text(text, Modifier.weight(1f), style = WardType.body.textStyle(), color = wardColor(if (chosen) WardToken.primaryInk else WardToken.ink),
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

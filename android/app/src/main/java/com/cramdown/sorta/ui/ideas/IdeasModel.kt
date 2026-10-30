@@ -24,7 +24,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.cramdown.sorta.data.IdeaStore
+import com.cramdown.sorta.data.ImportCounts
+import com.cramdown.sorta.data.ImportRefusal
+import com.cramdown.sorta.data.ImportRefused
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.data.SaveFailed
+import com.cramdown.sorta.data.SaveFailure
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.GraphStyleChoice
 import com.cramdown.sorta.ideas.GraphTheme
@@ -37,16 +47,115 @@ import com.cramdown.sorta.ideas.NoteTone
 import com.cramdown.sorta.map.SpaceStyle
 
 /**
- * The idea dump as the screens hold it: the notes and folders (IdeaBook). Until step 3 brings
- * the store, it holds them in memory, from the ideas it is given; reading [book] subscribes to
- * its changes. (Stethoscore's saved them to its library file, StudyStore, after every change.)
+ * The idea dump as the screens hold it: the notes and folders (IdeaBook); reading [book]
+ * subscribes to its changes. Opened on the store ([open]), every change is saved through it
+ * (IdeaStore.replaceIdeas), as Stethoscore's model saved to its library after every change
+ * (reference/stethoscore-aec2af1c/android/app/src/main/java/com/stethoscore/app/ui/ideas/
+ * IdeasModel.kt:42-58). Made from ideas alone (the maps' previews), it keeps them in memory.
+ *
+ * Two failures, each said once through [notice]:
+ *  - the store's file was there and couldn't be read: IdeaStore keeps it and refuses every save
+ *    (S04), so nothing read is ever written over. Capture still works, in memory only, and no
+ *    words claim a change was kept;
+ *  - a save didn't land: memory goes back to what is on disk, as Stethoscore's did.
  */
-class IdeasModel(notes: List<Note>, folders: List<NoteFolder>) {
+class IdeasModel private constructor(notes: List<Note>, folders: List<NoteFolder>, private val store: IdeaStore?) {
+    constructor(notes: List<Note>, folders: List<NoteFolder>) : this(notes, folders, null)
+
     private var revision by mutableIntStateOf(0)
     var error by mutableStateOf<String?>(null)
-    private var held: IdeaBook = IdeaBook(notes, folders, onChange = { _, _ -> revision++ })
+    /** What the screen says once, then clears. */
+    var notice by mutableStateOf(if (store?.loadFailed == true) IdeasNotice.UNREADABLE else null)
+    private var held: IdeaBook = make(notes, folders)
+
+    private fun make(notes: List<Note>, folders: List<NoteFolder>) = IdeaBook(notes, folders, onChange = ::persist)
+
+    private fun persist(notes: List<Note>, folders: List<NoteFolder>) {
+        val s = store
+        if (s != null) try {
+            s.replaceIdeas(notes, folders)
+        } catch (e: SaveFailed) {
+            // FILE_UNREAD: refused on purpose, and said at launch; the ideas stay here for now
+            if (e.failure == SaveFailure.NOT_WRITTEN) {
+                notice = IdeasNotice.NOT_SAVED
+                held = make(s.notes, s.folders)
+            }
+        }
+        revision++
+    }
 
     val book: IdeaBook get() { revision; return held }
+
+    /**
+     * How many changes the book has had. The book is one object that changes in place, so a
+     * composable handed it is skipped when it changes (Compose's strong skipping compares it by
+     * identity): those that take it take this too.
+     */
+    val version: Int get() = revision
+
+    /** Whether the store's file couldn't be read, so nothing is saved for now. */
+    val unreadable: Boolean get() = store?.loadFailed == true
+
+    /**
+     * S04's import (IdeaStore.importJson) on [text]: the ideas and folders this device doesn't
+     * have are added and saved, and the screen shows the store's copy.
+     */
+    fun import(text: String): ImportOutcome {
+        val s = store ?: return ImportOutcome.NotSaved
+        val outcome = try {
+            ImportOutcome.Added(s.importJson(text))
+        } catch (e: ImportRefused) {
+            ImportOutcome.Refused(e.refusal)
+        } catch (e: SaveFailed) {
+            ImportOutcome.NotSaved
+        }
+        if (outcome is ImportOutcome.Added && outcome.counts != ImportCounts()) {
+            held = make(s.notes, s.folders)
+            revision++
+        }
+        return outcome
+    }
+
+    companion object {
+        /** The model on [store], opened at launch with what it read. */
+        fun open(store: IdeaStore): IdeasModel = IdeasModel(store.notes, store.folders, store)
+    }
+}
+
+/** What the screen says once about the store. */
+enum class IdeasNotice { UNREADABLE, NOT_SAVED }
+
+/** How an import ended. */
+sealed class ImportOutcome {
+    /** Added what the counts say; all zero when everything was here already. */
+    data class Added(val counts: ImportCounts) : ImportOutcome()
+    data class Refused(val refusal: ImportRefusal) : ImportOutcome()
+    /** The import's save didn't land, or the store refuses saves: nothing changed. */
+    object NotSaved : ImportOutcome()
+}
+
+/**
+ * Reads what [open] gives, at most one byte past the import's limit (so a file too big is
+ * still refused as too big, without reading all of it), then runs the import on it. The
+ * system picker's result and the tests' launch extra both come here.
+ */
+suspend fun importFrom(model: IdeasModel, open: () -> InputStream?): ImportOutcome {
+    val text = withContext(Dispatchers.IO) {
+        runCatching { open()?.use { readCapped(it, IdeaStore.MAX_IMPORT_BYTES + 1) } }.getOrNull()
+    } ?: return ImportOutcome.Refused(ImportRefusal.UNREADABLE)
+    return model.import(text)
+}
+
+/** At most [limit] bytes of [input], as UTF-8. */
+internal fun readCapped(input: InputStream, limit: Int): String {
+    val out = ByteArrayOutputStream()
+    val chunk = ByteArray(64 * 1024)
+    while (out.size() < limit) {
+        val n = input.read(chunk, 0, minOf(chunk.size, limit - out.size()))
+        if (n < 0) break
+        out.write(chunk, 0, n)
+    }
+    return out.toString(Charsets.UTF_8.name())
 }
 
 /**

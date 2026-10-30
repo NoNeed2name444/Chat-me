@@ -30,7 +30,11 @@ object IdeaJson {
     }
     internal fun note(o: JSONObject): Note { val created = date(o.opt("createdAt")); return Note(o.text("id", newId()), o.text("title"), o.text("body"), o.nullText("folderId"), o.text("kind", "idea"), o.strings("links"), o.strings("tags"), o.optDouble("boardX", 0.0), o.optDouble("boardY", 0.0), created, date(o.opt("updatedAt"), created), o.toString()) }
     internal fun encodeNote(n: Note): JSONObject = raw(n.rawJson).put("id", n.id).put("title", n.title).put("body", n.body).put("folderId", n.folderId ?: JSONObject.NULL).put("kind", n.kind).put("links", jsonArray(n.links)).put("tags", jsonArray(n.tags)).put("boardX", n.boardX).put("boardY", n.boardY).putDate("createdAt", n.createdAt).putDate("updatedAt", n.updatedAt)
-    // "Folder": the name a folder without one is read as (iOS NoteStore.swift:90); step 4's strings pass words it
-    internal fun folder(o: JSONObject): NoteFolder = NoteFolder(o.text("id", newId()), o.text("name", "Folder"), o.nullText("parentId"), date(o.opt("createdAt")), o.toString())
+    /**
+     * The name a folder without one is read as (iOS NoteStore.swift:90), from the ux-writing pass of
+     * S05 (was "Folder"). The store has no resources to read, so the words are kept here, once.
+     */
+    const val UNTITLED_FOLDER = "Untitled folder"
+    internal fun folder(o: JSONObject): NoteFolder = NoteFolder(o.text("id", newId()), o.text("name", UNTITLED_FOLDER), o.nullText("parentId"), date(o.opt("createdAt")), o.toString())
     internal fun encodeFolder(f: NoteFolder): JSONObject = raw(f.rawJson).put("id", f.id).put("name", f.name).put("parentId", f.parentId ?: JSONObject.NULL).putDate("createdAt", f.createdAt)
 }

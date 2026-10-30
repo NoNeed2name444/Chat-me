@@ -48,7 +48,7 @@ class IdeaStoreTest {
         val folderTrip = IdeaJson.encodeFolder(shelf)
         assertEquals(2, folderTrip.getJSONArray("pinned").length())
         assertEquals(shelf.copy(rawJson = ""), IdeaJson.folder(folderTrip).copy(rawJson = ""))
-        assertEquals("a folder with no name", "Folder", IdeaJson.folder(JSONObject("""{"id":"${id(102)}"}""")).name)
+        assertEquals("a folder with no name", "Untitled folder", IdeaJson.folder(JSONObject("""{"id":"${id(102)}"}""")).name)
 
         // and through the store: fields beside the ideas are written back as they came
         file.writeText("""{"notes":[],"noteFolders":[],"laterVersion":{"kept":true}}""")

@@ -34,6 +34,9 @@ data class NoteFolder(
     val rawJson: String = "{}",
 )
 
+/** A deleted note, and the notes that held a hand-made link to it (IdeaBook.removal, IdeaBook.restore). */
+data class RemovedNote(val note: Note, val linkedFrom: List<String>)
+
 /** Every connection in the dump, each once (IdeaEdges). */
 object IdeaEdges {
     /**
@@ -122,6 +125,26 @@ class IdeaBook(
     /** Deletes a note and every hand-made link to it; `[[Title]]`s are left as written. */
     fun delete(id: String) {
         notes = notes.filterNot { it.id == id }.map { if (id in it.links) it.copy(links = it.links.filterNot { l -> l == id }) else it }
+        changed()
+    }
+
+    /** A note as it is before [delete], with the notes whose hand-made links to it go with it: what Undo puts back. */
+    fun removal(id: String): RemovedNote? {
+        val note = note(id) ?: return null
+        return RemovedNote(note, notes.filter { id in it.links }.map { it.id })
+    }
+
+    /**
+     * Undo of a delete: the note back as it was, and the hand-made links to it from the notes
+     * still here. Its folder, if that has gone since, gives way to To sort. Nothing happens if it
+     * is here already.
+     */
+    fun restore(removed: RemovedNote) {
+        val id = removed.note.id
+        if (note(id) != null) return
+        val from = removed.linkedFrom.toSet()
+        val back = removed.note.copy(folderId = removed.note.folderId?.takeIf { folder(it) != null })
+        notes = notes.map { if (it.id in from && id !in it.links) it.copy(links = it.links + id) else it } + back
         changed()
     }
 

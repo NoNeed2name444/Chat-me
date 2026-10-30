@@ -93,6 +93,8 @@ final class LaunchTests: XCTestCase {
         guard well.contains(spot) else { return point }
         XCTAssertTrue(well.contains(spot), "\(name): the capture well covers \(fx), \(fy)")
         let x: Double = fx < 0.5 ? margin : Double(screen.width) - margin
+        XCTAssertFalse(well.contains(CGPoint(x: x, y: spot.y)),
+                       "\(name): the moved point \(x), \(spot.y) is clear of the capture well \(well)")
         XCTContext.runActivity(named: "\(name): \(fx), \(fy) is under the capture well \(well); read at x \(x) points") { _ in }
         return (x / Double(screen.width), fy)
     }

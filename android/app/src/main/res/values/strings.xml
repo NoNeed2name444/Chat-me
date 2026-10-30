@@ -40,4 +40,156 @@
     <string name="ward_gallery_add">Add</string>
     <!-- The states gallery's sample tile, named after Sorta's ideas -->
     <string name="ward_gallery_tile">Ideas</string>
+
+    <!-- The Sort screen (ui/ideas), from the ux-writing pass of 30 Oct (S05). "What's on your mind?"
+         and "Sort it" are the owner's own words (23 Oct). -->
+    <!-- The capture field's placeholder, and its spoken label -->
+    <string name="capture_placeholder">What\'s on your mind?</string>
+    <!-- The filled button in the capture well: saves the idea and opens the folder chooser -->
+    <string name="capture_sort">Sort it</string>
+    <!-- Sort it, spoken hint (read after "Double-tap to") -->
+    <string name="capture_sort_hint">Saves your idea and lets you choose its folder.</string>
+    <!-- The title row at the top level -->
+    <string name="sort_title">To sort</string>
+    <!-- The title row at the top level, spoken as a header -->
+    <plurals name="sort_title_spoken">
+        <item quantity="one">To sort, %d idea</item>
+        <item quantity="other">To sort, %d ideas</item>
+    </plurals>
+    <!-- The title row inside a folder, spoken: the folder's name and its count -->
+    <plurals name="folder_title_spoken">
+        <item quantity="one">%1$s, %2$d idea</item>
+        <item quantity="other">%1$s, %2$d ideas</item>
+    </plurals>
+    <!-- The title row's ellipsis circle, and the editor's, spoken -->
+    <string name="sort_more">More</string>
+    <!-- Under the title row when To sort is empty but folders exist -->
+    <string name="sort_all_sorted">All sorted.</string>
+    <!-- The section label above the folder rows -->
+    <string name="sort_folders">Folders</string>
+    <!-- An idea row's button, its leading swipe, its menu item and its spoken action -->
+    <string name="row_choose_folder">Choose folder</string>
+    <!-- An idea row's button, spoken: "Choose folder for Paint the shed" -->
+    <string name="row_choose_folder_spoken">Choose folder for %1$s</string>
+    <!-- An idea row's spoken hint: a tap opens the editor -->
+    <string name="row_hint">Opens the idea.</string>
+    <!-- An idea row's trailing swipe, its menu item and its spoken action -->
+    <string name="row_delete">Delete</string>
+    <!-- An idea with no words in its title or details -->
+    <string name="idea_untitled">Untitled</string>
+    <!-- A folder row, spoken: its name and how many ideas are in it -->
+    <plurals name="folder_row_spoken">
+        <item quantity="one">%1$s, %2$d idea</item>
+        <item quantity="other">%1$s, %2$d ideas</item>
+    </plurals>
+    <!-- A folder row's menu items and spoken actions -->
+    <string name="folder_rename">Rename folder</string>
+    <string name="folder_new_inside">New folder inside</string>
+    <string name="folder_delete">Delete folder</string>
+    <!-- The up row, spoken: "Back to To sort" -->
+    <string name="up_row_spoken">Back to %1$s</string>
+    <!-- The More menu's items -->
+    <string name="more_import">Import from Stethoscore…</string>
+    <string name="more_new_folder">New folder</string>
+
+    <!-- The folder chooser -->
+    <string name="chooser_title">Choose folder</string>
+    <!-- Every sheet's and confirm's cancel -->
+    <string name="sheet_cancel">Cancel</string>
+    <!-- The chooser's first row: no folder -->
+    <string name="chooser_to_sort">To sort</string>
+    <string name="chooser_to_sort_spoken">To sort, no folder</string>
+    <!-- A nested folder row in the chooser, its spoken value: "inside Garden" -->
+    <string name="chooser_inside">inside %1$s</string>
+    <!-- The chooser's last row, and its spoken hint -->
+    <string name="chooser_new_folder">New folder</string>
+    <string name="chooser_new_folder_hint">Makes a folder and moves your idea into it.</string>
+    <!-- The naming sheet -->
+    <string name="name_new_title">New folder</string>
+    <string name="name_rename_title">Rename folder</string>
+    <string name="name_field">Folder name</string>
+    <string name="name_create">Create</string>
+    <string name="name_rename">Rename</string>
+    <!-- The delete-folder confirm: its title, message and button -->
+    <string name="folder_delete_title">Delete “%1$s”?</string>
+    <string name="folder_delete_body">Its ideas and folders move to %1$s, so nothing in it is lost.</string>
+    <string name="folder_delete_confirm">Delete folder</string>
+
+    <!-- The Undo banner -->
+    <string name="undo_moved">Moved to %1$s.</string>
+    <string name="undo_to_sort">Back in To sort.</string>
+    <string name="undo_deleted">Idea deleted.</string>
+    <string name="undo_action">Undo</string>
+
+    <!-- The editor -->
+    <string name="editor_title">Title</string>
+    <string name="editor_body">Details</string>
+    <string name="editor_hint">To link an idea, type [[ and its title, like [[Holiday plans]]. For a heading type #, for a list -, and **bold** or *italic*; tap Read to see them.</string>
+    <string name="editor_write">Write</string>
+    <string name="editor_read">Read</string>
+    <string name="editor_link_to">Link to an idea…</string>
+    <string name="editor_linked">Linked ideas</string>
+    <string name="editor_linked_here">Ideas that link here</string>
+    <!-- A link row's second line: how the link was made -->
+    <string name="editor_how_hand">Linked</string>
+    <string name="editor_how_text_out">Mentioned in the text</string>
+    <string name="editor_how_text_in">Mentions this idea</string>
+    <!-- A link row under a [[title]] no idea has -->
+    <string name="editor_missing">No idea with this title yet. Tap to make it.</string>
+    <!-- A link row's swipe, menu item and spoken action -->
+    <string name="editor_unlink">Unlink</string>
+    <!-- The folder chip, spoken, and its hint -->
+    <string name="editor_chip_spoken">Folder, %1$s</string>
+    <string name="editor_chip_hint">Choose a folder for this idea.</string>
+    <!-- The editor's More menu, and the delete confirm -->
+    <string name="editor_delete">Delete idea</string>
+    <string name="editor_delete_title">Delete this idea?</string>
+    <string name="editor_delete_body">Other ideas lose their links to it too.</string>
+    <string name="editor_delete_confirm">Delete idea</string>
+    <!-- The link picker -->
+    <string name="picker_title">Link to an idea</string>
+    <string name="picker_search">Find an idea</string>
+    <string name="picker_none">No ideas match “%1$s”.</string>
+
+    <!-- The empty store, the two lines under the well -->
+    <string name="empty_line1">Type an idea and tap Sort it to choose its folder.</string>
+    <string name="empty_line2">Ideas without a folder stay here to sort later.</string>
+    <!-- An open folder with no ideas -->
+    <string name="folder_empty">No ideas yet. Type one above to add it to this folder.</string>
+
+    <!-- The import's result -->
+    <string name="import_done_title">Ideas imported</string>
+    <!-- "Added 3 ideas, 1 folder and 2 links.", from the three plurals below -->
+    <string name="import_done_body">Added %1$s, %2$s and %3$s.</string>
+    <plurals name="import_ideas">
+        <item quantity="one">%d idea</item>
+        <item quantity="other">%d ideas</item>
+    </plurals>
+    <plurals name="import_folders">
+        <item quantity="one">%d folder</item>
+        <item quantity="other">%d folders</item>
+    </plurals>
+    <plurals name="import_links">
+        <item quantity="one">%d link</item>
+        <item quantity="other">%d links</item>
+    </plurals>
+    <!-- A second sentence, only when some added ideas had a place on the map -->
+    <plurals name="import_placed">
+        <item quantity="one">%d idea keeps its place on the map.</item>
+        <item quantity="other">%d ideas keep their place on the map.</item>
+    </plurals>
+    <string name="import_nothing_title">Nothing new to add</string>
+    <string name="import_nothing_body">You already have every idea in this file.</string>
+    <string name="import_ok">Done</string>
+    <!-- The import's refusals: one title, and a message for each of S04's cases -->
+    <string name="import_refused_title">Can\'t import this file</string>
+    <string name="import_refused_too_large">This file is over 32 MB, too big to import. Choose a smaller file.</string>
+    <string name="import_refused_unreadable">This file didn\'t open. It may be damaged, so try another copy.</string>
+    <string name="import_refused_not_export">This file isn\'t a Stethoscore ideas export. Choose another file.</string>
+    <string name="import_refused_other_version">This export is from another version of Stethoscore. Check for a Sorta update, then try again.</string>
+
+    <!-- The store's notices, once each, in the banner -->
+    <string name="store_unreadable">Your saved ideas didn\'t open. They\'re kept safe on this device, so new changes won\'t save for now.</string>
+    <string name="store_notice_close">Close</string>
+    <string name="store_save_failed">That change didn\'t save. Try again.</string>
 </resources>

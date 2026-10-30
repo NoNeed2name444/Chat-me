@@ -214,6 +214,38 @@ class IdeaBookTest {
         assertTrue(NoteEditing.suggestions("no bracket", notes, id(1)).isEmpty())
     }
 
+    // S05's Undo of a delete: made-up ideas
+    @Test fun aDeletedIdeaComesBackWithItsLinks() {
+        val b = book(folders = listOf(NoteFolder(id = id(90), name = "Garden")))
+        val shed = b.create("Paint the shed", folderId = id(90))
+        val brushes = b.create("Buy brushes")
+        val gate = b.create("Fix the gate")
+        b.link(brushes.id, shed.id)
+        b.link(shed.id, gate.id)
+        val removed = checkNotNull(b.removal(shed.id))
+        assertEquals("the ideas that link to it by hand are kept", listOf(brushes.id), removed.linkedFrom)
+        b.delete(shed.id)
+        assertNull("deleted", b.note(shed.id))
+        assertFalse("its link from another goes with it", shed.id in checkNotNull(b.note(brushes.id)).links)
+        saved.clear()
+        b.restore(removed)
+        val back = checkNotNull(b.note(shed.id)) { "restored" }
+        assertEquals("as it was", removed.note, back)
+        assertTrue("the link to it is back", shed.id in checkNotNull(b.note(brushes.id)).links)
+        assertTrue("its own links are back", gate.id in back.links)
+        assertEquals("saved once", 1, saved.size)
+        b.restore(removed)
+        assertEquals("a second restore does nothing", 1, saved.size)
+        assertEquals("once only", 1, b.notes.count { it.id == shed.id })
+
+        // its folder deleted meanwhile: it comes back to To sort
+        val again = checkNotNull(b.removal(shed.id))
+        b.delete(shed.id)
+        b.deleteFolder(id(90))
+        b.restore(again)
+        assertNull("in To sort", checkNotNull(b.note(shed.id)).folderId)
+    }
+
     @Test fun editorLinksAsTyped() {
         val b = book(listOf(Note(id = id(1), title = "A", links = listOf(id(2))), Note(id = id(2), title = "B"),
             Note(id = id(3), title = "C", body = "[[A]]")))

@@ -57,7 +57,7 @@ jobs:
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect ChunkCacheTest=5 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect IdeaBookTest=18 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeaStoreTest=6 --expect LabelRoomTest=3 --expect LaunchTest=10 --expect LineStyleTest=6 --expect LodSelectorTest=9 --expect MapDrawnTest=4 --expect MapMathTest=4 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SpaceDepthTest=15 --expect SpaceStyleTest=20 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect ChunkCacheTest=5 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect IdeaBookTest=19 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeaStoreTest=6 --expect LabelRoomTest=3 --expect LaunchTest=10 --expect LineStyleTest=6 --expect LodSelectorTest=9 --expect MapDrawnTest=4 --expect MapMathTest=4 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SortRenderTest=9 --expect SortScreenTest=17 --expect SortTouchTargetTest=2 --expect SpaceDepthTest=15 --expect SpaceStyleTest=20 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: sorta-android-apks
@@ -79,7 +79,8 @@ jobs:
   # (reference/stethoscore-aec2af1c/.github/workflows/android.yml and
   # android/scripts/capture-screenshots.sh). Its first green run (Chat-me
   # run 40855930084) took 4.1 minutes on the phone and 5.0 on the tablet,
-  # so it has about twice that.
+  # so it has about twice that. The phone's run also takes To sort with the
+  # three-button navigation bar (SortNavBarRenderTest), two stills.
   renders:
     needs: build
     runs-on: ubuntu-latest
@@ -170,10 +171,36 @@ jobs:
           adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapRenderTest \
             com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation.txt
           echo "the renders took $((SECONDS - started)) seconds" | tee test-results/time.txt
+          # the phone also renders To sort with Android's three-button
+          # navigation bar, by day and by night (S05, A6); the test checks
+          # the bar is the tappable three-button one
+          sort_tests=0
+          if [ "$device" = phone ]; then
+            adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton
+            for attempt in $(seq 1 15); do
+              if [ "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 0 ]; then break; fi
+              sleep 2
+            done
+            adb shell settings get secure navigation_mode | tr -d '\r' | tee test-results/navigation-mode.txt
+            sort_source=app/src/androidTest/java/com/cramdown/sorta/SortNavBarRenderTest.kt
+            sort_tests=$(grep -c '@Test' "$sort_source")
+            echo "expecting OK ($sort_tests tests) and $sort_tests renders of To sort" | tee -a test-results/expected.txt
+            started=$SECONDS
+            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SortNavBarRenderTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sort.txt
+            echo "To sort's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          fi
           # pulled first, so a failed run still uploads what it took
           adb pull /sdcard/Download/sorta-renders/. renders/ || true
           grep -qF "OK ($tests tests)" test-results/instrumentation.txt
-          test "$(find renders -name '*.png' | wc -l)" -eq "$tests"
+          test "$(find renders -name 'map-*.png' | wc -l)" -eq "$tests"
+          if [ "$device" = phone ]; then
+            # 0 is the three-button bar
+            [ "$(cat test-results/navigation-mode.txt)" = 0 ]
+            [ "$sort_tests" -gt 0 ]
+            grep -qF "OK ($sort_tests tests)" test-results/instrumentation-sort.txt
+            test "$(find renders -name 'sort-navbar-*.png' | wc -l)" -eq "$sort_tests"
+          fi
           SCRIPT
       - name: The renders
         uses: reactivecircus/android-emulator-runner@v2
