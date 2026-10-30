@@ -71,14 +71,16 @@ final class IdeasRenderTests: XCTestCase {
         XCTAssertLessThan(mode.maxY, link.minY, "Write / Read stands clear of Link to an idea: \(mode) \(link)")
 
         // a long draft: the well keeps its whole height, so the field stops
-        // at four lines and scrolls, and Sort it stays above the keyboard
-        // (the separate check of 33785fd)
+        // at two lines and scrolls, and Sort it stays above the keyboard
+        // (the separate checks of 33785fd and 0583088)
         app.buttons["editor-done"].tap()
         XCTAssertTrue(app.capture.waitForExistence(timeout: 10), "back on the Sort screen")
         app.capture.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         app.capture.typeText(String(repeating: "Oil the gate and the shed's hinges. ", count: 4))
         let keyboard = app.keyboards.firstMatch.frame
+        sleep(1)
+        keepShot("ideas-ax5-4-long-draft")
         assertInside(app.sortIt, window, "Sort it, with a long draft")
         XCTAssertTrue(app.sortIt.isHittable, "Sort it is on show with a long draft")
         XCTAssertLessThanOrEqual(app.sortIt.frame.maxY, keyboard.minY + 0.5,

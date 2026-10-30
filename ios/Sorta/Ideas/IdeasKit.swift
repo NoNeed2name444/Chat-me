@@ -114,9 +114,10 @@ struct CaptureWell: View {
                     Text(IdeasWords.placeholder)
                 })
                 // the well keeps its whole height (IdeasView's strip), so a
-                // long draft scrolls inside the field past four lines rather
-                // than pushing Sort it off the screen
-                .lineLimit(1...4)
+                // long draft scrolls inside the field past two lines, the
+                // prompt's own height, rather than pushing Sort it under the
+                // keyboard: four lines would on a 667-point iPhone SE at AX5
+                .lineLimit(1...2)
                 .onChange(of: draft) { _, now in
                     guard now.contains("\n") else { return }
                     draft = now.replacingOccurrences(of: "\n", with: " ")
