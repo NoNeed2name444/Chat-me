@@ -113,6 +113,10 @@ struct CaptureWell: View {
                 textField(TextField(text: $draft, prompt: Text(verbatim: ""), axis: .vertical) {
                     Text(IdeasWords.placeholder)
                 })
+                // the well keeps its whole height (IdeasView's strip), so a
+                // long draft scrolls inside the field past four lines rather
+                // than pushing Sort it off the screen
+                .lineLimit(1...4)
                 .onChange(of: draft) { _, now in
                     guard now.contains("\n") else { return }
                     draft = now.replacingOccurrences(of: "\n", with: " ")
