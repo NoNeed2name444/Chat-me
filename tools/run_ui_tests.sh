@@ -12,11 +12,16 @@
 # 40718963474 the iPad booted beside the running iPhone, in 6 minutes the
 # first time and in 11 the second.
 #
-#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad [kit|maps]
+#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad [kit|maps|ideas]
 #
 # kit (the default): the launch tests, the look kit's gallery and the maps'
 # renders, by day and by night, and the unit tests. maps: each of the maps'
 # tests (GraphPreviewUITests), one at a time; the maps are always night.
+# ideas (S05): on the iPhone, the Ideas screens' behaviour tests
+# (IdeasBehaviourTests, the whole class in one run), their renders by day
+# and by night, and the largest text size; on the iPad, the renders by day
+# and by night. A whole class passes only when every test in its file
+# passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
 set_="${2:-kit}"
@@ -65,6 +70,16 @@ case "$set_" in
     # take longer than a kit test; none was timed in Stethoscore's runs
     allowance=900
     echo "$kind: ${#runs[@]} map tests" ;;
+  ideas)
+    runs=(light:SortaUITests/IdeasRenderTests/testScreensRender
+          dark:SortaUITests/IdeasRenderTests/testScreensRender)
+    if [ "$kind" = "iphone" ]; then
+      runs=(light:SortaUITests/IdeasBehaviourTests "${runs[@]}"
+            light:SortaUITests/IdeasRenderTests/testLargestTextSize)
+    fi
+    # one test, or one launch of the whole class's: each test starts the
+    # app afresh, and the longest relaunches it once
+    allowance=300 ;;
   *) echo "::error::no test set $set_"; exit 2 ;;
 esac
 for run in "${runs[@]}"; do
@@ -94,6 +109,15 @@ for run in "${runs[@]}"; do
     # a whole bundle: every case passed, and none failed
     passed_by_name=$(grep -cE "Test [Cc]ase .*passed" "$log" || true)
     grep -qE "Test [Cc]ase .*failed" "$log" && passed_by_name=0
+  elif [ "${only#*/}" = "$test" ]; then
+    # a whole class: each test in its file passed, counted once by name,
+    # and none failed or was skipped
+    expected=$(grep -cE '^[[:space:]]*func test[A-Za-z0-9_]+\(' "UITests/$test.swift" || true)
+    passed_by_name=$( (grep -E "Test [Cc]ase .*passed" "$log" || true) \
+      | grep -oE "$test[ .]test[A-Za-z0-9_]+" | sort -u | wc -l | tr -d '[:space:]')
+    failed_here=$( (grep -E "Test [Cc]ase .*(failed|skipped)" "$log" || true) | wc -l | tr -d '[:space:]')
+    echo "$kind: $test: $passed_by_name of $expected passed, $failed_here failed or skipped"
+    if [ "$passed_by_name" -ne "$expected" ] || [ "$failed_here" -ne 0 ]; then passed_by_name=0; fi
   else
     passed_by_name=$(grep -cE "[ .]$test.*passed" "$log" || true)
   fi

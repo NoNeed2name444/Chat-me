@@ -167,3 +167,10 @@ suite zip ZipTests.swift $S/Zip.swift
 suite backup BackupTests.swift $S/LibraryBackup.swift $S/Zip.swift $S/MiniZip.swift \
       ios/Sorta/Store/IdeaImport.swift ios/Sorta/Store/NoteStore.swift ios/Sorta/Store/JSONCoding.swift \
       $S/RecoveryFiles.swift $S/Ideas/SaveToIdeas.swift $S/Ideas/IdeaEdges.swift
+
+# The Ideas screens (S05).
+# the Sort screen's rules: capture's guard, a row's line, the chooser's rows
+# in the store's order, the empty state, and the UI tests' launch arguments
+suite ideasdesk IdeasDeskTests.swift ios/Sorta/Ideas/IdeasDesk.swift
+# the editor's Read view: Markdown into blocks, [[Title]] into links
+suite notemarkdown NoteMarkdownTests.swift ios/Sorta/Ideas/NoteMarkdown.swift

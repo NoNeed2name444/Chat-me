@@ -1,7 +1,8 @@
 # Sorta's iOS app, on every copy pushed to Chat-me's sorta branch
 # (tools/mirror_chatme.py): the project generated, built for the simulator,
 # the app's Info.plist checked, and the launch, gallery and unit tests run on
-# an iPhone and an iPad. The Foundation-only Swift suites (the look kit's, the
+# an iPhone and an iPad; the Ideas screens' tests and renders run in a job
+# of their own (ideas), as the maps' do (maps). The Foundation-only Swift suites (the look kit's, the
 # maps' and the store's recovery) run on Linux (tools/swift_suites.py); the two
 # that need Apple's Compression, zip and backup (S04,
 # tools/swift_suites_mac_only.txt), run on the build job's Mac, as
@@ -142,6 +143,75 @@ jobs:
             results/
             shots/
             ios/build/swift-suites/out/
+          if-no-files-found: ignore
+          retention-days: 7
+  # The Ideas screens (S05): their behaviour tests on an iPhone, and their
+  # renders by day and by night on the iPhone and the iPad, with the largest
+  # text size on the iPhone, beside the build job (tools/run_ui_tests.sh,
+  # the ideas set). Their normal time is set by the first green run; until
+  # then the limits are about twice a guess: 15 minutes to build, 20 for the
+  # iPhone's 14 behaviour tests and 3 renders, 10 for the iPad's 2.
+  ideas:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Pick the simulators
+        id: sim
+        run: |
+          python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+          python3 tools/pick_sim.py ipad >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The Ideas tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 40
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone ideas
+      - name: The Ideas renders on an iPad
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 25
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.ipad_udid }}
+        run: bash ../tools/run_ui_tests.sh ipad ideas
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for bundle in results/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            name=$(basename "$bundle" .xcresult)
+            mkdir -p "shots/$name"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
+          done
+          ls -R shots 2>/dev/null | head -200 || echo "no screenshots"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-ios-ideas
+          path: |
+            build.log
+            results/
+            shots/
           if-no-files-found: ignore
           retention-days: 7
   # The maps' own tests (GraphPreviewUITests: each theme at rest, flown in,

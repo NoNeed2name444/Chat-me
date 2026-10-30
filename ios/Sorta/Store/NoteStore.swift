@@ -87,7 +87,11 @@ extension NoteFolder {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
-        self.init(name: try c.decodeIfPresent(String.self, forKey: .name) ?? "Folder")
+        // a folder with no name reads as one the person didn't name (the
+        // ux-writing pass of S05: "Untitled folder", as "Untitled" for ideas)
+        self.init(name: try c.decodeIfPresent(String.self, forKey: .name)
+            ?? NSLocalizedString("folder.default", value: "Untitled folder",
+                                 comment: "A folder read from a file with no name"))
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? id
         parentId = try c.decodeIfPresent(UUID.self, forKey: .parentId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? createdAt
@@ -105,6 +109,9 @@ extension NoteFolder {
 final class NoteStore: ObservableObject {
     @Published private(set) var notes: [Note] = [] { didSet { edgeCache = nil } }
     @Published private(set) var folders: [NoteFolder] = []
+    /// What reading the file at launch found wrong, if anything: the file
+    /// was put aside (RecoveryFiles) and the Sort screen says so once.
+    @Published private(set) var readProblem: ReadProblem?
     /// allEdges, kept until a note changes: the board draws them every frame.
     private var edgeCache: [(UUID, UUID)]?
 
@@ -112,6 +119,16 @@ final class NoteStore: ObservableObject {
     /// design preview's sample ideas (GraphPreview.makeStore), as Android's
     /// IdeaBook.makeId.
     var makeID: () -> UUID = { UUID() }
+
+    /// How reading the file at launch went wrong.
+    enum ReadProblem: Equatable {
+        /// None of it could be read: it was copied aside, and the store
+        /// starts empty, so new ideas still save.
+        case unreadable
+        /// Some ideas or folders couldn't be read: the rest were kept, and
+        /// the whole file was copied aside.
+        case partlyUnreadable
+    }
 
     private let fileURL: URL
     /// One queue, so two quick saves land in the order they were made.
@@ -148,13 +165,17 @@ final class NoteStore: ObservableObject {
             // version could not read; put the file aside first so they can be
             // recovered
             RecoveryFiles.putAside(fileURL, as: "notes-unreadable")
+            readProblem = .unreadable
             return
         }
         // a note this version cannot read costs only itself, and survives in
         // a copy (Settings > Your data)
         let read = RecoveryFiles.list(snapshot.notes)
         let shelves = RecoveryFiles.list(snapshot.folders)
-        if read.skipped + shelves.skipped > 0 { RecoveryFiles.putAside(fileURL, as: "notes-partly-unreadable") }
+        if read.skipped + shelves.skipped > 0 {
+            RecoveryFiles.putAside(fileURL, as: "notes-partly-unreadable")
+            readProblem = .partlyUnreadable
+        }
         notes = read.values
         folders = shelves.values
     }
@@ -256,6 +277,39 @@ final class NoteStore: ObservableObject {
         notes.removeAll { $0.id == id }
         for index in notes.indices where notes[index].links.contains(id) {
             notes[index].links.removeAll { $0 == id }
+        }
+        save()
+    }
+
+    /// What deleting a note took away, for Undo: the note, where it stood in
+    /// the list, and the notes whose hand-made links pointed to it.
+    struct Removal {
+        let note: Note
+        let index: Int
+        let heldBy: [UUID]
+    }
+
+    /// Deletes a note as `delete` does, and returns what `undo` needs to put
+    /// it back as it was; nil when there is no such note.
+    @discardableResult
+    func remove(_ id: UUID) -> Removal? {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return nil }
+        let heldBy: [UUID] = notes.filter { $0.links.contains(id) }.map(\.id)
+        let removal = Removal(note: notes[index], index: index, heldBy: heldBy)
+        delete(id)
+        return removal
+    }
+
+    /// Puts a removed note back where it stood, with the hand-made links to
+    /// it from the notes still here. Nothing when it is back already.
+    func undo(_ removal: Removal) {
+        let id = removal.note.id
+        guard note(id) == nil else { return }
+        notes.insert(removal.note, at: min(removal.index, notes.count))
+        for holder in removal.heldBy {
+            guard let index = notes.firstIndex(where: { $0.id == holder }),
+                  !notes[index].links.contains(id) else { continue }
+            notes[index].links.append(id)
         }
         save()
     }

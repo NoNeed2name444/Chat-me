@@ -12,6 +12,18 @@
           }
         }
       }
+    },
+    "Stethoscore backup" : {
+      "comment" : "The name of Stethoscore's backup file type, in the Files app and the file picker (UTImportedTypeDeclarations in project.yml).",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stethoscore backup"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

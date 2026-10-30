@@ -67,6 +67,20 @@ targets:
           - Nunito[wght].ttf
           - Nunito-Italic[wght].ttf
           - BalooBhaijaan2[wght].ttf
+        # Stethoscore's library backup, which Import from Stethoscore… opens
+        # with the system's file picker (IdeasView, IdeaImportFlow): imported,
+        # since Stethoscore owns it, with the id, description and extension
+        # Stethoscore declares (reference/stethoscore-aec2af1c/ios/project.yml:
+        # 213-220). The description's words are in InfoPlist.xcstrings.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.cramdown.stethoscore.backup
+            UTTypeDescription: Stethoscore backup
+            UTTypeConformsTo:
+              - public.zip-archive
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - stethoscorebackup
         # Sorta's own links: sorta://...
         CFBundleURLTypes:
           - CFBundleURLName: com.cramdown.sorta
@@ -100,6 +114,9 @@ targets:
     platform: iOS
     sources:
       - path: UITests
+      # the Ideas tests write their made-up Stethoscore backup with the
+      # app's own zip writer (IdeasUITestSupport)
+      - path: Sorta/Shared/MiniZip.swift
     dependencies:
       - target: Sorta
     settings:
