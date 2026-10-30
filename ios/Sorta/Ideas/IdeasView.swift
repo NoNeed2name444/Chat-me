@@ -290,6 +290,14 @@ struct IdeasView: View {
         }
         .menuStyle(.button)
         .buttonStyle(.wardCircle)
+        // the circle is 44 points across and its glyph grows with the
+        // text: past AX3 the dots ran out of it (render check of copy
+        // 0cf619c), so the glyph stops there, as a bar's glyphs do, and a
+        // long press shows the large content viewer instead
+        .dynamicTypeSize(...DynamicTypeSize.accessibility3)
+        .accessibilityShowsLargeContentViewer {
+            Label(IdeasWords.more, systemImage: "ellipsis")
+        }
         .accessibilityLabel(IdeasWords.more)
         .accessibilityIdentifier("more")
     }
