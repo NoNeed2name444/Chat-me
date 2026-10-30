@@ -132,11 +132,29 @@ extension XCUIApplication {
 }
 
 extension XCUIElement {
-    /// Clears a field and types `text` into it.
+    /// Clears a field and types `text` into it. The tap is at the field's
+    /// trailing end, so the caret sits after the old words and the deletes
+    /// take them (a tap in the middle left it at the start, and the new
+    /// words went in front: "Alpha planAlpha", Chat-me run 40983816557).
     func replaceText(with text: String) {
-        tap()
+        coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
         let old = (value as? String) ?? ""
         typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2) + text)
+        XCTAssertEqual(value as? String, text, "the field holds only the new words")
+    }
+
+    /// The frame once it has stopped moving: a sheet is measured at rest,
+    /// not while it slides in (the chooser's Cancel read 0.96 of its 44
+    /// points mid-presentation, Chat-me run 40983816557).
+    var settledFrame: CGRect {
+        var last = frame
+        for _ in 0..<20 {
+            _ = XCTWaiter.wait(for: [XCTestExpectation(description: "settle")], timeout: 0.25)
+            let now = frame
+            if now == last { return now }
+            last = now
+        }
+        return last
     }
 }
 

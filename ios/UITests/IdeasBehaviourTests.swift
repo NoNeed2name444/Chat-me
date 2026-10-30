@@ -366,16 +366,19 @@ final class IdeasBehaviourTests: XCTestCase {
         XCTAssertLessThanOrEqual(app.capture.frame.maxX, app.sortIt.frame.minX, "the field stops before Sort it")
 
         app.openChooser(for: "Oil the gate")
+        // measured once the sheet is at rest
+        let cancel = app.buttons["chooser-cancel"].settledFrame
         assertTargets([("To sort", app.chooserToSort.frame),
                        ("Garden", app.chooserFolder("Garden").frame),
                        ("New folder", app.buttons["chooser-new-folder"].frame),
-                       ("Cancel", app.buttons["chooser-cancel"].frame)], "the chooser")
+                       ("Cancel", cancel)], "the chooser")
         app.buttons["chooser-cancel"].tap()
 
         app.ideaRow("Oil the gate").tap()
         XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10))
         var editor: [(String, CGRect)] = [
-            ("Done", app.buttons["editor-done"].frame),
+            // the first read waits for the sheet to come to rest
+            ("Done", app.buttons["editor-done"].settledFrame),
             ("More", app.buttons["editor-more"].frame),
             ("the folder chip", app.buttons["editor-folder"].frame),
             ("Link to an idea", app.buttons["editor-link"].frame),
