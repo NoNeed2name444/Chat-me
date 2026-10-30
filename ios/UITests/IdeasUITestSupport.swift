@@ -115,12 +115,16 @@ extension XCUIApplication {
         XCTAssertTrue(folderRow(name).waitForExistence(timeout: 10), "the folder \(name) is listed")
     }
 
-    /// Types a name into the naming sheet's field once the keyboard is up,
-    /// and checks it arrived: the first keyboard after a cold boot lost
-    /// what was typed before it was ready (Chat-me run 40997369293, the
-    /// first test: the field focused but empty, Create off).
+    /// Types a name into the naming sheet's field once the keyboard is up
+    /// and the sheet has come to rest, and checks it arrived. The sheet
+    /// rises with the keyboard, and keys sent while it moved were lost:
+    /// all of them in Chat-me run 40997369293 (the field focused but
+    /// empty, Create off), all but the first in run 41014171299 ("G" for
+    /// "Garden").
     func typeName(_ name: String) {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
+        _ = keyboards.firstMatch.settledFrame
+        _ = nameField.settledFrame
         nameField.typeText(name)
         XCTAssertEqual(nameField.value as? String, name, "the name is in the field")
     }
