@@ -169,21 +169,26 @@ struct IdeasView: View {
     // MARK: the empty state
 
     /// A store with nothing in it: two lines under the well, in the top
-    /// third, so the middle of the screen is the page.
+    /// third, so the middle of the screen is the page. More stays at the
+    /// row's end, as on Android, so the import and New folder are there
+    /// on the first launch too.
     private var emptyLines: some View {
-        VStack(alignment: .leading, spacing: WardSpace.xs) {
-            Text(IdeasWords.emptyLine1)
-            Text(IdeasWords.emptyLine2)
+        HStack(alignment: .top, spacing: WardSpace.m) {
+            VStack(alignment: .leading, spacing: WardSpace.xs) {
+                Text(IdeasWords.emptyLine1)
+                Text(IdeasWords.emptyLine2)
+            }
+            .wardFont(.subheadline)
+            .foregroundStyle(Color.wardInkSecondary)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, WardSpace.m - WardSpace.s)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("ideas-empty")
+            moreMenu
         }
-        .wardFont(.subheadline)
-        .foregroundStyle(Color.wardInkSecondary)
-        .multilineTextAlignment(.leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WardSpace.gutter)
-        .padding(.top, WardSpace.m - WardSpace.s)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("ideas-empty")
     }
 
     // MARK: the list
