@@ -557,7 +557,10 @@ struct LinkPickerView: View {
                 .sharedBackgroundVisibility(.hidden)
             }
         }
-        .presentationDetents([.medium, .large])
+        // full height: at .medium, iOS draws a sheet's content at 0.96 of
+        // its size, which put the bar's 44-point Cancel at 42.25 (Chat-me
+        // run 40987053659, measured at rest); the editor, at .large, keeps 44
+        .presentationDetents([.large])
     }
 }
 

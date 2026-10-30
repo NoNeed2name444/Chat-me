@@ -374,6 +374,15 @@ final class IdeasBehaviourTests: XCTestCase {
                        ("Cancel", cancel)], "the chooser")
         app.buttons["chooser-cancel"].tap()
 
+        // the naming sheet's bar, at rest
+        app.more.tap()
+        app.buttons[IdeasText.newFolder].firstMatch.tap()
+        XCTAssertTrue(app.nameField.waitForExistence(timeout: 10), "the naming sheet is open")
+        let nameCancel = app.buttons[IdeasText.cancel].firstMatch
+        assertTargets([("Cancel", nameCancel.settledFrame),
+                       ("Create", app.buttons[IdeasText.create].firstMatch.frame)], "the naming sheet")
+        nameCancel.tap()
+
         app.ideaRow("Oil the gate").tap()
         XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10))
         var editor: [(String, CGRect)] = [
