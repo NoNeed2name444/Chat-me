@@ -120,7 +120,9 @@ extension XCUIApplication {
     /// rises with the keyboard, and keys sent while it moved were lost:
     /// all of them in Chat-me run 40997369293 (the field focused but
     /// empty, Create off), all but the first in run 41014171299 ("G" for
-    /// "Garden").
+    /// "Garden"). The field's value is read once it has caught up: read at
+    /// once it held "Gar" of "Garden" (run 41017802579), so the check waits
+    /// up to 5 seconds and names what it saw first and last.
     func typeName(_ name: String) {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         _ = keyboards.firstMatch.settledFrame
@@ -129,7 +131,11 @@ extension XCUIApplication {
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nameField)], timeout: 10),
                        .completed, "the name field has the caret")
         nameField.typeText(name)
-        XCTAssertEqual(nameField.value as? String, name, "the name is in the field")
+        let first = nameField.value as? String
+        let whole = NSPredicate(format: "value == %@", name)
+        let caughtUp = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: whole, object: nameField)], timeout: 5)
+        XCTAssertEqual(caughtUp, .completed,
+                       "the name is in the field: first \(first ?? "nil"), then \(nameField.value as? String ?? "nil")")
     }
 
     /// Taps the notice's Undo, at its trailing end: the banner reads as one
