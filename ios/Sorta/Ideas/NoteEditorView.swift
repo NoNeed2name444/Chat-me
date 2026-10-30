@@ -60,7 +60,13 @@ struct NoteEditorView: View {
         NavigationStack {
             form
                 .wardForm()
-                .safeAreaInset(edge: .bottom, spacing: 0) { actionBar }
+                // pinned over the foot of the page, except at the
+                // accessibility sizes, where the bar would take a fifth of
+                // the screen and cover the chip: there it is a row of the
+                // page, under the chip (`form`)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !typeSize.isAccessibilitySize { actionBar }
+                }
                 // no words in the bar: the title field under it names the
                 // idea, and the strings list gives the bar none
                 .navigationBarTitleDisplayMode(.inline)
@@ -165,6 +171,13 @@ struct NoteEditorView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(PopOutField.rowInsets)
                     .listRowSeparator(.hidden)
+                if typeSize.isAccessibilitySize {
+                    actionControls
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(PopOutField.rowInsets)
+                        .listRowSeparator(.hidden)
+                }
             }
 
             Section {
@@ -211,9 +224,9 @@ struct NoteEditorView: View {
 
     // MARK: the bottom bar and the chip
 
-    /// Write / Read and Link to an idea…, above the home indicator and the
-    /// keyboard; at the accessibility sizes each takes its own row.
-    private var actionBar: some View {
+    /// Write / Read and Link to an idea…: in one line in the bar, or at the
+    /// accessibility sizes each on its own line, in the page.
+    private var actionControls: some View {
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: WardSpace.s))
             : AnyLayout(HStackLayout(spacing: WardSpace.m))
@@ -224,10 +237,16 @@ struct NoteEditorView: View {
                 .accessibilityIdentifier("editor-link")
             if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
-        .padding(.horizontal, WardSpace.gutter)
-        .padding(.vertical, WardSpace.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.wardBackground)
+    }
+
+    /// The bar above the home indicator and the keyboard, at the standard
+    /// sizes.
+    private var actionBar: some View {
+        actionControls
+            .padding(.horizontal, WardSpace.gutter)
+            .padding(.vertical, WardSpace.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.wardBackground)
     }
 
     private func startLinking() {

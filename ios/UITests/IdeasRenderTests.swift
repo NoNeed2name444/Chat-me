@@ -19,13 +19,12 @@ final class IdeasRenderTests: XCTestCase {
     }
 
     /// The largest Dynamic Type size (AX5) on a phone: To sort and the
-    /// editor, with every control inside the window and none under 44
-    /// points. CI runs it on the iPhone only.
+    /// editor, with every control inside the window, none under 44 points
+    /// and none touching another. CI runs it on the iPhone only.
     func testLargestTextSize() throws {
-        let app = launchIdeas(IdeasStoreName(), [
-            "-SortaImportFile", try MadeUpExport.base64(),
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
-        ])
+        let store = IdeasStoreName()
+        let largest = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        var app = launchIdeas(store, ["-SortaImportFile", try MadeUpExport.base64()] + largest)
         let window = app.windows.firstMatch.frame
         keepShot("ideas-ax5-1-empty")
         assertInside(app.descendants(matching: .any)["capture"], window, "the capture well")
@@ -36,12 +35,24 @@ final class IdeasRenderTests: XCTestCase {
                        "Sort it is full width under the field: \(app.sortIt.frame) in \(well)")
 
         importExport(app)
-        app.captureIdea("Oil the gate before winter, and the shed's hinges too")
-        XCTAssertTrue(app.ideaRow("Oil the gate before winter, and the shed's hinges too").waitForExistence(timeout: 10))
+        let long = "Oil the gate before winter, and the shed's hinges too"
+        app.captureIdea(long)
+        XCTAssertTrue(app.ideaRow(long).waitForExistence(timeout: 10))
+        // capture keeps the caret, and its keyboard covers To sort: the
+        // same store reopened has no caret anywhere, so the rows show
+        // the store writes off the main thread: let it land
+        sleep(2)
+        app.terminate()
+        app = launchIdeas(store, largest)
+        XCTAssertTrue(app.ideaRow(long).waitForExistence(timeout: 10), "the idea is kept")
+        XCTAssertEqual(app.keyboards.count, 0, "no keyboard covers To sort")
+        sleep(1)
         keepShot("ideas-ax5-2-to-sort")
-        let choose = app.chooseFolder(for: "Oil the gate before winter, and the shed's hinges too")
+        let choose = app.chooseFolder(for: long)
         assertInside(choose, window, "Choose folder")
-        let row = app.ideaRow("Oil the gate before winter, and the shed's hinges too")
+        XCTAssertTrue(choose.isHittable, "Choose folder is on show, not covered")
+        XCTAssertLessThanOrEqual(choose.frame.maxY, window.maxY + 0.5, "Choose folder isn't cut at the bottom: \(choose.frame)")
+        let row = app.ideaRow(long)
         XCTAssertLessThanOrEqual(row.frame.maxY, choose.frame.minY + 1, "the row stacks: Choose folder under the words")
 
         row.tap()
@@ -51,6 +62,13 @@ final class IdeasRenderTests: XCTestCase {
         for id in ["editor-done", "editor-more", "editor-folder", "editor-link"] {
             assertInside(app.buttons[id], window, id)
         }
+        // the chip, Write / Read and Link to an idea… stack in the page,
+        // apart: none covers or touches the next
+        let chip = app.buttons["editor-folder"].frame
+        let mode = app.descendants(matching: .any)["noteMarkdownToggle"].frame
+        let link = app.buttons["editor-link"].frame
+        XCTAssertLessThan(chip.maxY, mode.minY, "the folder chip stands clear of Write / Read: \(chip) \(mode)")
+        XCTAssertLessThan(mode.maxY, link.minY, "Write / Read stands clear of Link to an idea: \(mode) \(link)")
     }
 
     // MARK: the walk

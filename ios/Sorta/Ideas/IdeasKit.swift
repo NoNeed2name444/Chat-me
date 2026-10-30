@@ -93,29 +93,49 @@ struct CaptureWell: View {
 
     @ViewBuilder
     private func field(wraps: Bool) -> some View {
-        let prompt = Text(IdeasWords.placeholder).foregroundStyle(Color.wardDisabledInk)
-        Group {
-            if wraps {
+        if wraps {
+            // a field's own prompt keeps to one line and is cut short, so
+            // at the largest sizes the prompt is words of the well's own,
+            // behind the field, that wrap; the field's label still names it
+            ZStack(alignment: .topLeading) {
+                if draft.isEmpty {
+                    Text(IdeasWords.placeholder)
+                        .wardFont(.body)
+                        .foregroundStyle(Color.wardDisabledInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 // a field that wraps takes Return as a new line, so a new
                 // line is read as Return: the idea is saved, and Done still
                 // saves at the largest sizes
-                TextField(text: $draft, prompt: prompt, axis: .vertical) { Text(IdeasWords.placeholder) }
-                    .onChange(of: draft) { _, now in
-                        guard now.contains("\n") else { return }
-                        draft = now.replacingOccurrences(of: "\n", with: " ")
-                        save()
-                    }
-            } else {
-                TextField(text: $draft, prompt: prompt) { Text(IdeasWords.placeholder) }
+                textField(TextField(text: $draft, prompt: Text(verbatim: ""), axis: .vertical) {
+                    Text(IdeasWords.placeholder)
+                })
+                .onChange(of: draft) { _, now in
+                    guard now.contains("\n") else { return }
+                    draft = now.replacingOccurrences(of: "\n", with: " ")
+                    save()
+                }
             }
+        } else {
+            textField(TextField(text: $draft,
+                                prompt: Text(IdeasWords.placeholder).foregroundStyle(Color.wardDisabledInk)) {
+                Text(IdeasWords.placeholder)
+            })
         }
-        .wardFont(.body)
-        .foregroundStyle(Color.wardInk)
-        .tint(Color.wardPrimaryInk)
-        .focused(capturing)
-        .submitLabel(.done)
-        .onSubmit(save)
-        .accessibilityIdentifier("idea-capture")
+    }
+
+    private func textField(_ field: TextField<Text>) -> some View {
+        field
+            .wardFont(.body)
+            .foregroundStyle(Color.wardInk)
+            .tint(Color.wardPrimaryInk)
+            .focused(capturing)
+            .submitLabel(.done)
+            .onSubmit(save)
+            .accessibilityIdentifier("idea-capture")
     }
 
     private func sortButton(wide: Bool) -> some View {
