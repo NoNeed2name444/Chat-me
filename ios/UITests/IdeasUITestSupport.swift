@@ -128,9 +128,11 @@ extension XCUIApplication {
     /// rises with the keyboard, and keys sent while it moved were lost:
     /// all of them in Chat-me run 40997369293 (the field focused but
     /// empty, Create off), all but the first in run 41014171299 ("G" for
-    /// "Garden"). The field's value is read once it has caught up: read at
-    /// once it held "Gar" of "Garden" (run 41017802579), so the check waits
-    /// up to 5 seconds and names what it saw first and last.
+    /// "Garden"). Sent whole, at XCUITest's 60 keys a second, keys were
+    /// still dropped on a slow runner with the field focused and at rest:
+    /// "Ga" of "Garden" five seconds on (run 41029008128, attempt 3). So
+    /// the name goes in a key at a time, and each key must land before the
+    /// next is sent; a key that never lands fails here, by its place.
     func typeName(_ name: String) {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         _ = keyboards.firstMatch.settledFrame
@@ -138,12 +140,15 @@ extension XCUIApplication {
         let focused = NSPredicate(format: "hasKeyboardFocus == true")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nameField)], timeout: 10),
                        .completed, "the name field has the caret")
-        nameField.typeText(name)
-        let first = nameField.value as? String
-        let whole = NSPredicate(format: "value == %@", name)
-        let caughtUp = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: whole, object: nameField)], timeout: 5)
-        XCTAssertEqual(caughtUp, .completed,
-                       "the name is in the field: first \(first ?? "nil"), then \(nameField.value as? String ?? "nil")")
+        var typed = ""
+        for key in name {
+            nameField.typeText(String(key))
+            typed.append(key)
+            let landed = NSPredicate(format: "value == %@", typed)
+            let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landed, object: nameField)], timeout: 5)
+            XCTAssertEqual(result, .completed,
+                           "key \(typed.count) of \"\(name)\" is in the field: it holds \(nameField.value as? String ?? "nil")")
+        }
     }
 
     /// Taps the notice's Undo, at its trailing end: the banner reads as one
