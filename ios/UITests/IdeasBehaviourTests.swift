@@ -118,7 +118,7 @@ final class IdeasBehaviourTests: XCTestCase {
         app.openChooser(for: "Bake rye bread")
         app.buttons["chooser-new-folder"].tap()
         XCTAssertTrue(app.nameField.waitForExistence(timeout: 10), "the naming sheet is open")
-        app.nameField.typeText("Kitchen")
+        app.typeName("Kitchen")
         app.buttons[IdeasText.create].firstMatch.tap()
         XCTAssertTrue(app.folderRow("Kitchen").waitForExistence(timeout: 10), "the folder was made")
         XCTAssertEqual(app.folderRow("Kitchen").label, IdeasText.folderTitle("Kitchen", 1), "the idea is in it")

@@ -110,9 +110,19 @@ extension XCUIApplication {
         more.tap()
         buttons[IdeasText.newFolder].firstMatch.tap()
         XCTAssertTrue(nameField.waitForExistence(timeout: 10), "the naming sheet is open")
-        nameField.typeText(name)
+        typeName(name)
         buttons[IdeasText.create].firstMatch.tap()
         XCTAssertTrue(folderRow(name).waitForExistence(timeout: 10), "the folder \(name) is listed")
+    }
+
+    /// Types a name into the naming sheet's field once the keyboard is up,
+    /// and checks it arrived: the first keyboard after a cold boot lost
+    /// what was typed before it was ready (Chat-me run 40997369293, the
+    /// first test: the field focused but empty, Create off).
+    func typeName(_ name: String) {
+        XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
+        nameField.typeText(name)
+        XCTAssertEqual(nameField.value as? String, name, "the name is in the field")
     }
 
     /// Taps the notice's Undo, at its trailing end: the banner reads as one
