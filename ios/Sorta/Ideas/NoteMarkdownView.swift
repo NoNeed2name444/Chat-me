@@ -56,13 +56,20 @@ struct NoteMarkdownView: View {
                     Rectangle().fill(Color.wardPrimaryInk).frame(width: WardSpace.xs)
                 }
         case .code(let body):
+            // the kit's callout, in its fixed-width variant where the face
+            // has one
             Text(body)
-                .font(.callout.monospaced())
+                .monospaced()
+                .wardFont(.callout)
                 .padding(WardSpace.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .wardInset(in: RoundedRectangle(cornerRadius: WardRadius.field, style: .continuous))
         case .rule:
-            WardEtch()
+            // hairline, the one line (S05 plan), as under the capture strip
+            Rectangle()
+                .fill(Color.wardHairline)
+                .frame(height: CGFloat(WardPaper.edgeWidth))
+                .accessibilityHidden(true)
         case .paragraph(let line):
             Text(NoteMarkdown.inline(line))
         }

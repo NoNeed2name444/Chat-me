@@ -13,7 +13,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -171,6 +170,32 @@ class SortScreenTest {
         run.until { run.banner()?.contains(s(R.string.undo_moved, "Shed")) == true }
     }
 
+    @Test fun newFolderFromTheChooserInsideAFolderMakesItThere() {
+        run.launch()
+        newFolder("Garden")
+        run.folderRow(p(R.plurals.folder_row_spoken, 0, "Garden", 0)).performClick()
+        compose.waitForIdle()
+        capture("Plant tulips")
+        chooseFor("Plant tulips")
+        run.inChooser(s(R.string.chooser_new_folder)).performClick()
+        compose.waitForIdle()
+        run.field(s(R.string.name_field)).performTextInput("Bulbs")
+        compose.onNodeWithText(s(R.string.name_create)).performClick()
+        run.until { compose.onAllNodes(hasContentDescription(p(R.plurals.folder_row_spoken, 1, "Bulbs", 1)) and
+            hasAnyAncestor(hasTestTag(IdeasTags.SCREEN))).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("the idea left Garden's own list", 0, run.ideaCount("Plant tulips"))
+        run.title.assertContentDescriptionEquals(p(R.plurals.folder_title_spoken, 1, "Garden", 1))
+        compose.onNode(hasContentDescription(s(R.string.up_row_spoken, s(R.string.sort_title)))).performClick()
+        compose.waitForIdle()
+        assertEquals("Bulbs isn't at the top level", 0,
+            compose.onAllNodes(hasContentDescription("Bulbs, ", substring = true) and hasAnyAncestor(hasTestTag(IdeasTags.SCREEN))).fetchSemanticsNodes().size)
+        run.folderRow(p(R.plurals.folder_row_spoken, 1, "Garden", 1)).assertIsDisplayed()
+        run.relaunch()
+        run.folderRow(p(R.plurals.folder_row_spoken, 1, "Garden", 1)).performClick()
+        compose.waitForIdle()
+        run.folderRow(p(R.plurals.folder_row_spoken, 1, "Bulbs", 1)).assertIsDisplayed()
+    }
+
     @Test fun toSortInTheChooserTakesTheIdeaOutOfItsFolder() {
         run.launch()
         newFolder("Garden")
@@ -206,7 +231,8 @@ class SortScreenTest {
         capture("Line the beds")
         compose.onNode(hasContentDescription(s(R.string.up_row_spoken, "Garden"))).performClick()
         compose.waitForIdle()
-        run.title.assertContentDescriptionEquals(p(R.plurals.folder_title_spoken, 1, "Garden", 1))
+        // its count takes in the nested folder's idea, as its row's does (iOS count(in:))
+        run.title.assertContentDescriptionEquals(p(R.plurals.folder_title_spoken, 2, "Garden", 2))
         run.idea("Plant tulips").assertIsDisplayed()
         assertEquals("the nested idea stays in its folder", 0, run.ideaCount("Line the beds"))
         run.folderRow(p(R.plurals.folder_row_spoken, 1, "Raised beds", 1)).assertIsDisplayed()
@@ -240,6 +266,50 @@ class SortScreenTest {
         run.idea("Plant tulips").assertIsDisplayed()
         run.folderRow(p(R.plurals.folder_row_spoken, 0, "Raised beds", 0)).assertIsDisplayed()
         assertEquals("the folder is gone", 0, compose.onAllNodes(hasContentDescription("Yard", substring = true)).fetchSemanticsNodes().size)
+    }
+
+    @Test fun aFolderTitleCountsTheIdeasInItsNestedFolders() {
+        run.launch()
+        newFolder("Garden")
+        run.folderRow(p(R.plurals.folder_row_spoken, 0, "Garden", 0)).performClick()
+        compose.waitForIdle()
+        capture("Plant tulips")
+        newFolder("Raised beds")
+        run.folderRow(p(R.plurals.folder_row_spoken, 0, "Raised beds", 0)).performClick()
+        compose.waitForIdle()
+        capture("Line the beds")
+        capture("Buy compost")
+        run.title.assertContentDescriptionEquals(p(R.plurals.folder_title_spoken, 2, "Raised beds", 2))
+        compose.onNode(hasContentDescription(s(R.string.up_row_spoken, "Garden"))).performClick()
+        compose.waitForIdle()
+        run.title.assertContentDescriptionEquals(p(R.plurals.folder_title_spoken, 3, "Garden", 3))
+        assertEquals("its own list shows its own idea", 1, compose.onAllNodes(hasTestTag(IdeasTags.IDEA_LINE)).fetchSemanticsNodes().size)
+        compose.onNode(hasContentDescription(s(R.string.up_row_spoken, s(R.string.sort_title)))).performClick()
+        compose.waitForIdle()
+        run.folderRow(p(R.plurals.folder_row_spoken, 3, "Garden", 3)).assertIsDisplayed()
+        run.title.assertContentDescriptionEquals(p(R.plurals.sort_title_spoken, 0, 0))
+    }
+
+    @Test fun aFolderSwipedAwayAsksFirstAndCancelKeepsIt() {
+        run.launch()
+        newFolder("Garden")
+        newFolder("Kitchen")
+        val garden = p(R.plurals.folder_row_spoken, 0, "Garden", 0)
+        assertTrue("TalkBack offers Delete folder", s(R.string.folder_delete) in run.actions(run.folderRow(garden)))
+        run.folderRow(garden).performTouchInput { swipeLeft() }
+        run.until { run.shows(s(R.string.folder_delete_title, "Garden")) }
+        compose.onNodeWithText(s(R.string.sheet_cancel)).performClick()
+        compose.waitForIdle()
+        run.until { !run.shows(s(R.string.folder_delete_title, "Garden")) }
+        run.folderRow(garden).assertIsDisplayed()
+        run.folderRow(garden).performTouchInput { swipeLeft() }
+        run.until { run.shows(s(R.string.folder_delete_title, "Garden")) }
+        compose.onNodeWithText(s(R.string.folder_delete_confirm)).performClick()
+        compose.waitForIdle()
+        run.until { compose.onAllNodes(hasContentDescription("Garden, ", substring = true)).fetchSemanticsNodes().isEmpty() }
+        run.folderRow(p(R.plurals.folder_row_spoken, 0, "Kitchen", 0)).assertIsDisplayed()
+        run.relaunch()
+        assertEquals("gone after a relaunch", 0, compose.onAllNodes(hasContentDescription("Garden, ", substring = true)).fetchSemanticsNodes().size)
     }
 
     @Test fun anIdeaSwipedAwayIsDeletedAndUndoBringsItBack() {
@@ -286,7 +356,7 @@ class SortScreenTest {
         title.performTextClearance()
         title.performTextInput("Paint the shed green")
         run.field(s(R.string.editor_body)).performTextInput("Two coats, after the rain.")
-        compose.onNodeWithText(s(R.string.editor_link_to)).performScrollTo().performClick()
+        compose.onNode(hasTestTag(EDITOR_LINK_TAG)).performClick()
         run.until { compose.onAllNodes(hasContentDescription("Buy brushes") and hasAnyAncestor(hasTestTag(LINK_PICKER_TAG))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasContentDescription("Buy brushes") and hasAnyAncestor(hasTestTag(LINK_PICKER_TAG))).performClick()
         compose.onNode(hasText(s(R.string.ward_done)) and hasAnyAncestor(hasTestTag(LINK_PICKER_TAG))).performClick()

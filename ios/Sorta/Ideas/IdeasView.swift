@@ -33,6 +33,8 @@ struct IdeasView: View {
     @State private var importing = false
     @State private var imported: ImportOutcome?
     @State private var notice: IdeasNotice?
+    /// A filing made in the editor, offered with Undo when it closes.
+    @State private var editorFiling: EditorFiling?
     @State private var toldReadProblem = false
     /// The list is scrolled away from its top: the hairline under the well shows.
     @State private var scrolled = false
@@ -87,8 +89,8 @@ struct IdeasView: View {
         .wardMasthead()
         .background { WardBackground() }
         .lineSpacing(WardSpace.leading)
-        .sheet(item: $opening) { ref in
-            NoteEditorView(noteID: ref.id, delete: deleteIdea)
+        .sheet(item: $opening, onDismiss: offerEditorUndo) { ref in
+            NoteEditorView(noteID: ref.id, file: fileFromEditor, delete: deleteIdea)
         }
         .sheet(item: $choosing) { ref in
             FolderChooser(current: notes.note(ref.id)?.folderId,
@@ -204,14 +206,14 @@ struct IdeasView: View {
             }
             titleRow(current, count: current.map { notes.count(in: $0.id) } ?? here.count)
                 .listRowBackground(Color.clear)
-                .listRowInsets(WardRowTile.insets)
+                .listRowInsets(IdeasLayout.lineInsets)
                 .listRowSeparator(.hidden)
             if here.isEmpty {
                 Text(current == nil ? IdeasWords.allSorted : IdeasWords.folderEmpty)
                     .wardFont(.subheadline)
                     .foregroundStyle(Color.wardInkSecondary)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(WardRowTile.insets)
+                    .listRowInsets(IdeasLayout.lineInsets)
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(here) { note in
@@ -222,7 +224,7 @@ struct IdeasView: View {
             if !subfolders.isEmpty {
                 WardSectionLabel(IdeasWords.folders)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(WardRowTile.insets)
+                    .listRowInsets(IdeasLayout.lineInsets)
                     .listRowSeparator(.hidden)
                 ForEach(subfolders) { folder in
                     folderRow(folder)
@@ -235,7 +237,8 @@ struct IdeasView: View {
         .scrollEdgeEffectHidden(true, for: .top)
         .environment(\.defaultMinListRowHeight, WardControlSize.button)
         // the tiles stand WardSpace.s in from the cell, so their edges line
-        // up with the well's, a gutter in from the column's
+        // up with the well's, a gutter in from the column's; the lines of
+        // words start there too (IdeasLayout.lineInsets)
         .padding(.horizontal, WardSpace.gutter - WardSpace.s)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top > 0
@@ -397,6 +400,27 @@ struct IdeasView: View {
         notice = IdeasNotice(text: text, undo: .moved(idea: id, from: from))
     }
 
+    /// A filing from the editor's folder chip: the idea moves now, and Undo
+    /// is offered when the editor closes, since the editor covers the
+    /// notice. Filed again in the same visit, Undo still goes back to where
+    /// the idea was before the first move; moved back there, nothing is
+    /// offered.
+    private func fileFromEditor(_ id: UUID, in folder: UUID?) {
+        guard let idea = notes.note(id), idea.folderId != folder else { return }
+        let from: UUID? = editorFiling?.idea == id ? editorFiling?.from : idea.folderId
+        notes.move(id, to: folder)
+        editorFiling = folder == from ? nil : EditorFiling(idea: id, from: from)
+    }
+
+    private func offerEditorUndo() {
+        guard let filing = editorFiling else { return }
+        editorFiling = nil
+        // deleted in the editor: its own notice, with its own Undo, stays
+        guard let idea = notes.note(filing.idea), idea.folderId != filing.from else { return }
+        let text: String = notes.folder(idea.folderId).map { IdeasWords.movedTo($0.name) } ?? IdeasWords.backInToSort
+        notice = IdeasNotice(text: text, undo: .moved(idea: filing.idea, from: filing.from))
+    }
+
     private func deleteIdea(_ id: UUID) {
         guard let removal = notes.remove(id) else { return }
         notice = IdeasNotice(text: IdeasWords.ideaDeleted, undo: .deleted(removal))
@@ -528,4 +552,11 @@ enum IdeaSwipe {
     static var chooseFill: Color {
         Color(uiColor: UIColor(Color.wardPrimary).resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)))
     }
+}
+
+/// A filing from the editor: the idea, and the folder it was in before the
+/// editor first moved it (nil: To sort), which Undo puts it back in.
+struct EditorFiling: Equatable {
+    let idea: UUID
+    let from: UUID?
 }

@@ -18,10 +18,14 @@ import SwiftUI
 /// cards and its alert (:113-117, 455-471, 553-558), the page/idea body
 /// heights (:49-51), NoteTone's folder colours and the kind glyphs, and every
 /// literal size. Changed: the folder chip opens the folder chooser, not a
-/// Picker menu; the hint drops its medical example; deleting asks first and
-/// then hands the idea to the Sort screen, which offers Undo; a missing
-/// title makes an idea, not a page.
+/// Picker menu, and files through the Sort screen, which offers Undo; the
+/// hint drops its medical example; deleting asks first and then hands the
+/// idea to the Sort screen, which offers Undo; a missing title makes an
+/// idea, not a page.
 struct NoteEditorView: View {
+    /// Files the idea in a folder (nil: To sort), from the Sort screen, so
+    /// it can offer Undo, as every filing does.
+    let file: (UUID, UUID?) -> Void
     /// Deletes the idea, from the Sort screen, so it can offer Undo.
     let delete: (UUID) -> Void
     @EnvironmentObject private var notes: NoteStore
@@ -46,8 +50,9 @@ struct NoteEditorView: View {
 
     enum EditorField: Hashable { case title, body }
 
-    init(noteID: UUID, delete: @escaping (UUID) -> Void) {
+    init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void) {
         _current = State(initialValue: noteID)
+        self.file = file
         self.delete = delete
     }
 
@@ -121,8 +126,8 @@ struct NoteEditorView: View {
                     LinkPickerView(noteID: current)
                 }
                 .sheet(isPresented: $choosingFolder) {
-                    FolderChooser(current: folderId, choose: { folderId = $0 }, makeFolder: { name in
-                        folderId = notes.createFolder(name: name, parentId: nil).id
+                    FolderChooser(current: folderId, choose: { fileHere(in: $0) }, makeFolder: { name in
+                        fileHere(in: notes.createFolder(name: name, parentId: nil).id)
                     })
                 }
         }
@@ -334,6 +339,14 @@ struct NoteEditorView: View {
         text = note.body
         folderId = note.folderId
         loaded = true
+    }
+
+    /// Files the idea on screen through the Sort screen: what was typed is
+    /// saved first, so the move keeps it, and the chip follows the store.
+    private func fileHere(in folder: UUID?) {
+        commit()
+        file(current, folder)
+        folderId = notes.note(current)?.folderId
     }
 
     private func commit() {

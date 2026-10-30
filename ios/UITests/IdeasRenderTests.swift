@@ -31,6 +31,9 @@ final class IdeasRenderTests: XCTestCase {
         assertInside(app.descendants(matching: .any)["capture"], window, "the capture well")
         assertInside(app.sortIt, window, "Sort it")
         XCTAssertLessThan(app.capture.frame.maxY, app.sortIt.frame.minY + 1, "the well stacks: Sort it under the field")
+        let well = app.descendants(matching: .any)["capture"].frame
+        XCTAssertEqual(app.sortIt.frame.width, well.width, accuracy: 1,
+                       "Sort it is full width under the field: \(app.sortIt.frame) in \(well)")
 
         importExport(app)
         app.captureIdea("Oil the gate before winter, and the shed's hinges too")

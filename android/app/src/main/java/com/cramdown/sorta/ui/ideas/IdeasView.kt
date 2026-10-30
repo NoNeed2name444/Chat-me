@@ -100,24 +100,26 @@ object IdeasLayout {
     const val bodyMinHeight = 140.0
     /** A sheet's list, at most, as MoveSheet's. */
     const val chooserMaxHeight = 480.0
-    /** The editor's back-along-the-trail title, at most (the reference's). */
-    const val trailMaxWidth = 160.0
     /** The editor's Write / Read, at least: the Lines picker's width (LINES_PICKER_WIDTH). */
     val segmentedWidth: Double = LINES_PICKER_WIDTH.toDouble()
 }
 
-/** The identifiers the tests use, the same on iOS. */
+/**
+ * The identifiers the tests use: each is iOS's accessibilityIdentifier for the same control, but
+ * [SCREEN], the screen's own column, which only Android's tests look inside.
+ */
 object IdeasTags {
     const val SCREEN = "sort-screen"
     /** The capture well: the field and Sort it. */
     const val CAPTURE = "capture"
     const val FIELD = "idea-capture"
     const val SORT_IT = "sort-it"
-    const val TITLE = "sort-title"
-    const val MORE = "ideas-more"
-    const val EMPTY = "sort-empty"
-    const val IDEA_LINE = "idea-line"
-    const val BANNER = "ideas-banner"
+    const val TITLE = "ideas-title"
+    const val MORE = "more"
+    const val EMPTY = "ideas-empty"
+    const val IDEA_LINE = "idea-row"
+    /** The banner: Undo's and the store's notices. */
+    const val BANNER = "notice"
 }
 
 /** Where the screen starts: the top level, or in a folder, with the editor or the chooser open (the renders' way in). */
@@ -251,7 +253,7 @@ private sealed class FolderPrompt {
         if (note == null) choosing = null
         else FolderChooser(book, note.folderId, version = model.version, onDismiss = { choosing = null },
             onChoose = { to -> choosing = null; file(id, to) },
-            onNewFolder = { choosing = null; naming = FolderPrompt.New(parent = null, filing = id) })
+            onNewFolder = { choosing = null; naming = FolderPrompt.New(parent = folderId, filing = id) })
     }
     when (val prompt = naming) {
         is FolderPrompt.New -> NameSheet(stringResource(R.string.name_new_title), stringResource(R.string.name_field), "",
@@ -322,22 +324,26 @@ private sealed class FolderPrompt {
     val here = remember(book, version, folderId) { book.contents(folderId) }
     val subfolders = remember(book, version, folderId) { book.subfolders(folderId) }
     val fresh = remember(book, version) { book.notes.isEmpty() && book.folders.isEmpty() }
+    // a folder's count takes in its nested folders' ideas, as its row's does; To sort's, the ideas without a folder
+    val count = remember(book, version, folderId) { current?.let { book.count(it.id) } ?: here.size }
     val inset = WardSpace.s.wardDp
     val more: @Composable () -> Unit = { MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) }) }
     Column(Modifier.fillMaxSize().semantics { testTag = IdeasTags.SCREEN }) {
         // the pinned strip: the list scrolls under it and is cut at its edge, with a hairline while it is scrolled
         Box(Modifier.fillMaxWidth().background(wardColor(WardToken.background)).drawBehind {
-            if (scrolled) drawLine(hairline, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1.dp.toPx())
+            val edge = WardPaper.edgeWidth.wardDp.toPx()
+            if (scrolled) drawLine(hairline, Offset(0f, size.height - edge / 2), Offset(size.width, size.height - edge / 2), edge)
         }.padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = WardSpace.s.wardDp)) {
             CaptureWell(draft, onDraft, capture, onCapture, onSortIt)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list,
             contentPadding = PaddingValues(start = inset, end = inset, top = WardSpace.xs.wardDp, bottom = bottom)) {
             if (fresh) {
+                // m under the well: the strip's s and the list's xs, with nothing more
                 item(key = "empty") {
                     Row(Modifier.fillMaxWidth().padding(horizontal = inset).semantics { testTag = IdeasTags.EMPTY },
                         horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-                        Column(Modifier.weight(1f).padding(top = WardSpace.s.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
                             for (line in listOf(R.string.empty_line1, R.string.empty_line2)) {
                                 Text(stringResource(line), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
                             }
@@ -351,7 +357,7 @@ private sealed class FolderPrompt {
                 val parent = book.folder(current.parentId)?.name ?: stringResource(R.string.sort_title)
                 UpRow(parent) { setFolder(current.parentId) }
             }
-            item(key = "title") { TitleRow(current?.name, here.size, more) }
+            item(key = "title") { TitleRow(current?.name, count, more) }
             if (here.isEmpty()) item(key = "none") {
                 Text(stringResource(if (current != null) R.string.folder_empty else R.string.sort_all_sorted),
                     Modifier.fillMaxWidth().padding(horizontal = inset).padding(bottom = WardSpace.s.wardDp),
@@ -385,8 +391,10 @@ private sealed class FolderPrompt {
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     @Composable fun Field(modifier: Modifier) {
-        BasicTextField(draft, onDraft, modifier.focusRequester(focus).semantics { testTag = IdeasTags.FIELD; contentDescription = placeholder },
-            singleLine = true, interactionSource = source,
+        // at the accessibility sizes the words wrap; Return still saves (a typed line break is taken as it)
+        val change: (String) -> Unit = { text -> if (ax && '\n' in text) { onDraft(text.replace("\n", "")); onDone() } else onDraft(text) }
+        BasicTextField(draft, change, modifier.focusRequester(focus).semantics { testTag = IdeasTags.FIELD; contentDescription = placeholder },
+            singleLine = !ax, interactionSource = source,
             textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
             cursorBrush = SolidColor(wardColor(WardToken.primaryInk)),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
@@ -404,7 +412,7 @@ private sealed class FolderPrompt {
         Row(Modifier.fillMaxWidth().heightIn(min = WardControlSize.button.wardDp).wardFocusRing(CircleShape, focused, ring)
             .wardInset(CircleShape, control = true).semantics { testTag = IdeasTags.CAPTURE },
             verticalAlignment = Alignment.CenterVertically) {
-            Field(Modifier.weight(1f))
+            Field(Modifier.weight(1f).padding(end = WardSpace.xs.wardDp))
             SortItButton(draft.isNotBlank(), onSortIt, Modifier.padding(end = WardSpace.xs.wardDp))
         }
     } else {
@@ -435,7 +443,7 @@ private sealed class FolderPrompt {
             .wardPressFace(CircleShape, WardLift.low, wardDepth(down), fill = wardColor(if (enabled) WardToken.primary else WardToken.surface))
             .clickable(source, indication = null, enabled = enabled, onClickLabel = hint, role = Role.Button, onClick = onClick)
             .semantics { testTag = IdeasTags.SORT_IT }
-            .padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.xs.wardDp),
+            .padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp),
             contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.capture_sort), style = WardType.buttonPrimary.textStyle(),
                 color = if (enabled) wardColor(WardToken.onPrimary) else wardDisabledInk(), maxLines = 1, softWrap = false)
@@ -534,7 +542,10 @@ private sealed class FolderPrompt {
     }
 }
 
-/** A folder: its glyph in the accent, its name, how many ideas are in it, a chevron; held, its menu. */
+/**
+ * A folder: its glyph in the accent, its name, how many ideas are in it, a chevron; held, its menu;
+ * swiped trailing, Delete folder, which asks first (the row springs back), as TalkBack's action does.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun FolderRow(folder: NoteFolder, count: Int, open: () -> Unit, rename: () -> Unit, newInside: () -> Unit, delete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
@@ -542,7 +553,7 @@ private sealed class FolderPrompt {
     val renameWords = stringResource(R.string.folder_rename)
     val insideWords = stringResource(R.string.folder_new_inside)
     val deleteWords = stringResource(R.string.folder_delete)
-    Box {
+    SwipeRow(lead = null, trail = deleteWords to delete, trailGoes = false) { Box {
         Row(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClick = { menu = true }, onClick = open).wardRowTile()
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
@@ -560,18 +571,20 @@ private sealed class FolderPrompt {
             MenuItem(insideWords) { menu = false; newInside() }
             MenuItem(deleteWords, destructive = true) { menu = false; delete() }
         }
-    }
+    } }
 }
 
 /**
  * A row's swipes (SwipeRow): leading to [lead] (it springs back), trailing to [trail] (the row
- * goes). The words underneath are ours: the accent's words and danger on the page.
+ * goes, or springs back when [trailGoes] is false, for an action that asks first). The words
+ * underneath are ours: the accent's words and danger on the page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun SwipeRow(lead: Pair<String, () -> Unit>?, trail: Pair<String, () -> Unit>, content: @Composable () -> Unit) {
+@Composable internal fun SwipeRow(lead: Pair<String, () -> Unit>?, trail: Pair<String, () -> Unit>, trailGoes: Boolean = true,
+                                  content: @Composable () -> Unit) {
     val state = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         when (value) {
-            SwipeToDismissBoxValue.EndToStart -> { trail.second(); true }
+            SwipeToDismissBoxValue.EndToStart -> { trail.second(); trailGoes }
             SwipeToDismissBoxValue.StartToEnd -> { lead?.second?.invoke(); false }
             else -> false
         }

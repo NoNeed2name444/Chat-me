@@ -19,6 +19,12 @@ enum IdeasLayout {
     static let bodyMinHeight: CGFloat = 140
     /// How long a notice with Undo stays, unless VoiceOver is on.
     static let noticeSeconds: Double = 6
+    /// A list row of words on the page, not a tile (the title, "All
+    /// sorted." and the Folders label): its words start at the well's edge,
+    /// a gutter in from the column (the list stands WardSpace.s in, the row
+    /// another WardSpace.s), with the tiles' room above and below.
+    static let lineInsets = EdgeInsets(top: WardRowTile.insets.top, leading: WardSpace.s,
+                                       bottom: WardRowTile.insets.bottom, trailing: WardSpace.s)
 }
 
 /// The capture well: the field and Sort it in one capsule pressed into the
@@ -50,12 +56,14 @@ struct CaptureWell: View {
 
     private var inline: some View {
         HStack(spacing: WardSpace.xs) {
+            // the well's leading room is the field's too, inside the area
+            // a tap focuses: everything before Sort it puts the caret in
             field(wraps: false)
+                .padding(.leading, WardSpace.m)
                 .frame(maxWidth: .infinity, minHeight: WardControlSize.button, alignment: .leading)
                 .background { focusArea }
-            sortButton
+            sortButton(wide: false)
         }
-        .padding(.leading, WardSpace.m)
         .padding(.trailing, WardSpace.xs)
         .frame(minHeight: WardControlSize.button)
         .wardInset(in: Capsule(), control: true)
@@ -69,8 +77,7 @@ struct CaptureWell: View {
                 .frame(maxWidth: .infinity, minHeight: WardControlSize.button, alignment: .leading)
                 .background { focusArea }
                 .wardInset(in: RoundedRectangle(cornerRadius: WardRadius.field, style: .continuous), control: true)
-            sortButton
-                .frame(maxWidth: .infinity)
+            sortButton(wide: true)
         }
     }
 
@@ -111,9 +118,9 @@ struct CaptureWell: View {
         .accessibilityIdentifier("idea-capture")
     }
 
-    private var sortButton: some View {
+    private func sortButton(wide: Bool) -> some View {
         Button(IdeasWords.sortIt, action: sortIt)
-            .buttonStyle(SortItButtonStyle())
+            .buttonStyle(SortItButtonStyle(wide: wide))
             .disabled(blank)
             .accessibilityHint(IdeasWords.sortItHint)
             .accessibilityIdentifier("sort-it")
@@ -124,16 +131,21 @@ struct CaptureWell: View {
 /// with its words in `onPrimary` (4.5:1 in light and dark, WardPalette),
 /// raised low off the well, on the kit's own face (WardPressFace). Off, it
 /// looks as every disabled control does: the lowest step, its words in
-/// Biro Grey, no fill.
+/// Biro Grey, no fill. `wide`: the face takes the whole width it is given,
+/// as under the field at the largest text sizes; the width is the face's,
+/// so the capsule, its fill and the tap all span it.
 struct SortItButtonStyle: ButtonStyle {
+    var wide = false
+
     func makeBody(configuration: Configuration) -> some View {
-        SortItFace(label: configuration.label, pressed: configuration.isPressed)
+        SortItFace(label: configuration.label, pressed: configuration.isPressed, wide: wide)
     }
 }
 
 private struct SortItFace: View {
     let label: ButtonStyleConfiguration.Label
     let pressed: Bool
+    let wide: Bool
     @Environment(\.isEnabled) private var enabled
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -150,7 +162,8 @@ private struct SortItFace: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, WardSpace.m)
             .padding(.vertical, WardSpace.s)
-            .frame(minWidth: WardControlSize.buttonSmall, minHeight: WardControlSize.buttonSmall)
+            .frame(minWidth: WardControlSize.buttonSmall, maxWidth: wide ? .infinity : nil,
+                   minHeight: WardControlSize.buttonSmall)
             .background {
                 WardPressFace(shape: Capsule(), lift: .low, pressed: down,
                               fill: enabled ? Color.wardPrimary : Color.wardSurface)

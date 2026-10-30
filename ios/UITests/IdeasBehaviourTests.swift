@@ -13,11 +13,17 @@ final class IdeasBehaviourTests: XCTestCase {
 
     // MARK: capture
 
-    /// Return saves the idea and keeps the field ready: the next idea is
-    /// typed without touching the field again, and lands on top.
+    /// A tap anywhere in the well before Sort it, its leading room too,
+    /// puts the caret in the field. Return saves the idea and keeps the
+    /// field ready: the next idea is typed without touching the field
+    /// again, and lands on top.
     func testReturnSavesAndKeepsFocus() {
         let app = launchIdeas(IdeasStoreName())
-        app.capture.tap()
+        let well = app.descendants(matching: .any)["capture"]
+        XCTAssertLessThan(well.frame.minX + 6, app.capture.frame.minX, "the tap below lands in the well's leading room")
+        well.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 6, dy: 0)).tap()
+        XCTAssertEqual(app.capture.value(forKey: "hasKeyboardFocus") as? Bool, true,
+                       "a tap in the well's leading room put the caret in the field")
         app.capture.typeText("Paint the shed\n")
         XCTAssertTrue(app.ideaRow("Paint the shed").waitForExistence(timeout: 10), "Return saved the idea")
         XCTAssertEqual(app.capture.value(forKey: "hasKeyboardFocus") as? Bool, true, "the field kept the caret")
@@ -71,6 +77,32 @@ final class IdeasBehaviourTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[IdeasText.allSorted].waitForExistence(timeout: 10), "To sort is empty")
         XCTAssertEqual(app.ideasTitle.label, IdeasText.toSortTitle(0))
         XCTAssertEqual(app.folderRow("Garden").label, IdeasText.folderTitle("Garden", 1))
+        XCTAssertTrue(app.notice.label.contains(IdeasText.movedTo("Garden")), app.notice.label)
+        app.tapUndo()
+        XCTAssertTrue(app.ideaRow("Plant bulbs").waitForExistence(timeout: 10), "Undo put it back")
+        XCTAssertEqual(app.ideasTitle.label, IdeasText.toSortTitle(1))
+        XCTAssertEqual(app.folderRow("Garden").label, IdeasText.folderTitle("Garden", 0))
+    }
+
+    /// Filing from the editor's folder chip offers Undo too, once the editor
+    /// closes; Undo puts the idea back in To sort.
+    func testFilingFromTheEditorOffersUndo() {
+        let app = launchIdeas(IdeasStoreName())
+        app.makeFolder("Garden")
+        app.captureIdea("Plant bulbs")
+        XCTAssertTrue(app.ideaRow("Plant bulbs").waitForExistence(timeout: 10))
+        app.ideaRow("Plant bulbs").tap()
+        XCTAssertTrue(app.buttons["editor-folder"].waitForExistence(timeout: 10), "the editor opened")
+        app.buttons["editor-folder"].tap()
+        XCTAssertTrue(app.chooserFolder("Garden").waitForExistence(timeout: 10), "the folder chooser is open")
+        app.chooserFolder("Garden").tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "editor-folder")
+            .matching(NSPredicate(format: "label CONTAINS %@", "Garden")).firstMatch.waitForExistence(timeout: 10),
+                      "the chip names the new folder")
+        app.buttons["editor-done"].tap()
+        XCTAssertTrue(app.staticTexts[IdeasText.allSorted].waitForExistence(timeout: 10), "To sort is empty")
+        XCTAssertEqual(app.folderRow("Garden").label, IdeasText.folderTitle("Garden", 1))
+        XCTAssertTrue(app.notice.waitForExistence(timeout: 10), "the filing offers Undo")
         XCTAssertTrue(app.notice.label.contains(IdeasText.movedTo("Garden")), app.notice.label)
         app.tapUndo()
         XCTAssertTrue(app.ideaRow("Plant bulbs").waitForExistence(timeout: 10), "Undo put it back")

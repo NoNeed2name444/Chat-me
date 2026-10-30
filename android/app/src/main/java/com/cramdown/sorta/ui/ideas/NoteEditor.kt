@@ -81,6 +81,9 @@ import kotlinx.coroutines.delay
 const val EDITOR_TAG = "idea-editor"
 /** The test tag on the link picker's content. */
 const val LINK_PICKER_TAG = "link-picker"
+/** The editor's Back along the trail and its Link to an idea…, as iOS's identifiers. */
+const val EDITOR_BACK_TAG = "editor-back"
+const val EDITOR_LINK_TAG = "editor-link"
 
 @Composable fun NoteEditor(model: IdeasModel, settings: IdeasSettings, noteId: String, bottom: Dp,
                            choose: (String) -> Unit, delete: (String) -> Unit, onClose: () -> Unit) {
@@ -130,15 +133,12 @@ const val LINK_PICKER_TAG = "link-picker"
     Column(Modifier.fillMaxSize().semantics { testTag = EDITOR_TAG }) {
         ReaderNavBar("",
             leading = {
+                // Back along the trail: the kit's circle, as iOS's wardCircle, saying where it goes
+                // ("Back to Buy brushes"). ReaderBackButton is that circle with the words "Back"
+                // fixed, which would lose the idea's name iOS says, so the circle is used as it is.
                 if (backTitle != null) {
-                    val spoken = stringResource(R.string.up_row_spoken, backTitle)
-                    Row(Modifier.heightIn(min = WardControlSize.target.wardDp).clickable(role = Role.Button) { leave(back) }
-                        .padding(horizontal = WardSpace.s.wardDp).semantics(mergeDescendants = true) { contentDescription = spoken },
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(20.0)))
-                        Text(backTitle, Modifier.widthIn(max = IdeasLayout.trailMaxWidth.dp), style = WardType.body.textStyle(), color = wardColor(WardToken.primaryInk),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                    WardCircleButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.up_row_spoken, backTitle), { leave(back) },
+                        Modifier.semantics { testTag = EDITOR_BACK_TAG })
                 }
             },
             trailing = {
@@ -167,7 +167,7 @@ const val LINK_PICKER_TAG = "link-picker"
                 val suggestions = NoteEditing.suggestions(body, book.notes, id)
                 if (suggestions.isNotEmpty()) FlowRowOf(suggestions.map { it.title }) { name -> body = NoteEditing.complete(body, name) }
             }
-            Text(stringResource(R.string.editor_hint), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+            Text(stringResource(R.string.editor_hint), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
 
             EditorSection(stringResource(R.string.editor_linked))
             val outgoing = NoteEditing.outgoing(book, id, body)
@@ -220,7 +220,9 @@ const val LINK_PICKER_TAG = "link-picker"
             WardSegmented(reading, listOf(false, true), { save(); settings.setReading(it) }, segment) { r, text, ink ->
                 Text(if (r) read else write, style = text, color = ink)
             }
-            WardCircleButton(Icons.Rounded.Link, stringResource(R.string.editor_link_to), { save(); picking = true })
+            // Link to an idea…, in words, as iOS's wardCompact button
+            WardTextButton(stringResource(R.string.editor_link_to), { save(); picking = true },
+                Modifier.semantics { testTag = EDITOR_LINK_TAG }, kind = WardButtonKind.compact, fills = false)
         }
         if (ax) Column(Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), horizontalAlignment = Alignment.CenterHorizontally) { bar(Modifier.fillMaxWidth()) }

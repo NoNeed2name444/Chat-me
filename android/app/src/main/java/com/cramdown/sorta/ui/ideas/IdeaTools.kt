@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.res.stringResource
 import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphLineStyle
@@ -171,7 +172,7 @@ const val FOLDER_CHOOSER_TAG = "folder-chooser"
  * Features/Notes/IdeasView.swift:380-392, moveChoices and indented; Android ui/ideas/IdeasView.kt:159
  * and MoveSheet) as a sheet. To sort first, which takes the idea out of its folder; then every folder,
  * nested, in the store's outline; then New folder, which [onNewFolder] names, makes and files the idea
- * in. The row the idea is in now ([current]) is pressed in and selected. The person picks: nothing is
+ * in. The row the idea is in now ([current]) has a checkmark and is selected. The person picks: nothing is
  * suggested. MoveSheet stays as it is for the board. [version] is the book's (IdeasModel.version), so
  * the sheet follows its changes.
  */
@@ -203,20 +204,24 @@ const val FOLDER_CHOOSER_TAG = "folder-chooser"
     }
 }
 
-/** One row of the chooser: a tile, pressed in when it is where the idea is now. */
+/**
+ * One row of the chooser: a tile, with a checkmark in primaryInk when it is where the idea is now
+ * (iOS FolderChooser's). An action row ([icon], New folder) has its glyph and words in primaryInk.
+ */
 @Composable private fun ChooserRow(text: String, chosen: Boolean, spoken: String, value: String? = null, hint: String? = null,
                                    icon: ImageVector? = null, onClick: () -> Unit) {
+    val ink = wardColor(if (icon != null) WardToken.primaryInk else WardToken.ink)
     Row(Modifier.fillMaxWidth()
         .clickable(role = Role.Button, onClickLabel = hint, onClick = onClick)
-        .wardRowTile(inset = chosen)
+        .wardRowTile()
         .semantics(mergeDescendants = true) {
             contentDescription = spoken
             selected = chosen
             if (value != null) stateDescription = value
         },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-        if (icon != null) Icon(icon, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(20.0)))
-        Text(text, Modifier.weight(1f), style = WardType.body.textStyle(), color = wardColor(if (chosen) WardToken.primaryInk else WardToken.ink),
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(wardGlyph(20.0)))
+        Text(text, Modifier.weight(1f), style = WardType.body.textStyle(), color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (chosen) Icon(Icons.Rounded.Check, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(20.0)))
     }
 }
