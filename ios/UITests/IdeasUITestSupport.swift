@@ -104,10 +104,20 @@ extension XCUIApplication {
     /// takes it back a moment later (IdeasView.capture): in run 41047476120,
     /// attempt 2, keys typed straight after Return fell in that moment and
     /// only the last, "t", was saved. So the well is at rest first, with the
-    /// caret and empty, and the words are checked before Return.
+    /// caret and empty, and the words are checked before Return. On a
+    /// stalled runner the first tap after a launch can be lost: in run
+    /// 41812442710 the app was busy 27 s after it and never took the caret.
+    /// So a tap that brings no caret in 5 s is made once more; the well must
+    /// still have the caret, empty, before a key is typed.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
-        if !(capture.value(forKey: "hasKeyboardFocus") as? Bool ?? false) { capture.tap() }
         let ready = NSPredicate(format: "hasKeyboardFocus == true AND (value == '' OR value == placeholderValue)")
+        if !(capture.value(forKey: "hasKeyboardFocus") as? Bool ?? false) {
+            capture.tap()
+            if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 5) != .completed,
+               !(capture.value(forKey: "hasKeyboardFocus") as? Bool ?? false) {
+                capture.tap()
+            }
+        }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 10),
                        .completed, "capture has the caret and is empty: it holds \(capture.value as? String ?? "nil")",
                        file: file, line: line)
@@ -148,7 +158,9 @@ extension XCUIApplication {
     /// still dropped on a slow runner with the field focused and at rest:
     /// "Ga" of "Garden" five seconds on (run 41029008128, attempt 3). So
     /// the name goes in a key at a time, and each key must land before the
-    /// next is sent; a key that never lands fails here, by its place.
+    /// next is sent; a key that never lands fails here, by its place. A key
+    /// has 15 s: in run 41812442710 one took 15 s to send and its check
+    /// another 7 s to find the field, and it landed after a 5 s wait.
     func typeName(_ name: String) {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         _ = keyboards.firstMatch.settledFrame
@@ -161,7 +173,7 @@ extension XCUIApplication {
             nameField.typeText(String(key))
             typed.append(key)
             let landed = NSPredicate(format: "value == %@", typed)
-            let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landed, object: nameField)], timeout: 5)
+            let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landed, object: nameField)], timeout: 15)
             XCTAssertEqual(result, .completed,
                            "key \(typed.count) of \"\(name)\" is in the field: it holds \(nameField.value as? String ?? "nil")")
         }
