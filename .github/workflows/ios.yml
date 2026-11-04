@@ -151,10 +151,13 @@ jobs:
   # (tools/run_ui_tests.sh, the ideas set). On copy 1211aaf (S05) the iPhone's
   # step took 13 minutes for 15 behaviour tests and 3 render runs, and the
   # iPad's 3 for 2; S05b adds 8 Map mode tests and 3 render runs on the
-  # iPhone and 2 render runs on the iPad, inside limits of 40 and 25.
+  # iPhone and 2 render runs on the iPad, inside limits of 40 and 35. On
+  # a7054fe the iPad's simulator took 178 s to boot and its warm-up launch
+  # 475 s (605a19c: 87 and 277), and its step, about 19 minutes on 605a19c,
+  # passed 25: so 35, and the job 105.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@v7
         with:
@@ -190,7 +193,7 @@ jobs:
         run: bash ../tools/run_ui_tests.sh iphone ideas
       - name: The Ideas renders on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 25
+        timeout-minutes: 35
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}

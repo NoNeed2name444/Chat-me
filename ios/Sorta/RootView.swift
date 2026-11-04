@@ -82,7 +82,12 @@ struct IdeasRoot: View {
                     if split.gap > 0 {
                         WardBackground().frame(width: split.gap)
                     }
+                    // the keyboard is the Sort screen's: the map keeps its
+                    // frame, else it refits on every step of the keyboard's
+                    // slide, which kept the app from ever going idle (a7054fe's
+                    // iPad render, 60 s waiting after the capture field's tap)
                     IdeasMapView(mode: $mode, openFolder: { folderId = $0 }, paned: true)
+                        .ignoresSafeArea(.keyboard)
                 }
                 // the two panes keep to their sides of the band themselves
                 .preference(key: PostureClaimKey.self, value: true)

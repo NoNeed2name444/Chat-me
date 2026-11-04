@@ -27,6 +27,10 @@ struct IdeasMapView: View {
     @State private var opening: NoteRef?
     /// The list sheet is up.
     @State private var listing = false
+    /// The list of the looks is open over the map (MapLookChip).
+    @State private var choosingLook = false
+    /// The top strip's height, so the list of the looks opens under it.
+    @State private var stripHeight: CGFloat = 0
 
     private var look: MapLook { MapLook.stored(board: board, theme: themeRaw) }
 
@@ -41,13 +45,27 @@ struct IdeasMapView: View {
             // strip and the foot, so every sheet still follows the phone
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !empty {
-                    MapTopStrip(look: look, choose: choose, list: paned ? nil : { listing = true })
+                    MapTopStrip(look: look, openLooks: { choosingLook = true },
+                                list: paned ? nil : { listing = true })
                         .environment(\.colorScheme, night ? .dark : scheme)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 IdeasFoot(mode: $mode, notices: !listing && !paned, switches: !paned)
                     .environment(\.colorScheme, night ? .dark : scheme)
+            }
+            // in the view itself, not a Menu or a popover: those closed when
+            // the 3D map's scene replaced "Laying out your ideas"
+            .overlay(alignment: .topTrailing) {
+                if choosingLook && !empty {
+                    lookList
+                }
+            }
+            // on two panes the last idea can go from the Sort screen while
+            // the list is open: it must not come back with the next one
+            .onChange(of: empty) { _, now in
+                if now { choosingLook = false }
             }
             // the map frames itself in one side of a fold's hinge, never on it
             .clearOfBand()
@@ -61,6 +79,26 @@ struct IdeasMapView: View {
             .sheet(isPresented: $listing) {
                 MapListSheet()
             }
+    }
+
+    /// The list of the looks under the strip, at its trailing end; a tap
+    /// anywhere else closes it, as a menu's would.
+    private var lookList: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { choosingLook = false }
+                .accessibilityHidden(true)
+            MapLookList(look: look, choose: { new in
+                choosingLook = false
+                choose(new)
+            }, close: { choosingLook = false })
+                .padding(.top, stripHeight)
+                .padding(.trailing, WardSpace.gutter)
+                .padding(.leading, WardSpace.gutter)
+        }
+        .environment(\.colorScheme, night ? .dark : scheme)
     }
 
     /// A new look, as a cut: no morph and no cross-fade between looks

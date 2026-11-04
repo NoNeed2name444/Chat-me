@@ -7,7 +7,8 @@ import SwiftUI
 /// `list` is nil on two panes, where the Sort screen is beside the map.
 struct MapTopStrip: View {
     let look: MapLook
-    let choose: (MapLook) -> Void
+    /// Opens the list of the looks (IdeasMapView draws it, MapLookList).
+    let openLooks: () -> Void
     var list: (() -> Void)?
 
     var body: some View {
@@ -15,11 +16,11 @@ struct MapTopStrip: View {
             HStack(spacing: WardSpace.s) {
                 listChip
                 Spacer(minLength: 0)
-                MapLookChip(look: look, choose: choose)
+                MapLookChip(look: look, open: openLooks)
             }
             VStack(alignment: .leading, spacing: WardSpace.s) {
                 listChip
-                MapLookChip(look: look, choose: choose)
+                MapLookChip(look: look, open: openLooks)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -66,18 +67,18 @@ private struct MapListChip: View {
 /// one (S05b checklist 4). A tap opens the list of the four looks, a check
 /// on the chosen one.
 ///
-/// The list is a popover the chip holds open itself, as the board's Look
-/// tool's (IdeaBoardLookTool), not a Menu: a Menu is a context menu, which
-/// closed when the 3D map behind it finished laying out (605a19c's
-/// MapModeTests, the recording at 18-21 s), so a tap in the map's first
-/// seconds lost the list. Android's is a DropdownMenu, held the same way.
+/// The list is drawn by IdeasMapView over the map (MapLookList), not shown
+/// as a Menu or a popover: both closed the moment the 3D map behind them
+/// finished laying out ("Laying out your ideas" giving way to the scene;
+/// the recordings of 605a19c's and a7054fe's MapModeTests), so a tap in the
+/// map's first seconds lost the list. Android's is a DropdownMenu, in its
+/// own window the same way.
 struct MapLookChip: View {
     let look: MapLook
-    let choose: (MapLook) -> Void
-    @State private var open = false
+    let open: () -> Void
 
     var body: some View {
-        Button { open = true } label: {
+        Button(action: open) {
             HStack(spacing: WardSpace.xs) {
                 Text(look.title)
                     .lineLimit(1)
@@ -90,24 +91,40 @@ struct MapLookChip: View {
         .accessibilityLabel(IdeasWords.lookChipSpoken(look.title))
         .accessibilityHint(IdeasWords.lookChipHint)
         .accessibilityIdentifier(MapLook.chipIdentifier)
-        .popover(isPresented: $open, arrowEdge: .top) {
-            MapLookList(look: look) { item in
-                open = false
-                choose(item)
-            }
-            .presentationCompactAdaptation(.popover)
-            .presentationBackground(Color.wardBackground)
-        }
     }
 }
 
 /// The four looks, one row each, at least a target tall, a check beside the
-/// chosen one: what the Menu showed.
-private struct MapLookList: View {
+/// chosen one: what the Menu showed, on a raised panel as the map's others
+/// (GraphMapPanels). Modal to VoiceOver, which can close it (escape).
+struct MapLookList: View {
     let look: MapLook
     let choose: (MapLook) -> Void
+    let close: () -> Void
+    /// VoiceOver starts on the chosen look, as in a menu.
+    @AccessibilityFocusState private var focused: MapLook?
 
     var body: some View {
+        // its own width where that fits; else the width it is given, its
+        // titles wrapping (the largest text sizes)
+        ViewThatFits(in: .horizontal) {
+            panel.fixedSize(horizontal: true, vertical: false)
+            panel.frame(maxWidth: 360)
+        }
+        .wardRaised(in: RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous), lift: .high,
+                    fill: .wardBackground)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) { close() }
+        .accessibilityIdentifier("map-look-list")
+        // a moment after it appears, once VoiceOver has seen its rows
+        .task {
+            try? await Task.sleep(for: .milliseconds(100))
+            focused = look
+        }
+    }
+
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(MapLook.allCases) { item in
                 Button {
@@ -131,6 +148,7 @@ private struct MapLookList: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(item == look ? .isSelected : [])
                 .accessibilityIdentifier(item.identifier)
+                .accessibilityFocused($focused, equals: item)
             }
         }
         .padding(.vertical, WardSpace.xs)
