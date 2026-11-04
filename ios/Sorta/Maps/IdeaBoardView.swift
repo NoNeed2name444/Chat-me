@@ -220,6 +220,9 @@ struct IdeaBoardView: View {
         }
         .padding(WardSpace.m)
         .frame(width: Self.cardWidth, alignment: .leading)
+        // the height the first view fits by, so its floor keeps a one-line
+        // card a target tall (fitAll's firstRange)
+        .frame(minHeight: IdeaBoardDrop.card.height, alignment: .top)
         .background {
             // the folder's faint wash on the card's own relief
             ZStack {

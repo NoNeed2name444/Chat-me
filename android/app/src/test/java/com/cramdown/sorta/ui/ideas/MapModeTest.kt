@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performTouchInput
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.GraphTheme
+import com.cramdown.sorta.ideas.IdeaBoardDrop
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.map.MapDrawnKey
 import org.junit.After
@@ -123,6 +124,21 @@ class MapModeTest {
         compose.waitForIdle()
         run.until { shown(EDITOR_TAG) }
         assertFalse("the switch is not over the editor", shown(SortaMode.MAP.identifier) || shown(SortaMode.TOGGLE))
+    }
+
+    // S05b task 5: a card is never shorter than the height the board's first view fits by, so the
+    // first view's floor (a 48 dp target over that height) keeps even a one-line card a target tall.
+    @Test fun aOneLineCardIsAsTallAsTheBoardFitsBy() {
+        lookIs2D()
+        run.launch()
+        capture("Oil the gate")
+        openSwitch()
+        switchTo(SortaMode.MAP)
+        val card = card("Oil the gate")
+        card.assertIsDisplayed()
+        // one card: the first view is at its ceiling, 1, so the card is drawn at its own height
+        val tall = card.fetchSemanticsNode().boundsInRoot.height / run.context.resources.displayMetrics.density
+        assertTrue("the card is $tall dp tall, under ${IdeaBoardDrop.CARD_HEIGHT}", tall >= IdeaBoardDrop.CARD_HEIGHT - 0.5)
     }
 
     @Test fun theListChipOpensTheListAndItsWordsOpenTheEditor() {

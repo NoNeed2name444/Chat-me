@@ -274,6 +274,8 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
     val scale = (zoom * if (lifted) 1.04 else 1.0).toFloat()
     Column(modifier.graphicsLayer { scaleX = scale; scaleY = scale }
         .width(CARD_WIDTH.dp)
+        // the height the first view fits by, so its floor keeps a one-line card a target tall
+        .heightIn(min = CARD_HEIGHT.dp)
         .wardRaised(WardRadius.card, if (lifted) WardLift.high else WardLift.low, fill = WardToken.raised)
         .clip(shape).background(tone.copy(alpha = 0.14f))
         .then(if (chosen) Modifier.border(2.dp, chosenInk, shape) else Modifier)

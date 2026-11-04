@@ -37,6 +37,14 @@ final class MapModeRenderTests: XCTestCase {
         XCTAssertTrue(mapCard(app, "Oil the gate").waitForExistence(timeout: 10), "2D: the board, with the idea")
         sleep(1)
         keepShot("mapmode-1-board")
+        // the first view's floor keeps every card a target tall (S05b task 5),
+        // a one-line card too
+        for title in ["Oil the gate", "A bell for the bike"] {
+            let card = mapCard(app, title)
+            XCTAssertTrue(card.waitForExistence(timeout: 10), "the \(title) card")
+            // 88 x 0.5 at the floor is 44 exactly: half a point for the frame's rounding
+            XCTAssertGreaterThanOrEqual(card.frame.height, 43.5, "the \(title) card at the first view: \(card.frame)")
+        }
 
         app.chooseLook("look-space")
         let map = app.descendants(matching: .any)["graph3D"].firstMatch
