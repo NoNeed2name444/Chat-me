@@ -171,6 +171,16 @@ val MapDrawnKey = SemanticsPropertyKey<MapDrawn>("MapDrawn")
 var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
 /**
+ * The map's [onOpenNode] on its node, for tests, with the ids its body indices stand for
+ * ([MapScene.ids]): a tap on body i is tap(i), as the map's own hit test hands it on. Robolectric
+ * can't draw GL, so no body is on screen to hit, and MapPeekCardTest taps through this. A key of
+ * its own, as [MapDrawnKey]: accessibility services do not read it.
+ */
+class MapTap(val ids: List<String>, val tap: (Int) -> Unit)
+val MapTapKey = SemanticsPropertyKey<MapTap>("MapTap")
+var SemanticsPropertyReceiver.mapTap by MapTapKey
+
+/**
  * The 3D map on screen. Frames follow Choreographer's vsync; the window asks for the
  * display's highest refresh mode and the surface for its highest frame rate, so the map
  * runs at the screen's own rate (plan 4e). With [continuous] false the map stops drawing
@@ -195,7 +205,10 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val display: Display? = remember(context) {
-        if (Build.VERSION.SDK_INT >= 30) context.display else @Suppress("DEPRECATION") (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+        // a context the system gave no display of its own throws here (Robolectric's activity does),
+        // so the window manager's default display stands in
+        (if (Build.VERSION.SDK_INT >= 30) runCatching { context.display }.getOrNull() else null)
+            ?: @Suppress("DEPRECATION") (context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay
     }
     val modes = remember(display) { display?.supportedModes?.map { it.info() } ?: emptyList() }
     val maxHz = remember(modes) { RefreshRate.maxHz(modes, display?.refreshRate ?: 60f) }
@@ -251,7 +264,10 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     val latestDrawn by rememberUpdatedState(onDrawn)
     val firstDrawn = !gles3 || drawnNow.frames >= 1
     LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
-    Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }
+    Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
+        contentDescription = description; mapDrawn = drawnNow
+        if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
+    }
         .onSizeChanged { if (synchronized(camera) { home.fit(camera, scene.viewRadius, it.width, it.height) }) loop.moved() }) {
         if (!gles3) {
             // the kit's ink on the map's own night blue: the map's callers keep it night

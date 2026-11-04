@@ -60,7 +60,7 @@ struct IdeaBoardView: View {
         let y: Double
     }
 
-    private static let cardWidth: CGFloat = 150
+    private static let cardWidth: CGFloat = IdeaBoardDrop.card.width
     private static let space = "idea-board"
 
     private var scale: CGFloat { min(max(zoom * pinching, 0.3), 2.5) }
@@ -183,7 +183,7 @@ struct IdeaBoardView: View {
     private func fitAll() {
         let centres: [CGPoint] = notes.notes.map { CGPoint(x: $0.boardX, y: $0.boardY) }
         let margins = IdeaBoardFit.Margins(top: 16, leading: 16, bottom: 16, trailing: 76)
-        let card = CGSize(width: Self.cardWidth, height: 88)
+        let card = IdeaBoardDrop.card
         // never so far out that a card is shorter than a target
         let range = IdeaBoardFit.firstRange(cardHeight: Double(card.height), target: Double(WardControlSize.target))
         let cam = IdeaBoardFit.camera(centres: centres, card: card, view: frame,
@@ -387,7 +387,7 @@ struct IdeaBoardView: View {
                 let dropped = CGPoint(x: note.boardX + Double(value.translation.width / scale),
                                       y: note.boardY + Double(value.translation.height / scale))
                 let others: [CGPoint] = notes.notes.filter { $0.id != note.id }.map { CGPoint(x: $0.boardX, y: $0.boardY) }
-                let at: CGPoint = IdeaBoardDrop.settle(dropped, card: CGSize(width: Self.cardWidth, height: 88), others: others)
+                let at: CGPoint = IdeaBoardDrop.settle(dropped, card: IdeaBoardDrop.card, others: others)
                 notes.setPosition(note.id, x: Double(at.x), y: Double(at.y))
                 dragged = nil
                 dragOffset = .zero

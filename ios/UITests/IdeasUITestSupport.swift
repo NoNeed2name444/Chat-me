@@ -66,6 +66,34 @@ extension XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
     }
+
+    /// Imports the made-up export from More (the app launched with
+    /// `-SortaImportFile`), keeping a picture of its message as `name`.
+    /// Shared by IdeasRenderTests and MapModeRenderTests.
+    func importExport(_ app: XCUIApplication, keep name: String? = nil) {
+        app.more.tap()
+        app.buttons[IdeasText.importFromStethoscore].firstMatch.tap()
+        let added = app.alerts[IdeasText.importedTitle]
+        XCTAssertTrue(added.waitForExistence(timeout: 10), "the import added the made-up ideas")
+        if let name {
+            sleep(1)
+            keepShot(name)
+        }
+        added.buttons[IdeasText.done].tap()
+        XCTAssertTrue(app.folderRow("Garden").waitForExistence(timeout: 10))
+    }
+
+    /// The control is on screen, inside the window across, and at least 44
+    /// by 44 points.
+    func assertInside(_ element: XCUIElement, _ window: CGRect, _ name: String,
+                      file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(element.exists, "\(name) is on screen", file: file, line: line)
+        let frame = element.frame
+        XCTAssertGreaterThanOrEqual(frame.minX, window.minX - 0.5, "\(name) isn't cut at the left: \(frame)", file: file, line: line)
+        XCTAssertLessThanOrEqual(frame.maxX, window.maxX + 0.5, "\(name) isn't cut at the right: \(frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.height, 44, "\(name) is at least 44 tall: \(frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.width, 44, "\(name) is at least 44 wide: \(frame)", file: file, line: line)
+    }
 }
 
 extension XCUIApplication {
@@ -196,6 +224,11 @@ extension XCUIApplication {
 }
 
 extension XCUIElement {
+    /// Taps it if it is there to tap.
+    func tapIfThere() {
+        if exists && isHittable { tap() }
+    }
+
     /// Clears a field and types `text` into it. The tap is at the field's
     /// trailing end, so the caret sits after the old words and the deletes
     /// take them (a tap in the middle left it at the start, and the new

@@ -224,8 +224,9 @@ final class NoteStore: ObservableObject {
     // MARK: making and changing notes
 
     /// Makes a note and returns it. Without a board position it is placed on
-    /// a slow spiral out from the centre, so a run of quick ideas does not
-    /// land in one pile.
+    /// a slow spiral out from the centre, then at the nearest place where its
+    /// card covers no other (IdeaBoardDrop, as a dropped card), so a run of
+    /// quick ideas does not land in one pile or card over card.
     @discardableResult
     func create(title: String, body: String = "", kind: NoteKind = .idea,
                 folderId: UUID? = nil, at point: (x: Double, y: Double)? = nil,
@@ -533,6 +534,9 @@ final class NoteStore: ObservableObject {
         let n = Double(notes.count)
         let angle = n * 2.399963
         let radius = 90 * n.squareRoot()
-        return (radius * cos(angle), radius * sin(angle))
+        let spot = IdeaBoardDrop.settle(CGPoint(x: radius * cos(angle), y: radius * sin(angle)),
+                                        card: IdeaBoardDrop.tallest,
+                                        others: notes.map { CGPoint(x: $0.boardX, y: $0.boardY) })
+        return (Double(spot.x), Double(spot.y))
     }
 }

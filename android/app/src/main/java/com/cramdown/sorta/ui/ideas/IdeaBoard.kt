@@ -62,8 +62,8 @@ import kotlin.math.max
 // them. Drag a card to move it, saved where it lands. Double-tap anywhere to put an idea
 // there. Board units are points, drawn here as dp.
 
-private const val CARD_WIDTH = 150.0
-private const val CARD_HEIGHT = 88.0
+private const val CARD_WIDTH = IdeaBoardDrop.CARD_WIDTH
+private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
 
 @Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp) {
     val density = LocalDensity.current

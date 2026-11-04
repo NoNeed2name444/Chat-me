@@ -31,14 +31,28 @@ class IdeaBookTest {
         assertEquals("the title trimmed", "Heart failure", first.title)
         assertEquals("the first at the centre", BoardPoint(0.0, 0.0), BoardPoint(first.boardX, first.boardY))
         val second = b.create("Second")
-        assertTrue("the second one step out on the golden spiral",
-            abs(second.boardX - 90 * kotlin.math.cos(2.399963)) < 1e-9 && abs(second.boardY - 90 * kotlin.math.sin(2.399963)) < 1e-9)
+        val spiral = BoardPoint(90 * kotlin.math.cos(2.399963), 90 * kotlin.math.sin(2.399963))
+        assertEquals("the second one step out on the golden spiral, radius 90 times the square root of the count, " +
+            "then where its card covers none (S05b)",
+            IdeaBoardDrop.settle(spiral, IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST, listOf(BoardPoint(0.0, 0.0))),
+            BoardPoint(second.boardX, second.boardY))
         val third = b.create("Third", at = BoardPoint(5.0, -7.0))
         assertEquals("a given spot is kept", BoardPoint(5.0, -7.0), BoardPoint(third.boardX, third.boardY))
-        assertTrue("radius 90 times the square root of the count",
-            abs(sqrt(second.boardX * second.boardX + second.boardY * second.boardY) - 90) < 1e-9)
         assertEquals("each change saved", listOf(1, 2, 3), saved)
         assertEquals("an idea unless asked", "idea", first.kind)
+    }
+
+    @Test fun ideasMadeInARowCoverNoCardOnTheBoard() {
+        val b = book()
+        val made = (1..12).map { b.create("Idea $it") }
+        val w = IdeaBoardDrop.CARD_WIDTH + 8
+        val h = IdeaBoardDrop.CARD_TALLEST + 8
+        for (i in made.indices) for (j in i + 1 until made.size) {
+            val a = made[i]; val c = made[j]
+            assertTrue("${a.title} at (${a.boardX}, ${a.boardY}) and ${c.title} at (${c.boardX}, ${c.boardY}) are apart",
+                abs(a.boardX - c.boardX) >= w - 1e-9 || abs(a.boardY - c.boardY) >= h - 1e-9)
+        }
+        assertTrue("the ring stays near the centre", made.all { sqrt(it.boardX * it.boardX + it.boardY * it.boardY) < 1000 })
     }
 
     @Test fun updateStampsOnlyARealChange() {

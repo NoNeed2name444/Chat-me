@@ -145,12 +145,13 @@ jobs:
             ios/build/swift-suites/out/
           if-no-files-found: ignore
           retention-days: 7
-  # The Ideas screens (S05): their behaviour tests on an iPhone, and their
-  # renders by day and by night on the iPhone and the iPad, with the largest
-  # text size on the iPhone, beside the build job (tools/run_ui_tests.sh,
-  # the ideas set). Their normal time is set by the first green run; until
-  # then the limits are about twice a guess: 15 minutes to build, 20 for the
-  # iPhone's 14 behaviour tests and 3 renders, 10 for the iPad's 2.
+  # The Ideas screens (S05) and Map mode (S05b): their behaviour tests on an
+  # iPhone, and their renders by day and by night on the iPhone and the iPad,
+  # with the largest text size on the iPhone, beside the build job
+  # (tools/run_ui_tests.sh, the ideas set). On copy 1211aaf (S05) the iPhone's
+  # step took 13 minutes for 15 behaviour tests and 3 render runs, and the
+  # iPad's 3 for 2; S05b adds 8 Map mode tests and 3 render runs on the
+  # iPhone and 2 render runs on the iPad, inside limits of 40 and 25.
   ideas:
     runs-on: macos-latest
     timeout-minutes: 90

@@ -100,7 +100,10 @@ class IdeaBook(
 
     // ---- making and changing notes ----
 
-    /** Makes a note; without a board position it goes on a golden-angle spiral out from the centre. */
+    /**
+     * Makes a note; without a board position it goes on a golden-angle spiral out from the centre,
+     * then to the nearest place where its card covers no other ([IdeaBoardDrop], as a dropped card).
+     */
     fun create(title: String, body: String = "", kind: NoteKind = NoteKind.IDEA, folderId: String? = null,
                at: BoardPoint? = null): Note {
         val spot = at ?: nextBoardSpot()
@@ -305,7 +308,8 @@ class IdeaBook(
         val n = notes.size.toDouble()
         val angle = n * 2.399963
         val radius = 90 * sqrt(n)
-        return BoardPoint(radius * cos(angle), radius * sin(angle))
+        return IdeaBoardDrop.settle(BoardPoint(radius * cos(angle), radius * sin(angle)),
+            IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST, notes.map { BoardPoint(it.boardX, it.boardY) })
     }
 
     companion object {

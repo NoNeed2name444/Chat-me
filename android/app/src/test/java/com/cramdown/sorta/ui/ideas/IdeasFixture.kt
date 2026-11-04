@@ -2,6 +2,7 @@ package com.cramdown.sorta.ui.ideas
 
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ui.ideas.SortaRun.Companion.id
 import java.io.File
@@ -31,7 +32,13 @@ object IdeasFixture {
         createdAt = T + 4 * HOUR)
     val bread = Note(id = id(17), title = "Try the seeded bread", folderId = kitchen.id, createdAt = T + 3 * HOUR)
 
-    val notes = listOf(gate, boiler, brushes, shed, compost, tulips, bread)
+    /** On the board where the app puts ideas made one after another (IdeaBook.create), not all on the centre. */
+    val notes = IdeaBook(emptyList(), emptyList()).let { book ->
+        listOf(gate, boiler, brushes, shed, compost, tulips, bread).map { note ->
+            val spot = book.create(note.title)
+            note.copy(boardX = spot.boardX, boardY = spot.boardY)
+        }
+    }
     val folders = listOf(garden, kitchen, bulbs)
 
     /** A store in a new directory under [parent], holding the made-up ideas, or empty when [filled] is false. */

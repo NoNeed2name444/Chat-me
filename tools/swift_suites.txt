@@ -165,7 +165,7 @@ suite zip ZipTests.swift $S/Zip.swift
 # first and read, an Anki file and a later version refused (macOS only:
 # Compression, and NoteStore's Combine)
 suite backup BackupTests.swift $S/LibraryBackup.swift $S/Zip.swift $S/MiniZip.swift \
-      ios/Sorta/Store/IdeaImport.swift ios/Sorta/Store/NoteStore.swift ios/Sorta/Store/JSONCoding.swift \
+      ios/Sorta/Store/IdeaImport.swift ios/Sorta/Store/NoteStore.swift ios/Sorta/Store/JSONCoding.swift $M/GraphLineStyle.swift \
       $S/RecoveryFiles.swift $S/Ideas/SaveToIdeas.swift $S/Ideas/IdeaEdges.swift
 
 # The Ideas screens (S05).

@@ -361,6 +361,13 @@ nonisolated enum IdeaBoardFit {
 /// free place, looked for in rings `step` apart, 24 ways round each, with
 /// `gap` kept between cards. Centres, in board points.
 nonisolated enum IdeaBoardDrop {
+    /// The 2D board's card, in board points: its width, and the height the
+    /// board fits and drops by.
+    static let card = CGSize(width: 150, height: 88)
+    /// The tallest card at the default text size (its folder line and four
+    /// lines of title), which a new idea is spaced by.
+    static let tallest = CGSize(width: 150, height: 128)
+
     static func settle(_ p: CGPoint, card: CGSize, others: [CGPoint], gap: Double = 8, step: Double = 8,
                        rings: Int = 200) -> CGPoint {
         let w: Double = Double(card.width) + gap

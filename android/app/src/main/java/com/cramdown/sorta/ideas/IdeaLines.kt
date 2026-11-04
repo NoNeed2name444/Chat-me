@@ -247,6 +247,12 @@ object IdeaBoardFit {
  * ways round each, with [gap] kept between cards. Centres, in board points. As iOS's.
  */
 object IdeaBoardDrop {
+    /** The 2D board's card, in board points: its width, and the height the board fits and drops by. */
+    const val CARD_WIDTH = 150.0
+    const val CARD_HEIGHT = 88.0
+    /** The tallest card at the default text size (its folder line and four lines of title), which a new idea is spaced by. */
+    const val CARD_TALLEST = 128.0
+
     fun settle(p: BoardPoint, cardWidth: Double, cardHeight: Double, others: List<BoardPoint>, gap: Double = 8.0,
                step: Double = 8.0, rings: Int = 200): BoardPoint {
         val w = cardWidth + gap

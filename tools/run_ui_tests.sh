@@ -17,11 +17,12 @@
 # kit (the default): the launch tests, the look kit's gallery and the maps'
 # renders, by day and by night, and the unit tests. maps: each of the maps'
 # tests (GraphPreviewUITests), one at a time; the maps are always night.
-# ideas (S05): on the iPhone, the Ideas screens' behaviour tests
-# (IdeasBehaviourTests, the whole class in one run), their renders by day
-# and by night, and the largest text size; on the iPad, the renders by day
-# and by night. A whole class passes only when every test in its file
-# passed, by name, and none failed or was skipped.
+# ideas (S05, S05b): on the iPhone, the Ideas screens' behaviour tests
+# (IdeasBehaviourTests and MapModeTests, each whole class in one run), the
+# Sort screen's and Map mode's renders by day and by night (IdeasRenderTests,
+# MapModeRenderTests), and each one's largest text size; on the iPad, the
+# two sets of renders by day and by night. A whole class passes only when
+# every test in its file passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
 set_="${2:-kit}"
@@ -72,10 +73,13 @@ case "$set_" in
     echo "$kind: ${#runs[@]} map tests" ;;
   ideas)
     runs=(light:SortaUITests/IdeasRenderTests/testScreensRender
-          dark:SortaUITests/IdeasRenderTests/testScreensRender)
+          dark:SortaUITests/IdeasRenderTests/testScreensRender
+          light:SortaUITests/MapModeRenderTests/testMapRenders
+          dark:SortaUITests/MapModeRenderTests/testMapRenders)
     if [ "$kind" = "iphone" ]; then
       runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
-            light:SortaUITests/IdeasRenderTests/testLargestTextSize)
+            light:SortaUITests/IdeasRenderTests/testLargestTextSize
+            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
     fi
     # one test, or one launch of the whole class's: each test starts the
     # app afresh, and the longest relaunches it once

@@ -36,6 +36,24 @@ final class IdeasStoreTests: XCTestCase {
         XCTAssertEqual(NoteStore(fileURL: url).notes.map(\.id), before.map(\.id), "and saved")
     }
 
+    /// Ideas made one after another go out on the spiral, and each to the
+    /// nearest place where its card covers no other on the 2D board (S05b).
+    func testIdeasMadeInARowCoverNoCardOnTheBoard() throws {
+        let (store, _) = try freshStore()
+        let made = (1...12).map { store.create(title: "Idea \($0)") }
+        let w = Double(IdeaBoardDrop.tallest.width) + 8, h = Double(IdeaBoardDrop.tallest.height) + 8
+        for i in made.indices {
+            for j in made.indices where j > i {
+                let a = made[i], c = made[j]
+                XCTAssertTrue(abs(a.boardX - c.boardX) >= w - 1e-9 || abs(a.boardY - c.boardY) >= h - 1e-9,
+                              "\(a.title) at (\(a.boardX), \(a.boardY)) and \(c.title) at (\(c.boardX), \(c.boardY)) are apart")
+            }
+        }
+        XCTAssertEqual(made[0].boardX, 0); XCTAssertEqual(made[0].boardY, 0)
+        XCTAssertTrue(made.allSatisfy { ($0.boardX * $0.boardX + $0.boardY * $0.boardY).squareRoot() < 1000 },
+                      "the ring stays near the centre")
+    }
+
     func testRemovingAnIdeaThatIsNotThereGivesNothing() throws {
         let (store, _) = try freshStore()
         XCTAssertNil(store.remove(UUID()))
