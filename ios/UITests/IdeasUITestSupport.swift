@@ -99,10 +99,26 @@ extension XCUIApplication {
         buttons.matching(identifier: "chooser-folder").matching(NSPredicate(format: "label == %@", name)).firstMatch
     }
 
-    /// Types an idea into the well and presses Return.
-    func captureIdea(_ text: String) {
+    /// Types an idea into the well and presses Return, then waits for the
+    /// well to be ready for the next. Return lets go of the caret and capture
+    /// takes it back a moment later (IdeasView.capture): in run 41047476120,
+    /// attempt 2, keys typed straight after Return fell in that moment and
+    /// only the last, "t", was saved. So the well is at rest first, with the
+    /// caret and empty, and the words are checked before Return.
+    func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
         if !(capture.value(forKey: "hasKeyboardFocus") as? Bool ?? false) { capture.tap() }
-        capture.typeText(text + "\n")
+        let ready = NSPredicate(format: "hasKeyboardFocus == true AND (value == '' OR value == placeholderValue)")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 10),
+                       .completed, "capture has the caret and is empty: it holds \(capture.value as? String ?? "nil")",
+                       file: file, line: line)
+        capture.typeText(text)
+        let typed = NSPredicate(format: "value == %@", text)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: typed, object: capture)], timeout: 10),
+                       .completed, "capture holds \"\(text)\": it holds \(capture.value as? String ?? "nil")",
+                       file: file, line: line)
+        capture.typeText("\n")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 10),
+                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
     }
 
     /// Makes a folder from More, at the level on screen.
