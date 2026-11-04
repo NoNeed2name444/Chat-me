@@ -194,7 +194,7 @@ class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
         homeC = if (folderList.isEmpty() || (gatherLoose && loose)) folderList.size else -1
     }
 
-    fun cName(c: Int): String = if (c < folderList.size) folderList[c].name else if (hasFolders) "Unsorted" else "Ideas"
+    fun cName(c: Int): String = if (c < folderList.size) folderList[c].name else if (hasFolders) "To sort" else "Ideas"
     fun cID(c: Int): String = if (c < folderList.size) folderList[c].id else GraphUniverse.HOME_ID
     fun liftKey(c: Int): String = if (input.seedByName) cName(c) else cID(c)
     fun cSeed(c: Int): ULong = GraphUniverse.fnv(liftKey(c))
@@ -275,7 +275,7 @@ class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
         fun folderLabel(name: String, count: Int): String {
             val shown = if (name.length > 20) name.take(20) + "…" else name
             if (count == 0) return "$shown · empty"
-            return "$shown · $count " + if (count == 1) "note" else "notes"
+            return "$shown · $count " + if (count == 1) "idea" else "ideas"
         }
 
         fun noteLabel(title: String): String = title.ifEmpty { "Untitled" }

@@ -2,6 +2,7 @@ package com.cramdown.sorta.ui.ideas
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.NoteAdd
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.ImportCounts
 import com.cramdown.sorta.data.ImportRefusal
@@ -40,6 +42,7 @@ import com.cramdown.sorta.ideas.GraphStyleChoice
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.IdeasMode
+import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteEditing
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.NoteKind
@@ -161,7 +164,7 @@ internal fun readCapped(input: InputStream, limit: Int): String {
 /**
  * Ideas' remembered choices, kept as iOS keeps them in UserDefaults (the same keys), in this
  * device's preferences: the mode, the folded switcher, Lines, Read as Markdown, and the map's
- * theme, look, folder looks and demo.
+ * theme, look, folder looks and demo, and Map mode's look.
  */
 class IdeasSettings(context: Context) {
     private val prefs: SharedPreferences? = runCatching { context.getSharedPreferences(FILE, Context.MODE_PRIVATE) }.getOrNull()
@@ -189,6 +192,15 @@ class IdeasSettings(context: Context) {
     private var heldTheme by mutableStateOf(str(GraphTheme.KEY, GraphTheme.standard.rawValue))
     val theme: String get() = heldTheme
     fun setTheme(value: String) { heldTheme = value; put { putString(GraphTheme.KEY, value) } }
+
+    private var heldBoard by mutableStateOf(bool(MapLook.BOARD_KEY))
+    /** Map mode's look (MapLook): the board's choice and the theme, each under its own key. */
+    val look: MapLook get() = MapLook.stored(heldBoard, heldTheme)
+    fun setLook(value: MapLook) {
+        heldBoard = value == MapLook.TWO_D
+        put { putBoolean(MapLook.BOARD_KEY, heldBoard) }
+        value.theme?.let { setTheme(it.rawValue) }
+    }
 
     private var heldNodeStyle by mutableStateOf(str(GraphStyleChoice.KEY, GraphStyleChoice.STANDARD))
     val nodeStyle: String get() = heldNodeStyle
@@ -232,6 +244,35 @@ val IdeasMode.icon: ImageVector get() = when (this) {
     IdeasMode.LIST -> Icons.AutoMirrored.Outlined.List         // list.bullet
     IdeasMode.BOARD -> Icons.Outlined.Dashboard                // rectangle.3.group
     IdeasMode.SPACE -> Icons.Outlined.ViewInAr                 // cube.transparent
+}
+
+/**
+ * Sorta's two modes (S05b): Sort, the Sort screen, and Map, the map of the same ideas. The app
+ * opens on Sort at every launch, so the mode isn't remembered; [identifier] is iOS's
+ * accessibilityIdentifier for the same switch item. IdeasMode stays as the maps' own.
+ */
+enum class SortaMode(val rawValue: String, val identifier: String, @StringRes val title: Int, @StringRes val spoken: Int) {
+    SORT("sort", "mode-sort", R.string.mode_sort, R.string.mode_sort_spoken),
+    MAP("map", "mode-map", R.string.mode_map, R.string.mode_map_spoken);
+
+    companion object {
+        /** The switch's fold toggle, as iOS's. */
+        const val TOGGLE = "modeSwitcherToggle"
+    }
+}
+
+/** The looks' names, the chip's and its menu's. */
+val MapLook.title: Int @StringRes get() = when (this) {
+    MapLook.SPACE -> R.string.look_space
+    MapLook.NEURON -> R.string.look_neuron
+    MapLook.TWO_D -> R.string.look_2d
+    MapLook.PERFORMANCE -> R.string.look_performance
+}
+
+/** The modes' glyphs, the maps' own: Sort is List's list.bullet, Map is Space's cube.transparent. */
+val SortaMode.icon: ImageVector get() = when (this) {
+    SortaMode.SORT -> IdeasMode.LIST.icon
+    SortaMode.MAP -> IdeasMode.SPACE.icon
 }
 
 val NoteKind.icon: ImageVector get() = when (this) {

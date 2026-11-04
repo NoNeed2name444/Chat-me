@@ -52,6 +52,9 @@ import simd
 /// change.
 struct Graph3DView: View {
     @EnvironmentObject private var notes: NoteStore
+    /// Map mode's filings, deletes and Undo, the Sort screen's (S05b
+    /// checklist 7).
+    @Environment(IdeasFiling.self) private var filing
     let open: (UUID) -> Void
     /// Opens a folder in the List (nil: its top level) - two double taps on
     /// a star or black hole in the Universe.
@@ -143,8 +146,8 @@ struct Graph3DView: View {
     var body: some View {
         Group {
             if notes.notes.isEmpty {
-                WardEmptyState(symbol: "cube.transparent", title: "Dump your first idea",
-                               message: "Every note appears here as a point in space, joined to the notes it links to. Type one in the bar below.")
+                WardEmptyState(symbol: "cube.transparent", title: IdeasWords.mapEmptyTitle,
+                               message: IdeasWords.mapEmptyLine)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if theme.bodies == .points {
                 perfSpace
@@ -154,7 +157,7 @@ struct Graph3DView: View {
                 // Stethoscore's wait was its ECG trace, which Sorta leaves
                 // out; Sorta's kit has no spinner (WardKitPortTest), so the
                 // wait says what is happening, as Android's does
-                Text("Laying out your notes")
+                Text("Laying out your ideas")
                     .wardFont(.subheadline)
                     .foregroundStyle(Color.wardInkSecondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -180,10 +183,12 @@ struct Graph3DView: View {
             GraphLegendSheet(theme: built?.theme ?? theme)
                 .modifier(GraphLegendPresentation(regular: sizeClass == .regular))
         }
-        // Open: the note, grown out of the peek card; closing it comes back
-        // to the map with the same body still chosen
+        // Open: the idea in S05's editor, grown out of the peek card;
+        // closing it comes back to the map with the same body still chosen,
+        // and offers Undo for a filing made in it
         .sheet(item: $reading, onDismiss: closedReading) { item in
-            IdeaReadView(noteID: item.id)
+            NoteEditorView(noteID: item.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
+                           delete: { filing.deleteIdea($0, notes: notes) })
                 .navigationTransition(.zoom(sourceID: GraphPeekCardView.zoomID, in: peekZoom))
         }
         .sheet(item: $renaming) { target in
@@ -198,14 +203,22 @@ struct Graph3DView: View {
         .sheet(item: $linkingFrom) { item in
             GraphNotePicker(from: item.id)
         }
+        // Choose folder: S05's chooser, with its Undo
         .sheet(item: $movingNote) { item in
-            GraphFolderPicker(note: item.id)
+            FolderChooser(current: notes.note(item.id)?.folderId,
+                          choose: { filing.file(item.id, in: $0, notes: notes) },
+                          makeFolder: { name in
+                              let folder = notes.createFolder(name: name, parentId: nil)
+                              filing.file(item.id, in: folder.id, notes: notes)
+                          })
         }
+        // a folder asks first, in S05's words; an idea goes at once, with Undo
         .confirmationDialog(deleteTitle, isPresented: deletingShown, titleVisibility: .visible,
                             presenting: deleting) { target in
-            Button("Delete", role: .destructive) { delete(target) }
+            Button(IdeasWords.deleteFolder, role: .destructive) { delete(target) }
+            Button(IdeasWords.cancel, role: .cancel) {}
         } message: { target in
-            Text(target.folder ? "Its notes and folders move up a level." : "This can\u{2019}t be undone.")
+            Text(IdeasWords.deleteFolderBody(notes.folder(notes.folder(target.id)?.parentId)?.name ?? IdeasWords.toSort))
         }
         // a chosen body deleted or gone: let it go
         .onChange(of: notes.notes) { _, _ in forgetGone() }
@@ -408,7 +421,7 @@ struct Graph3DView: View {
     }
 
     static let graphHint: String =
-        "Drag to turn, pinch to zoom. Tap a note to preview it, tap again to open it; hold it to move it or for its options."
+        "Drag to turn, pinch to zoom. Tap an idea to preview it, tap again to open it; hold it to move it or for its options."
 
     /// Whether a theme's first-run card has been seen (the Universe keeps
     /// its own old key).
@@ -498,6 +511,7 @@ struct Graph3DView: View {
 
     private func closedReading() {
         perform(selection.handle(.closed, at: CACurrentMediaTime()))
+        filing.offerEditorUndo(notes: notes)
     }
 
     /// Held still on a body: its options, where it was held.
@@ -518,7 +532,7 @@ struct Graph3DView: View {
             if selection.selected != id { handle(.tapBody(id)) }
             command.send(.flyIn(id))
         case "Delete":
-            deleting = optionsTarget(id, in: built, at: nil)
+            askToDelete(optionsTarget(id, in: built, at: nil))
         default:
             if selection.selected != id { handle(.tapBody(id)) }
         }
@@ -531,9 +545,9 @@ struct Graph3DView: View {
         case "Open", "Open folder": handle(.doubleTap(target.id))
         case "Rename": renaming = target
         case "Link to\u{2026}": linkingFrom = GraphReading(id: target.id)
-        case "Move to folder\u{2026}": movingNote = GraphReading(id: target.id)
-        case "Add note here": addingInto = target
-        case "Delete": deleting = target
+        case "Choose folder": movingNote = GraphReading(id: target.id)
+        case "Add idea here": addingInto = target
+        case "Delete": askToDelete(target)
         default: break
         }
     }
@@ -541,7 +555,7 @@ struct Graph3DView: View {
     @ViewBuilder
     private func renameSheet(_ target: GraphOptionsTarget) -> some View {
         let prompt: String = target.folder ? "Folder name" : "Title"
-        NameSheet(title: "Rename", prompt: prompt, initial: title(target.id), confirm: "Rename") { name in
+        NameSheet(title: target.folder ? IdeasWords.renameFolder : "Rename idea", prompt: prompt, initial: title(target.id), confirm: "Rename") { name in
             if target.folder {
                 notes.renameFolder(target.id, to: name)
             } else if var note = notes.note(target.id) {
@@ -556,8 +570,17 @@ struct Graph3DView: View {
     }
 
     private var deleteTitle: String {
-        guard let target = deleting else { return "Delete?" }
-        return "Delete \u{201C}" + title(target.id) + "\u{201D}?"
+        guard let target = deleting else { return "" }
+        return IdeasWords.deleteFolderTitle(title(target.id))
+    }
+
+    /// Asks first for a folder; deletes an idea at once, with Undo.
+    private func askToDelete(_ target: GraphOptionsTarget) {
+        if target.folder {
+            deleting = target
+        } else {
+            delete(target)
+        }
     }
 
     /// Deletes it; the map plays its death as it rebuilds.
@@ -565,7 +588,7 @@ struct Graph3DView: View {
         if target.folder {
             notes.deleteFolder(target.id)
         } else {
-            notes.delete(target.id)
+            filing.deleteIdea(target.id, notes: notes)
         }
         perform(selection.handle(.gone(target.id), at: CACurrentMediaTime()))
         deleting = nil
@@ -584,7 +607,7 @@ struct Graph3DView: View {
         if let folder = notes.folder(id) { return folder.name }
         // the home: the vault itself, or (beside folders) the Neurons cell
         // its notes in no folder share
-        return notes.folders.isEmpty ? "Ideas" : "Unsorted"
+        return notes.folders.isEmpty ? "Ideas" : "To sort"
     }
 
     private func isFolder(_ id: UUID, in built: GraphScene?) -> Bool {
@@ -670,7 +693,8 @@ struct Graph3DView: View {
     @ViewBuilder
     private var tools: some View {
         let filtering: Bool = filter != .all
-        GraphStyleTool(theme: themeBinding, main: lookBinding, folderRaw: folderBinding, folders: topFolders,
+        // the preview has no look chip, so its Look menu keeps the themes
+        GraphStyleTool(theme: theme.rawValue, chooseTheme: GraphPreview.isOn ? .constant(GraphPreview.theme.rawValue) : nil, main: lookBinding, folderRaw: folderBinding, folders: topFolders,
                        showLegend: { showingLegend = true }, linkLength: linkValue,
                        tuneLinks: tuneLinksAction, cellState: cellStateBinding, cellFolders: cellFoldersBinding)
 
@@ -720,11 +744,7 @@ struct Graph3DView: View {
     }
 
     /// The theme in force: the owner's choice, or in the design preview the
-    /// one asked for (never read or written there).
-    private var themeBinding: Binding<String> {
-        GraphPreview.isOn ? .constant(GraphPreview.theme.rawValue) : $themeRaw
-    }
-
+    /// one asked for (never read there).
     private var theme: GraphTheme {
         GraphPreview.isOn ? GraphPreview.theme : GraphTheme.stored(themeRaw)
     }
@@ -735,7 +755,7 @@ struct Graph3DView: View {
             Text("Everything").tag(GraphFilter.all)
             Text("Pages").tag(GraphFilter.pages)
             Text("Ideas").tag(GraphFilter.ideas)
-            Text("Linked notes").tag(GraphFilter.linked)
+            Text("Linked ideas").tag(GraphFilter.linked)
         }
         .pickerStyle(.inline)
         let tops: [NoteFolder] = topFolders
@@ -2709,6 +2729,16 @@ struct GraphSCNView: UIViewRepresentable {
             summary.accessibilityValue = built.universe ? built.summary : ""
             summary.accessibilityHint = built.universe ? built.theme.hint : Graph3DView.graphHint
             var out: [UIAccessibilityElement] = [summary]
+            // the design preview only: what the frames drew, for the render
+            // check (MapRenderTests), which counts bodies and links rather
+            // than bright pixels, as Android's MapDrawn does
+            if GraphPreview.isOn {
+                let drawn = GraphDrawnElement(accessibilityContainer: view)
+                drawn.sim = sim
+                drawn.accessibilityIdentifier = "graphDrawn"
+                drawn.accessibilityLabel = "Drawn"
+                out.append(drawn)
+            }
             for i in sim.ids.indices {
                 let id: UUID = sim.ids[i]
                 let folder: Bool = sim.kind(of: i) != .note
@@ -2720,7 +2750,7 @@ struct GraphSCNView: UIViewRepresentable {
                 let role: String = built.roles[id] ?? ""
                 let word: String? = GraphPeek.roleWord(theme: built.theme.rawValue, role: role, folder: folder,
                                                        home: id == GraphUniverse.homeID)
-                element.accessibilityValue = word ?? (folder ? "Folder" : "Note")
+                element.accessibilityValue = word ?? (folder ? "Folder" : "Idea")
                 element.accessibilityTraits = .button
                 element.accessibilityHint = "Shows its card."
                 var actions: [UIAccessibilityCustomAction] = []
@@ -2736,7 +2766,7 @@ struct GraphSCNView: UIViewRepresentable {
             }
             voiceElements = out
             refreshVoice()
-            view.accessibilityCustomRotors = [rotor("Notes", folders: false), rotor("Folders", folders: true)]
+            view.accessibilityCustomRotors = [rotor("Ideas", folders: false), rotor("Folders", folders: true)]
         }
 
         /// Only the bodies the filter shows.
@@ -3003,6 +3033,22 @@ final class GraphBodyElement: UIAccessibilityElement {
     override func accessibilityActivate() -> Bool {
         coordinator?.voiceSelect(slot)
         return true
+    }
+}
+
+/// What the map's frames drew (GraphDrawnCount), read fresh each time the
+/// UI tests ask: the design preview's only, a point in the view's corner.
+final class GraphDrawnElement: UIAccessibilityElement {
+    weak var sim: GraphSim?
+
+    override var accessibilityValue: String? {
+        get { sim?.drawnCount().line ?? "" }
+        set { _ = newValue }
+    }
+
+    override var accessibilityFrameInContainerSpace: CGRect {
+        get { CGRect(x: 0, y: 0, width: 1, height: 1) }
+        set { _ = newValue }
     }
 }
 

@@ -246,13 +246,13 @@ class NeuronHierarchyTest {
         val closed = GraphNeurons.plan(preview)
         check("T1 closed: three cells", closed.summary == "3 cells", closed.summary)
         check("T1 closed: the top folders are the cells", titles(closed, NeuronRole.CELL) == setOf("Examples", "Cardiology"), "${titles(closed, NeuronRole.CELL)}")
-        val unsorted = bodyNamed(closed, "Unsorted")
+        val unsorted = bodyNamed(closed, "To sort")
         check("T1 closed: the two loose notes share one cell, Unsorted, on the sheet",
-            unsorted != null && titles(closed, NeuronRole.HOME) == setOf("Unsorted") && closed.bodies[unsorted].id == GraphUniverse.HOME_ID
+            unsorted != null && titles(closed, NeuronRole.HOME) == setOf("To sort") && closed.bodies[unsorted].id == GraphUniverse.HOME_ID
                 && closed.bodies[unsorted].kind == ThemeBodyKind.HOME && closed.bodies[unsorted].count == 2
                 && closed.bodies[unsorted].parent < 0 && closed.bodies[unsorted].depth == 0, "${titles(closed, NeuronRole.HOME)}")
         check("T1 closed: nothing shows inside a closed cell", closed.bodies.all { it.parent < 0 })
-        check("T1 the cells are the regions", closed.regions.map { closed.bodies[it].title }.sorted() == listOf("Cardiology", "Examples", "Unsorted")
+        check("T1 the cells are the regions", closed.regions.map { closed.bodies[it].title }.sorted() == listOf("Cardiology", "Examples", "To sort")
             && closed.regions.all { closed.bodies[it].region == it })
         val openOne = planOpen(preview, listOf(EXAMPLES))
         check("T1 Examples opened: its two parts and three notes show", openOne.summary == "3 cells, 2 parts, 1 vesicle, 2 granules", openOne.summary)
@@ -284,7 +284,7 @@ class NeuronHierarchyTest {
         }
         check("T1 all opened: each note in the folder that holds it (Unsorted when none), a page a vesicle", misplaced.isEmpty(), few(misplaced))
         val openHome = planOpen(preview, listOf(GraphUniverse.HOME_ID))
-        val unsortedOpen = bodyNamed(openHome, "Unsorted") ?: -1
+        val unsortedOpen = bodyNamed(openHome, "To sort") ?: -1
         check("T1 Unsorted opened: its two ideas show inside it, as granules",
             openHome.summary == "3 cells, 2 granules" && titles(openHome, NeuronRole.GRANULE) == setOf("Richter's hernia", "Pericarditis")
                 && openHome.bodies.filter { it.parent >= 0 }.all { it.parent == unsortedOpen }, openHome.summary)
@@ -316,7 +316,7 @@ class NeuronHierarchyTest {
                 && closed.links.any { closed.bodies[it.a].title == "Examples" && closed.bodies[it.b].title == "Cardiology" }, "${closed.links}")
         check("T2 Examples opened: every link carried once", processProblems(preview, openOne).isEmpty(), few(processProblems(preview, openOne)))
         val examplesBody = bodyNamed(openOne, "Examples") ?: -1
-        val unsortedOne = bodyNamed(openOne, "Unsorted") ?: -1
+        val unsortedOne = bodyNamed(openOne, "To sort") ?: -1
         val femoral = bodyNamed(openOne, "Femoral") ?: -1
         check("T2 a link from outside joins the opened cell's membrane, not the part inside",
             openOne.links.any { it.a == unsortedOne && it.b == examplesBody && it.kind == 6 }
@@ -430,7 +430,7 @@ class NeuronHierarchyTest {
         check("T4 closing hides only what was inside", closed.bodies.map { it.id }.toSet() == openAll.bodies.filter { it.parent < 0 }.map { it.id }.toSet())
         check("T4 opening keeps the framing", closed.envelope == openAll.envelope)
         val unlinked = allOpen(UniverseInput(preview.notes, preview.folders, emptyList(), seedByName = true))
-        val unlinkedHome = bodyNamed(unlinked, "Unsorted") ?: -1
+        val unlinkedHome = bodyNamed(unlinked, "To sort") ?: -1
         check("T4 without links: no processes, the loose notes still in Unsorted",
             unlinked.links.isEmpty() && unlinkedHome >= 0 && unlinked.bodies[unlinkedHome].count == 2
                 && unlinked.bodies.filter { it.parent == unlinkedHome }.map { it.title }.toSet() == setOf("Richter's hernia", "Pericarditis"),
@@ -582,12 +582,12 @@ class NeuronHierarchyTest {
         val looseInput = UniverseInput(looseNotes, listOf(UniverseFolder(fixedID(879), "Hub", null)), looseEdges, seedByName = true)
         val loosePlan = GraphNeurons.plan(looseInput)
         check("T6 forty loose: two cells, Hub and Unsorted, and nothing else",
-            loosePlan.summary == "2 cells" && titles(loosePlan, NeuronRole.CELL) == setOf("Hub") && titles(loosePlan, NeuronRole.HOME) == setOf("Unsorted"),
+            loosePlan.summary == "2 cells" && titles(loosePlan, NeuronRole.CELL) == setOf("Hub") && titles(loosePlan, NeuronRole.HOME) == setOf("To sort"),
             loosePlan.summary)
         check("T6 forty loose: no two meet", meetProblems(loosePlan).isEmpty(), few(meetProblems(loosePlan)))
         check("T6 forty loose: the framing holds them", envelopeProblems(loosePlan).isEmpty(), few(envelopeProblems(loosePlan)))
         val hub = bodyNamed(loosePlan, "Hub")
-        val home = bodyNamed(loosePlan, "Unsorted")
+        val home = bodyNamed(loosePlan, "To sort")
         if (hub != null && home != null) {
             val hubBody = loosePlan.bodies[hub]
             val homeBody = loosePlan.bodies[home]
@@ -638,7 +638,7 @@ class NeuronHierarchyTest {
         check("T8 a removed theme falls back: a stored Circuit opens in Space", GraphTheme.stored("circuit") == GraphTheme.SPACE)
         check("T8 the menu offers only ready themes", GraphTheme.offered.all { it.isReady } && GraphTheme.offered.firstOrNull() == GraphTheme.SPACE)
         check("T8 the themes' words are their own", GraphTheme.entries.map { it.legendTitle }.toSet().size == GraphTheme.entries.size
-            && GraphTheme.NEURONS.title == "Neurons" && GraphTheme.stored("space") == GraphTheme.SPACE)
+            && GraphTheme.NEURONS.title == "Neuron" && GraphTheme.stored("space") == GraphTheme.SPACE)
         check("T8 the theme's key is the one the Look menu writes", GraphTheme.KEY == "vignette.space.theme")
         done()
     }

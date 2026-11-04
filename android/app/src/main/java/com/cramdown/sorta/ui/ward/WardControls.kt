@@ -211,7 +211,9 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
  * fill. Its label is any of iOS's: words, a glyph ([icon]) before the
  * words, or the glyph alone. [role] is how TalkBack names it: a toggle by
  * default, a button for a chip that acts (Timed, Re-test me soon), as iOS's
- * are plain buttons.
+ * are plain buttons. [count], a number after the words in the accent's ink,
+ * as a title's count (Map mode's To sort chip); [trailingIcon], a glyph
+ * after them (the look chip's chevron).
  */
 @Composable fun WardChipButton(
     text: String?,
@@ -222,6 +224,8 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     enabled: Boolean = true,
     icon: ImageVector? = null,
     role: Role = Role.Checkbox,
+    count: Int? = null,
+    trailingIcon: ImageVector? = null,
 ) {
     val source = remember { MutableInteractionSource() }
     val touch = wardTouch(source, enabled)
@@ -246,6 +250,9 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
         ) {
             if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(wardGlyph(18.0)))
             if (text != null) Text(text, style = WardType.chip.textStyle(), color = ink, maxLines = 1)
+            if (count != null) Text("$count", style = WardType.chip.textStyle(),
+                color = if (enabled) wardColor(WardToken.primaryInk) else ink, maxLines = 1)
+            if (trailingIcon != null) Icon(trailingIcon, null, tint = ink, modifier = Modifier.size(wardGlyph(18.0)))
         }
     }
 }

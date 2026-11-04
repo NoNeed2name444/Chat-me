@@ -251,8 +251,8 @@ struct GraphNodeMenuView: View {
         case "Open", "Open folder": return "doc.text"
         case "Rename": return "pencil"
         case "Link to\u{2026}": return "link"
-        case "Move to folder\u{2026}": return "folder"
-        case "Add note here": return "plus"
+        case "Choose folder": return "folder"
+        case "Add idea here": return "plus"
         case "Delete": return "trash"
         default: return "circle"
         }
@@ -307,42 +307,6 @@ struct GraphNotePicker: View {
         let q: String = query.trimmingCharacters(in: .whitespaces).lowercased()
         let kept: [Note] = q.isEmpty ? others : others.filter { $0.title.lowercased().contains(q) }
         return kept.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-    }
-}
-
-/// Move to folder…: no folder, or any folder (indented as in the List).
-struct GraphFolderPicker: View {
-    @EnvironmentObject private var notes: NoteStore
-    @Environment(\.dismiss) private var dismiss
-    let note: UUID
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Button("No folder") { move(to: nil) }
-                    .wardRowBackground()
-                ForEach(Array(notes.folderOutline().enumerated()), id: \.offset) { _, entry in
-                    Button(IdeaIndent.name(entry.folder.name, depth: entry.depth)) { move(to: entry.folder.id) }
-                        .wardRowBackground()
-                }
-            }
-            .wardForm()
-            .wardFont(.body)
-            .navigationTitle("Move to")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                    .buttonStyle(.wardQuiet)
-                }
-                .sharedBackgroundVisibility(.hidden)
-            }
-        }
-    }
-
-    private func move(to folder: UUID?) {
-        notes.move(note, to: folder)
-        dismiss()
     }
 }
 

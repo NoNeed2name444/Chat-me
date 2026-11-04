@@ -306,13 +306,13 @@ nonisolated enum GraphLinkLength {
         return v < standard ? "Shorter" : "Longer"
     }
 
-    /// "Standard", or "1.4 × longer" / "0.8 × shorter" - VoiceOver and the
+    /// "Standard", or "Longer, 1.4×" / "Shorter, 0.8×" - VoiceOver and the
     /// menu's value.
     static func spoken(_ value: Double) -> String {
         let v: Double = clamped(value)
         if abs(v - standard) < 0.001 { return "Standard" }
         let shown: String = String(format: "%.1f", v)
-        return shown + "\u{00D7} " + (v < standard ? "shorter" : "longer")
+        return (v < standard ? "Shorter, " : "Longer, ") + shown + "\u{00D7}"
     }
 
     /// The Settings footer's line for a value, live as the slider moves.

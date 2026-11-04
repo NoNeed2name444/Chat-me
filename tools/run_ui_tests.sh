@@ -74,7 +74,7 @@ case "$set_" in
     runs=(light:SortaUITests/IdeasRenderTests/testScreensRender
           dark:SortaUITests/IdeasRenderTests/testScreensRender)
     if [ "$kind" = "iphone" ]; then
-      runs=(light:SortaUITests/IdeasBehaviourTests "${runs[@]}"
+      runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
             light:SortaUITests/IdeasRenderTests/testLargestTextSize)
     fi
     # one test, or one launch of the whole class's: each test starts the

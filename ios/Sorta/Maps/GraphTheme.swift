@@ -59,7 +59,7 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
     var title: String {
         switch self {
         case .space: return "Space"
-        case .neurons: return "Neurons"
+        case .neurons: return "Neuron"
         case .performance: return "Performance"
         }
     }
@@ -78,7 +78,7 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .space: return "How your universe is built"
         case .neurons: return "How your network is built"
-        case .performance: return "How the fast map is built"
+        case .performance: return "How the Performance map is built"
         }
     }
 
@@ -87,7 +87,7 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .space: return "Space of ideas"
         case .neurons: return "Network of ideas"
-        case .performance: return "Fast map of ideas"
+        case .performance: return "Performance map of ideas"
         }
     }
 
@@ -109,9 +109,9 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
     /// The first-run card's title and two lines, once per theme.
     var cardTitle: String {
         switch self {
-        case .space: return "Your notes as a universe"
-        case .neurons: return "Your notes as a nervous system"
-        case .performance: return "Your notes, built for speed"
+        case .space: return "Your ideas as a universe"
+        case .neurons: return "Your ideas as a nervous system"
+        case .performance: return "Your ideas, built for speed"
         }
     }
 
@@ -124,8 +124,8 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
             return "Top-level folders are cells, folders are the parts inside them, "
                 + "pages are vesicles and ideas granules. Links grow out of the cells as axons carrying impulses."
         case .performance:
-            return "Every note is a point and every link a line, drawn so 100,000 fit at once. "
-                + "Each top-level folder has its own colour; far away a folder\u{2019}s notes merge into one glow."
+            return "Every idea is a point and every link a line, drawn so 100,000 fit at once. "
+                + "Each top-level folder has its own colour; far away a folder\u{2019}s ideas merge into one glow."
         }
     }
 
@@ -136,15 +136,15 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
         case .space:
             return ["Tap + \u{203A} New folder: a new galaxy round its black hole.",
                     "Tap + \u{203A} New page for a gas giant, New idea for a rocky planet.",
-                    "Type [[ and a note\u{2019}s title in a note: a link joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea: a link joins them."]
         case .neurons:
             return ["Tap + \u{203A} New folder: a new cell.",
                     "Tap + \u{203A} New page for a vesicle, New idea for a granule.",
-                    "Type [[ and a note\u{2019}s title in a note: an axon joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea: an axon joins them."]
         case .performance:
             return ["Tap + \u{203A} New folder: a new cluster round its hub.",
                     "Tap + \u{203A} New page for a larger point, New idea for a smaller one.",
-                    "Type [[ and a note\u{2019}s title in a note: a line joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea: a line joins them."]
         }
     }
 

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.BoardPoint
 import com.cramdown.sorta.ideas.GraphLineStyle
+import com.cramdown.sorta.ideas.IdeaBoardDrop
 import com.cramdown.sorta.ideas.IdeaBoardFit
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.IdeaLinkShape
@@ -64,7 +65,7 @@ import kotlin.math.max
 private const val CARD_WIDTH = 150.0
 private const val CARD_HEIGHT = 88.0
 
-@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit) {
+@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp) {
     val density = LocalDensity.current
     var size by remember { mutableStateOf(IntSize.Zero) }
     var zoom by remember { mutableDoubleStateOf(1.0) }
@@ -94,11 +95,15 @@ private const val CARD_HEIGHT = 88.0
     fun fitAll() {
         if (size == IntSize.Zero) return
         val camera = IdeaBoardFit.camera(notes.map { BoardPoint(it.boardX, it.boardY) }, IdeaBoardFit.Size(CARD_WIDTH, CARD_HEIGHT),
-            IdeaBoardFit.Size(widthDp, heightDp), hiddenDp, IdeaBoardFit.Margins(16.0, 16.0, 16.0, 76.0))
+            IdeaBoardFit.Size(widthDp, heightDp), hiddenDp,
+            // clear of the top strip ([top]) as of the tools at the trailing edge
+            IdeaBoardFit.Margins(16.0 + top.value, 16.0, 16.0, 76.0),
+            // never so far out that a card is shorter than a target
+            IdeaBoardFit.firstRange(CARD_HEIGHT, WardControlSize.target))
         zoom = camera.zoom; panX = camera.panX; panY = camera.panY
     }
     // the first view frames every card, until the board is moved by hand
-    LaunchedEffect(size, notes.size, hidden) { if (!moved) fitAll() }
+    LaunchedEffect(size, notes.size, hidden, top) { if (!moved) fitAll() }
 
     fun tapCard(id: String) {
         val from = source
@@ -171,7 +176,12 @@ private const val CARD_HEIGHT = 88.0
                                     onDragStart = { dragging = note.id; dragX = 0.0; dragY = 0.0 },
                                     onDragEnd = {
                                         val id = dragging
-                                        if (id != null) book.note(id)?.let { book.setPosition(id, it.boardX + dragX, it.boardY + dragY) }
+                                        // let go on another card, it settles in the nearest free place
+                                        if (id != null) book.note(id)?.let {
+                                            val at = IdeaBoardDrop.settle(BoardPoint(it.boardX + dragX, it.boardY + dragY), CARD_WIDTH, CARD_HEIGHT,
+                                                notes.filter { other -> other.id != id }.map { other -> BoardPoint(other.boardX, other.boardY) })
+                                            book.setPosition(id, at.x, at.y)
+                                        }
                                         dragging = null; dragX = 0.0; dragY = 0.0
                                     },
                                     onDragCancel = { dragging = null; dragX = 0.0; dragY = 0.0 },

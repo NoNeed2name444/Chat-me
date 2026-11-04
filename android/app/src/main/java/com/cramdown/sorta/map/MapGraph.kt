@@ -32,8 +32,11 @@ class MapGraph(
     }
 
     companion object {
-        /** Linked notes, laid out in 3D: a few hundred force steps for small maps, a sphere for big ones. */
-        fun fromNotes(notes: List<NoteLike>): MapGraph {
+        /**
+         * Linked notes, laid out in 3D: a few hundred force steps for small maps, a sphere for big ones.
+         * [rest] is the length a link pulls towards ([layout]).
+         */
+        fun fromNotes(notes: List<NoteLike>, rest: Float = REST): MapGraph {
             val n = notes.size
             val index = notes.withIndex().associate { it.value.id to it.index }
             val pairs = LinkedHashSet<Long>()
@@ -47,7 +50,7 @@ class MapGraph(
             pairs.forEachIndexed { k, key -> edges[2 * k] = (key ushr 32).toInt(); edges[2 * k + 1] = key.toInt() }
             val tags = notes.map { it.tags.firstOrNull() ?: "" }.distinct()
             val groups = ByteArray(n) { i -> (tags.indexOf(notes[i].tags.firstOrNull() ?: "") % PALETTE_SIZE).toByte() }
-            val positions = layout(n, edges)
+            val positions = layout(n, edges, rest = rest)
             return MapGraph(positions, groups, edges, notes.map { it.title }, notes.map { it.id })
         }
 
@@ -55,9 +58,11 @@ class MapGraph(
          * Fibonacci sphere start, then spring steps (links pull, every pair pushes, and a faint pull
          * to the centre, as iOS's ForceLayout3D has) when the map is small. Without that pull, loose
          * ideas pushed each other some 35 link lengths out, and the home view, framing them all,
-         * drew every note under the size at which Space shows its body.
+         * drew every note under the size at which Space shows its body. A link pulls its ends
+         * towards [rest] apart: [REST] times the Link length the Look menu sets (iOS GraphLinkLength,
+         * ios/Sorta/Shared/Space/GraphicsQuality.swift:271; MapPanels' MapLinkLength).
          */
-        fun layout(n: Int, edges: IntArray, steps: Int = 300): FloatArray {
+        fun layout(n: Int, edges: IntArray, steps: Int = 300, rest: Float = REST): FloatArray {
             val p = FloatArray(n * 3)
             if (n == 0) return p
             val radius = 1.6f * Math.cbrt(n.toDouble()).toFloat()
@@ -83,7 +88,7 @@ class MapGraph(
                     val i = edges[2 * e]; val j = edges[2 * e + 1]
                     val dx = p[3 * j] - p[3 * i]; val dy = p[3 * j + 1] - p[3 * i + 1]; val dz = p[3 * j + 2] - p[3 * i + 2]
                     val d = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1e-3f)
-                    val k = 0.08f * (d - 2f) / d
+                    val k = 0.08f * (d - rest) / d
                     force[3 * i] += dx * k; force[3 * i + 1] += dy * k; force[3 * i + 2] += dz * k
                     force[3 * j] -= dx * k; force[3 * j + 1] -= dy * k; force[3 * j + 2] -= dz * k
                 }
@@ -103,6 +108,9 @@ class MapGraph(
         }
 
         const val PALETTE_SIZE = 6
+
+        /** A link's rest length at the standard Link length (1.0). */
+        const val REST = 2f
 
         /** The layout's pull to the centre per step, a fraction of a note's distance from it (iOS ForceLayout3D's 0.05). */
         const val CENTRE_PULL = 0.05f

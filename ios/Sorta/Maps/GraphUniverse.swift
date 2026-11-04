@@ -575,7 +575,7 @@ nonisolated struct UniversePlanner: Sendable {
     // MARK: names and seeds
 
     func cName(_ c: Int) -> String {
-        c < folderList.count ? folderList[c].name : (hasFolders ? "Unsorted" : "Ideas")
+        c < folderList.count ? folderList[c].name : (hasFolders ? "To sort" : "Ideas")
     }
 
     func cID(_ c: Int) -> UUID {
@@ -1274,7 +1274,7 @@ nonisolated struct UniversePlanner: Sendable {
     static func folderLabel(_ name: String, count n: Int) -> String {
         let shown: String = name.count > 20 ? String(name.prefix(20)) + "\u{2026}" : name
         if n == 0 { return shown + " \u{00B7} empty" }
-        let noun: String = n == 1 ? "note" : "notes"
+        let noun: String = n == 1 ? "idea" : "ideas"
         return shown + " \u{00B7} \(n) " + noun
     }
 

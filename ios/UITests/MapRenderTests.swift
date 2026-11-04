@@ -26,14 +26,22 @@ final class MapRenderTests: XCTestCase {
             XCTAssertTrue(app.otherElements["graph3D"].waitForExistence(timeout: 60), "the \(theme) map is on screen")
             // the scene is built: wait until it is drawn too. A fixed 4 s
             // caught the iPad's first map, Space, before SceneKit's first
-            // frame, with nothing drawn but the tools (Chat-me copy c8186ce)
+            // frame, with nothing drawn but the tools (Chat-me copy c8186ce).
+            // Bright pixels alone passed a map of bodies with no links (the
+            // dark iPad Space on that copy), so the map's own count says its
+            // bodies and its links are drawn, as Android's MapDrawn does
+            let drawnCount = app.descendants(matching: .any)["graphDrawn"]
+            XCTAssertTrue(drawnCount.waitForExistence(timeout: 30), "the \(theme) map reports what it drew")
             let start = Date()
             var lit = Self.lit()
-            while lit < Self.drawn && Date().timeIntervalSince(start) < 60 {
+            var count = Self.count(drawnCount)
+            while !(lit >= Self.drawn && count.done) && Date().timeIntervalSince(start) < 60 {
                 sleep(1)
                 lit = Self.lit()
+                count = Self.count(drawnCount)
             }
             XCTAssertGreaterThanOrEqual(lit, Self.drawn, "the \(theme) map is drawn, not just its background")
+            XCTAssertTrue(count.done, "the \(theme) map drew \(Self.frames) frames with its bodies and links: \(count.line)")
             // the labels and the last bodies settle
             sleep(2)
             keep("map-\(theme)")
@@ -54,6 +62,23 @@ final class MapRenderTests: XCTestCase {
     /// passes 40. On copy c8186ce's renders, Performance, the sparest, lit
     /// 1.1% to 1.4% of it; the blank iPad Space, none.
     private static let drawn: Double = 0.003
+
+    /// Frames the map must have drawn before its count is taken.
+    private static let frames: Int = 3
+
+    /// The map's own count, "frames F, bodies B, links L" (GraphDrawnCount):
+    /// done once it has drawn a few frames with bodies and links in them.
+    private static func count(_ element: XCUIElement) -> (done: Bool, line: String) {
+        let line: String = element.value as? String ?? ""
+        var numbers: [String: Int] = [:]
+        for part in line.split(separator: ",") {
+            let words = part.split(separator: " ")
+            if words.count == 2, let n = Int(words[1]) { numbers[String(words[0])] = n }
+        }
+        let done: Bool = (numbers["frames"] ?? 0) >= frames && (numbers["bodies"] ?? 0) > 0
+            && (numbers["links"] ?? 0) > 0
+        return (done, line.isEmpty ? "nothing reported" : line)
+    }
 
     private static func lit() -> Double {
         guard let picture = XCUIScreen.main.screenshot().image.cgImage,

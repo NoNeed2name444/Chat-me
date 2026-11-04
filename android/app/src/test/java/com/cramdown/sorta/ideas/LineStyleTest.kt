@@ -6,6 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -236,5 +237,34 @@ class LineStyleTest {
         val fitFloor = IdeaBoardFit.camera(farApart, card, phone, 220.0, room)
         assertTrue("L6 a vast board stops at the board's own floor, centred: $fitFloor",
             fitFloor.zoom == 0.3 && nearD(fitFloor.panX, 16 + (402 - 92) / 2.0 - 201))
+    }
+
+    // ---- L7 the first view keeps every card big enough to tap ----
+
+    @Test fun l7FirstViewKeepsCardsTappable() {
+        val card = IdeaBoardFit.Size(150.0, 88.0)
+        val room = IdeaBoardFit.Margins(16.0, 16.0, 16.0, 76.0)
+        val phone = IdeaBoardFit.Size(402.0, 760.0)
+        val range = IdeaBoardFit.firstRange(88.0, 48.0)
+        val farApart = listOf(BoardPoint(-5000.0, 0.0), BoardPoint(5000.0, 0.0))
+        val fit = IdeaBoardFit.camera(farApart, card, phone, 220.0, room, range)
+        assertTrue("L7 a vast board opens with its cards 48 dp tall, on its middle: $fit",
+            nearD(fit.zoom * 88, 48.0) && nearD(fit.panX, 16 + (402 - 92) / 2.0 - 201))
+        assertTrue("L7 it never asks for more than 1, nor less than the board's floor",
+            IdeaBoardFit.firstRange(20.0, 48.0) == 1.0..1.0 && IdeaBoardFit.firstRange(400.0, 48.0) == 0.3..1.0)
+    }
+
+    // ---- L8 a card let go of on another settles beside it ----
+
+    @Test fun l8DropSettlesClear() {
+        val others = listOf(BoardPoint(0.0, 0.0), BoardPoint(0.0, 96.0))
+        val clear = BoardPoint(400.0, 400.0)
+        assertEquals("L8 let go in a clear place, it stays", clear, IdeaBoardDrop.settle(clear, 150.0, 88.0, others))
+        val onTop = BoardPoint(10.0, 4.0)
+        val settled = IdeaBoardDrop.settle(onTop, 150.0, 88.0, others)
+        fun overlaps(a: BoardPoint, b: BoardPoint) = abs(a.x - b.x) < 150 + 8 - 1e-6 && abs(a.y - b.y) < 88 + 8 - 1e-6
+        val moved = hypot(settled.x - onTop.x, settled.y - onTop.y)
+        assertTrue("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap: $settled",
+            others.none { overlaps(settled, it) } && moved > 0 && moved <= 150 + 8 + 8)
     }
 }

@@ -104,13 +104,18 @@ enum GraphStyleChoice {
 
 /// The look tool, in the Space's cluster of round tools (under the thumb
 /// on a phone, at the trailing edge on a wide iPad - IdeaTools' placement):
-/// the map's theme (GraphTheme: Space, Neurons, Performance); in Space, the
+/// in Space, the
 /// Universe or one look for every note and a submenu with a look per
 /// top-level folder; Lines, Curved or Straight (IdeaLinesPicker, shared
 /// with the board); and, in the Universe or any other theme, what its
-/// bodies mean.
+/// bodies mean. In Map mode the theme is the look chip's (MapLookChip), so
+/// it has one control (S05b checklist 4); the map preview, which has no
+/// chip, passes `chooseTheme` and the menu offers the themes first.
 struct GraphStyleTool: View {
-    @Binding var theme: String
+    /// The stored theme (GraphTheme), which picks the choices shown.
+    let theme: String
+    /// Where a theme chosen here goes; nil where the look chip chooses it.
+    var chooseTheme: Binding<String>?
     @Binding var main: String
     @Binding var folderRaw: String
     let folders: [NoteFolder]
@@ -133,8 +138,11 @@ struct GraphStyleTool: View {
         let cells = NeuronStateChoice(main: cellState.wrappedValue, folderRaw: cellFolders.wrappedValue)
         let custom: Bool = !space || main != GraphStyleChoice.auto || !folderRaw.isEmpty || cells.isCustom
         Menu {
-            if GraphTheme.offered.count > 1 {
-                Picker("Theme", selection: themeBinding) {
+            if let chooseTheme, GraphTheme.offered.count > 1 {
+                Picker("Theme", selection: Binding<String>(
+                    get: { GraphTheme.stored(chooseTheme.wrappedValue).rawValue },
+                    set: { chooseTheme.wrappedValue = $0 }
+                )) {
                     ForEach(GraphTheme.offered) { option in
                         Label(option.title, systemImage: option.symbol).tag(option.rawValue)
                     }
@@ -171,7 +179,7 @@ struct GraphStyleTool: View {
         .foregroundStyle(IdeaToolFace.ink(active: custom))
         .ideaToolRelief(active: custom)
         .accessibilityLabel("Look")
-        .accessibilityHint("Choose the map\u{2019}s theme, how its notes look, and curved or straight lines.")
+        .accessibilityHint("Changes how the map\u{2019}s ideas look, and whether lines curve.")
     }
 
     /// The Space theme's own choices: the Universe or one style for all,
@@ -244,14 +252,6 @@ struct GraphStyleTool: View {
                 map[id] = NeuronState(rawValue: value)
                 store.wrappedValue = NeuronStateChoice.encode(map)
             }
-        )
-    }
-
-    /// The stored theme, read back as one the menu offers.
-    private var themeBinding: Binding<String> {
-        Binding<String>(
-            get: { GraphTheme.stored(theme).rawValue },
-            set: { theme = $0 }
         )
     }
 

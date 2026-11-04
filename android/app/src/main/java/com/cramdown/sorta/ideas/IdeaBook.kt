@@ -391,7 +391,7 @@ object NoteTone {
 /** Which way the notes are being looked at. */
 enum class IdeasMode(val rawValue: String, val title: String, val identifier: String) {
     LIST("list", "List", "ideasMode-list"),
-    BOARD("board", "Board", "ideasMode-board"),
+    BOARD("board", "2D", "ideasMode-board"),
     SPACE("space", "Space", "ideasMode-space");
 
     companion object {

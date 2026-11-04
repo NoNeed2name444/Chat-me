@@ -400,8 +400,8 @@ let tiers: [(String, Int)] = [("Inguinal", 1), ("Femoral", 1), ("Anatomy", 2)]
 let gotTiers: [Int] = tiers.map { pair in bodyNamed(preview, pair.0).map { preview.bodies[$0].tier } ?? -1 }
 check("T1 star tiers: Inguinal and Femoral yellow-white, Anatomy orange", gotTiers == tiers.map(\.1), "\(gotTiers)")
 let labels: [String] = [
-    "Examples \u{00B7} 14 notes", "Inguinal \u{00B7} 8 notes", "Anatomy \u{00B7} 3 notes",
-    "Femoral \u{00B7} 3 notes", "Cardiology \u{00B7} 14 notes"
+    "Examples \u{00B7} 14 ideas", "Inguinal \u{00B7} 8 ideas", "Anatomy \u{00B7} 3 ideas",
+    "Femoral \u{00B7} 3 ideas", "Cardiology \u{00B7} 14 ideas"
 ]
 let shownLabels: Set<String> = Set(preview.bodies.map(\.label))
 let missingLabels: [String] = labels.filter { !shownLabels.contains($0) }
@@ -545,7 +545,7 @@ let flat: UniversePlan = GraphUniverse.plan(UniverseInput(notes: flatNotes, fold
                                                           seedByName: false))
 let homes: [UniverseBody] = flat.bodies.filter { $0.role == .home }
 check("T7 one home star", homes.count == 1 && homes.first?.id == GraphUniverse.homeID)
-check("T7 its label", homes.first?.label == "Ideas \u{00B7} 20 notes", homes.first?.label ?? "")
+check("T7 its label", homes.first?.label == "Ideas \u{00B7} 20 ideas", homes.first?.label ?? "")
 check("T7 no comets or pulsars", !flat.bodies.contains { [.comet, .oort, .pulsar, .galaxy].contains($0.role) })
 let orbitsHome: Bool = flat.bodies.dropFirst().allSatisfy { body in
     body.parent == 0 || (body.role == .moon && flat.bodies[body.parent].parent == 0)
@@ -780,7 +780,7 @@ let sparse: UniversePlan = GraphUniverse.plan(UniverseInput(
     ],
     edges: [], seedByName: false))
 let oneNote: UniverseBody? = bodyNamed(sparse, "One").map { sparse.bodies[$0] }
-check("a one-note folder: a star with one planet", oneNote?.role == .star && oneNote?.label == "One \u{00B7} 1 note")
+check("a one-note folder: a star with one planet", oneNote?.role == .star && oneNote?.label == "One \u{00B7} 1 idea")
 let only: UniverseBody? = bodyNamed(sparse, "Only").map { sparse.bodies[$0] }
 check("its note orbits it", only.map { sparse.bodies[$0.parent].title } == "One")
 let dormant: UniverseBody? = bodyNamed(sparse, "Nothing").map { sparse.bodies[$0] }
@@ -814,7 +814,7 @@ let longName: String = String(repeating: "Cardiothoracic ", count: 3)
 let named: UniversePlan = GraphUniverse.plan(UniverseInput(
     notes: [UniverseNote(id: fixedID(1), title: "", isPage: false, folder: top1, words: 3, created: 0)],
     folders: [UniverseFolder(id: top1, name: longName, parent: nil)], edges: [], seedByName: false))
-let cut: String = String(longName.prefix(20)) + "\u{2026} \u{00B7} 1 note"
+let cut: String = String(longName.prefix(20)) + "\u{2026} \u{00B7} 1 idea"
 check("a long folder name is cut but the count shows", named.bodies.first?.label == cut, named.bodies.first?.label ?? "")
 check("an empty title shows Untitled", named.bodies.last?.label == "Untitled")
 

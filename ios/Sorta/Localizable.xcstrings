@@ -332,7 +332,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a folder for this idea."
+            "value" : "Opens the folder chooser."
           }
         }
       }
@@ -863,13 +863,13 @@
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld idea keeps its place on the map."
+                  "value" : "%lld idea keeps its place on the 2D map."
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld ideas keep their place on the map."
+                  "value" : "%lld ideas keep their place on the 2D map."
                 }
               }
             }
@@ -921,6 +921,162 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This backup didn't open. It may be damaged, so try another copy."
+          }
+        }
+      }
+    },
+    "look.2d" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2D"
+          }
+        }
+      }
+    },
+    "look.chip.hint" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.chip.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes how the map looks."
+          }
+        }
+      }
+    },
+    "look.chip.spoken %@" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.chip.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme, %@"
+          }
+        }
+      }
+    },
+    "look.neuron" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.neuron",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neuron"
+          }
+        }
+      }
+    },
+    "look.performance" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.performance",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Performance"
+          }
+        }
+      }
+    },
+    "look.space" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.space",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Space"
+          }
+        }
+      }
+    },
+    "map.empty.line" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.empty.line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add ideas in Sort, and they appear here."
+          }
+        }
+      }
+    },
+    "map.empty.title" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.empty.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas yet"
+          }
+        }
+      }
+    },
+    "map.list.hint" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.list.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the list."
+          }
+        }
+      }
+    },
+    "mode.map" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.map",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Map"
+          }
+        }
+      }
+    },
+    "mode.map.spoken" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.map.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Map of ideas"
+          }
+        }
+      }
+    },
+    "mode.sort" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.sort",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort"
+          }
+        }
+      }
+    },
+    "mode.sort.spoken" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.sort.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort ideas"
           }
         }
       }
@@ -1161,6 +1317,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your saved ideas didn't open. A copy is kept safe on this device, and new ideas still save."
+          }
+        }
+      }
+    },
+    "switcher.hide" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.hide",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide modes"
+          }
+        }
+      }
+    },
+    "switcher.hint" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows every mode. Double-tap and hold to choose a mode."
+          }
+        }
+      }
+    },
+    "switcher.list.done" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.list.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "switcher.list.title" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.list.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modes"
+          }
+        }
+      }
+    },
+    "switcher.show %@" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.show",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show modes. Now showing %@"
           }
         }
       }

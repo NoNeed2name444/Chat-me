@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -188,6 +189,8 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
     /** Each change puts the camera back to its first view (the Recentre tool). */
     recenter: Int = 0,
     corner: androidx.compose.ui.unit.Dp = 24.dp,
+    /** Called once the map is first drawn: its first finished frame, or at once where it can't draw. */
+    onDrawn: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -245,12 +248,15 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val drawnNow = drawn
+    val latestDrawn by rememberUpdatedState(onDrawn)
+    val firstDrawn = !gles3 || drawnNow.frames >= 1
+    LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics { contentDescription = description; mapDrawn = drawnNow }
         .onSizeChanged { if (synchronized(camera) { home.fit(camera, scene.viewRadius, it.width, it.height) }) loop.moved() }) {
         if (!gles3) {
             // the kit's ink on the map's own night blue: the map's callers keep it night
             // (IdeasSpace's SortaTheme), so the ink is night's too
-            Text("This device can’t draw the 3D map.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
+            Text("This device can’t draw the 3D map. Choose 2D in the theme menu.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
                 style = WardType.body.textStyle(), color = wardColor(WardToken.ink), textAlign = TextAlign.Center)
             return@Box
         }

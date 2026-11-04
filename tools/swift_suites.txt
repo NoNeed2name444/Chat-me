@@ -174,3 +174,6 @@ suite backup BackupTests.swift $S/LibraryBackup.swift $S/Zip.swift $S/MiniZip.sw
 suite ideasdesk IdeasDeskTests.swift ios/Sorta/Ideas/IdeasDesk.swift
 # the editor's Read view: Markdown into blocks, [[Title]] into links
 suite notemarkdown NoteMarkdownTests.swift ios/Sorta/Ideas/NoteMarkdown.swift
+# Map mode (S05b).
+# the map's looks: the menu's order, the stored look, the theme each draws
+suite maplook MapLookTests.swift ios/Sorta/Ideas/MapLook.swift $M/GraphTheme.swift

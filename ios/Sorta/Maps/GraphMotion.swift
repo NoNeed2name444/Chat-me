@@ -435,6 +435,10 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     private var shownEdges: [Int] = []
     /// Set when the shown links change; the render loop redraws them.
     private var linesDirty: Bool = true
+    /// What the frames drew, for the design preview's render check
+    /// (MapRenderTests): the frames done, and the bodies shown and links
+    /// written when the links were last written. Under the lock.
+    private var drawnNow = GraphDrawnCount()
     /// Each note's size while it pops in, out or bounces (a spring towards
     /// `popGoal`, after `popWait` seconds), and the glow that blooms as it
     /// appears. Render thread, under the lock.
@@ -1543,9 +1547,11 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// (GraphSpaceDepthStage), from the camera in the world's coordinates:
     /// every frame while anything moves, and at rest only when the camera,
     /// its focus, the view or the filter changed. Called with the lock held.
-    private func stepDepth(eye: SIMD3<Float>, right: SIMD3<Float>, up: SIMD3<Float>, turned: Bool) {
-        guard let depth else { return }
-        guard lively || turned || depthStale || !resting else { return }
+    /// Returns whether the band was worked out again this frame.
+    @discardableResult
+    private func stepDepth(eye: SIMD3<Float>, right: SIMD3<Float>, up: SIMD3<Float>, turned: Bool) -> Bool {
+        guard let depth else { return false }
+        guard lively || turned || depthStale || !resting else { return false }
         depthStale = false
         let r: SIMD3<Float> = simd_length_squared(right) > 1e-12 ? simd_normalize(right) : SIMD3<Float>(1, 0, 0)
         let u: SIMD3<Float> = simd_length_squared(up) > 1e-12 ? simd_normalize(up) : SIMD3<Float>(0, 1, 0)
@@ -1555,6 +1561,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         depth.update(eye: eye, forward: forward, right: r, up: u, fovY: fovY, width: viewWidth, height: viewHeight,
                      focus: focus, position: position, visible: visible, ghost: ghost,
                      chosen: grabbed ?? selected)
+        return true
     }
 
     /// Moves everything on by `rawStep` seconds. `worldEye`, `worldRight`
@@ -1568,8 +1575,14 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         let up: SIMD3<Float> = world.simdConvertVector(worldUp, from: nil)
         let turned: Bool = simd_distance_squared(eye, lastEye) > 1e-8
         lastEye = eye
-        stepDepth(eye: eye, right: right, up: up, turned: turned)
-        var linksStale: Bool = turned
+        // a new band can bring back bodies it had past its end, so the
+        // links are written again with it. At rest they were not: the band
+        // the first frame had (before the framing gave it its reach) left
+        // the far bodies' links out, the framing brought the bodies back,
+        // and the still map kept no links (the dark iPad Space on Chat-me
+        // copy c8186ce)
+        let banded: Bool = stepDepth(eye: eye, right: right, up: up, turned: turned)
+        var linksStale: Bool = turned || banded
         // Lines: Curved / Straight was flipped - redraw even when at rest
         let straight: Bool = GraphLineStyleLive.shared.isStraight
         if straight != lastStraight {
@@ -1831,6 +1844,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
                                                    codes: codes, axis: axes, focus: focus, eye: eye,
                                                    device: device)
         if lines.geometry !== geometry { lines.geometry = geometry }
+        countDrawn()
         guard let farLines, farMaterial != nil else {
             mouths?.place(links: ribbonLinks, far: [], position: position, radius: linkRadius, eye: eye)
             return
@@ -1840,6 +1854,25 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
                                                  device: device)
         if farLines.geometry !== far { farLines.geometry = far }
         mouths?.place(links: ribbonLinks, far: farLinks, position: position, radius: linkRadius, eye: eye)
+    }
+
+    /// The bodies shown (not hidden, a ghost or past the band) and the
+    /// links just written, near and far. Under the lock.
+    private func countDrawn() {
+        var bodies: Int = 0
+        for i in visible.indices where visible[i] && !ghost[i] && !beyondBand(i) { bodies += 1 }
+        drawnNow.bodies = bodies
+        drawnNow.links = ribbonLinks.count + farLinks.count
+    }
+
+    /// What the frames have drawn so far (MapRenderTests, through the
+    /// design preview's "graphDrawn" element). Main thread.
+    func drawnCount() -> GraphDrawnCount {
+        lock.lock()
+        defer { lock.unlock() }
+        var out: GraphDrawnCount = drawnNow
+        out.frames = frame
+        return out
     }
 
     /// Adds one link, from its sending end; in the Universe a link between
@@ -2368,4 +2401,16 @@ nonisolated final class GraphLabelParts: @unchecked Sendable {
     static func colour(_ c: GraphRGB, alpha: Double) -> UIColor {
         UIColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: CGFloat(alpha))
     }
+}
+
+
+/// What a 3D map has drawn: its frames, and the bodies shown and links
+/// written when its links were last written. The design preview reports it
+/// to the UI tests as "frames F, bodies B, links L".
+nonisolated struct GraphDrawnCount: Sendable, Equatable {
+    var frames: Int = 0
+    var bodies: Int = 0
+    var links: Int = 0
+
+    var line: String { "frames \(frames), bodies \(bodies), links \(links)" }
 }

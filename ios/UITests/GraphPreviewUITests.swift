@@ -230,7 +230,7 @@ final class GraphPreviewUITests: XCTestCase {
         XCTAssertTrue(look.waitForExistence(timeout: 10), "no Look tool")
         look.tap()
         XCTAssertTrue(app.buttons["Space"].waitForExistence(timeout: 5), "no Space theme in the Look menu")
-        XCTAssertTrue(app.buttons["Neurons"].exists, "no Neurons theme in the Look menu")
+        XCTAssertTrue(app.buttons["Neuron"].exists, "no Neuron theme in the Look menu")
         let legend = app.buttons["How your network is built"]
         XCTAssertTrue(legend.waitForExistence(timeout: 5), "no Neurons legend in the Look menu")
         snap(app, "19-neurons-look-menu")

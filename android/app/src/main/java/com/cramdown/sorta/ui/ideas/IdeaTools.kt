@@ -150,7 +150,7 @@ const val LINES_PICKER_WIDTH = 200
 @Composable fun MoveSheet(book: IdeaBook, onDismiss: () -> Unit, onMove: (String?) -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = wardColor(WardToken.background)) {
         ReaderNavBar("Move to", leading = { WardTextButton("Cancel", onDismiss, kind = WardButtonKind.quiet, fills = false) })
-        val choices: List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "No folder") +
+        val choices: List<Pair<String?, String>> = listOf<Pair<String?, String>>(null to "To sort") +
             book.folderOutline().map { (folder, depth) -> folder.id to IdeaBook.indented(folder.name, depth) }
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
             items(choices) { (id, name) ->

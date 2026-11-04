@@ -167,7 +167,7 @@ class IdeaBookTest {
     }
 
     @Test fun modesAndTheirWords() {
-        assertEquals(listOf("List", "Board", "Space"), IdeasMode.entries.map { it.title })
+        assertEquals(listOf("List", "2D", "Space"), IdeasMode.entries.map { it.title })
         assertEquals(listOf("ideasMode-list", "ideasMode-board", "ideasMode-space"), IdeasMode.entries.map { it.identifier })
         assertEquals("unknown is the list", IdeasMode.LIST, IdeasMode.of("cube"))
         assertEquals("vignette.ideas.mode", IdeasMode.KEY)
@@ -260,8 +260,8 @@ class IdeaBookTest {
         assertEquals("unknown is Space", GraphTheme.SPACE, GraphTheme.stored("galaxy"))
         assertEquals(GraphTheme.PERFORMANCE, GraphTheme.stored("performance"))
         assertEquals("Neurons is ported: Neurons", GraphTheme.NEURONS, GraphTheme.stored("neurons"))
-        assertEquals(listOf("Space", "Neurons", "Performance"), GraphTheme.offered.map { it.title })
-        assertEquals(listOf("Space of ideas", "Network of ideas", "Fast map of ideas"), GraphTheme.entries.map { it.mapLabel })
+        assertEquals(listOf("Space", "Neuron", "Performance"), GraphTheme.offered.map { it.title })
+        assertEquals(listOf("Space of ideas", "Network of ideas", "Performance map of ideas"), GraphTheme.entries.map { it.mapLabel })
     }
 
     @Test fun styleChoice() {

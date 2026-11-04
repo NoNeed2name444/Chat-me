@@ -344,4 +344,40 @@ nonisolated enum IdeaBoardFit {
         let panY: Double = margins.top + roomH / 2 - seen / 2 - (minY + maxY) / 2 * zoom
         return Camera(zoom: zoom, panX: panX, panY: panY)
     }
+
+    /// The first view's (and Recentre's) zoom range: never past 1, and never
+    /// so far out that a card is shorter than a touch target (`target`: 44
+    /// pt, 48 dp), so every card opens big enough to tap (S05b task 5; at
+    /// 0.3 a phone's cards were about 45 by 26). A pinch still reaches the
+    /// board's floor, 0.3. A board too wide for the room at this zoom opens
+    /// on its middle.
+    static func firstRange(cardHeight: Double, target: Double) -> ClosedRange<Double> {
+        min(max(target / cardHeight, 0.3), 1)...1
+    }
+}
+
+/// Where a card let go of on the board settles (S05b task 5): where it was
+/// let go, unless it would cover part of another card; then the nearest
+/// free place, looked for in rings `step` apart, 24 ways round each, with
+/// `gap` kept between cards. Centres, in board points.
+nonisolated enum IdeaBoardDrop {
+    static func settle(_ p: CGPoint, card: CGSize, others: [CGPoint], gap: Double = 8, step: Double = 8,
+                       rings: Int = 200) -> CGPoint {
+        let w: Double = Double(card.width) + gap
+        let h: Double = Double(card.height) + gap
+        func free(_ x: Double, _ y: Double) -> Bool {
+            others.allSatisfy { abs(x - Double($0.x)) >= w || abs(y - Double($0.y)) >= h }
+        }
+        let x0: Double = Double(p.x), y0: Double = Double(p.y)
+        if free(x0, y0) { return p }
+        for ring in 1...max(rings, 1) {
+            let r: Double = Double(ring) * step
+            for k in 0..<24 {
+                let a: Double = Double(k) * Double.pi / 12
+                let x: Double = x0 + r * cos(a), y: Double = y0 + r * sin(a)
+                if free(x, y) { return CGPoint(x: x, y: y) }
+            }
+        }
+        return p
+    }
 }

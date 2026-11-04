@@ -8,7 +8,8 @@ import SwiftUI
 /// It is the noding system for idea points - the place to lay thoughts out
 /// next to each other and draw the lines between them by hand:
 /// - drag the background to move around, pinch to zoom;
-/// - drag a card to put it somewhere else (where it lands is kept);
+/// - drag a card to put it somewhere else (where it lands is kept; let go
+///   on another card, it settles in the nearest free place);
 /// - long-press a card, then tap another, to connect the two - or to
 ///   disconnect them if they were already connected. "Connect", in the
 ///   round tools at the bottom corner, does the same with plain taps, for
@@ -183,8 +184,10 @@ struct IdeaBoardView: View {
         let centres: [CGPoint] = notes.notes.map { CGPoint(x: $0.boardX, y: $0.boardY) }
         let margins = IdeaBoardFit.Margins(top: 16, leading: 16, bottom: 16, trailing: 76)
         let card = CGSize(width: Self.cardWidth, height: 88)
+        // never so far out that a card is shorter than a target
+        let range = IdeaBoardFit.firstRange(cardHeight: Double(card.height), target: Double(WardControlSize.target))
         let cam = IdeaBoardFit.camera(centres: centres, card: card, view: frame,
-                                      hidden: Double(underGlass), margins: margins)
+                                      hidden: Double(underGlass), margins: margins, zoomRange: range)
         zoom = cam.zoom
         pan = CGSize(width: cam.panX, height: cam.panY)
     }
@@ -380,9 +383,12 @@ struct IdeaBoardView: View {
                 dragOffset = value.translation
             }
             .onEnded { value in
-                notes.setPosition(note.id,
-                                  x: note.boardX + Double(value.translation.width / scale),
-                                  y: note.boardY + Double(value.translation.height / scale))
+                // let go on another card, it settles in the nearest free place
+                let dropped = CGPoint(x: note.boardX + Double(value.translation.width / scale),
+                                      y: note.boardY + Double(value.translation.height / scale))
+                let others: [CGPoint] = notes.notes.filter { $0.id != note.id }.map { CGPoint(x: $0.boardX, y: $0.boardY) }
+                let at: CGPoint = IdeaBoardDrop.settle(dropped, card: CGSize(width: Self.cardWidth, height: 88), others: others)
+                notes.setPosition(note.id, x: Double(at.x), y: Double(at.y))
                 dragged = nil
                 dragOffset = .zero
             }

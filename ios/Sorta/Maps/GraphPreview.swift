@@ -342,6 +342,8 @@ nonisolated struct GraphStandIns: Sendable {
 /// The whole app, for a `-graphPreview` launch: only the space.
 struct GraphPreviewRoot: View {
     @StateObject private var notes: NoteStore = GraphPreview.makeStore()
+    /// The filings and Undo the map makes, as in the app (IdeasRoot).
+    @State private var filing = IdeasFiling()
 
     /// The design preview's own freeze watch starts with it.
     init() { GraphHangReporter.start() }
@@ -356,12 +358,14 @@ struct GraphPreviewRoot: View {
             IdeaBoardView(open: { _ in })
                 .wardUnlit()
                 .environmentObject(notes)
+                .environment(filing)
                 .safeAreaInset(edge: .top, spacing: 0) { GraphPreviewBar() }
                 .background { WardBackground() }
         } else {
             // the map is always night, so the bar over it is too
             Graph3DView(open: { _ in }, openFolder: { _ in })
                 .environmentObject(notes)
+                .environment(filing)
                 .safeAreaInset(edge: .top, spacing: 0) { GraphPreviewBar() }
                 .background(Color.black)
                 .environment(\.colorScheme, .dark)

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.cramdown.sorta.R
+import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ward.WardChecks
 import com.cramdown.sorta.ui.ward.WardPalette
@@ -68,6 +69,9 @@ class SortRenderTest {
         val cache = compose.activity.cacheDir
         val models = list.map { IdeasModel.open(IdeasFixture.store(cache, it.filled)) }
         val export = File(cache, "export-" + UUID.randomUUID() + ".json").also { it.writeText(SortaRun.export) }
+        // the broad windows show the map beside the Sort screen (S05b two panes); Robolectric can't
+        // draw the GL map, so it is the 2D look's board
+        IdeasSettings(compose.activity).setLook(MapLook.TWO_D)
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(scale)) {
                 SortaTheme(dark = isSystemInDarkTheme()) {

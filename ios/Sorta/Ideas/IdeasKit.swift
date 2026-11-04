@@ -27,6 +27,72 @@ enum IdeasLayout {
                                        bottom: WardRowTile.insets.bottom, trailing: WardSpace.s)
 }
 
+/// Sorta's two ways of looking at the ideas (S05b): Sort, the list
+/// (IdeasView), and Map. Not the maps' IdeasMode (List / Board / Space,
+/// Maps/NotesShared.swift), which stays as it is. Its items go to the
+/// FloatingSwitcher.
+enum SortaMode: String, CaseIterable, Identifiable {
+    case sort, map
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .sort: return IdeasWords.modeSort
+        case .map: return IdeasWords.modeMap
+        }
+    }
+
+    /// What VoiceOver reads for the mode's segment.
+    var spoken: String {
+        switch self {
+        case .sort: return IdeasWords.modeSortSpoken
+        case .map: return IdeasWords.modeMapSpoken
+        }
+    }
+
+    /// The glyph on the switch's segment and on its folded disc.
+    var symbol: String {
+        switch self {
+        case .sort: return "list.bullet"
+        case .map: return "cube.transparent"
+        }
+    }
+
+    /// The segment's accessibility identifier.
+    var identifier: String {
+        switch self {
+        case .sort: return "mode-sort"
+        case .map: return "mode-map"
+        }
+    }
+
+    /// The identifier of the switch's fold button and of its folded disc.
+    static let toggleIdentifier = "modeSwitcherToggle"
+    /// Where the switch remembers being folded, the key Stethoscore's Ideas
+    /// bar uses (IdeasBottomBar.swift:27).
+    static let collapsedKey = "vignette.ideas.switcherCollapsed"
+
+    static var items: [SwitcherItem<SortaMode>] {
+        allCases.map { mode in
+            SwitcherItem(value: mode, title: mode.title, symbol: mode.symbol,
+                         identifier: mode.identifier, spoken: mode.spoken)
+        }
+    }
+}
+
+extension MapLook {
+    /// The look's name, on the chip and in its menu.
+    var title: String {
+        switch self {
+        case .space: return IdeasWords.lookSpace
+        case .neuron: return IdeasWords.lookNeuron
+        case .twoD: return IdeasWords.look2D
+        case .performance: return IdeasWords.lookPerformance
+        }
+    }
+}
+
 /// The capture well: the field and Sort it in one capsule pressed into the
 /// base. Return saves and keeps the field ready (`save`); Sort it saves and
 /// opens the folder chooser (`sortIt`). Both are off while the field is

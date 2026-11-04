@@ -655,14 +655,14 @@ let closed: ThemePlan = GraphNeurons.plan(preview)
 check("T1 closed: three cells", closed.summary == "3 cells", closed.summary)
 check("T1 closed: the top folders are the cells", titles(closed, .cell) == ["Examples", "Cardiology"],
       "\(titles(closed, .cell))")
-let unsorted: Int = bodyNamed(closed, "Unsorted") ?? -1
+let unsorted: Int = bodyNamed(closed, "To sort") ?? -1
 check("T1 closed: the two loose notes share one cell, Unsorted, on the sheet",
-      unsorted >= 0 && titles(closed, .home) == ["Unsorted"] && closed.bodies[unsorted].id == GraphUniverse.homeID
+      unsorted >= 0 && titles(closed, .home) == ["To sort"] && closed.bodies[unsorted].id == GraphUniverse.homeID
       && closed.bodies[unsorted].kind == .home && closed.bodies[unsorted].count == 2
       && closed.bodies[unsorted].parent < 0 && closed.bodies[unsorted].depth == 0, "\(titles(closed, .home))")
 check("T1 closed: nothing shows inside a closed cell", closed.bodies.allSatisfy { $0.parent < 0 })
 check("T1 the cells are the regions",
-      closed.regions.map { closed.bodies[$0].title } .sorted() == ["Cardiology", "Examples", "Unsorted"]
+      closed.regions.map { closed.bodies[$0].title } .sorted() == ["Cardiology", "Examples", "To sort"]
       && closed.regions.allSatisfy { closed.bodies[$0].region == $0 })
 let openOne: ThemePlan = planOpen(preview, [examples])
 check("T1 Examples opened: its two parts and three notes show",
@@ -703,7 +703,7 @@ for note in preview.notes {
 check("T1 all opened: each note in the folder that holds it (Unsorted when none), a page a vesicle",
       misplaced.isEmpty, few(misplaced))
 let openHome: ThemePlan = planOpen(preview, [GraphUniverse.homeID])
-let unsortedOpen: Int = bodyNamed(openHome, "Unsorted") ?? -1
+let unsortedOpen: Int = bodyNamed(openHome, "To sort") ?? -1
 check("T1 Unsorted opened: its two ideas show inside it, as granules",
       openHome.summary == "3 cells, 2 granules"
       && titles(openHome, .granule) == ["Richter's hernia", "Pericarditis"]
@@ -733,7 +733,7 @@ check("T2 closed: three processes into cells, two from Unsorted and one from Exa
       "\(closed.links)")
 check("T2 Examples opened: every link carried once", processProblems(preview, openOne).isEmpty,
       few(processProblems(preview, openOne)))
-let unsortedOne: Int = bodyNamed(openOne, "Unsorted") ?? -1
+let unsortedOne: Int = bodyNamed(openOne, "To sort") ?? -1
 let femoral: Int = bodyNamed(openOne, "Femoral") ?? -1
 check("T2 a link from outside joins the opened cell's membrane, not the part inside",
       openOne.links.contains { $0.a == unsortedOne && $0.b == examplesBody && $0.kind == 6 }
@@ -871,7 +871,7 @@ check("T4 closing hides only what was inside",
 check("T4 opening keeps the framing", closed.envelope == openAll.envelope)
 let unlinkedInput = UniverseInput(notes: preview.notes, folders: preview.folders, edges: [], seedByName: true)
 let unlinked: ThemePlan = allOpen(unlinkedInput)
-let unlinkedHome: Int = bodyNamed(unlinked, "Unsorted") ?? -1
+let unlinkedHome: Int = bodyNamed(unlinked, "To sort") ?? -1
 check("T4 without links: no processes, the loose notes still in Unsorted",
       unlinked.links.isEmpty && unlinkedHome >= 0 && unlinked.bodies[unlinkedHome].count == 2
       && Set(unlinked.bodies.filter { $0.parent == unlinkedHome }.map(\.title)) == ["Richter's hernia", "Pericarditis"],
@@ -1056,11 +1056,11 @@ let looseInput = UniverseInput(notes: looseNotes, folders: [UniverseFolder(id: f
                                edges: looseEdges, seedByName: true)
 let loosePlan: ThemePlan = GraphNeurons.plan(looseInput)
 check("T6 forty loose: two cells, Hub and Unsorted, and nothing else",
-      loosePlan.summary == "2 cells" && titles(loosePlan, .cell) == ["Hub"] && titles(loosePlan, .home) == ["Unsorted"],
+      loosePlan.summary == "2 cells" && titles(loosePlan, .cell) == ["Hub"] && titles(loosePlan, .home) == ["To sort"],
       loosePlan.summary)
 check("T6 forty loose: no two meet", meetProblems(loosePlan).isEmpty, few(meetProblems(loosePlan)))
 check("T6 forty loose: the framing holds them", envelopeProblems(loosePlan).isEmpty, few(envelopeProblems(loosePlan)))
-if let hub = bodyNamed(loosePlan, "Hub"), let home = bodyNamed(loosePlan, "Unsorted") {
+if let hub = bodyNamed(loosePlan, "Hub"), let home = bodyNamed(loosePlan, "To sort") {
     let hubBody: ThemeBody = loosePlan.bodies[hub]
     let homeBody: ThemeBody = loosePlan.bodies[home]
     check("T6 forty loose: Unsorted holds all forty, so it is the bigger cell",
@@ -1118,7 +1118,7 @@ check("T8 the menu offers only ready themes", GraphTheme.offered.allSatisfy { $0
       && GraphTheme.offered.first == .space)
 check("T8 the themes' words are their own",
       Set(GraphTheme.allCases.map(\.legendTitle)).count == GraphTheme.allCases.count
-      && GraphTheme.neurons.title == "Neurons" && GraphTheme.stored("space") == .space)
+      && GraphTheme.neurons.title == "Neuron" && GraphTheme.stored("space") == .space)
 // T0149: each theme its own bodies and its own ground, read from the key the
 // Look menu (and the tours) store it under
 check("T8 Space draws the Universe's bodies on the starfield",

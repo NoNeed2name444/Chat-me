@@ -10,7 +10,7 @@ import kotlin.math.abs
 /** The 3D Ideas map's themes (GraphTheme). */
 enum class GraphTheme(val rawValue: String, val title: String) {
     SPACE("space", "Space"),
-    NEURONS("neurons", "Neurons"),
+    NEURONS("neurons", "Neuron"),
     PERFORMANCE("performance", "Performance");
 
     /**
@@ -22,14 +22,14 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     val legendTitle: String get() = when (this) {
         SPACE -> "How your universe is built"
         NEURONS -> "How your network is built"
-        PERFORMANCE -> "How the fast map is built"
+        PERFORMANCE -> "How the Performance map is built"
     }
 
     /** What TalkBack calls the map. */
     val mapLabel: String get() = when (this) {
         SPACE -> "Space of ideas"
         NEURONS -> "Network of ideas"
-        PERFORMANCE -> "Fast map of ideas"
+        PERFORMANCE -> "Performance map of ideas"
     }
 
     /**
@@ -37,38 +37,38 @@ enum class GraphTheme(val rawValue: String, val title: String) {
      * no card and no hold, IdeasSpace), one finger turns, two slide and pinch.
      */
     val hint: String get() = when (this) {
-        SPACE -> "Tap a body to open its note. Drag to turn, two fingers to slide, pinch to zoom."
-        NEURONS -> "Tap a cell or a part to open it, and a note inside to read it. Recentre closes them again. " +
+        SPACE -> "Tap a body to open its idea. Drag to turn, two fingers to slide, pinch to zoom."
+        NEURONS -> "Tap a cell or a part to open it, and an idea inside to read it. Recentre closes them again. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
-        PERFORMANCE -> "Tap a point to open its note. Drag to turn, two fingers to slide, pinch to zoom."
+        PERFORMANCE -> "Tap a point to open its idea. Drag to turn, two fingers to slide, pinch to zoom."
     }
 
     val cardTitle: String get() = when (this) {
-        SPACE -> "Your notes as a universe"
-        NEURONS -> "Your notes as a nervous system"
-        PERFORMANCE -> "Your notes, built for speed"
+        SPACE -> "Your ideas as a universe"
+        NEURONS -> "Your ideas as a nervous system"
+        PERFORMANCE -> "Your ideas, built for speed"
     }
 
     /** What the map is made of on Android: Space's bodies come from links (the Universe is not ported, GraphStyleChoice.codes). */
     val cardText: String get() = when (this) {
-        SPACE -> "Every note is a body, and its links choose which: a comet has none, a pulsar one, " +
+        SPACE -> "Every idea is a body, and its links choose which: a comet has none, a pulsar one, " +
             "a rocky planet two, a gas giant three or four, a sun five to seven and a black hole eight or more."
         NEURONS -> "Top-level folders are cells, folders are the parts inside them, " +
-            "pages are vesicles and ideas granules. Notes in no folder share one cell. " +
+            "pages are vesicles and ideas granules. Ideas in no folder share one cell. " +
             "Links grow out of the cells as axons carrying impulses."
-        PERFORMANCE -> "Every note is a point and every link a line, drawn so 100,000 fit at once. " +
-            "Each top-level folder has its own colour; far away a folder’s notes merge into one glow."
+        PERFORMANCE -> "Every idea is a point and every link a line, drawn so 100,000 fit at once. " +
+            "Each top-level folder has its own colour; far away a folder’s ideas merge into one glow."
     }
 
     val cardSteps: List<String> get() = when (this) {
-        SPACE -> listOf("Type [[ and a note’s title in a note: a link joins them, and each note’s links choose its body.",
-            "Look › Bodies: one body for every note, or Folder looks for one folder’s notes.")
+        SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them, and each idea’s links choose its body.",
+            "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
         NEURONS -> listOf("Tap + › New folder: a new cell.",
             "Tap + › New page for a vesicle, New idea for a granule.",
-            "Type [[ and a note’s title in a note: an axon joins them.")
+            "Type [[ and another idea’s title in an idea: an axon joins them.")
         PERFORMANCE -> listOf("Tap + › New folder: a new cluster round its hub.",
             "Tap + › New page for a larger point, New idea for a smaller one.",
-            "Type [[ and a note’s title in a note: a line joins them.")
+            "Type [[ and another idea’s title in an idea: a line joins them.")
     }
 
     companion object {

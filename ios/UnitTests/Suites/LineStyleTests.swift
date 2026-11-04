@@ -282,5 +282,30 @@ let fitFloor: IdeaBoardFit.Camera = IdeaBoardFit.camera(centres: farApart, card:
 check("L6 a vast board stops at the board's own floor, centred",
       fitFloor.zoom == 0.3 && nearD(fitFloor.panX, 16 + (402 - 92) / 2 - 201), "\(fitFloor)")
 
+// MARK: L7 the first view keeps every card big enough to tap
+
+let tapRange: ClosedRange<Double> = IdeaBoardFit.firstRange(cardHeight: 88, target: 44)
+let tapFit: IdeaBoardFit.Camera = IdeaBoardFit.camera(centres: farApart, card: card, view: phone,
+                                                    hidden: 220, margins: room, zoomRange: tapRange)
+check("L7 a vast board opens with its cards 44 points tall, on its middle",
+      tapRange == 0.5...1 && nearD(tapFit.zoom * 88, 44) && nearD(tapFit.panX, 16 + (402 - 92) / 2 - 201), "\(tapFit)")
+check("L7 it never asks for more than 1, nor less than the board's floor",
+      IdeaBoardFit.firstRange(cardHeight: 20, target: 44) == 1...1
+      && IdeaBoardFit.firstRange(cardHeight: 400, target: 44) == 0.3...1)
+
+// MARK: L8 a card let go of on another settles beside it
+
+let others: [CGPoint] = [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 96)]
+let clear = CGPoint(x: 400, y: 400)
+check("L8 let go in a clear place, it stays", IdeaBoardDrop.settle(clear, card: card, others: others) == clear)
+let onTop = CGPoint(x: 10, y: 4)
+let settled: CGPoint = IdeaBoardDrop.settle(onTop, card: card, others: others)
+func overlaps(_ a: CGPoint, _ b: CGPoint) -> Bool {
+    abs(Double(a.x - b.x)) < 150 + 8 - 1e-6 && abs(Double(a.y - b.y)) < 88 + 8 - 1e-6
+}
+let moved: Double = hypot(Double(settled.x - onTop.x), Double(settled.y - onTop.y))
+check("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap",
+      !others.contains { overlaps(settled, $0) } && moved > 0 && moved <= 150 + 8 + 8, "\(settled)")
+
 print(failures.isEmpty ? "all passed" : "\(failures.count) failed")
 exit(failures.isEmpty ? 0 : 1)

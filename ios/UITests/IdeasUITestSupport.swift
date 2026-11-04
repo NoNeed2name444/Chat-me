@@ -25,7 +25,7 @@ enum IdeasText {
     static let ideaDeleted = "Idea deleted."
     static let backInToSort = "Back in To sort."
     static let importedTitle = "Ideas imported"
-    static let importedBody = "Added 4 ideas, 4 folders and 4 links. 3 ideas keep their place on the map."
+    static let importedBody = "Added 4 ideas, 4 folders and 4 links. 3 ideas keep their place on the 2D map."
     static let nothingNewTitle = "Nothing new to add"
     static let refusedTitle = "Can't import this file"
     static let refusedNotBackup = "This file isn't a Stethoscore backup. Choose another file."

@@ -283,7 +283,7 @@ nonisolated enum GraphPeek {
     /// The plain type: the home beside folders as the Move menu names
     /// where its notes are.
     static func plainType(folder: Bool, home: Bool, unsorted: Bool = false, page: Bool) -> String {
-        if home { return unsorted ? "No folder" : "All notes" }
+        if home { return unsorted ? "To sort" : "All ideas" }
         if folder { return "Folder" }
         return page ? "Page" : "Idea"
     }
@@ -318,7 +318,7 @@ nonisolated enum GraphPeek {
         let kind: String = own == plain ? plain : own + " \u{00B7} " + plain
         let title: String = input.title.isEmpty ? "Untitled" : input.title
         if input.folder || input.home {
-            var lines: [String] = [plural(input.notes, "note", "notes") + " \u{00B7} "
+            var lines: [String] = [plural(input.notes, "idea", "ideas") + " \u{00B7} "
                                    + plural(input.subfolders, "subfolder", "subfolders")]
             let recent: [String] = Array(input.recent.prefix(3)).map { $0.isEmpty ? "Untitled" : $0 }
             if !recent.isEmpty { lines.append("Latest: " + recent.joined(separator: ", ")) }
@@ -353,8 +353,8 @@ nonisolated enum GraphPeek {
 
     /// The options held on a body, in order; `canAddNote` for folders.
     static func menu(folder: Bool, home: Bool) -> [String] {
-        if home { return ["Open", "Add note here"] }
-        if folder { return ["Open", "Rename", "Add note here", "Delete"] }
-        return ["Open", "Rename", "Link to\u{2026}", "Move to folder\u{2026}", "Delete"]
+        if home { return ["Open", "Add idea here"] }
+        if folder { return ["Open", "Rename", "Add idea here", "Delete"] }
+        return ["Open", "Rename", "Link to\u{2026}", "Choose folder", "Delete"]
     }
 }

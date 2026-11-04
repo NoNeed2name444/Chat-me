@@ -1,8 +1,12 @@
 package com.cramdown.sorta.ideas
 
 import com.cramdown.sorta.map.Vec3
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 // A port of ios/RedPen/Features/Notes/GraphLineStyle.swift (fed0105).
@@ -226,5 +230,38 @@ object IdeaBoardFit {
         val panX = margins.leading + roomW / 2 - width / 2 - (minX + maxX) / 2 * zoom
         val panY = margins.top + roomH / 2 - seen / 2 - (minY + maxY) / 2 * zoom
         return Camera(zoom, panX, panY)
+    }
+
+    /**
+     * The first view's (and Recentre's) zoom range: never past 1, and never so far out that a card
+     * is shorter than a touch target ([target]: 48 dp, 44 pt), so every card opens big enough to
+     * tap (S05b task 5). A pinch still reaches the board's floor, 0.3. As iOS's.
+     */
+    fun firstRange(cardHeight: Double, target: Double): ClosedFloatingPointRange<Double> =
+        min(max(target / cardHeight, 0.3), 1.0)..1.0
+}
+
+/**
+ * Where a card let go of on the board settles (S05b task 5): where it was let go, unless it would
+ * cover part of another card; then the nearest free place, looked for in rings [step] apart, 24
+ * ways round each, with [gap] kept between cards. Centres, in board points. As iOS's.
+ */
+object IdeaBoardDrop {
+    fun settle(p: BoardPoint, cardWidth: Double, cardHeight: Double, others: List<BoardPoint>, gap: Double = 8.0,
+               step: Double = 8.0, rings: Int = 200): BoardPoint {
+        val w = cardWidth + gap
+        val h = cardHeight + gap
+        fun free(x: Double, y: Double) = others.all { abs(x - it.x) >= w || abs(y - it.y) >= h }
+        if (free(p.x, p.y)) return p
+        for (ring in 1..max(rings, 1)) {
+            val r = ring * step
+            for (k in 0 until 24) {
+                val a = k * PI / 12
+                val x = p.x + r * cos(a)
+                val y = p.y + r * sin(a)
+                if (free(x, y)) return BoardPoint(x, y)
+            }
+        }
+        return p
     }
 }

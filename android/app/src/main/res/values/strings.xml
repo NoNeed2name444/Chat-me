@@ -18,12 +18,15 @@
     <string name="ward_deck_show">Show buttons</string>
     <!-- The open bottom bar's band that folds it away, read aloud -->
     <string name="ward_deck_hide">Hide buttons</string>
-    <!-- The view switcher's chevron that folds it into a disc, read aloud -->
-    <string name="ward_switcher_hide">Hide views</string>
-    <!-- The folded switcher's disc, read aloud, with the view on show: "Show views. Now showing Board" -->
-    <string name="ward_switcher_show">Show views. Now showing %1$s</string>
-    <!-- The title of the sheet that lists every view, at the largest text sizes -->
-    <string name="ward_switcher_list_title">Views</string>
+    <!-- The mode switcher's chevron that folds it into a disc, read aloud -->
+    <string name="ward_switcher_hide">Hide modes</string>
+    <!-- The folded switcher's disc, read aloud, with the mode on show: "Show modes. Now showing Map" -->
+    <string name="ward_switcher_show">Show modes. Now showing %1$s</string>
+    <!-- What a tap and a hold on the folded disc do, read by TalkBack after "Double-tap to" and "Double-tap and hold to", as iOS's hint "Shows every mode. Double-tap and hold to choose a mode." -->
+    <string name="ward_switcher_tap">show every mode</string>
+    <string name="ward_switcher_hold">choose a mode</string>
+    <!-- The title of the sheet that lists every mode, at the largest text sizes -->
+    <string name="ward_switcher_list_title">Modes</string>
     <!-- The states gallery (a design reference): its heading, with the look's name -->
     <string name="ward_gallery_heading">States · %1$s</string>
     <string name="ward_gallery_rest">Rest</string>
@@ -48,7 +51,7 @@
     <!-- The filled button in the capture well: saves the idea and opens the folder chooser -->
     <string name="capture_sort">Sort it</string>
     <!-- Sort it, spoken hint (read after "Double-tap to") -->
-    <string name="capture_sort_hint">Saves your idea and lets you choose its folder.</string>
+    <string name="capture_sort_hint">save your idea and choose its folder</string>
     <!-- The title row at the top level -->
     <string name="sort_title">To sort</string>
     <!-- The title row at the top level, spoken as a header -->
@@ -72,7 +75,7 @@
     <!-- An idea row's button, spoken: "Choose folder for Paint the shed" -->
     <string name="row_choose_folder_spoken">Choose folder for %1$s</string>
     <!-- An idea row's spoken hint: a tap opens the editor -->
-    <string name="row_hint">Opens the idea.</string>
+    <string name="row_hint">open the idea</string>
     <!-- An idea row's trailing swipe, its menu item and its spoken action -->
     <string name="row_delete">Delete</string>
     <!-- An idea with no words in its title or details -->
@@ -92,6 +95,28 @@
     <string name="more_import">Import from Stethoscore…</string>
     <string name="more_new_folder">New folder</string>
 
+    <!-- The Sort / Map switch (S05b), draft words from its plan, for the ux-writing pass -->
+    <!-- The switch's item for the Sort screen, and its spoken label -->
+    <string name="mode_sort">Sort</string>
+    <string name="mode_sort_spoken">Sort ideas</string>
+    <!-- The switch's item for the map, and its spoken label -->
+    <string name="mode_map">Map</string>
+    <string name="mode_map_spoken">Map of ideas</string>
+
+    <!-- Map mode's look chip and its menu: the four looks, drafts for ux-writing -->
+    <string name="look_space">Space</string>
+    <string name="look_neuron">Neuron</string>
+    <string name="look_2d">2D</string>
+    <string name="look_performance">Performance</string>
+    <!-- The look chip, read aloud with the look: "Theme, Space" -->
+    <string name="look_chip_spoken">Theme, %1$s</string>
+    <string name="look_chip_hint">change how the map looks</string>
+    <!-- The map's "To sort n" chip: what a tap does (its label is the title's spoken words) -->
+    <string name="map_list_hint">open the list</string>
+    <!-- Map mode with no ideas yet: its title and line, drafts for ux-writing -->
+    <string name="map_empty_title">No ideas yet</string>
+    <string name="map_empty_line">Add ideas in Sort, and they appear here.</string>
+
     <!-- The folder chooser -->
     <string name="chooser_title">Choose folder</string>
     <!-- Every sheet's and confirm's cancel -->
@@ -103,7 +128,7 @@
     <string name="chooser_inside">inside %1$s</string>
     <!-- The chooser's last row, and its spoken hint -->
     <string name="chooser_new_folder">New folder</string>
-    <string name="chooser_new_folder_hint">Makes a folder and moves your idea into it.</string>
+    <string name="chooser_new_folder_hint">make a folder and move your idea into it</string>
     <!-- The naming sheet -->
     <string name="name_new_title">New folder</string>
     <string name="name_rename_title">Rename folder</string>
@@ -175,8 +200,8 @@
     </plurals>
     <!-- A second sentence, only when some added ideas had a place on the map -->
     <plurals name="import_placed">
-        <item quantity="one">%d idea keeps its place on the map.</item>
-        <item quantity="other">%d ideas keep their place on the map.</item>
+        <item quantity="one">%d idea keeps its place on the 2D map.</item>
+        <item quantity="other">%d ideas keep their place on the 2D map.</item>
     </plurals>
     <string name="import_nothing_title">Nothing new to add</string>
     <string name="import_nothing_body">You already have every idea in this file.</string>
@@ -192,4 +217,68 @@
     <string name="store_unreadable">Your saved ideas didn\'t open. They\'re kept safe on this device, so new changes won\'t save for now.</string>
     <string name="store_notice_close">Close</string>
     <string name="store_save_failed">That change didn\'t save. Try again.</string>
+
+    <!-- Map mode's panels (S05b task 4) -->
+    <!-- The peek card: what a body is (iOS GraphPeek), its kind's words, and its buttons -->
+    <string name="map_peek_idea">Idea</string>
+    <string name="map_peek_page">Page</string>
+    <string name="map_peek_folder">Folder</string>
+    <string name="map_peek_all_ideas">All ideas</string>
+    <string name="map_peek_nothing">Nothing written yet.</string>
+    <string name="map_peek_latest">Latest: %1$s</string>
+    <string name="map_peek_more_links">+%1$d more</string>
+    <string name="map_peek_open">Open</string>
+    <string name="map_peek_open_folder">Open folder</string>
+    <string name="map_peek_fly_in">Fly in</string>
+    <string name="map_peek_more">More</string>
+    <plurals name="map_peek_ideas">
+        <item quantity="one">%d idea</item>
+        <item quantity="other">%d ideas</item>
+    </plurals>
+    <plurals name="map_peek_subfolders">
+        <item quantity="one">%d subfolder</item>
+        <item quantity="other">%d subfolders</item>
+    </plurals>
+    <plurals name="map_peek_links">
+        <item quantity="one">%d link</item>
+        <item quantity="other">%d links</item>
+    </plurals>
+    <!-- Each theme's own word for a body -->
+    <string name="map_role_black_hole">Black hole</string>
+    <string name="map_role_star">Star</string>
+    <string name="map_role_gas_giant">Gas giant</string>
+    <string name="map_role_rocky">Rocky planet</string>
+    <string name="map_role_comet">Comet</string>
+    <string name="map_role_pulsar">Pulsar</string>
+    <string name="map_role_cell">Cell</string>
+    <string name="map_role_cell_part">Cell part</string>
+    <string name="map_role_vesicle">Vesicle</string>
+    <string name="map_role_granule">Granule</string>
+    <!-- A body's options (iOS GraphPeek.menu) -->
+    <string name="map_menu_rename">Rename</string>
+    <string name="map_menu_move">Choose folder</string>
+    <string name="map_menu_delete">Delete</string>
+    <string name="map_rename_idea_title">Rename idea</string>
+    <string name="map_rename_idea_field">Title</string>
+    <!-- The Link length bar (iOS GraphLinkLengthBar) and its item in the Look menu -->
+    <string name="map_link_length">Link length</string>
+    <string name="map_link_length_item">Link length: %1$s</string>
+    <string name="map_link_standard">Standard</string>
+    <string name="map_link_shorter_by">Shorter, %1$s×</string>
+    <string name="map_link_longer_by">Longer, %1$s×</string>
+    <string name="map_link_shorter">Shorter</string>
+    <string name="map_link_longer">Longer</string>
+    <string name="map_link_done">Done</string>
+    <!-- The first-run card (iOS GraphUniverseHint): Android's own touch lines, since a body can't be held to move -->
+    <string name="map_touch_title">Touching the map</string>
+    <string name="map_touch_tap">Tap to preview</string>
+    <string name="map_touch_again">Tap again or Open to read</string>
+    <string name="map_touch_hold">Hold for options</string>
+    <string name="map_touch_full_list">Full list</string>
+    <string name="map_touch_got_it">Got it</string>
+    <!-- The hint over a map with no folders yet (iOS GraphEmptyHint), by theme -->
+    <string name="map_no_folder_space">No folders yet. Add a folder, then give its ideas their own look in Folder looks.</string>
+    <string name="map_no_folder_neurons">No folders yet: every idea shares one cell. Add a folder to grow a cell of its own.</string>
+    <string name="map_no_folder_performance">No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour.</string>
+    <string name="map_add_folder">Add folder</string>
 </resources>

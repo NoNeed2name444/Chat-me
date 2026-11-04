@@ -101,6 +101,13 @@ final class IdeasRenderTests: XCTestCase {
         app.keyboards.buttons["Done"].firstMatch.tapIfThere()
         sleep(1)
         keepShot("\(prefix)-3-to-sort")
+        if app.windows.firstMatch.frame.width >= 700 {
+            // a broad window: the map beside the Sort screen, with no switch (S05b checklist 9)
+            XCTAssertTrue(app.descendants(matching: .any)[MapText.lookChip].waitForExistence(timeout: 10),
+                          "two panes: the map beside the Sort screen")
+            XCTAssertFalse(app.descendants(matching: .any)["mode-sort"].exists, "two panes: no switch")
+            XCTAssertFalse(app.descendants(matching: .any)["map-list-chip"].exists, "two panes: no list chip")
+        }
 
         app.openChooser(for: "Oil the gate")
         sleep(1)

@@ -476,7 +476,7 @@ check("P7 no frames, zeros", none7.count == 0 && none7.p50 == 0 && none7.p95 == 
 var readout = GraphPerfStats(notes: 100_000, links: 230_080, drawnBodies: 98_412, drawnGlows: 236, drawnLines: 231_940,
                              fps: 119.6, cpuP95: 0.004, settling: false)
 check("P7 the readout: notes, links; what was drawn",
-      readout.line == "100,000 notes \u{00B7} 230,080 links"
+      readout.line == "100,000 ideas \u{00B7} 230,080 links"
       && readout.drawn == "98,412 drawn \u{00B7} 236 glows \u{00B7} 231,940 lines", readout.line + " / " + readout.drawn)
 check("P7 the pace without a known screen: frames a second and a frame's time",
       readout.pace == "120 fps \u{00B7} 4.0 ms a frame", readout.pace)
@@ -512,7 +512,7 @@ check("P7 once measured, the share of the screen at 250 or more ends the stages"
 check("P7 the median", GraphPerfStats.median([]) == 0 && GraphPerfStats.median([3, 1, 2]) == 2)
 readout.notes = 1; readout.links = 1; readout.drawnGlows = 1
 check("P7 one of each is singular, and small numbers have no commas",
-      readout.line == "1 note \u{00B7} 1 link" && GraphPerfStats.grouped(999) == "999"
+      readout.line == "1 idea \u{00B7} 1 link" && GraphPerfStats.grouped(999) == "999"
       && GraphPerfStats.grouped(1_000) == "1,000" && GraphPerfStats.grouped(-12_345) == "-12,345")
 
 // MARK: - P8 linear time
@@ -1059,7 +1059,7 @@ check("P16 a long error is cut at 160 characters",
 let failedStats = stuck.failing(.shaders(shaderError))
 check("P16 a failure comes first in the readout's words, the numbers after it",
       failedStats.spoken.hasPrefix("cannot draw: the shaders did not compile")
-          && failedStats.spoken.contains("0 notes") && failedStats.spoken.contains("tour: warm"), failedStats.spoken)
+          && failedStats.spoken.contains("0 ideas") && failedStats.spoken.contains("tour: warm"), failedStats.spoken)
 check("P16 the proof's 300-character tail of a long reading still holds a short failure's reason",
       String(GraphPerfStats().failing(.mapBuffers).spoken.suffix(300)).contains("cannot draw: the map's GPU buffers"))
 check("P16 a run of stopped frames never replaces the failure that caused it",

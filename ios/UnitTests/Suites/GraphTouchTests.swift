@@ -88,10 +88,10 @@ check("T3 Neurons: Vesicle · Page", card("neurons", "3", page: true).kind == "V
 check("T3 Neurons: a role with no word of its own is just its type", card("neurons", "6").kind == "Idea")
 check("T3 Neurons: Unsorted, beside folders, is a Cell of the notes in no folder",
       GraphPeek.content(GraphPeekInput(theme: "neurons", role: "2", folder: true, home: true, unsorted: true,
-                                       title: "Unsorted")).kind == "Cell \u{00B7} No folder")
+                                       title: "Unsorted")).kind == "Cell \u{00B7} To sort")
 check("T3 Neurons with no folders: the one cell holds all notes",
       GraphPeek.content(GraphPeekInput(theme: "neurons", role: "2", folder: true, home: true,
-                                       title: "Ideas")).kind == "Cell \u{00B7} All notes")
+                                       title: "Ideas")).kind == "Cell \u{00B7} All ideas")
 var single = GraphPeekInput(theme: "space", role: "", folder: false, title: "x", page: false)
 single.lookName = "Pulsar"
 check("T3 a single look names its style", GraphPeek.content(single).kind == "Pulsar \u{00B7} Idea")
@@ -114,7 +114,7 @@ folder.recent = ["Inguinal canal", "Internal ring test", "Direct inguinal hernia
 let folderCard: GraphPeekContent = GraphPeek.content(folder)
 check("T3 a folder: Star · Folder", folderCard.kind == "Star \u{00B7} Folder")
 check("T3 a folder: counts and its latest notes", folderCard.lines == [
-    "8 notes \u{00B7} 1 subfolder", "Latest: Inguinal canal, Internal ring test, Direct inguinal hernia"
+    "8 ideas \u{00B7} 1 subfolder", "Latest: Inguinal canal, Internal ring test, Direct inguinal hernia"
 ], "\(folderCard.lines)")
 check("T3 a folder: Open folder and Fly in", folderCard.primary == "Open folder" && folderCard.secondary == ["Fly in"])
 check("T3 Neurons folder: Cell", GraphPeek.content(GraphPeekInput(theme: "neurons", role: "0", folder: true,
@@ -132,9 +132,9 @@ check("T4 the first-run card's three lines", GraphPeek.coachLines == [
 ])
 check("T4 VoiceOver's actions", GraphPeek.actions(folder: false) == ["Open", "Show links", "Delete"])
 check("T4 a note's options", GraphPeek.menu(folder: false, home: false) == [
-    "Open", "Rename", "Link to\u{2026}", "Move to folder\u{2026}", "Delete"
+    "Open", "Rename", "Link to\u{2026}", "Choose folder", "Delete"
 ])
-check("T4 a folder's options add a note there", GraphPeek.menu(folder: true, home: false).contains("Add note here")
+check("T4 a folder's options add a note there", GraphPeek.menu(folder: true, home: false).contains("Add idea here")
       && !GraphPeek.menu(folder: true, home: false).contains("Link to\u{2026}"))
 check("T4 the home star cannot be renamed or deleted", !GraphPeek.menu(folder: true, home: true).contains("Delete"))
 

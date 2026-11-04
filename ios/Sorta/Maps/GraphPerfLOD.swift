@@ -325,7 +325,7 @@ nonisolated struct GraphPerfStats: Sendable, Equatable {
 
     /// "100,000 notes · 230,080 links"
     var line: String {
-        Self.grouped(notes) + (notes == 1 ? " note" : " notes") + " \u{00B7} " + Self.grouped(links)
+        Self.grouped(notes) + (notes == 1 ? " idea" : " ideas") + " \u{00B7} " + Self.grouped(links)
             + (links == 1 ? " link" : " links")
     }
 

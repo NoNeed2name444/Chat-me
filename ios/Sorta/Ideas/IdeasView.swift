@@ -11,35 +11,37 @@ import UniformTypeIdentifiers
 /// From Stethoscore's IdeasView (reference/stethoscore-aec2af1c/ios/RedPen/
 /// Features/Notes/IdeasView.swift): `capture()` (:128-134), the folder being
 /// browsed and its reset when deleted (:35, 101-104), FolderPrompt (:52-63),
-/// the list (:204-244), `upRow` (:258-269), `folderRow` with its menu
-/// (:282-321), `noteRow` with its swipes and menu (:323-376), and the naming
-/// sheet (:394-406). Cut: the bottom bar and FloatingSwitcher, the Board and
-/// Space modes (S05b), search, the title pill and IdeasChrome, the dock
-/// spacer, "Loose ideas", "Start typing" and WardEmptyState, NoteTone's
-/// colours, the kind glyphs, the preview line and "n linked", and every
-/// literal size. Changed: capture at the top; To sort first; Choose folder
-/// on each row; the move dialog is a sheet (FolderChooser); Undo after each
-/// filing and delete; deleting a folder asks first; the import.
+/// and the naming sheet (:394-406); the list (:204-376) is IdeasList, which
+/// Map mode's list sheet shares with the sheets it leads to (IdeasListRoutes). Cut: the bottom bar and FloatingSwitcher,
+/// the Board and Space modes (S05b), search, the title pill and IdeasChrome,
+/// the dock spacer, "Loose ideas", "Start typing" and WardEmptyState,
+/// NoteTone's colours, the kind glyphs, the preview line and "n linked",
+/// and every literal size. Changed: capture at the top; To sort first;
+/// Choose folder on each row; the move dialog is a sheet (FolderChooser);
+/// Undo after each filing and delete; deleting a folder asks first; the
+/// import.
 struct IdeasView: View {
     @EnvironmentObject private var notes: NoteStore
-    @State private var draft = ""
-    /// The folder being browsed, or nil for the top level.
-    @State private var folderId: UUID?
-    @State private var opening: NoteRef?
-    @State private var naming: FolderPrompt?
-    /// The idea whose folder is being chosen.
-    @State private var choosing: NoteRef?
-    @State private var deletingFolder: NoteFolder?
+    @Environment(IdeasFiling.self) private var filing
+    /// Sort or Map, the switch's (IdeasRoot's).
+    @Binding var mode: SortaMode
+    /// The field's words and the folder being browsed (nil: the top level),
+    /// kept by IdeasRoot, so a visit to Map comes back to them.
+    @Binding var draft: String
+    @Binding var folderId: UUID?
+    /// Beside the map, on two panes: no switch.
+    var paned = false
+    /// The editor, chooser, naming sheet and delete dialog the list opens.
+    @State private var routes = IdeasListRoutes()
     @State private var importing = false
     @State private var imported: ImportOutcome?
-    @State private var notice: IdeasNotice?
-    /// A filing made in the editor, offered with Undo when it closes.
-    @State private var editorFiling: EditorFiling?
     @State private var toldReadProblem = false
     /// The list is scrolled away from its top: the hairline under the well shows.
     @State private var scrolled = false
     @FocusState private var capturing: Bool
-    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The field has the caret, held a moment after it lets go: the switch
+    /// is folded meanwhile (IdeasFoot).
+    @State private var typing = false
 
     /// The test-only import file (`-SortaImportFile`), opened by Import
     /// from Stethoscore… in place of the system's picker.
@@ -50,19 +52,6 @@ struct IdeasView: View {
         return nil
         #endif
     }()
-
-    /// The naming sheet, for a new folder or a renamed one.
-    enum FolderPrompt: Identifiable {
-        case new(parent: UUID?)
-        case rename(NoteFolder)
-
-        var id: String {
-            switch self {
-            case .new(let parent): return "new-\(parent?.uuidString ?? "top")"
-            case .rename(let folder): return "rename-\(folder.id.uuidString)"
-            }
-        }
-    }
 
     private var showsEmpty: Bool {
         folderId == nil && IdeasDesk.isEmpty(ideas: notes.notes.count, folders: notes.folders.count)
@@ -86,35 +75,14 @@ struct IdeasView: View {
         .frame(maxWidth: IdeasLayout.column)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            IdeasNoticeHost(notice: $notice, undo: undo)
-                .frame(maxWidth: IdeasLayout.column)
+            IdeasFoot(mode: $mode, typing: typing, letGo: { capturing = false }, switches: !paned)
         }
         // one side of a fold's hinge, the page across it
         .clearOfBand()
         .wardMasthead()
         .background { WardBackground() }
         .lineSpacing(WardSpace.leading)
-        .sheet(item: $opening, onDismiss: offerEditorUndo) { ref in
-            NoteEditorView(noteID: ref.id, file: fileFromEditor, delete: deleteIdea)
-        }
-        .sheet(item: $choosing) { ref in
-            FolderChooser(current: notes.note(ref.id)?.folderId,
-                          choose: { file(ref.id, in: $0) },
-                          makeFolder: { name in
-                              let folder = notes.createFolder(name: name, parentId: folderId)
-                              file(ref.id, in: folder.id)
-                          })
-        }
-        .sheet(item: $naming) { prompt in
-            nameSheet(prompt)
-        }
-        .confirmationDialog(deletingFolder.map { IdeasWords.deleteFolderTitle($0.name) } ?? "",
-                            isPresented: deletingShown, titleVisibility: .visible, presenting: deletingFolder) { folder in
-            Button(IdeasWords.deleteFolder, role: .destructive) { notes.deleteFolder(folder.id) }
-            Button(IdeasWords.cancel, role: .cancel) {}
-        } message: { folder in
-            Text(IdeasWords.deleteFolderBody(notes.folder(folder.parentId)?.name ?? IdeasWords.toSort))
-        }
+        .ideasListSheets(routes, folderId: $folderId)
         .fileImporter(isPresented: $importing, allowedContentTypes: [IdeaImportFlow.backupType]) { result in
             if case .success(let url) = result { runImport(url) }
         }
@@ -123,11 +91,16 @@ struct IdeasView: View {
         } message: { outcome in
             Text(outcome.message)
         }
-        // the folder being browsed was deleted: back to the top
-        .onChange(of: notes.folders) { _, _ in
-            if folderId != nil, notes.folder(folderId) == nil { folderId = nil }
-        }
         .onAppear(perform: tellReadProblem)
+        .task(id: capturing) {
+            if capturing {
+                typing = true
+                return
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            typing = false
+        }
     }
 
     // MARK: capture
@@ -172,7 +145,7 @@ struct IdeasView: View {
         let idea = notes.create(title: text, kind: .idea, folderId: folderId)
         draft = ""
         capturing = false
-        choosing = NoteRef(id: idea.id)
+        routes.choosing = NoteRef(id: idea.id)
     }
 
     // MARK: the empty state
@@ -202,89 +175,18 @@ struct IdeasView: View {
 
     // MARK: the list
 
+    /// S05's list (IdeasList), with More at the title row's end; the
+    /// sheets, dialogs and Undo it leads to are this screen's.
     private var list: some View {
-        let current: NoteFolder? = notes.folder(folderId)
-        let here: [Note] = notes.contents(of: folderId)
-        let subfolders: [NoteFolder] = notes.subfolders(of: folderId)
-        return List {
-            if let current {
-                upRow(current)
-                    .wardRowBackground()
-            }
-            titleRow(current, count: current.map { notes.count(in: $0.id) } ?? here.count)
-                .listRowBackground(Color.clear)
-                .listRowInsets(IdeasLayout.lineInsets)
-                .listRowSeparator(.hidden)
-            if here.isEmpty {
-                Text(current == nil ? IdeasWords.allSorted : IdeasWords.folderEmpty)
-                    .wardFont(.subheadline)
-                    .foregroundStyle(Color.wardInkSecondary)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(IdeasLayout.lineInsets)
-                    .listRowSeparator(.hidden)
-            } else {
-                ForEach(here) { note in
-                    ideaRow(note)
-                        .wardRowBackground()
-                }
-            }
-            if !subfolders.isEmpty {
-                WardSectionLabel(IdeasWords.folders)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(IdeasLayout.lineInsets)
-                    .listRowSeparator(.hidden)
-                ForEach(subfolders) { folder in
-                    folderRow(folder)
-                        .wardRowBackground()
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .scrollEdgeEffectHidden(true, for: .top)
-        .environment(\.defaultMinListRowHeight, WardControlSize.button)
-        // the tiles stand WardSpace.s in from the cell, so their edges line
-        // up with the well's, a gutter in from the column's; the lines of
-        // words start there too (IdeasLayout.lineInsets)
-        .padding(.horizontal, WardSpace.gutter - WardSpace.s)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top > 0
-        } action: { _, now in
-            if now != scrolled { scrolled = now }
-        }
-    }
-
-    /// "To sort" (or the open folder's name) and its count, as a header,
-    /// with More at its end.
-    private func titleRow(_ current: NoteFolder?, count: Int) -> some View {
-        let name: String = current?.name ?? IdeasWords.toSort
-        let spoken: String = current == nil ? IdeasWords.toSortSpoken(count) : IdeasWords.folderSpoken(name, count)
-        return HStack(alignment: .center, spacing: WardSpace.s) {
-            Text(Self.titleText(name, count))
-                .wardFont(.title1.monospacedDigit())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(spoken)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("ideas-title")
+        IdeasList(folderId: $folderId, scrolled: $scrolled, actions: routes.actions(filing: filing, notes: notes)) {
             moreMenu
         }
-    }
-
-    /// The title in ink and its count in the coral ink (primaryInk), one
-    /// line of text, so it wraps as one.
-    private static func titleText(_ name: String, _ count: Int) -> AttributedString {
-        var title = AttributedString(name)
-        title.foregroundColor = Color.wardInk
-        var number = AttributedString(" \(count)")
-        number.foregroundColor = Color.wardPrimaryInk
-        return title + number
     }
 
     private var moreMenu: some View {
         Menu {
             Button(IdeasWords.importFromStethoscore, systemImage: "square.and.arrow.down") { startImport() }
-            Button(IdeasWords.newFolder, systemImage: "folder.badge.plus") { naming = .new(parent: folderId) }
+            Button(IdeasWords.newFolder, systemImage: "folder.badge.plus") { routes.naming = .new(parent: folderId) }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -302,154 +204,7 @@ struct IdeasView: View {
         .accessibilityIdentifier("more")
     }
 
-    private func upRow(_ current: NoteFolder) -> some View {
-        let parentName: String = notes.folder(current.parentId)?.name ?? IdeasWords.toSort
-        return Button {
-            folderId = current.parentId
-        } label: {
-            Label(parentName, systemImage: "chevron.backward")
-                .wardFont(.body)
-                .foregroundStyle(Color.wardPrimaryInk)
-                .frame(maxWidth: .infinity, minHeight: WardControlSize.target, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .accessibilityLabel(IdeasWords.backTo(parentName))
-        .accessibilityIdentifier("up-row")
-    }
-
-    private func folderRow(_ folder: NoteFolder) -> some View {
-        let count: Int = notes.count(in: folder.id)
-        return Button {
-            folderId = folder.id
-        } label: {
-            HStack(spacing: WardSpace.m) {
-                Image(systemName: "folder")
-                    .foregroundStyle(Color.wardGlyph)
-                    .accessibilityHidden(true)
-                Text(folder.name)
-                    .wardFont(.body)
-                    .foregroundStyle(Color.wardInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(verbatim: "\(count)")
-                    .wardFont(.footnote.monospacedDigit())
-                    .foregroundStyle(Color.wardInkSecondary)
-                Image(systemName: "chevron.forward")
-                    .wardFont(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.wardInkSecondary)
-                    .accessibilityHidden(true)
-            }
-            .frame(minHeight: WardControlSize.target)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .accessibilityLabel(IdeasWords.folderRowSpoken(folder.name, count))
-        .accessibilityIdentifier("folder-row")
-        .accessibilityAction(named: IdeasWords.renameFolder) { naming = .rename(folder) }
-        .accessibilityAction(named: IdeasWords.newFolderInside) { naming = .new(parent: folder.id) }
-        .accessibilityAction(named: IdeasWords.deleteFolder) { deletingFolder = folder }
-        .contextMenu {
-            Button(IdeasWords.renameFolder, systemImage: "pencil") { naming = .rename(folder) }
-            Button(IdeasWords.newFolderInside, systemImage: "folder.badge.plus") { naming = .new(parent: folder.id) }
-            Button(IdeasWords.deleteFolder, systemImage: "trash", role: .destructive) { deletingFolder = folder }
-        }
-        .swipeActions {
-            Button(IdeasWords.deleteFolder, systemImage: "trash", role: .destructive) { deletingFolder = folder }
-        }
-    }
-
-    private func ideaRow(_ note: Note) -> some View {
-        let line: String = IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
-        let whole: String = note.title.isEmpty ? line : note.title
-        let stacked: Bool = typeSize.isAccessibilitySize
-        let layout = stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WardSpace.s))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: WardSpace.m))
-        return layout {
-            Button {
-                opening = NoteRef(id: note.id)
-            } label: {
-                Text(line)
-                    .wardFont(.body)
-                    .foregroundStyle(Color.wardInk)
-                    .lineLimit(stacked ? 3 : 2)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, minHeight: WardControlSize.target, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .accessibilityLabel(whole)
-            .accessibilityHint(IdeasWords.rowHint)
-            .accessibilityIdentifier("idea-row")
-            Button(IdeasWords.chooseFolder) { choosing = NoteRef(id: note.id) }
-                .buttonStyle(.wardCompact)
-                .fixedSize(horizontal: !stacked, vertical: false)
-                .accessibilityLabel(IdeasWords.chooseFolderFor(line))
-                .accessibilityIdentifier("choose-folder")
-        }
-        .contextMenu {
-            Button(IdeasWords.chooseFolder, systemImage: "folder") { choosing = NoteRef(id: note.id) }
-            Button(IdeasWords.delete, systemImage: "trash", role: .destructive) { deleteIdea(note.id) }
-        }
-        .swipeActions(edge: .leading) {
-            Button(IdeasWords.chooseFolder, systemImage: "folder") { choosing = NoteRef(id: note.id) }
-                .tint(IdeaSwipe.chooseFill)
-        }
-        .swipeActions(edge: .trailing) {
-            Button(IdeasWords.delete, systemImage: "trash", role: .destructive) { deleteIdea(note.id) }
-        }
-    }
-
-    // MARK: filing, deleting and Undo
-
-    /// Moves an idea into a folder (nil: To sort) and offers Undo.
-    private func file(_ id: UUID, in folder: UUID?) {
-        guard let idea = notes.note(id), idea.folderId != folder else { return }
-        let from: UUID? = idea.folderId
-        notes.move(id, to: folder)
-        let text: String = notes.folder(folder).map { IdeasWords.movedTo($0.name) } ?? IdeasWords.backInToSort
-        notice = IdeasNotice(text: text, undo: .moved(idea: id, from: from))
-    }
-
-    /// A filing from the editor's folder chip: the idea moves now, and Undo
-    /// is offered when the editor closes, since the editor covers the
-    /// notice. Filed again in the same visit, Undo still goes back to where
-    /// the idea was before the first move; moved back there, nothing is
-    /// offered.
-    private func fileFromEditor(_ id: UUID, in folder: UUID?) {
-        guard let idea = notes.note(id), idea.folderId != folder else { return }
-        let from: UUID? = editorFiling?.idea == id ? editorFiling?.from : idea.folderId
-        notes.move(id, to: folder)
-        editorFiling = folder == from ? nil : EditorFiling(idea: id, from: from)
-    }
-
-    private func offerEditorUndo() {
-        guard let filing = editorFiling else { return }
-        editorFiling = nil
-        // deleted in the editor: its own notice, with its own Undo, stays
-        guard let idea = notes.note(filing.idea), idea.folderId != filing.from else { return }
-        let text: String = notes.folder(idea.folderId).map { IdeasWords.movedTo($0.name) } ?? IdeasWords.backInToSort
-        notice = IdeasNotice(text: text, undo: .moved(idea: filing.idea, from: filing.from))
-    }
-
-    private func deleteIdea(_ id: UUID) {
-        guard let removal = notes.remove(id) else { return }
-        notice = IdeasNotice(text: IdeasWords.ideaDeleted, undo: .deleted(removal))
-    }
-
-    private func undo(_ step: IdeasNotice.Undo) {
-        switch step {
-        case let .moved(idea, from):
-            // the folder it came from may have gone since; then To sort
-            notes.move(idea, to: notes.folder(from)?.id)
-        case let .deleted(removal):
-            notes.undo(removal)
-        }
-    }
+    // MARK: the store's notice (IdeasFiling)
 
     /// The store's file couldn't be read at launch, wholly or in part: said
     /// once, in the notice, which never covers capture.
@@ -457,29 +212,7 @@ struct IdeasView: View {
         guard !toldReadProblem, let problem = notes.readProblem else { return }
         toldReadProblem = true
         let text: String = problem == .unreadable ? IdeasWords.storeUnreadable : IdeasWords.storePartlyUnreadable
-        notice = IdeasNotice(text: text, undo: nil)
-    }
-
-    // MARK: folders
-
-    private var deletingShown: Binding<Bool> {
-        Binding(get: { deletingFolder != nil }, set: { if !$0 { deletingFolder = nil } })
-    }
-
-    @ViewBuilder
-    private func nameSheet(_ prompt: FolderPrompt) -> some View {
-        switch prompt {
-        case .new(let parent):
-            NameSheet(title: IdeasWords.newFolder, prompt: IdeasWords.folderName, initial: "",
-                      confirm: IdeasWords.create) { name in
-                _ = notes.createFolder(name: name, parentId: parent)
-            }
-        case .rename(let folder):
-            NameSheet(title: IdeasWords.renameFolder, prompt: IdeasWords.folderName, initial: folder.name,
-                      confirm: IdeasWords.rename) { name in
-                notes.renameFolder(folder.id, to: name)
-            }
-        }
+        filing.notice = IdeasNotice(text: text, undo: nil)
     }
 
     // MARK: the import

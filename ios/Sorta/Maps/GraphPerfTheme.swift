@@ -32,6 +32,8 @@ struct GraphPerfSpace: View {
     var bold: Bool = false
     @AppStorage(GraphPerfDemo.key) private var demo: Int = 0
     @State private var stats = GraphPerfStats()
+    /// The engine's reports so far (the design preview's drawn check).
+    @State private var reports: Int = 0
     @Environment(\.graphics) private var graphics
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
@@ -42,6 +44,17 @@ struct GraphPerfSpace: View {
                 map(insets: geo.safeAreaInsets)
             }
             .ignoresSafeArea()
+            // the design preview only: what the frames drew, for the render
+            // check (MapRenderTests), as Graph3DView's GraphDrawnElement
+            if GraphPreview.isOn {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("graphDrawn")
+                    .accessibilityLabel("Drawn")
+                    .accessibilityValue(GraphDrawnCount(frames: reports, bodies: stats.drawnBodies,
+                                                        links: stats.drawnLines).line)
+            }
             // a developer's meter: the personal build's, or a demo's (its
             // menu is the way back to the owner's notes); never over a
             // user's own notes (GraphPerfReadout)
@@ -58,9 +71,9 @@ struct GraphPerfSpace: View {
         #if canImport(Metal) && canImport(MetalKit)
         GraphPerfMap(source: source, demo: demoInForce, filter: filter, recenter: recenter, insets: insets,
                      command: command, chosen: chosen, linksFor: linksFor, touch: touch, tier: tier, bold: bold,
-                     contrast: contrast == .increased, reduceMotion: reduceMotion, onStats: { stats = $0 })
+                     contrast: contrast == .increased, reduceMotion: reduceMotion, onStats: { stats = $0; if GraphPreview.isOn { reports += 1 } })
         #else
-        Text("This device can\u{2019}t draw the fast map.")
+        Text("This device can\u{2019}t draw the Performance map. Choose another theme.")
         #endif
     }
 
@@ -85,9 +98,9 @@ struct GraphPerfSpace: View {
     private var readout: some View {
         Menu {
             Picker("Map", selection: demoBinding) {
-                Text("Your notes").tag(0)
-                Text("Demo: 100,000 notes").tag(GraphPerfDemo.sizes[0])
-                Text("Demo: 300,000 notes").tag(GraphPerfDemo.sizes[1])
+                Text("Your ideas").tag(0)
+                Text("Demo: 100,000 ideas").tag(GraphPerfDemo.sizes[0])
+                Text("Demo: 300,000 ideas").tag(GraphPerfDemo.sizes[1])
             }
             .pickerStyle(.inline)
         } label: {
@@ -129,7 +142,7 @@ struct GraphPerfSpace: View {
         .foregroundStyle(Color.wardInk)
         .accessibilityLabel("Speed")
         .accessibilityValue(stats.spoken)
-        .accessibilityHint("How fast the map draws. Opens the demo maps of 100,000 and 300,000 notes.")
+        .accessibilityHint("How fast the map draws. Opens the demo maps of 100,000 and 300,000 ideas.")
         .accessibilityIdentifier("perfReadout")
     }
 }

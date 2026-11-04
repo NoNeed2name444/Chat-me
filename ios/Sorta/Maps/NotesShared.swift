@@ -70,7 +70,7 @@ enum IdeasMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .list: return "List"
-        case .board: return "Board"
+        case .board: return "2D"
         case .space: return "Space"
         }
     }

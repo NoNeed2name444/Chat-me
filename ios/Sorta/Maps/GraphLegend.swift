@@ -225,7 +225,7 @@ struct GraphLegendContent {
 
     private static let spaceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.circle.fill", name: "Black hole",
-                       text: "A top-level folder: the heart of a galaxy. Notes filed straight in it orbit close; its folders shine round it as stars. Bigger holds more notes.",
+                       text: "A top-level folder: the heart of a galaxy. Ideas filed straight in it orbit close; its folders shine round it as stars. Bigger holds more ideas.",
                        tint: gold, how: "Make a folder: + \u{203A} New folder."),
         GraphLegendRow(symbol: "sun.max.fill", name: "Star",
                        text: "A folder inside a folder: yellow, orange one level deeper, red deeper still. Bigger holds more; a folder is always drawn a little smaller than the one it sits in. An empty folder is a dark star.",
@@ -237,20 +237,20 @@ struct GraphLegendContent {
                        text: "An idea. Brighter means more links.", tint: rockTint,
                        how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
         GraphLegendRow(symbol: "moon.fill", name: "Moon",
-                       text: "A short idea linked only to the note it circles.", tint: moonTint,
-                       how: "A short idea linked to one note."),
+                       text: "A short idea linked only to the one it circles.", tint: moonTint,
+                       how: "A short idea linked to one other idea."),
         GraphLegendRow(symbol: "dot.radiowaves.left.and.right", name: "Pulsar",
-                       text: "An idea linking notes in two or more other folders. Its links pulse together.",
-                       tint: pulsarTint, how: "Link an idea to notes in two other folders."),
+                       text: "An idea linking ideas in two or more other folders. Its links pulse together.",
+                       tint: pulsarTint, how: "Link an idea to ideas in two other folders."),
         GraphLegendRow(symbol: "sparkle", name: "Comet",
-                       text: "A note in no folder. It swings past the folder it links to most; file it and it settles into orbit. Older ones wait in the far cloud.",
-                       tint: cometTint, how: "A note in no folder (Move \u{203A} No folder)."),
+                       text: "An idea in no folder. It swings past the folder it links to most; file it and it settles into orbit. Older ones wait in the far cloud.",
+                       tint: cometTint, how: "An idea in no folder (Choose folder \u{203A} To sort)."),
         GraphLegendRow(symbol: "point.3.connected.trianglepath.dotted", name: "Links",
                        text: "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.",
-                       tint: beamTint, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
+                       tint: beamTint, how: "Link two ideas: type [[ and one idea\u{2019}s title in the other.")
     ]
 
-    private static let spaceFooter: String = "Inner orbits turn faster. Tap a note twice to open it; hold it to move it or for its options. Tap a star or black hole twice to fly in, twice again to open the folder. Move a star and its planets follow."
+    private static let spaceFooter: String = "Inner orbits turn faster. Tap an idea twice to open it; hold it to move it or for its options. Tap a star or black hole twice to fly in, twice again to open the folder. Move a star and its planets follow."
 
     static let space: GraphLegendContent = GraphLegendContent(
         rungs: spaceRungs, ladderCaption: "Bigger bodies hold more.",
@@ -281,10 +281,10 @@ struct GraphLegendContent {
 
     private static let neuronRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Cell",
-                       text: "A top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and notes float inside it. Bigger holds more.",
+                       text: "A top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float inside it. Bigger holds more.",
                        tint: teal, how: "Make a folder: + \u{203A} New folder."),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Cell part",
-                       text: "A folder inside a folder: an organelle inside its cell, and a smaller one inside that for each folder deeper down. Each holds its own notes.",
+                       text: "A folder inside a folder: an organelle inside its cell, and a smaller one inside that for each folder deeper down. Each holds its own ideas.",
                        tint: green, how: "A folder inside a folder: its menu in the List \u{203A} New folder inside."),
         GraphLegendRow(symbol: "circle.fill", name: "Vesicle",
                        text: "A page: a bright-rimmed vesicle floating inside the folder that holds it. Longer pages are bigger.",
@@ -292,21 +292,21 @@ struct GraphLegendContent {
         GraphLegendRow(symbol: "aqi.medium", name: "Granule",
                        text: "An idea: a small bright granule inside the folder that holds it. Brighter means more links.",
                        tint: interTint, how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
-        GraphLegendRow(symbol: "tray.fill", name: "Unsorted",
-                       text: "The notes in no folder share one cell, opened like the others. Move a note into a folder and it joins that folder\u{2019}s cell.",
-                       tint: teal, how: "Move a note \u{203A} No folder."),
+        GraphLegendRow(symbol: "tray.fill", name: "To sort",
+                       text: "The ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins that folder\u{2019}s cell.",
+                       tint: teal, how: "Choose folder \u{203A} To sort."),
         GraphLegendRow(symbol: "arrow.up.left.and.arrow.down.right", name: "Opening a cell",
-                       text: "A cell shows its insides only when you open it: its parts and notes grow out from its heart one after another, and fold back in when you leave.",
+                       text: "A cell shows its insides only when you open it: its parts and ideas grow out from its heart one after another, and fold back in when you leave.",
                        tint: crossTint, how: "Tap a cell twice to fly in and open it."),
         GraphLegendRow(symbol: "sparkles", name: "Cell states",
-                       text: "Each note shows a state, as the space\u{2019}s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, every note rests.",
-                       tint: stateTint, how: "Look \u{203A} Cells: one state for every note, or Cell by cell for one folder."),
+                       text: "Each idea shows a state, as the space\u{2019}s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, every idea rests.",
+                       tint: stateTint, how: "Look \u{203A} Cells: one state for every idea, or Cell by cell for one folder."),
         GraphLegendRow(symbol: "bolt.horizontal.fill", name: "Axons and synapses",
-                       text: "Links. Each grows out of its cell as part of it, thick where it leaves and tapering to a synapse on the cell it reaches; impulses run along it. Inside an open cell, links between its notes run inside it.",
-                       tint: amber, how: "Link two notes: type [[ and a note\u{2019}s title in a note.")
+                       text: "Links. Each grows out of its cell as part of it, thick where it leaves and tapering to a synapse on the cell it reaches; impulses run along it. Inside an open cell, links between its ideas run inside it.",
+                       tint: amber, how: "Link two ideas: type [[ and one idea\u{2019}s title in the other.")
     ]
 
-    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Tap a note twice to open it; hold it to move it or for its options. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Move a cell and everything inside it follows."
+    private static let neuronFooter: String = "Cells drift gently in deep blue fluid. Tap an idea twice to open it; hold it to move it or for its options. Tap a cell or a part twice to fly in and open it, twice again to open the folder. Move a cell and everything inside it follows."
 
     /// The Neurons (GraphNeurons): one line per kind of cell.
     static let neurons: GraphLegendContent = GraphLegendContent(
@@ -330,12 +330,12 @@ extension GraphLegendContent {
         GraphLegendRung(caption: "Folder", size: 22, fill: hubWhite, ring: .clear),
         GraphLegendRung(caption: "Page", size: 16, fill: pointRose, ring: .clear),
         GraphLegendRung(caption: "Idea", size: 11, fill: pointBlue, ring: .clear),
-        GraphLegendRung(caption: "Far note", size: 5, fill: lineGrey, ring: .clear)
+        GraphLegendRung(caption: "Far idea", size: 5, fill: lineGrey, ring: .clear)
     ]
 
     private static let performanceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Folder",
-                       text: "A bright hub with its notes round it in a ball. Each top-level folder and everything in it has its own colour; a folder inside a folder is a lighter shade.",
+                       text: "A bright hub with its ideas round it in a ball. Each top-level folder and everything in it has its own colour; a folder inside a folder is a lighter shade.",
                        tint: hubWhite, how: "Make a folder: + \u{203A} New folder."),
         GraphLegendRow(symbol: "circle.fill", name: "Page",
                        text: "A larger point. Brighter means more links.", tint: pointRose,
@@ -344,13 +344,13 @@ extension GraphLegendContent {
                        text: "A smaller point. Brighter means more links.", tint: pointBlue,
                        how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
         GraphLegendRow(symbol: "sun.min.fill", name: "Glow",
-                       text: "A folder too far away to show its notes one by one: one soft light stands for all of them, and links into it end at its middle. Come closer and it opens into its points.",
+                       text: "A folder too far away to show its ideas one by one: one soft light stands for all of them, and links into it end at its middle. Come closer and it opens into its points.",
                        tint: glowAmber),
         GraphLegendRow(symbol: "line.diagonal", name: "Lines",
-                       text: "Links, coloured by the notes at their ends, fainter between folders and in the distance. Thin grey lines join each folder to the one it sits in.",
-                       tint: lineGrey, how: "Link two notes: type [[ and a note\u{2019}s title in a note."),
+                       text: "Links, coloured by the ideas at their ends, fainter between folders and in the distance. Thin grey lines join each folder to the one it sits in.",
+                       tint: lineGrey, how: "Link two ideas: type [[ and one idea\u{2019}s title in the other."),
         GraphLegendRow(symbol: "speedometer", name: "Speed",
-                       text: "The readout at the top counts the notes, the links and the frames a second. Its menu shows a demo map of 100,000 or 300,000 made-up notes; your own notes are never touched.",
+                       text: "The readout at the top counts the ideas, the links and the frames a second. Its menu shows a demo map of 100,000 or 300,000 made-up ideas; your own ideas are never touched.",
                        tint: lineGrey)
     ]
 
@@ -359,7 +359,7 @@ extension GraphLegendContent {
     /// The Performance theme (GraphPerf*): what the points, glows and lines are.
     static let performance: GraphLegendContent = GraphLegendContent(
         rungs: performanceRungs, ladderCaption: "Nearer things show more detail.",
-        ladderLabel: "Size ladder: far folder, folder, page, idea, far note",
+        ladderLabel: "Size ladder: far folder, folder, page, idea, far idea",
         // the Speed row names the readout, which only the personal build shows
         rows: performanceRows.filter { $0.name != "Speed" || GraphPerfReadout.shown(developer: PersonalBuild.isOn, demo: 0) },
         footer: performanceFooter)
@@ -428,10 +428,10 @@ struct GraphEmptyHint: View {
 
     private var words: String {
         switch theme {
-        case .space: return "No galaxies yet: your notes orbit one star. Add a folder to light your first black hole."
+        case .space: return "No galaxies yet: your ideas orbit one star. Add a folder to light your first black hole."
         // notes in no folder share one cell (GraphNeurons), so there is always one
-        case .neurons: return "No folders yet: every note shares one cell. Add a folder to grow a cell of its own."
-        case .performance: return "No folders yet: every note shares one cluster. Add a folder to start a cluster of its own."
+        case .neurons: return "No folders yet: every idea shares one cell. Add a folder to grow a cell of its own."
+        case .performance: return "No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour."
         }
     }
 

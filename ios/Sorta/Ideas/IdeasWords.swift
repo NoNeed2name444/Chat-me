@@ -13,6 +13,31 @@ enum IdeasWords {
         String(localized: "capture.sort.hint", defaultValue: "Saves your idea and lets you choose its folder.")
     }
 
+    // MARK: the modes (S05b): the switch's words, drafts for ux-writing
+    static var modeSort: String { String(localized: "mode.sort", defaultValue: "Sort") }
+    static var modeMap: String { String(localized: "mode.map", defaultValue: "Map") }
+    static var modeSortSpoken: String { String(localized: "mode.sort.spoken", defaultValue: "Sort ideas") }
+    static var modeMapSpoken: String { String(localized: "mode.map.spoken", defaultValue: "Map of ideas") }
+
+    // MARK: Map mode's look chip and its menu (S05b), drafts for ux-writing
+    static var lookSpace: String { String(localized: "look.space", defaultValue: "Space") }
+    static var lookNeuron: String { String(localized: "look.neuron", defaultValue: "Neuron") }
+    static var look2D: String { String(localized: "look.2d", defaultValue: "2D") }
+    static var lookPerformance: String { String(localized: "look.performance", defaultValue: "Performance") }
+    /// The look chip, read aloud with the look: "Theme, Space".
+    static func lookChipSpoken(_ look: String) -> String {
+        String(localized: "look.chip.spoken %@", defaultValue: "Theme, \(look)")
+    }
+    static var lookChipHint: String { String(localized: "look.chip.hint", defaultValue: "Changes how the map looks.") }
+    /// The map's "To sort n" chip's hint; its label is the title's spoken words.
+    static var mapListHint: String { String(localized: "map.list.hint", defaultValue: "Opens the list.") }
+
+    // MARK: the empty map (S05b), drafts for ux-writing
+    static var mapEmptyTitle: String { String(localized: "map.empty.title", defaultValue: "No ideas yet") }
+    static var mapEmptyLine: String {
+        String(localized: "map.empty.line", defaultValue: "Add ideas in Sort, and they appear here.")
+    }
+
     // MARK: the Sort screen
     static var toSort: String { String(localized: "sort.title", defaultValue: "To sort") }
     /// "1 idea", "3 ideas": the count the spoken titles and rows end with.
@@ -128,7 +153,7 @@ enum IdeasWords {
     static func chipSpoken(_ folder: String) -> String {
         String(localized: "editor.chip.spoken %@", defaultValue: "Folder, \(folder)")
     }
-    static var chipHint: String { String(localized: "editor.chip.hint", defaultValue: "Choose a folder for this idea.") }
+    static var chipHint: String { String(localized: "editor.chip.hint", defaultValue: "Opens the folder chooser.") }
     static var deleteIdea: String { String(localized: "editor.delete", defaultValue: "Delete idea") }
     static var deleteIdeaTitle: String { String(localized: "editor.delete.title", defaultValue: "Delete this idea?") }
     static var deleteIdeaBody: String {
@@ -150,7 +175,7 @@ enum IdeasWords {
         return String(localized: "import.done.body %@ %@ %@", defaultValue: "Added \(i), \(f) and \(l).")
     }
     static func placed(_ n: Int) -> String {
-        String(localized: "import.placed %lld", defaultValue: "\(n) ideas keep their place on the map.")
+        String(localized: "import.placed %lld", defaultValue: "\(n) ideas keep their place on the 2D map.")
     }
     static var nothingNewTitle: String { String(localized: "import.nothing.title", defaultValue: "Nothing new to add") }
     static var nothingNewBody: String {

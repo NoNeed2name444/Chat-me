@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -37,8 +38,11 @@ import com.cramdown.sorta.ui.wardColor
 // shared by the lecture reader's bar (Document / Page) and Ideas' bottom
 // container (List / Board / Space).
 
-/** One choice on the switcher: its value, word, glyph and test tag (the accessibility identifier). */
-data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVector, val identifier: String)
+/**
+ * One choice on the switcher: its value, word, glyph and test tag (the accessibility identifier),
+ * and what TalkBack reads for its segment when that is more than the word (iOS's `spoken`).
+ */
+data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVector, val identifier: String, val spoken: String? = null)
 
 /**
  * A soft strip raised high off the base with the chosen view pressed into it
@@ -70,14 +74,16 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
                 val chosen = item.value == selection
                 val shape = RoundedCornerShape(21.dp)
                 Column(Modifier.selectable(chosen, role = Role.Tab, interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(item.value) }
-                    .semantics { testTag = item.identifier }
+                    .semantics { testTag = item.identifier; item.spoken?.let { contentDescription = it } }
                     // the well the chosen segment is pressed into, with its 2-point edge in its ink
                     .then(if (chosen) Modifier.wardInset(shape).wardChosenEdge(shape, true, tint) else Modifier)
                     .defaultMinSize(minWidth = 64.dp, minHeight = 48.dp).padding(horizontal = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically)) {
                     val ink = if (chosen) tint else wardColor(WardToken.ink)
                     Icon(item.icon, null, tint = ink, modifier = Modifier.size(wardGlyph(20.0)))
-                    Text(item.title, style = WardTextStyle.caption2.textStyle(WardWeight.bold), color = ink, maxLines = 1)
+                    // read once, as the segment's spoken words when it has them
+                    Text(item.title, (if (item.spoken != null) Modifier.clearAndSetSemantics {} else Modifier),
+                        style = WardTextStyle.caption2.textStyle(WardWeight.bold), color = ink, maxLines = 1)
                 }
             }
             IconButton(onClick = collapse, Modifier.semantics { testTag = toggleTag }) {
@@ -94,7 +100,9 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
     var menu by remember { mutableStateOf(false) }
     val name = stringResource(R.string.ward_switcher_show, chosen.title)
     Box {
-        Box(Modifier.size(48.dp).combinedClickable(role = Role.Button, onLongClick = { menu = true }, onClick = expand)
+        // TalkBack says what a tap and a hold do, as iOS's hint does
+        Box(Modifier.size(48.dp).combinedClickable(role = Role.Button, onClickLabel = stringResource(R.string.ward_switcher_tap),
+            onLongClickLabel = stringResource(R.string.ward_switcher_hold), onLongClick = { menu = true }, onClick = expand)
             .semantics { contentDescription = name; testTag = toggleTag }
             .wardRaised(24.0, WardLift.high, fill = WardToken.raised), contentAlignment = Alignment.Center) {
             Icon(chosen.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(22.0)))
@@ -105,7 +113,10 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
         }
         DropdownMenu(menu, { menu = false }) {
             items.forEach { item ->
-                DropdownMenuItem(text = { Text(item.title) }, leadingIcon = { Icon(item.icon, null) }, onClick = { menu = false; onSelect(item.value) })
+                // read once, as its spoken words when it has them
+                DropdownMenuItem(text = { Text(item.title, if (item.spoken != null) Modifier.clearAndSetSemantics {} else Modifier) },
+                    leadingIcon = { Icon(item.icon, null) }, onClick = { menu = false; onSelect(item.value) },
+                    modifier = Modifier.semantics { item.spoken?.let { contentDescription = it } })
             }
         }
     }
@@ -118,7 +129,10 @@ data class SwitcherItem<T>(val value: T, val title: String, val icon: ImageVecto
         ReaderNavBar(stringResource(R.string.ward_switcher_list_title), trailing = { ReaderDoneButton(onClick = onDone) })
         items.forEach { item ->
             val chosen = item.value == selection
-            Row(Modifier.fillMaxWidth().selectable(chosen, role = Role.Button) { choose(item.value) }.wardRowTile().heightIn(min = 56.dp),
+            // read as the segment is: its spoken words when it has them
+            Row(Modifier.fillMaxWidth().selectable(chosen, role = Role.Button) { choose(item.value) }
+                .then(if (item.spoken != null) Modifier.clearAndSetSemantics { contentDescription = item.spoken } else Modifier)
+                .wardRowTile().heightIn(min = 56.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Icon(item.icon, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(26.0)))
                 Text(item.title, Modifier.weight(1f), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
