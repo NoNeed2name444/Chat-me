@@ -63,28 +63,21 @@ private struct MapListChip: View {
 }
 
 /// The look's name and a chevron: the name on the map and the control in
-/// one (S05b checklist 4). A tap opens the menu of the four looks, a check
+/// one (S05b checklist 4). A tap opens the list of the four looks, a check
 /// on the chosen one.
+///
+/// The list is a popover the chip holds open itself, as the board's Look
+/// tool's (IdeaBoardLookTool), not a Menu: a Menu is a context menu, which
+/// closed when the 3D map behind it finished laying out (605a19c's
+/// MapModeTests, the recording at 18-21 s), so a tap in the map's first
+/// seconds lost the list. Android's is a DropdownMenu, held the same way.
 struct MapLookChip: View {
     let look: MapLook
     let choose: (MapLook) -> Void
+    @State private var open = false
 
     var body: some View {
-        Menu {
-            ForEach(MapLook.allCases) { item in
-                Button {
-                    choose(item)
-                } label: {
-                    if item == look {
-                        Label(item.title, systemImage: "checkmark")
-                    } else {
-                        Text(item.title)
-                    }
-                }
-                .accessibilityAddTraits(item == look ? .isSelected : [])
-                .accessibilityIdentifier(item.identifier)
-            }
-        } label: {
+        Button { open = true } label: {
             HStack(spacing: WardSpace.xs) {
                 Text(look.title)
                     .lineLimit(1)
@@ -93,11 +86,55 @@ struct MapLookChip: View {
                     .accessibilityHidden(true)
             }
         }
-        .menuStyle(.button)
         .buttonStyle(WardChipButtonStyle())
         .accessibilityLabel(IdeasWords.lookChipSpoken(look.title))
         .accessibilityHint(IdeasWords.lookChipHint)
         .accessibilityIdentifier(MapLook.chipIdentifier)
+        .popover(isPresented: $open, arrowEdge: .top) {
+            MapLookList(look: look) { item in
+                open = false
+                choose(item)
+            }
+            .presentationCompactAdaptation(.popover)
+            .presentationBackground(Color.wardBackground)
+        }
+    }
+}
+
+/// The four looks, one row each, at least a target tall, a check beside the
+/// chosen one: what the Menu showed.
+private struct MapLookList: View {
+    let look: MapLook
+    let choose: (MapLook) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(MapLook.allCases) { item in
+                Button {
+                    choose(item)
+                } label: {
+                    HStack(spacing: WardSpace.s) {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(Color.wardPrimaryInk)
+                            .opacity(item == look ? 1 : 0)
+                            .accessibilityHidden(true)
+                        Text(item.title)
+                            .wardFont(.body)
+                            .foregroundStyle(Color.wardInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, WardSpace.m)
+                    .frame(minHeight: WardControlSize.target)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(item == look ? .isSelected : [])
+                .accessibilityIdentifier(item.identifier)
+            }
+        }
+        .padding(.vertical, WardSpace.xs)
+        .frame(minWidth: 200)
     }
 }
 
