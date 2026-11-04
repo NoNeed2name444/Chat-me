@@ -21,7 +21,8 @@ import SwiftUI
 /// Picker menu, and files through the Sort screen, which offers Undo; the
 /// hint drops its medical example; deleting asks first and then hands the
 /// idea to the Sort screen, which offers Undo; a missing title makes an
-/// idea, not a page.
+/// idea, not a page; "Link to an idea…" is offered once, with Write / Read,
+/// and no longer also as a row under Linked ideas (S05's next step, item 8).
 struct NoteEditorView: View {
     /// Files the idea in a folder (nil: To sort), from the Sort screen, so
     /// it can offer Undo, as every filing does.
@@ -301,32 +302,24 @@ struct NoteEditorView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The ideas this one links to. "Link to an idea…" is only here when
-    /// there are none yet; otherwise it is in the bottom bar alone.
+    /// The ideas this one links to, shown once there is one. "Link to an
+    /// idea…" is offered once, with Write / Read (`actionControls`), never
+    /// as a row here as well.
+    @ViewBuilder
     private var linkedSection: some View {
         let out: [UUID] = outgoing
         let missing: [String] = unresolved
-        let none: Bool = out.isEmpty && missing.isEmpty
-        return Section {
-            ForEach(out, id: \.self) { id in
-                linkRow(id, how: isHandLinked(id) ? IdeasWords.howLinked : IdeasWords.howMentioned)
-            }
-            ForEach(missing, id: \.self) { name in
-                missingRow(name)
-            }
-            if none {
-                Button {
-                    startLinking()
-                } label: {
-                    Label(IdeasWords.linkTo, systemImage: "link")
-                        .foregroundStyle(Color.wardPrimaryInk)
-                        .frame(maxWidth: .infinity, minHeight: WardControlSize.target, alignment: .leading)
-                        .contentShape(Rectangle())
+        if !out.isEmpty || !missing.isEmpty {
+            Section {
+                ForEach(out, id: \.self) { id in
+                    linkRow(id, how: isHandLinked(id) ? IdeasWords.howLinked : IdeasWords.howMentioned)
                 }
-                .buttonStyle(.plain)
+                ForEach(missing, id: \.self) { name in
+                    missingRow(name)
+                }
+            } header: {
+                WardSectionLabel(IdeasWords.linkedIdeas)
             }
-        } header: {
-            WardSectionLabel(IdeasWords.linkedIdeas)
         }
     }
 

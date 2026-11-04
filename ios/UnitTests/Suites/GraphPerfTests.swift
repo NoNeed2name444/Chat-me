@@ -461,6 +461,60 @@ check("P6 a name over a placed one, or inside its gap, waits",
       !GraphPerfLabelRoom.fits((x: 120, y: 110, width: 60, height: 16), among: placedName)
       && !GraphPerfLabelRoom.fits((x: 161, y: 100, width: 60, height: 16), among: placedName)
       && !GraphPerfLabelRoom.fits((x: 100, y: 117, width: 60, height: 16), among: placedName))
+// a name and the bodies (S05b, packet item 6: S03's ios-iphone-performance-light,
+// where a hub's satellites stood under "Heart failure" and "Murmurs")
+let smallBody: GraphPerfLabelRoom.Disc = (x: 100, y: 100, radius: 4)
+let smallSpot = GraphPerfLabelRoom.box(under: smallBody, width: 60, height: 16, viewWidth: 400)
+check("P6 under a small body a name keeps its old spot, 16 points down",
+      smallSpot == (x: 100, y: 116, width: 60, height: 16), "\(smallSpot)")
+let hub: GraphPerfLabelRoom.Disc = (x: 200, y: 200, radius: 30)
+let hubSpot = GraphPerfLabelRoom.box(under: hub, width: 80, height: 16, viewWidth: 400)
+check("P6 under a big body a name starts a gap below its disc, not on it",
+      hubSpot.y - hubSpot.height / 2 == hub.y + hub.radius + GraphPerfLabelRoom.gap
+      && GraphPerfLabelRoom.clear(hubSpot, of: hub), "\(hubSpot)")
+let edgeSpot = GraphPerfLabelRoom.box(under: (x: 2, y: 50, radius: 4), width: 60, height: 16, viewWidth: 400)
+let wideSpot = GraphPerfLabelRoom.box(under: (x: 200, y: 50, radius: 4), width: 900, height: 16, viewWidth: 400)
+check("P6 a name stays 12 points inside the view, and a long one is cut to it",
+      edgeSpot.x - edgeSpot.width / 2 == 12 && wideSpot.width == 376 && wideSpot.x == 200,
+      "\(edgeSpot) \(wideSpot)")
+let nameBox: GraphPerfLabelRoom.Box = (x: 100, y: 100, width: 60, height: 16)
+check("P6 a body over a name, or inside the gap of its edge or corner, takes its room",
+      !GraphPerfLabelRoom.clear(nameBox, of: (x: 100, y: 100, radius: 3))
+      && !GraphPerfLabelRoom.clear(nameBox, of: (x: 100, y: 113, radius: 4))
+      && !GraphPerfLabelRoom.clear(nameBox, of: (x: 133, y: 111, radius: 4)))
+check("P6 a body a gap clear of a name, below it, beside it or off its corner, leaves it room",
+      GraphPerfLabelRoom.clear(nameBox, of: (x: 100, y: 114, radius: 4))
+      && GraphPerfLabelRoom.clear(nameBox, of: (x: 136, y: 100, radius: 4))
+      && GraphPerfLabelRoom.clear(nameBox, of: (x: 135, y: 113, radius: 4)))
+// the render's crowd, made up: a hub, two satellites below it and a far body
+let crowd: [GraphPerfLabelRoom.Disc] = [(x: 200, y: 200, radius: 30), (x: 190, y: 245, radius: 6),
+                                        (x: 225, y: 250, radius: 6), (x: 320, y: 300, radius: 4)]
+let hubName = GraphPerfLabelRoom.box(under: crowd[0], width: 90, height: 16, viewWidth: 400)
+let farName = GraphPerfLabelRoom.box(under: crowd[3], width: 60, height: 16, viewWidth: 400)
+check("P6 a name over another body waits; its own body never counts",
+      !GraphPerfLabelRoom.fits(hubName, among: [], clearOf: crowd, except: 0)
+      && GraphPerfLabelRoom.fits(farName, among: [], clearOf: crowd, except: 3)
+      && !GraphPerfLabelRoom.fits(farName, among: [], clearOf: [(x: 320, y: 300, radius: 20)]))
+check("P6 clear of the bodies still waits for a placed name",
+      !GraphPerfLabelRoom.fits(farName, among: [farName], clearOf: crowd, except: 3))
+var walkPlaced: [(box: GraphPerfLabelRoom.Box, owner: Int)] = []
+for (k, disc) in crowd.enumerated() {
+    let b = GraphPerfLabelRoom.box(under: disc, width: 70, height: 16, viewWidth: 400)
+    guard GraphPerfLabelRoom.fits(b, among: walkPlaced.map(\.box), clearOf: crowd, except: k) else { continue }
+    walkPlaced.append((b, k))
+}
+var nameClashes = 0
+for i in walkPlaced.indices {
+    for j in walkPlaced.indices where i < j && !GraphPerfLabelRoom.fits(walkPlaced[i].box, among: [walkPlaced[j].box]) {
+        nameClashes += 1
+    }
+    for (k, disc) in crowd.enumerated() where k != walkPlaced[i].owner
+        && !GraphPerfLabelRoom.clear(walkPlaced[i].box, of: disc) {
+        nameClashes += 1
+    }
+}
+check("P6 the names placed over the crowd cover no name and no other body (\(walkPlaced.map(\.owner)) placed)",
+      nameClashes == 0 && walkPlaced.map(\.owner) == [2, 3], "\(nameClashes) nameClashes")
 
 // MARK: - P7 frame stats and the readout
 

@@ -119,7 +119,8 @@ enum class MapTheme { PLAIN, SPACE, NEURONS }
  * Space theme's depth fade has begun: its name does not show there (iOS shows names only in
  * the crisp zone); a note past the band's end is not listed at all, so it cannot be picked.
  */
-data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true)
+/** [perUnit] is how many pixels a world unit spans at its depth, which sizes its links' bands for the names. */
+data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f)
 
 /**
  * Draws the 3D Ideas map with OpenGL ES 3.0, the baseline every Android 8+ phone has.
@@ -394,7 +395,7 @@ class GlMapRenderer(
                 if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
                 val sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width
                 val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
-                out.add(ScreenNode(i, sx, sy, gl.size(i) * focal / clip[3] * 2f, band.crisp(clip[3]) || band == SpaceDepthBand.OFF))
+                out.add(ScreenNode(i, sx, sy, gl.size(i) * focal / clip[3] * 2f, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
             }
             callback(out)
         }
@@ -620,7 +621,7 @@ class GlMapRenderer(
             if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
             val sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width
             val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
-            out.add(ScreenNode(tree.order[k], sx, sy, nodeRadius * focal / clip[3] * 2f * t, band.crisp(clip[3]) || band == SpaceDepthBand.OFF))
+            out.add(ScreenNode(tree.order[k], sx, sy, nodeRadius * focal / clip[3] * 2f * t, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
         }
         callback(out)
     }

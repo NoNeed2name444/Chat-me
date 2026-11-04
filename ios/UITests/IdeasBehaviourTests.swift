@@ -388,6 +388,10 @@ final class IdeasBehaviourTests: XCTestCase {
 
         app.ideaRow("Oil the gate").tap()
         XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10))
+        // an idea with no links offers Link to an idea… once, with Write /
+        // Read, not as a row in the page as well (S05's next step, item 8)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", IdeasText.linkTo)).count, 1,
+                       "Link to an idea… is offered once")
         var editor: [(String, CGRect)] = [
             // the first read waits for the sheet to come to rest
             ("Done", app.buttons["editor-done"].settledFrame),

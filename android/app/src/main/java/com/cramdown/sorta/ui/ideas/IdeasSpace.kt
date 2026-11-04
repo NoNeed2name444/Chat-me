@@ -169,7 +169,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     WardEmptyState(Icons.Outlined.ViewInAr, stringResource(R.string.map_empty_title),
                         stringResource(R.string.map_empty_line))
                 }
+                // the first view keeps under the strip, or the status bar where there is none, and above the foot
                 else -> NotesMap(book, settings, theme, recenter, openPath, panels.linkLength, onRoles = { roles = it },
+                    top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
                     onBody = { body, hold, at ->
                         when {
                             hold -> { chosen = body; held = body to at }
@@ -280,12 +282,13 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
 
 /**
  * The user's notes on the map, rebuilt off the main thread when they, the look or the Link length
- * change. [onBody] hears a body tapped or held (and where), [onEmpty] a tap on empty space.
+ * change. [onBody] hears a body tapped or held (and where), [onEmpty] a tap on empty space. Its
+ * first view fits what the chrome leaves: under [top] and above [hidden], as the 2D board's.
  * [onShown] hears that the map is drawn, once its first frame is; until [shown] comes back, with the
  * screen's night look and tools, the wait covers the map, so the two come in the same frame.
  */
 @Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, openPath: List<String>,
-                                  linkLength: Double, onRoles: (Map<String, String>) -> Unit,
+                                  linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   onBody: (MapBody, Boolean, Offset) -> Unit, onEmpty: () -> Unit,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
@@ -372,7 +375,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 if (chosen != null) onBody(chosen, press.kind == MapTouchKind.HOLD, at)
             },
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,
-            onDrawn = { drawnOnce = true })
+            onDrawn = { drawnOnce = true }, top = top, hidden = hidden)
         if (!shown) Building(null)
     }
 }
@@ -470,7 +473,8 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
             // the theme is the look chip's (S05b checklist 4), so the menu starts with the theme's own
             // choices, each group ending on its divider; Neurons, which has none here, starts with Lines
             if (theme == GraphTheme.SPACE) {
-                MenuHeader("Bodies")
+                // iOS's word for the group (GraphNodeStyles.swift, spaceLooks' Picker)
+                MenuHeader("Look")
                 // sparkles, as on iOS: the globe is the rocky planet's
                 Choice("Universe", Icons.Rounded.AutoAwesome, spaceStyle(settings.nodeStyle) == null) { settings.setNodeStyle(GraphStyleChoice.AUTO); showing = false }
                 SpaceStyle.menuOrder.forEach { s ->

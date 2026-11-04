@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.MapPeekInput
@@ -54,7 +55,9 @@ import org.robolectric.annotation.GraphicsMode
 //  - no two targets' 48 dp squares overlap, a panel and the controls inside it apart (the card is
 //    tapped as a whole, round its own buttons);
 // the slider is at least 48 dp tall; and every line of words lays out whole, apart from those that
-// end in an ellipsis by design (the card's title and lines, as iOS's lineLimit).
+// end in an ellipsis by design (the card's title and lines, as iOS's lineLimit). The naming sheet the
+// options' Rename opens (MapPeekCardTest), with the map's words, is measured the same way: its
+// field, Cancel and Rename (S03-result.md's checklist: the touch-target line covers the name field).
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -106,6 +109,35 @@ class MapPanelsTouchTargetTest {
             val what = "the options at font scale $s"
             val rows = measure(MapPanelTags.MENU, what)
             check("$what: Rename, Choose folder and Delete, in order", rows == listOf(words.rename, words.moveToFolder, words.delete), rows.joinToString(" | "))
+        }
+    }
+
+    @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")
+    @Test fun theRenameSheetsFieldAndButtonsAreTargetsOnAPhoneAtBothSizes() = renameSheet("phone")
+
+    @Config(qualifiers = "w360dp-h748dp-port-xxhdpi")
+    @Test fun theRenameSheetsFieldAndButtonsAreTargetsOnAFoldedPhoneAtBothSizes() = renameSheet("folded phone")
+
+    private fun renameSheet(device: String) = checks {
+        val res = compose.activity.resources
+        val field = res.getString(R.string.map_rename_idea_field)
+        val expect = listOf(field, res.getString(R.string.sheet_cancel), res.getString(R.string.name_rename))
+        compose.setContent {
+            host {
+                key(scale) {
+                    NameSheet(res.getString(R.string.map_rename_idea_title), field, "Oil the gate before the frost comes in",
+                        res.getString(R.string.name_rename), onDismiss = {}) {}
+                }
+            }
+        }
+        for (s in listOf(1f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(1_000) // the sheet comes up
+            compose.waitForIdle()
+            val what = "the map's rename sheet on a $device at font scale $s"
+            val seen = measure(NAME_SHEET_TAG, what)
+            for (word in expect) check("$what: \"$word\" is a target in view", seen.any { it.contains(word) }, seen.joinToString(" | "))
         }
     }
 

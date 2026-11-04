@@ -213,7 +213,10 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
  * default, a button for a chip that acts (Timed, Re-test me soon), as iOS's
  * are plain buttons. [count], a number after the words in the accent's ink,
  * as a title's count (Map mode's To sort chip); [trailingIcon], a glyph
- * after them (the look chip's chevron).
+ * after them (the look chip's chevron). [iconTint], the leading glyph's
+ * colour while enabled, as iOS's chips colour their glyph apart from their
+ * words (the editor's folder chip, `Color.wardGlyph`); by default the glyph
+ * takes the words' ink.
  */
 @Composable fun WardChipButton(
     text: String?,
@@ -226,6 +229,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     role: Role = Role.Checkbox,
     count: Int? = null,
     trailingIcon: ImageVector? = null,
+    iconTint: Color? = null,
 ) {
     val source = remember { MutableInteractionSource() }
     val touch = wardTouch(source, enabled)
@@ -248,7 +252,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
                 .padding(horizontal = WardSpace.m.wardDp, vertical = WardSpace.s.wardDp),
             horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) Icon(icon, null, tint = ink, modifier = Modifier.size(wardGlyph(18.0)))
+            if (icon != null) Icon(icon, null, tint = if (enabled) iconTint ?: ink else ink, modifier = Modifier.size(wardGlyph(18.0)))
             if (text != null) Text(text, style = WardType.chip.textStyle(), color = ink, maxLines = 1)
             if (count != null) Text("$count", style = WardType.chip.textStyle(),
                 color = if (enabled) wardColor(WardToken.primaryInk) else ink, maxLines = 1)

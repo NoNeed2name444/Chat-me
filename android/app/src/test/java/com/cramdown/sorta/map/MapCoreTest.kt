@@ -71,6 +71,141 @@ class LabelRoomTest {
         assertFalse(LabelRoom.fits(LabelBox(161f, 100f, 60f, 16f), placed, gap = 2f))
         assertFalse(LabelRoom.fits(LabelBox(100f, 117f, 60f, 16f), placed, gap = 2f))
     }
+
+    // S05b, packet item 6 (S03-result.md: "Hypokalaemia" with "Loop diuretics" in Performance): two
+    // names in a row a hairline apart passed the 2-point room and read as one. Beside each other they
+    // now keep a word's room (8); above and below each other, the 4 the map gives them.
+    @Test fun twoNamesInARowKeepAWordsRoomBetweenThem() {
+        val beside = LabelBox(165f, 100f, 60f, 16f) // 5 clear of the placed name's end
+        assertTrue("the hairline room let it in", LabelRoom.fits(beside, placed, gap = 2f))
+        assertFalse(LabelRoom.fits(beside, placed, gapX = 8f, gapY = 4f))
+        assertTrue(LabelRoom.fits(LabelBox(168f, 100f, 60f, 16f), placed, gapX = 8f, gapY = 4f))
+        // a row below keeps its own room, not the word's
+        assertTrue(LabelRoom.fits(LabelBox(100f, 120f, 60f, 16f), placed, gapX = 8f, gapY = 4f))
+        assertFalse(LabelRoom.fits(LabelBox(100f, 119f, 60f, 16f), placed, gapX = 8f, gapY = 4f))
+    }
+
+    // S05b, packet item 6 (S03-result.md: Neurons' link covers its label): a link's band through a
+    // name, or within the room of it, takes that place; one clear of it, or ending short of it, doesn't.
+    @Test fun aLinkThroughANameOrItsRoomTakesThatPlace() {
+        val box = LabelBox(100f, 100f, 60f, 16f) // x 70-130, y 92-108
+        assertTrue("across it", LabelRoom.crosses(box, LabelLink(40f, 100f, 160f, 100f), gap = 0f))
+        assertTrue("down through it", LabelRoom.crosses(box, LabelLink(100f, 0f, 100f, 200f), gap = 0f))
+        assertTrue("on a slant through a corner", LabelRoom.crosses(box, LabelLink(110f, 80f, 140f, 110f), gap = 0f))
+        assertFalse("above it", LabelRoom.crosses(box, LabelLink(40f, 80f, 160f, 80f), gap = 0f))
+        assertFalse("ending short of it", LabelRoom.crosses(box, LabelLink(100f, 0f, 100f, 80f), gap = 0f))
+        // a band 20 wide each side (a Neurons tract) reaches a name its line misses by 15
+        assertFalse(LabelRoom.crosses(box, LabelLink(40f, 77f, 160f, 77f), gap = 0f))
+        assertTrue(LabelRoom.crosses(box, LabelLink(40f, 77f, 160f, 77f, half = 20f), gap = 0f))
+        // and the room round the name counts
+        assertTrue(LabelRoom.crosses(box, LabelLink(40f, 89f, 160f, 89f), gap = 4f))
+    }
+
+    @Test fun aBodyOnANameOrInItsRoomTakesThatPlace() {
+        val box = LabelBox(100f, 100f, 60f, 16f)
+        assertTrue(LabelRoom.covers(box, LabelDisc(135f, 100f, 6f), gap = 0f))
+        assertFalse(LabelRoom.covers(box, LabelDisc(140f, 100f, 6f), gap = 0f))
+        assertTrue(LabelRoom.covers(box, LabelDisc(140f, 100f, 6f), gap = 5f))
+        // a corner is round: clear of the box's corner by its radius
+        assertFalse(LabelRoom.covers(box, LabelDisc(136f, 114f, 6f), gap = 0f))
+    }
+
+    // a name tries under its body, above, after and before it, and takes the first clear place; its own body never counts
+    @Test fun aNameTakesTheFirstClearPlaceOrWaits() {
+        val spots = LabelRoom.spots(100f, 100f, pixels = 20f, width = 60f, height = 16f, below = 24f, beside = 6f)
+        assertEquals(listOf(LabelBox(100f, 124f, 60f, 16f), LabelBox(100f, 76f, 60f, 16f), LabelBox(146f, 100f, 60f, 16f), LabelBox(54f, 100f, 60f, 16f)), spots)
+        val own = LabelDisc(100f, 100f, 10f, index = 7)
+        assertEquals(spots[0], LabelRoom.place(spots, emptyList(), emptyList(), listOf(own), 8f, 4f, self = 7))
+        val down = LabelLink(100f, 100f, 100f, 300f)
+        assertEquals("a link straight down: above", spots[1], LabelRoom.place(spots, emptyList(), listOf(down), listOf(own), 8f, 4f, self = 7))
+        val up = LabelLink(100f, 100f, 100f, -100f)
+        assertEquals("and one straight up: after", spots[2], LabelRoom.place(spots, emptyList(), listOf(down, up), listOf(own), 8f, 4f, self = 7))
+        val across = LabelLink(-100f, 100f, 300f, 100f)
+        assertNull("no place clear: it waits", LabelRoom.place(spots, emptyList(), listOf(down, up, across), listOf(own), 8f, 4f, self = 7))
+    }
+}
+
+/**
+ * S05b, packet item 5: the 3D looks' first view fits the map to what Map mode's chrome leaves (the
+ * top strip and the foot), as iOS's GraphPerfCamera.framing (Graph3DView.swift:251-255).
+ */
+class MapFitTest {
+    private val centre = Vec3(2f, -1f, 3f)
+    private val radius = 10f
+
+    private fun at(fit: MapFit) = OrbitCamera(target = fit.target, distance = fit.distance, pitch = 0.7f)
+
+    /** Where [p] lands on a [width] x [height] screen, in pixels from its top left. */
+    private fun screen(camera: OrbitCamera, p: Vec3, width: Float, height: Float): Pair<Float, Float> {
+        val out = FloatArray(4)
+        Mat4.project(Mat4.multiply(camera.projection(width / height), camera.view()), p.x, p.y, p.z, out)
+        return (out[0] / out[3] * 0.5f + 0.5f) * width to (1f - (out[1] / out[3] * 0.5f + 0.5f)) * height
+    }
+
+    /** Points over the ball's surface, every 15 degrees each way. */
+    private val ball: List<Vec3> = (0..12).flatMap { i ->
+        val lat = (-90 + i * 15) * Math.PI / 180
+        (0 until 24).map { j ->
+            val lon = j * 15 * Math.PI / 180
+            centre + Vec3((kotlin.math.cos(lat) * kotlin.math.cos(lon)).toFloat(), kotlin.math.sin(lat).toFloat(), (kotlin.math.cos(lat) * kotlin.math.sin(lon)).toFloat()) * radius
+        }
+    }
+
+    /** The ball's reach on screen: left, top, right, bottom. */
+    private fun reach(camera: OrbitCamera, width: Float, height: Float): FloatArray {
+        val r = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        for (p in ball) {
+            val (x, y) = screen(camera, p, width, height)
+            r[0] = minOf(r[0], x); r[1] = minOf(r[1], y); r[2] = maxOf(r[2], x); r[3] = maxOf(r[3], y)
+        }
+        return r
+    }
+
+    @Test fun withNoChromeItIsTheWholeViewsFit() {
+        val lens = OrbitCamera(pitch = 0.7f)
+        val fit = lens.fitWindow(centre, radius, 1080f, 2400f)
+        assertEquals(lens.fitDistance(radius, aspect = 1080f / 2400f), fit.distance, 1e-3f)
+        assertTrue((fit.target - centre).length() < 1e-4f)
+    }
+
+    // a landscape tablet, 2560 x 1600, under a 250 strip and over a 300 foot: the whole view's fit
+    // (the map before) puts the ball under both; the window's keeps it inside, centred there
+    @Test fun theBallFitsInsideTheChromeAndCentresInWhatItLeaves() {
+        val width = 2560f; val height = 1600f
+        val insets = MapInsets(top = 250f, bottom = 300f)
+        val lens = OrbitCamera(pitch = 0.7f)
+        val before = reach(at(MapFit(lens.fitDistance(radius, aspect = width / height), centre)), width, height)
+        assertTrue("the whole view's fit reaches under the strip or the foot: ${before.toList()}", before[1] < insets.top || before[3] > height - insets.bottom)
+        val camera = at(lens.fitWindow(centre, radius, width, height, insets))
+        val after = reach(camera, width, height)
+        assertTrue("inside the window: ${after.toList()}", after[1] >= insets.top && after[3] <= height - insets.bottom && after[0] >= 0f && after[2] <= width)
+        val (x, y) = screen(camera, centre, width, height)
+        assertEquals(width / 2, x, 0.5f)
+        assertEquals((insets.top + height - insets.bottom) / 2, y, 0.5f)
+    }
+
+    // a phone, 1080 x 2400: the window's middle sits between the strip and the foot, and across between a cutout and a side bar
+    @Test fun theCentreLandsInTheWindowsMiddleOnEachAxis() {
+        val width = 1080f; val height = 2400f
+        val insets = MapInsets(top = 320f, left = 90f, bottom = 410f, right = 30f)
+        val camera = at(OrbitCamera(pitch = 0.7f).fitWindow(centre, radius, width, height, insets))
+        val (x, y) = screen(camera, centre, width, height)
+        assertEquals((insets.left + width - insets.right) / 2, x, 0.5f)
+        assertEquals((insets.top + height - insets.bottom) / 2, y, 0.5f)
+        val r = reach(camera, width, height)
+        assertTrue("inside the window: ${r.toList()}", r[0] >= insets.left && r[2] <= width - insets.right && r[1] >= insets.top && r[3] <= height - insets.bottom)
+    }
+
+    @Test fun moreChromeStandsTheCameraFurtherBackAndAWindowIsAThirdAtLeast() {
+        val lens = OrbitCamera(pitch = 0.7f)
+        val open = lens.fitWindow(centre, radius, 2560f, 1600f)
+        val barred = lens.fitWindow(centre, radius, 2560f, 1600f, MapInsets(top = 250f, bottom = 300f))
+        assertTrue(barred.distance > open.distance)
+        val third = lens.fitWindow(centre, radius, 2560f, 1600f, MapInsets(top = 600f, bottom = 900f))
+        val most = lens.fitWindow(centre, radius, 2560f, 1600f, MapInsets(top = 800f, bottom = 1200f))
+        assertEquals("never less than a third of the view", third.distance, most.distance, 1e-3f)
+        assertEquals("and never nearer than the least", 4f, lens.fitWindow(centre, 0.1f, 1080f, 2400f).distance, 0f)
+    }
 }
 
 class GraphAndOctreeTest {

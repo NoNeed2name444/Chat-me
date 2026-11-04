@@ -12,6 +12,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
@@ -29,8 +31,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 // Android's peek card on Map mode's Space (S05b A4), as iOS's UI tests ask of its card: a tap on an
-// idea raises it, its Open and a second tap open the editor, its options' Delete and Choose folder
-// act on the store, and a tap on empty space lets it go. Each test on a fresh store of made-up ideas
+// idea raises it, its Open and a second tap open the editor, its options' Delete, Choose folder and
+// Rename (through the naming sheet MapPanelsTouchTargetTest measures) act on the store, and a tap on
+// empty space lets it go. Each test on a fresh store of made-up ideas
 // (IdeasFixture), Sorta launched as SortaRun launches it.
 //
 // Robolectric can't draw GL: the device reports no OpenGL ES 3, so Map3DView shows its words for that
@@ -145,5 +148,20 @@ class MapPeekCardTest {
         compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }  // above the card, under the top strip
         run.until { !shown(MapPanelTags.PEEK) }
         assertTrue("the idea stays", stored().any { it.id == gate.id })
+    }
+
+    @Test fun itsRenameRenamesTheIdeaThroughTheNamingSheet() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        option(words.rename)
+        run.until { shown(NAME_SHEET_TAG) }
+        val field = run.field(s(R.string.map_rename_idea_field))
+        field.assert(hasText(gate.title))
+        field.performTextClearance()
+        field.performTextInput("Oil the gate latch")
+        compose.onNode(hasText(s(R.string.name_rename)) and hasAnyAncestor(hasTestTag(NAME_SHEET_TAG))).performClick()
+        run.until { !shown(NAME_SHEET_TAG) }
+        run.until { stored().firstOrNull { it.id == gate.id }?.title == "Oil the gate latch" }
     }
 }

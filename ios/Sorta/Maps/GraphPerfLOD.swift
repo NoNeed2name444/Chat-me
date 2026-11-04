@@ -141,16 +141,58 @@ nonisolated enum GraphPerfLabelSpots {
 /// name placed before it, so the names in a crowd do not print over one
 /// another. A box is its centre and size, in points. Sorta's rule: the
 /// reference placed every chosen name.
+///
+/// A name also sits under its own body's drawn disc, not on it, and keeps
+/// clear of every other body drawn: in S03's render a hub's satellites
+/// stood under "Heart failure" and "Murmurs" (ios-iphone-performance-light,
+/// (936,1213)-(1152,1311)), and a name printed over bodies reads as names
+/// over names. A name with no such room waits, as one in a crowd does.
 nonisolated enum GraphPerfLabelRoom {
     typealias Box = (x: Float, y: Float, width: Float, height: Float)
-    /// The clear space kept between two names.
+    /// A body as drawn: its centre and radius on screen, in points.
+    typealias Disc = (x: Float, y: Float, radius: Float)
+    /// The clear space kept between two names, and between a name and a body.
     static let gap: Float = 2
+    /// A name's least drop below its body's centre: a body drawn smaller
+    /// than this keeps the spot every name had before (16 points down, for
+    /// a 16-point line).
+    static let leastDrop: Float = 6
+    /// The room kept at either side of the view.
+    static let edge: Float = 12
 
     static func fits(_ box: Box, among placed: [Box]) -> Bool {
         placed.allSatisfy { p in
             abs(box.x - p.x) * 2 >= box.width + p.width + 2 * gap
                 || abs(box.y - p.y) * 2 >= box.height + p.height + 2 * gap
         }
+    }
+
+    /// Clear of the names placed before it and, by the gap, of every body
+    /// in `bodies` but `except`, the name's own.
+    static func fits(_ box: Box, among placed: [Box], clearOf bodies: [Disc], except own: Int? = nil) -> Bool {
+        guard fits(box, among: placed) else { return false }
+        for k in bodies.indices where k != own && !clear(box, of: bodies[k]) { return false }
+        return true
+    }
+
+    /// Whether a box keeps the gap from a disc: the box's nearest point to
+    /// the disc's centre is at least its radius and the gap away.
+    static func clear(_ box: Box, of disc: Disc) -> Bool {
+        let dx = max(abs(disc.x - box.x) - box.width / 2, 0)
+        let dy = max(abs(disc.y - box.y) - box.height / 2, 0)
+        let reach = max(disc.radius, 0) + gap
+        return dx * dx + dy * dy >= reach * reach
+    }
+
+    /// Where a name `width` by `height` goes: centred under its body's
+    /// disc, a gap below its edge (or `leastDrop` below its centre), and
+    /// inside a view `viewWidth` across, `edge` in from either side; a name
+    /// wider than that room is cut to it.
+    static func box(under body: Disc, width: Float, height: Float, viewWidth: Float) -> Box {
+        let w = max(min(width, viewWidth - 2 * edge), 0)
+        let x = min(max(body.x, w / 2 + edge), viewWidth - w / 2 - edge)
+        let y = body.y + max(body.radius, leastDrop) + gap + height / 2
+        return (x, y, w, height)
     }
 }
 

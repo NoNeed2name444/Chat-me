@@ -6,6 +6,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -17,7 +20,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
+import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
+import com.cramdown.sorta.ui.map.MapDrawnKey
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,8 +41,9 @@ import org.robolectric.annotation.GraphicsMode
 // board. The "To sort n" chip opens the list as a sheet, To sort first, whose words open the editor
 // and whose Choose folder files an idea through the chooser. Each of the four looks is one tap on
 // the look chip and one in its menu away, the chip then naming it. A look chosen from the menu is
-// kept, and a relaunch opens on Sort. iOS's UI tests ask the same. The ideas are made up
-// (IdeasFixture), on a fresh store.
+// kept, and a relaunch opens on Sort. iOS's UI tests ask the same. Performance's Look menu offers
+// no Map group or demo maps, as no Sorta build, the release one among them, is a developer's. The
+// ideas are made up (IdeasFixture), on a fresh store.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -226,5 +232,32 @@ class MapModeTest {
         assertFalse("back on the map, not Sort", shown(IdeasTags.CAPTURE))
         card("Paint the shed green").assertIsDisplayed()
         assertEquals("the old title is gone", 0, compose.onAllNodes(hasContentDescription("Paint the shed, ", substring = true)).fetchSemanticsNodes().size)
+    }
+
+    // S05b, step 4's list (S03-result.md: "the Map group and the demo maps are in a developer's build
+    // only"): IdeasSettings.DEVELOPER is false in every Sorta build, debug and release alike, so what
+    // this debug run shows is the release build's menu. Performance's Look menu offers its Lines and
+    // legend, with no Map group, no Your ideas and no demo map; and a demo map stored from before
+    // (setPerfDemo) is not shown: the map is the person's own ideas.
+    @Test fun theReleaseLookMenuOffersNoMapGroupOrDemoMaps() {
+        assertFalse("no Sorta build is a developer's", IdeasSettings.DEVELOPER)
+        IdeasSettings(run.context).apply { setLook(MapLook.PERFORMANCE); setPerfDemo(IdeasSettings.perfDemoSizes.first()) }
+        run.launch()
+        capture("Paint the shed green")
+        openSwitch()
+        switchTo(SortaMode.MAP)
+        val lookTool = hasContentDescription("Look") and hasClickAction()
+        run.until { compose.onAllNodes(lookTool).fetchSemanticsNodes().isNotEmpty() }
+        val map = compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().single()
+        val said = map.config[SemanticsProperties.ContentDescription].joinToString()
+        assertTrue("the person's ideas, not a demo: $said", said.startsWith("${GraphTheme.PERFORMANCE.mapLabel}: 1 idea,") && !said.contains("demo"))
+        compose.onNode(lookTool).performClick()
+        compose.waitForIdle()
+        val heading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+        assertTrue("the menu is open, its Lines group there", compose.onAllNodes(heading and hasText("Lines", ignoreCase = true)).fetchSemanticsNodes().isNotEmpty())
+        assertFalse("no Map group", compose.onAllNodes(heading and hasText("Map", ignoreCase = true)).fetchSemanticsNodes().isNotEmpty())
+        assertFalse("no Your ideas", run.shows("Your ideas"))
+        for (n in IdeasSettings.perfDemoSizes) assertFalse("no ${perfDemoTitle(n)}", run.shows(perfDemoTitle(n)))
+        assertFalse("no demo of any size", run.shows("Demo:"))
     }
 }

@@ -24,6 +24,7 @@ enum IdeasText {
     static let allSorted = "All sorted."
     static let ideaDeleted = "Idea deleted."
     static let backInToSort = "Back in To sort."
+    static let linkTo = "Link to an idea\u{2026}"
     static let importedTitle = "Ideas imported"
     static let importedBody = "Added 4 ideas, 4 folders and 4 links. 3 ideas keep their place on the 2D map."
     static let nothingNewTitle = "Nothing new to add"
@@ -138,7 +139,20 @@ extension XCUIApplication {
     /// So a tap that brings no caret in 5 s is made once more; the well must
     /// still have the caret, empty, before a key is typed.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
-        let ready = NSPredicate(format: "hasKeyboardFocus == true AND (value == '' OR value == placeholderValue)")
+        typeDraft(text, file: file, line: line)
+        capture.typeText("\n")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
+                                      timeout: 10),
+                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
+    }
+
+    /// The well at rest: it has the caret, and holds nothing.
+    static var captureReady: NSPredicate { NSPredicate(format: "hasKeyboardFocus == true AND (value == '' OR value == placeholderValue)") }
+
+    /// Types a draft into the well, with captureIdea's waits, and leaves it
+    /// there unsorted: no Return.
+    func typeDraft(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+        let ready = Self.captureReady
         if !(capture.value(forKey: "hasKeyboardFocus") as? Bool ?? false) {
             capture.tap()
             if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 5) != .completed,
@@ -154,9 +168,6 @@ extension XCUIApplication {
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: typed, object: capture)], timeout: 10),
                        .completed, "capture holds \"\(text)\": it holds \(capture.value as? String ?? "nil")",
                        file: file, line: line)
-        capture.typeText("\n")
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 10),
-                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
     }
 
     /// Makes a folder from More, at the level on screen.

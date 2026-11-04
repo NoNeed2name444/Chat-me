@@ -49,6 +49,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
@@ -63,9 +65,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
-import com.cramdown.sorta.map.LabelBox
-import com.cramdown.sorta.map.LabelRoom
 import com.cramdown.sorta.map.MapGraph
+import com.cramdown.sorta.map.MapInsets
+import com.cramdown.sorta.map.NeuronLookPlan
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.RefreshRate
@@ -87,9 +89,11 @@ import kotlin.math.max
 /** A map ready to draw: its octree, how big a node is, and the notes behind the nodes. */
 /** [viewRadius] holds 95% of the nodes: the home view frames those, not a few far outliers. */
 /** [theme] says how its notes are drawn; in [MapTheme.SPACE] each node's group is its SpaceStyle code. */
+/** [links] are its links as pairs of node indices, and [linkHalf] how far a drawn link reaches each side of its line (world units): names keep off them. */
 class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>, val ids: List<String>, val viewRadius: Float = tree.radius[0], val theme: MapTheme = MapTheme.PLAIN,
                /** [MapTheme.NEURONS]: the cells and links NeuronGl draws; the tree then only holds their places, by body. */
-               val neurons: NeuronScene? = null) {
+               val neurons: NeuronScene? = null,
+               val links: IntArray = IntArray(0), val linkHalf: Float = 0f) {
     companion object {
         /**
          * The Neurons map: node i is the plan's body i at its home (labels, taps and the home view
@@ -108,7 +112,9 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             val tree = Octree.build(graph, 4096)
             val sizes = bodies.map { it.sphere }.sorted()
             val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
-            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene)
+            // the bridges' half width: the wider of a tract's and a fibre's (NeuronGl.drawBridges)
+            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene,
+                edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE))
         }
 
         fun viewRadius(tree: Octree): Float {
@@ -141,7 +147,7 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 weight += tree.count[cell]
             }
             val radius = if (weight == 0) 0.35f else (spacing / weight * 0.3).toFloat().coerceIn(0.01f, 0.45f)
-            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), theme)
+            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), theme, links = graph.edges)
         }
     }
 }
@@ -201,6 +207,13 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     corner: androidx.compose.ui.unit.Dp = 24.dp,
     /** Called once the map is first drawn: its first finished frame, or at once where it can't draw. */
     onDrawn: () -> Unit = {},
+    /**
+     * What the chrome covers over the map, from its top ([top]: the status bar and the top strip) and
+     * its bottom ([hidden]: the foot and the navigation bar), as the 2D board takes them: the first
+     * view fits the map to what they leave (HomeView.fit), as iOS's does (Graph3DView.swift:251-255).
+     */
+    top: androidx.compose.ui.unit.Dp = 0.dp,
+    hidden: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -214,8 +227,8 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     val maxHz = remember(modes) { RefreshRate.maxHz(modes, display?.refreshRate ?: 60f) }
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
     var screenNodes by remember { mutableStateOf<List<ScreenNode>>(emptyList()) }
-    // the names drawn last frame, which count a little bigger in this one (LabelRoom.HOLD)
-    val named = remember(scene) { HashSet<Int>() }
+    // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
+    val named = remember(scene) { HashMap<Int, Int>() }
     var drawn by remember { mutableStateOf(MapDrawn()) }
     val hz = remember { floatArrayOf(display?.refreshRate ?: 60f) }
     val tree = scene.tree
@@ -229,7 +242,10 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
             minDistance = scene.nodeRadius * 4; maxDistance = max(tree.radius[0], 1f) * 80
         }
     }
-    val home = remember(scene) { HomeView(camera) }
+    val home = remember(scene) { HomeView(camera, scene.viewRadius) }
+    val density = LocalDensity.current
+    val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
+    var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val renderer = remember(scene) {
         GlMapRenderer(
@@ -248,6 +264,10 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     LaunchedEffect(recenter) {
         if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
     }
+    // the first view fits the shape the map has (on its size, below) and what the chrome leaves of
+    // it, again when the chrome changes
+    fun fitHome(size: IntSize) { if (synchronized(camera) { home.fit(camera, size.width, size.height, insets) }) loop.moved() }
+    LaunchedEffect(home, insets) { fitHome(viewSize) }
 
     // Ask the window for the highest refresh mode at this resolution while the map is shown.
     DisposableEffect(activity, modes) {
@@ -268,12 +288,12 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
         contentDescription = description; mapDrawn = drawnNow
         if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
     }
-        .onSizeChanged { if (synchronized(camera) { home.fit(camera, scene.viewRadius, it.width, it.height) }) loop.moved() }) {
+        .onSizeChanged { viewSize = it; fitHome(it) }) {
         if (!gles3) {
-            // the kit's ink on the map's own night blue: the map's callers keep it night
-            // (IdeasSpace's SortaTheme), so the ink is night's too
+            // the kit's secondary ink on the map's own night blue, as the map's other notes: its
+            // callers keep it night (IdeasSpace's SortaTheme), so the ink is night's too
             Text("This device can’t draw the 3D map. Choose 2D in the theme menu.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
-                style = WardType.body.textStyle(), color = wardColor(WardToken.ink), textAlign = TextAlign.Center)
+                style = WardType.body.textStyle(), color = wardColor(WardToken.inkSecondary), textAlign = TextAlign.Center)
             return@Box
         }
         AndroidView(
@@ -342,31 +362,24 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
                 }
             },
         ) {
-            // labels grow with their node's size on screen: no fading, only size. Biggest first, and
-            // a name with no room clear of those placed waits (LabelRoom)
+            // the names (MapNames): biggest body first, each clear of the names placed, the links and
+            // the other bodies, under its body or else beside it; one with no room waits
             if (scene.titles.isEmpty()) return@Canvas
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     color = android.graphics.Color.rgb(225, 235, 249); textAlign = android.graphics.Paint.Align.CENTER
                     typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 }
-                val gap = 2.dp.toPx() // the clear space kept between two names, a hairline's nudge (iOS GraphPerfLabelRoom.gap)
-                val placed = ArrayList<LabelBox>()
-                val order = screenNodes.filter { it.crisp }.sortedByDescending { if (it.index in named) it.pixels * LabelRoom.HOLD else it.pixels }
+                val metrics = PaintMetrics(paint)
+                // a word's room beside a name, so two in a row read as two; iOS's 2-point nudge
+                // (GraphPerfLabelRoom.gap), doubled, above and below and round links and bodies
+                val rules = MapNames.Rules(largest = 12.sp.toPx(), gapX = 8.dp.toPx(), gapY = 4.dp.toPx(), line = 1.dp.toPx())
+                val names = MapNames.layout(screenNodes, scene.titles, scene.links, scene.linkHalf, HashMap(named), rules, metrics)
                 named.clear()
-                for (node in order) {
-                    val textSize = (node.pixels * 0.9f).coerceAtMost(12.sp.toPx())
-                    if (textSize < 5f) continue
-                    paint.textSize = textSize
-                    val title = scene.titles.getOrNull(node.index) ?: continue
-                    val label = if (title.length > 23) title.take(22) + "…" else title
-                    val baseline = node.y + node.pixels / 2 + textSize * 1.4f
-                    val metrics = paint.fontMetrics
-                    val box = LabelBox(node.x, baseline + (metrics.ascent + metrics.descent) / 2, paint.measureText(label), metrics.descent - metrics.ascent)
-                    if (!LabelRoom.fits(box, placed, gap)) continue
-                    placed.add(box)
-                    named.add(node.index)
-                    canvas.nativeCanvas.drawText(label, node.x, baseline, paint)
+                for (name in names) {
+                    named[name.index] = name.spot
+                    paint.textSize = name.textSize
+                    canvas.nativeCanvas.drawText(name.label, name.box.x, name.baseline(metrics), paint)
                 }
             }
         }
@@ -415,25 +428,38 @@ private fun requestFrameRate(surface: Surface, hz: Float) {
  * asks for one frame. Idle maps stop after a quiet second with three frames finished in it
  * (FrameQuiet); a touch restarts at once.
  */
+/** A name's words measured by the map's own paint, at each size asked. */
+private class PaintMetrics(private val paint: android.graphics.Paint) : NameMetrics {
+    private fun at(size: Float) = paint.also { it.textSize = size }
+    override fun width(label: String, size: Float) = at(size).measureText(label)
+    override fun ascent(size: Float) = at(size).fontMetrics.ascent
+    override fun descent(size: Float) = at(size).fontMetrics.descent
+}
+
 /**
- * The camera's first view, which Recentre goes back to. [fit] sizes it to the view's own shape
- * once that is known, and again when it changes (a turn, a fold): the whole map in view across the
- * narrower side. Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's map off at
- * the sides and left a tablet's small.
+ * The camera's first view, which Recentre goes back to. [fit] sizes it to the view's own shape and
+ * what the chrome leaves of it ([MapInsets]) once those are known, and again when they change (a
+ * turn, a fold, the strip's height): the map's [radius] round its centre in view across the narrower
+ * side of that window, its centre in the window's middle (OrbitCamera.fitWindow, as iOS's framing).
+ * Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's map off at the sides and left a
+ * tablet's small, and fitted the whole view, so what the bottom bar hides was never in its sum.
  */
-private class HomeView(camera: OrbitCamera) {
-    private val target = camera.target
+private class HomeView(camera: OrbitCamera, private val radius: Float) {
+    private val centre = camera.target
+    private var target = camera.target
     private var distance = camera.distance
     private val yaw = camera.yaw
     private val pitch = camera.pitch
+    private val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = camera.fovY)
 
     fun restore(camera: OrbitCamera) { camera.target = target; camera.distance = distance; camera.yaw = yaw; camera.pitch = pitch }
 
-    /** Fits to a [width] x [height] view; a camera still at home moves with it, and then this returns true. */
-    fun fit(camera: OrbitCamera, radius: Float, width: Int, height: Int): Boolean {
+    /** Fits to a [width] x [height] view under [insets]; a camera still at home moves with it, and then this returns true. */
+    fun fit(camera: OrbitCamera, width: Int, height: Int, insets: MapInsets): Boolean {
         if (width <= 0 || height <= 0) return false
         val there = camera.target == target && camera.distance == distance && camera.yaw == yaw && camera.pitch == pitch
-        distance = max(camera.fitDistance(radius, aspect = width.toFloat() / height), 4f)
+        val fit = lens.fitWindow(centre, radius, width.toFloat(), height.toFloat(), insets)
+        distance = fit.distance; target = fit.target
         if (there) restore(camera)
         return there
     }

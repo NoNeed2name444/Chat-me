@@ -153,22 +153,119 @@ class OrbitCamera(
 
     /** Pixels per world unit at depth 1: half the viewport height over tan(fov / 2). */
     fun focalPixels(viewportHeight: Float) = viewportHeight / 2f / tan(fovY / 2)
+
+    /**
+     * The first view of a ball of [radius] round [centre], from this camera's yaw and pitch, fitted
+     * to the part of a [width] x [height] view (pixels) the chrome leaves ([insets]), as iOS's
+     * GraphPerfCamera.framing and GraphTilt.window (Graph3DView.swift:251-255): the ball fits that
+     * window across its narrower side with [margin] to spare, and its centre lands in the window's
+     * middle, so what the top strip or the bottom bar covers never holds the map at first. The
+     * window is never less than a third of the view each way; the distance never under [least].
+     */
+    fun fitWindow(centre: Vec3, radius: Float, width: Float, height: Float, insets: MapInsets = MapInsets.NONE,
+                  margin: Float = 1.3f, least: Float = 4f): MapFit {
+        val wide = max(width, 1f)
+        val tall = max(height, 1f)
+        val seenWidth = max(wide - insets.left - insets.right, wide / 3)
+        val seenHeight = max(tall - insets.top - insets.bottom, tall / 3)
+        val focal = focalPixels(tall)
+        // the window's half angles, about its own middle
+        val half = min(atan(seenWidth / 2 / focal), atan(seenHeight / 2 / focal))
+        val distance = max(radius / sin(half) * margin, least)
+        // the window's middle from the view's, in pixels: rightwards and upwards
+        val across = (insets.left - insets.right) / 2
+        val up = (insets.bottom - insets.top) / 2
+        val target = centre - (right() * across + up() * up) * (distance / focal)
+        return MapFit(distance, target)
+    }
 }
+
+/** How much of the map's view, on each side, the chrome covers, in pixels (iOS's GraphInsets). */
+data class MapInsets(val top: Float = 0f, val left: Float = 0f, val bottom: Float = 0f, val right: Float = 0f) {
+    companion object { val NONE = MapInsets() }
+}
+
+/** A first view ([OrbitCamera.fitWindow]): how far back the camera stands, and what it looks at. */
+data class MapFit(val distance: Float, val target: Vec3)
 
 /** A name's box on screen: its centre and size, in pixels. */
 data class LabelBox(val x: Float, val y: Float, val width: Float, val height: Float)
+
+/** A link's run on screen, from (ax, ay) to (bx, by), and how far its drawn band reaches each side of that line, in pixels. */
+data class LabelLink(val ax: Float, val ay: Float, val bx: Float, val by: Float, val half: Float = 0f)
+
+/** A body's disc on screen: its centre and radius, in pixels, and whose it is. */
+data class LabelDisc(val x: Float, val y: Float, val radius: Float, val index: Int = -1)
 
 /**
  * Which names go on screen, as iOS's GraphPerfLabelRoom: tried biggest body first, each one whose
  * box is clear of every name placed before it by [gap], so the names in a crowd do not print over
  * one another. Sorta's rule: the reference drew every name.
+ *
+ * [place] adds the rest of Sorta's rule for a map at rest (S03-result.md, step 4's list): a name
+ * keeps a word's room from a name beside it, so two never read as one ("Performance and Space names
+ * collide"); and it lies on no link and no other body ("Neurons' link covers its label"). Where its
+ * place under the body is taken, it tries above, then after, then before it, and waits if none is clear.
  */
 object LabelRoom {
     /** A name shown last frame counts as this much bigger, so two close ones do not swap as the camera drifts. */
     const val HOLD = 1.05f
 
-    fun fits(box: LabelBox, placed: List<LabelBox>, gap: Float): Boolean = placed.all { p ->
-        abs(box.x - p.x) * 2 >= box.width + p.width + 2 * gap || abs(box.y - p.y) * 2 >= box.height + p.height + 2 * gap
+    fun fits(box: LabelBox, placed: List<LabelBox>, gap: Float): Boolean = fits(box, placed, gap, gap)
+
+    /** Clear of every placed name by [gapX] beside it and [gapY] above or below it. */
+    fun fits(box: LabelBox, placed: List<LabelBox>, gapX: Float, gapY: Float): Boolean = placed.all { p ->
+        abs(box.x - p.x) * 2 >= box.width + p.width + 2 * gapX || abs(box.y - p.y) * 2 >= box.height + p.height + 2 * gapY
+    }
+
+    /** Whether [link]'s band comes within [gap] of [box]: the line clipped to the box grown by the band and the gap. */
+    fun crosses(box: LabelBox, link: LabelLink, gap: Float): Boolean {
+        val grow = link.half + gap
+        val left = box.x - box.width / 2 - grow; val right = box.x + box.width / 2 + grow
+        val top = box.y - box.height / 2 - grow; val bottom = box.y + box.height / 2 + grow
+        // Liang-Barsky: the part of the segment inside the rectangle, if any
+        val dx = link.bx - link.ax; val dy = link.by - link.ay
+        var t0 = 0f; var t1 = 1f
+        val p = floatArrayOf(-dx, dx, -dy, dy)
+        val q = floatArrayOf(link.ax - left, right - link.ax, link.ay - top, bottom - link.ay)
+        for (i in 0 until 4) {
+            if (p[i] == 0f) { if (q[i] < 0f) return false; continue }
+            val t = q[i] / p[i]
+            if (p[i] < 0f) { if (t > t1) return false; if (t > t0) t0 = t }
+            else { if (t < t0) return false; if (t < t1) t1 = t }
+        }
+        return t0 <= t1
+    }
+
+    /** Whether [disc] comes within [gap] of [box]. */
+    fun covers(box: LabelBox, disc: LabelDisc, gap: Float): Boolean {
+        val nx = disc.x.coerceIn(box.x - box.width / 2, box.x + box.width / 2)
+        val ny = disc.y.coerceIn(box.y - box.height / 2, box.y + box.height / 2)
+        val r = disc.radius + gap
+        val ex = disc.x - nx; val ey = disc.y - ny
+        return ex * ex + ey * ey < r * r
+    }
+
+    /**
+     * A name of [width] x [height] for a body at ([x], [y]) drawn [pixels] across: under it, where
+     * the map has always put it, [below] pixels from its centre to the name's; then as far above;
+     * then after it and before it, [beside] pixels clear of its edge. In that order.
+     */
+    fun spots(x: Float, y: Float, pixels: Float, width: Float, height: Float, below: Float, beside: Float): List<LabelBox> {
+        val side = pixels / 2 + beside + width / 2
+        return listOf(LabelBox(x, y + below, width, height), LabelBox(x, y - below, width, height),
+            LabelBox(x + side, y, width, height), LabelBox(x - side, y, width, height))
+    }
+
+    /**
+     * The first of [spots] clear of every name [placed] (by [gapX] beside, [gapY] above or below),
+     * every link in [links] and every body in [discs] (by [gapY]) but the name's own ([self]); null
+     * when none is, and the name waits.
+     */
+    fun place(spots: List<LabelBox>, placed: List<LabelBox>, links: List<LabelLink>, discs: List<LabelDisc>,
+              gapX: Float, gapY: Float, self: Int = -1): LabelBox? = spots.firstOrNull { box ->
+        fits(box, placed, gapX, gapY) && links.none { crosses(box, it, gapY) } &&
+            discs.none { (self < 0 || it.index != self) && covers(box, it, gapY) }
     }
 }
 

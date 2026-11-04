@@ -84,7 +84,7 @@ object IdeasLayout {
     const val column = 700.0
     /** The editor's details field, at least, as iOS's NoteEditorView. */
     const val bodyMinHeight = 140.0
-    /** A sheet's list, at most, as MoveSheet's. */
+    /** A sheet's list, at most, as Stethoscore's MoveSheet's. */
     const val chooserMaxHeight = 480.0
     /** The editor's Write / Read, at least: the Lines picker's width (LINES_PICKER_WIDTH). */
     val segmentedWidth: Double = LINES_PICKER_WIDTH.toDouble()

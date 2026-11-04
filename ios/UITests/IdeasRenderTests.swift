@@ -2,7 +2,8 @@ import XCTest
 
 /// The Ideas screens rendered for real (S05, A6 and A7), each kept as a
 /// named screenshot: the empty state, the import's message, To sort with
-/// ideas, the folder chooser, an open folder and the editor. CI runs it by
+/// ideas, the folder chooser, an open folder, the editor and, on the
+/// iPhone, a draft typed in the well. CI runs it by
 /// day and by night on the iPhone and the iPad (tools/run_ui_tests.sh, the
 /// ideas set), setting the simulator's appearance from outside, as for
 /// LaunchTests. The ideas are the made-up export's and a few typed ones;
@@ -125,5 +126,16 @@ final class IdeasRenderTests: XCTestCase {
         sleep(1)
         keepShot("\(prefix)-6-editor")
         app.buttons["editor-done"].tap()
+
+        if app.windows.firstMatch.frame.width < 700 {
+            // a draft typed and not yet sorted, so Sort it shows its coral
+            // fill, not only its off face (S05's next step, item 2)
+            XCTAssertTrue(app.capture.waitForExistence(timeout: 10), "back on the Sort screen")
+            XCTAssertFalse(app.sortIt.isEnabled, "Sort it is off with the well empty")
+            app.typeDraft("Fix the gate latch")
+            XCTAssertTrue(app.sortIt.isEnabled, "Sort it is on with a draft")
+            sleep(1)
+            keepShot("\(prefix)-7-draft")
+        }
     }
 }

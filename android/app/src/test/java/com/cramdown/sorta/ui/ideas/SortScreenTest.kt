@@ -356,6 +356,11 @@ class SortScreenTest {
         title.performTextClearance()
         title.performTextInput("Paint the shed green")
         run.field(s(R.string.editor_body)).performTextInput("Two coats, after the rain.")
+        // with no link yet, "Link to an idea…" is offered once, in the bar, and no Linked ideas header shows
+        assertEquals("one Link to an idea…", 1, compose.onAllNodes(hasText(s(R.string.editor_link_to)) and
+            hasAnyAncestor(hasTestTag(EDITOR_TAG))).fetchSemanticsNodes().size)
+        assertEquals("no Linked ideas header", 0, compose.onAllNodes(hasText(s(R.string.editor_linked)) and
+            hasAnyAncestor(hasTestTag(EDITOR_TAG))).fetchSemanticsNodes().size)
         compose.onNode(hasTestTag(EDITOR_LINK_TAG)).performClick()
         run.until { compose.onAllNodes(hasContentDescription("Buy brushes") and hasAnyAncestor(hasTestTag(LINK_PICKER_TAG))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasContentDescription("Buy brushes") and hasAnyAncestor(hasTestTag(LINK_PICKER_TAG))).performClick()

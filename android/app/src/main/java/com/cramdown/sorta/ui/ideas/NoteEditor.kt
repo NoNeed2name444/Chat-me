@@ -21,7 +21,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -169,9 +168,11 @@ const val EDITOR_LINK_TAG = "editor-link"
             }
             Text(stringResource(R.string.editor_hint), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
 
-            EditorSection(stringResource(R.string.editor_linked))
+            // the ideas this one links to, shown once there is one; "Link to an idea…" is offered once,
+            // in the bar with Write / Read, never as a row here as well (S05's next step, item 8; as iOS)
             val outgoing = NoteEditing.outgoing(book, id, body)
             val missing = NoteEditing.unresolved(book, body)
+            if (outgoing.isNotEmpty() || missing.isNotEmpty()) EditorSection(stringResource(R.string.editor_linked))
             val byHand = book.note(id)?.links?.toSet() ?: emptySet()
             val hand = stringResource(R.string.editor_how_hand)
             val outText = stringResource(R.string.editor_how_text_out)
@@ -188,13 +189,6 @@ const val EDITOR_LINK_TAG = "editor-link"
                         Text(name, style = WardType.body.textStyle(), color = wardColor(WardToken.ink))
                         Text(stringResource(R.string.editor_missing), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
                     }
-                }
-            }
-            if (outgoing.isEmpty() && missing.isEmpty()) {
-                Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { save(); picking = true }.wardRowTile(),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-                    Icon(Icons.Rounded.Link, null, tint = wardColor(WardToken.primaryInk), modifier = Modifier.size(wardGlyph(20.0)))
-                    Text(stringResource(R.string.editor_link_to), style = WardType.body.textStyle(), color = wardColor(WardToken.primaryInk))
                 }
             }
 
@@ -276,11 +270,12 @@ const val EDITOR_LINK_TAG = "editor-link"
     WardSectionLabel(text, Modifier.padding(top = WardSpace.s.wardDp))
 }
 
-/** The idea's folder, as the kit's chip: its name, or To sort; it opens the folder chooser. */
+/** The idea's folder, as the kit's chip: its name, or To sort; it opens the folder chooser. Its glyph is the accent, as iOS's (`Color.wardGlyph`). */
 @Composable private fun FolderChip(book: IdeaBook, note: Note, onClick: () -> Unit) {
     val name = book.folder(note.folderId)?.name ?: stringResource(R.string.sort_title)
     val spoken = stringResource(R.string.editor_chip_spoken, name)
-    WardChipButton(name, onClick, Modifier.semantics { contentDescription = spoken }, icon = Icons.Outlined.Folder, role = Role.Button)
+    WardChipButton(name, onClick, Modifier.semantics { contentDescription = spoken }, icon = Icons.Outlined.Folder,
+        role = Role.Button, iconTint = wardColor(WardToken.accent))
 }
 
 /** A linked idea: its first line, and how it is linked; a hand-made one can be unlinked (swipe, menu, action). */

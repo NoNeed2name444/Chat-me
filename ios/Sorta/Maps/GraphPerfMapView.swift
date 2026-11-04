@@ -593,6 +593,19 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
         let pill = pillBack.frame
         var placed: [GraphPerfLabelRoom.Box] = pillBack.isHidden ? []
             : [(Float(pill.midX), Float(pill.midY), Float(pill.width), Float(pill.height))]
+        // the bodies as the last frame drew them, on screen: a name keeps
+        // clear of every one but its own (GraphPerfLabelRoom)
+        var discs: [GraphPerfLabelRoom.Disc] = []
+        var discOf: [Int: Int] = [:]
+        if !shown.isEmpty, let drawn = renderer?.drawnPoints() {
+            let p = drawn.points
+            for k in 0..<min(p.count, drawn.ids.count) where drawn.ids[k] >= 0 && p.pickable(k) {
+                guard p.x[k] + p.radius[k] >= 0, p.x[k] - p.radius[k] <= width,
+                      p.y[k] + p.radius[k] >= 0, p.y[k] - p.radius[k] <= height else { continue }
+                discOf[Int(drawn.ids[k])] = discs.count
+                discs.append((p.x[k], p.y[k], p.radius[k]))
+            }
+        }
         var used = 0
         for body in shown {
             let label: UILabel = nameLabel(used)
@@ -602,14 +615,14 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
                 label.sizeToFit()
             }
             let at = projected[body]
-            let w: CGFloat = min(label.bounds.width, bounds.width - 24)
-            let x: CGFloat = min(max(CGFloat(at.x), w / 2 + 12), bounds.width - w / 2 - 12)
-            let y: CGFloat = CGFloat(at.y) + 16
-            let box: GraphPerfLabelRoom.Box = (Float(x), Float(y), Float(w), Float(label.bounds.height))
-            guard GraphPerfLabelRoom.fits(box, among: placed) else { continue }
+            let own: Int? = discOf[body]
+            let under: GraphPerfLabelRoom.Disc = (at.x, at.y, own.map { discs[$0].radius } ?? 0)
+            let box = GraphPerfLabelRoom.box(under: under, width: Float(label.bounds.width),
+                                             height: Float(label.bounds.height), viewWidth: width)
+            guard GraphPerfLabelRoom.fits(box, among: placed, clearOf: discs, except: own) else { continue }
             placed.append(box)
-            label.bounds = CGRect(x: 0, y: 0, width: w, height: label.bounds.height)
-            label.center = CGPoint(x: x, y: y)
+            label.bounds = CGRect(x: 0, y: 0, width: CGFloat(box.width), height: label.bounds.height)
+            label.center = CGPoint(x: CGFloat(box.x), y: CGFloat(box.y))
             label.isHidden = false
             used += 1
         }
