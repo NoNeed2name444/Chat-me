@@ -244,10 +244,24 @@ extension XCUIElement {
     /// trailing end, so the caret sits after the old words and the deletes
     /// take them (a tap in the middle left it at the start, and the new
     /// words went in front: "Alpha planAlpha", Chat-me run 40983816557).
+    /// The new words go in a key at a time, each landing before the next,
+    /// as typeName's: sent whole, the field read "Back gard" 0.18 s after
+    /// the keys went (Chat-me run 41877111599, attempt 2), and its video
+    /// shows "Back garden" a second later. The first key landing alone
+    /// shows the deletes took the old words.
     func replaceText(with text: String) {
         coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
         let old = (value as? String) ?? ""
-        typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2) + text)
+        typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2))
+        var typed = ""
+        for key in text {
+            typeText(String(key))
+            typed.append(key)
+            let landed = NSPredicate(format: "value == %@", typed)
+            let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landed, object: self)], timeout: 15)
+            XCTAssertEqual(result, .completed,
+                           "key \(typed.count) of \"\(text)\" is in the field: it holds \(value as? String ?? "nil")")
+        }
         XCTAssertEqual(value as? String, text, "the field holds only the new words")
     }
 
