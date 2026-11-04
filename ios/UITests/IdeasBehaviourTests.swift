@@ -195,8 +195,7 @@ final class IdeasBehaviourTests: XCTestCase {
         XCTAssertTrue(app.folderRow("Garden").waitForExistence(timeout: 10), "back at the top")
         XCTAssertFalse(app.upRow.exists, "no up row at the top")
 
-        app.folderRow("Garden").press(forDuration: 1.2)
-        XCTAssertTrue(app.buttons[IdeasText.renameFolder].firstMatch.waitForExistence(timeout: 5), "the folder's menu is open")
+        app.openFolderMenu("Garden", showing: IdeasText.renameFolder)
         app.buttons[IdeasText.renameFolder].firstMatch.tap()
         XCTAssertTrue(app.nameField.waitForExistence(timeout: 10), "the naming sheet is open")
         app.nameField.replaceText(with: "Back garden")
@@ -204,7 +203,7 @@ final class IdeasBehaviourTests: XCTestCase {
         XCTAssertTrue(app.folderRow("Back garden").waitForExistence(timeout: 10), "renamed")
         XCTAssertFalse(app.folderRow("Garden").exists)
 
-        app.folderRow("Back garden").press(forDuration: 1.2)
+        app.openFolderMenu("Back garden", showing: IdeasText.deleteFolder)
         app.buttons[IdeasText.deleteFolder].firstMatch.tap()
         // the confirm's own button, once the menu has gone
         let confirm = app.sheets.buttons[IdeasText.deleteFolder]

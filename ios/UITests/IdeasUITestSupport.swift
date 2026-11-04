@@ -124,6 +124,29 @@ extension XCUIApplication {
         folderRows.matching(NSPredicate(format: "label BEGINSWITH %@", "\(name), ")).firstMatch
     }
 
+    /// Holds a folder's row, at rest, until its menu shows `item`. On a
+    /// slow runner the hold reached the app as a tap: in Chat-me run
+    /// 41897740188 the 1.2 s press took 6.7 s to send (2.2 s on the run
+    /// before), and its video shows Garden opening, no menu. Only then,
+    /// with the up row showing it went in, it goes back up and holds once
+    /// more; the menu must still open from a hold.
+    func openFolderMenu(_ name: String, showing item: String) {
+        let row = folderRow(name)
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "\(name)'s row is there")
+        _ = row.settledFrame
+        row.press(forDuration: 1.2)
+        let menuItem = buttons[item].firstMatch
+        if !menuItem.waitForExistence(timeout: 5) && upRow.exists {
+            XCTContext.runActivity(named: "the hold opened \(name) as a tap; back up, hold again") { _ in
+                upRow.tap()
+                XCTAssertTrue(row.waitForExistence(timeout: 10), "back beside \(name)")
+                _ = row.settledFrame
+                row.press(forDuration: 1.2)
+            }
+        }
+        XCTAssertTrue(menuItem.waitForExistence(timeout: 5), "\(name)'s menu is open")
+    }
+
     func chooserFolder(_ name: String) -> XCUIElement {
         buttons.matching(identifier: "chooser-folder").matching(NSPredicate(format: "label == %@", name)).firstMatch
     }
