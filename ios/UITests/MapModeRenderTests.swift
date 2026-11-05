@@ -45,6 +45,18 @@ final class MapModeRenderTests: XCTestCase {
             // 88 x 0.5 at the floor is 44 exactly: half a point for the frame's rounding
             XCTAssertGreaterThanOrEqual(card.frame.height, 43.5, "the \(title) card at the first view: \(card.frame)")
         }
+        // no card over another, though the export puts Seed swap list and A
+        // bell for the bike 33 points apart (S05c)
+        assertBoardApart(app, MadeUpExport.titles + ["Oil the gate", "Ask about the allotment waiting list"])
+        // a card let go of on another settles clear of every card (S05c)
+        let bell = mapCard(app, "A bell for the bike")
+        let before: CGRect = bell.frame
+        let onto = mapCard(app, "Seed swap list").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        bell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: onto, withVelocity: 300, thenHoldForDuration: 0.2)
+        sleep(1)
+        XCTAssertNotEqual(bell.frame, before, "the bell card was let go of on Seed swap list: \(before)")
+        assertBoardApart(app, MadeUpExport.titles + ["Oil the gate", "Ask about the allotment waiting list"])
 
         app.chooseLook("look-space")
         let map = app.descendants(matching: .any)["graph3D"].firstMatch
@@ -94,6 +106,8 @@ final class MapModeRenderTests: XCTestCase {
 
         app.chooseLook("look-2d")
         XCTAssertTrue(app.boardCard("A bell for the bike").waitForExistence(timeout: 10), "2D: the board")
+        // cards grown with the text size are drawn apart too (S05c)
+        assertBoardApart(app, MadeUpExport.titles)
         let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
         let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
         XCTAssertTrue(list.waitForExistence(timeout: 10), "the To sort chip")
@@ -216,6 +230,18 @@ final class MapModeRenderTests: XCTestCase {
             }
         }
         return seen > 0 ? Double(bright) / Double(seen) : 0
+    }
+
+    /// Every board card named is on the board and covers no other: their
+    /// frames, as drawn, apart.
+    private func assertBoardApart(_ app: XCUIApplication, _ titles: [String],
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        let frames: [(String, CGRect)] = titles.map { title in
+            let card = mapCard(app, title)
+            XCTAssertTrue(card.waitForExistence(timeout: 10), "the \(title) card", file: file, line: line)
+            return (title, card.frame)
+        }
+        assertApart(frames, "the 2D board", file: file, line: line)
     }
 
     /// No two of the targets overlap (IdeasBehaviourTests' check).

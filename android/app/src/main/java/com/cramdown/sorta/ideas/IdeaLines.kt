@@ -253,6 +253,10 @@ object IdeaBoardDrop {
     /** The tallest card at the default text size (its folder line and four lines of title), which a new idea is spaced by. */
     const val CARD_TALLEST = 128.0
 
+    /** Two cards cover each other, or come closer than [gap]: centres nearer than half their widths (heights) and the gap, across and down. As iOS's. */
+    fun covers(a: BoardPoint, aw: Double, ah: Double, b: BoardPoint, bw: Double, bh: Double, gap: Double): Boolean =
+        abs(a.x - b.x) < (aw + bw) / 2 + gap && abs(a.y - b.y) < (ah + bh) / 2 + gap
+
     fun settle(p: BoardPoint, cardWidth: Double, cardHeight: Double, others: List<BoardPoint>, gap: Double = 8.0,
                step: Double = 8.0, rings: Int = 200): BoardPoint {
         val w = cardWidth + gap
@@ -266,6 +270,78 @@ object IdeaBoardDrop {
                 val x = p.x + r * cos(a)
                 val y = p.y + r * sin(a)
                 if (free(x, y)) return BoardPoint(x, y)
+            }
+        }
+        return p
+    }
+}
+
+/**
+ * Where the 2D board draws its cards (S05c): each at its stored centre, unless it would cover a card
+ * drawn before it, in the store's order; then at the nearest place that covers none, in
+ * [IdeaBoardDrop]'s rings, with each pair's own sizes. On screen only: the stored places stay as they
+ * are, so an import's overlapping places, ideas with none (all at 0, 0) and cards grown with the font
+ * scale are drawn apart. The same input gives the same places. As iOS's.
+ */
+object IdeaBoardSpread {
+    data class Card(val id: String, val centre: BoardPoint, val width: Double, val height: Double)
+
+    private data class Cell(val i: Int, val j: Int)
+    private class Placed(val at: BoardPoint, val width: Double, val height: Double)
+
+    fun places(cards: List<Card>, gap: Double = 8.0, step: Double = 8.0, rings: Int = 2000): Map<String, BoardPoint> {
+        if (cards.isEmpty()) return emptyMap()
+        // placed cards in cells the size of the largest card and the gap, so a place is checked
+        // against the 3 by 3 cells round it
+        val cellW = cards.maxOf { it.width } + gap
+        val cellH = cards.maxOf { it.height } + gap
+        val grid = HashMap<Cell, MutableList<Placed>>()
+        var right = Double.NEGATIVE_INFINITY
+        val result = LinkedHashMap<String, BoardPoint>()
+        fun cell(p: BoardPoint) = Cell(kotlin.math.floor(p.x / cellW).toInt(), kotlin.math.floor(p.y / cellH).toInt())
+        fun free(p: BoardPoint, w: Double, h: Double): Boolean {
+            val c = cell(p)
+            for (di in -1..1) for (dj in -1..1) {
+                for (o in grid[Cell(c.i + di, c.j + dj)] ?: continue) {
+                    if (IdeaBoardDrop.covers(p, w, h, o.at, o.width, o.height, gap)) return false
+                }
+            }
+            return true
+        }
+        fun place(card: Card): BoardPoint {
+            val p = card.centre
+            if (free(p, card.width, card.height)) return p
+            for (ring in 1..max(rings, 1)) {
+                val r = ring * step
+                for (k in 0 until 24) {
+                    val a = k * PI / 12
+                    val q = BoardPoint(p.x + r * cos(a), p.y + r * sin(a))
+                    if (free(q, card.width, card.height)) return q
+                }
+            }
+            // past the rings: beyond every placed card, at its own height
+            return BoardPoint(right + card.width / 2 + gap, p.y)
+        }
+        for (card in cards) {
+            val at = place(card)
+            grid.getOrPut(cell(at)) { mutableListOf() }.add(Placed(at, card.width, card.height))
+            right = max(right, at.x + card.width / 2)
+            result[card.id] = at
+        }
+        return result
+    }
+
+    /** Where a card let go of at [p] settles among the drawn cards ([others]): [IdeaBoardDrop.settle]'s search, with each pair's own sizes. */
+    fun settle(p: BoardPoint, width: Double, height: Double, others: List<Card>, gap: Double = 8.0,
+               step: Double = 8.0, rings: Int = 200): BoardPoint {
+        fun free(q: BoardPoint) = others.none { IdeaBoardDrop.covers(q, width, height, it.centre, it.width, it.height, gap) }
+        if (free(p)) return p
+        for (ring in 1..max(rings, 1)) {
+            val r = ring * step
+            for (k in 0 until 24) {
+                val a = k * PI / 12
+                val q = BoardPoint(p.x + r * cos(a), p.y + r * sin(a))
+                if (free(q)) return q
             }
         }
         return p

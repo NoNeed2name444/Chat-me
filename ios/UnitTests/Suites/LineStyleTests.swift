@@ -307,5 +307,52 @@ let moved: Double = hypot(Double(settled.x - onTop.x), Double(settled.y - onTop.
 check("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap",
       !others.contains { overlaps(settled, $0) } && moved > 0 && moved <= 150 + 8 + 8, "\(settled)")
 
+// MARK: L9 the board draws no card over another (S05c)
+
+func spBoardCard(_ n: Int, _ x: Double, _ y: Double, h: Double = 88) -> IdeaBoardSpread.Card {
+    IdeaBoardSpread.Card(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", n))!,
+                         centre: CGPoint(x: x, y: y), size: CGSize(width: 150, height: h))
+}
+func spNoneCover(_ cards: [IdeaBoardSpread.Card], _ at: [UUID: CGPoint]) -> Bool {
+    for (i, a) in cards.enumerated() {
+        for b in cards[(i + 1)...] {
+            guard let p = at[a.id], let q = at[b.id] else { return false }
+            if IdeaBoardDrop.covers(p, a.size, q, b.size, gap: 8 - 1e-6) { return false }
+        }
+    }
+    return true
+}
+let spApart: [IdeaBoardSpread.Card] = [spBoardCard(1, 0, 0), spBoardCard(2, 200, 0), spBoardCard(3, 0, 120)]
+let spApartAt = IdeaBoardSpread.places(spApart)
+check("L9 cards that cover none stay where they are stored",
+      spApart.allSatisfy { spApartAt[$0.id] == $0.centre }, "\(spApartAt)")
+let spPair: [IdeaBoardSpread.Card] = [spBoardCard(1, 10, 10), spBoardCard(2, 10, 10)]
+let spPairAt = IdeaBoardSpread.places(spPair)
+check("L9 two on one place end apart, the first kept", spPairAt[spPair[0].id] == spPair[0].centre && spNoneCover(spPair, spPairAt), "\(spPairAt)")
+let spStack: [IdeaBoardSpread.Card] = (1...5).map { spBoardCard($0, 0, 0) }
+let spStackAt = IdeaBoardSpread.places(spStack)
+check("L9 five at (0, 0) end apart, none covering another", spStackAt.count == 5 && spNoneCover(spStack, spStackAt), "\(spStackAt)")
+// 96 down clears two 88-point cards, not a 200-point one
+let spTall: [IdeaBoardSpread.Card] = [spBoardCard(1, 0, 0, h: 200), spBoardCard(2, 0, 96)]
+let spTallAt = IdeaBoardSpread.places(spTall)
+check("L9 a tall card and a short one are kept apart by their own sizes",
+      spTallAt[spTall[0].id] == spTall[0].centre && spTallAt[spTall[1].id] != spTall[1].centre && spNoneCover(spTall, spTallAt), "\(spTallAt)")
+check("L9 the same cards give the same places", IdeaBoardSpread.places(spStack) == spStackAt)
+let spSwapped: [IdeaBoardSpread.Card] = [spPair[1], spPair[0]]
+check("L9 the store's order decides who stays", IdeaBoardSpread.places(spSwapped)[spPair[1].id] == spPair[1].centre)
+let spCrowd: [IdeaBoardSpread.Card] = (1...300).map { spBoardCard($0, 0, 0) }
+let spCrowdAt = IdeaBoardSpread.places(spCrowd, rings: 40)
+check("L9 a crowd past the rings still ends with none covering another", spCrowdAt.count == 300 && spNoneCover(spCrowd, spCrowdAt))
+// a card let go of settles clear of the drawn cards, as the board does it
+let spA = spBoardCard(1, 0, 0), spB = spBoardCard(2, 30, 0)
+let spDrawn = IdeaBoardSpread.places([spA, spB])
+let spDrop: CGPoint = IdeaBoardSpread.settle(CGPoint(x: 30, y: 0), size: CGSize(width: 150, height: 88),
+                                             others: [spDrawn[spA.id]!, spDrawn[spB.id]!].map { ($0, CGSize(width: 150, height: 88)) })
+var spC = spBoardCard(3, 0, 0); spC.centre = spDrop
+let spAfter = IdeaBoardSpread.places([spA, spC, spB])
+check("L9 a card let go of clear of the drawn cards is drawn where it settled, ahead of a moved one in the order",
+      spAfter[spC.id] == spDrop && spNoneCover([spA, spC, spB], spAfter), "\(spAfter)")
+check("L9 no cards, no places", IdeaBoardSpread.places([]).isEmpty)
+
 print(failures.isEmpty ? "all passed" : "\(failures.count) failed")
 exit(failures.isEmpty ? 0 : 1)

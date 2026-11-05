@@ -51,6 +51,11 @@ struct IdeaBoardView: View {
     @State private var underGlass: CGFloat = 0
     /// Once the board has been dragged or pinched, it stays where it was put.
     @State private var moved = false
+    /// Each card's drawn size, in board points, as it lays out (S05c).
+    @State private var sizes: [UUID: CGSize] = [:]
+    /// The places the cards are drawn at, worked out again only when a
+    /// stored place, a card or a size changes.
+    @State private var spread = BoardSpreadMemo()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Where a new idea was asked for, in board points.
@@ -109,7 +114,8 @@ struct IdeaBoardView: View {
             // the reader runs on under the bottom glass; this much is hidden
             let hidden: CGFloat = geo.safeAreaInsets.bottom
             let midY: CGFloat = Self.middle(of: size, hidden: hidden)
-            let points = positions(in: size, midY: midY)
+            let drawn: [UUID: CGPoint] = drawnCentres()
+            let points = positions(in: size, midY: midY, drawn: drawn)
             let edges = notes.allEdges()
             let lineWidth: CGFloat = max(1, 1.5 * scale)
             let style: GraphLineStyle = GraphLineStyle.inForce(straightLines)
@@ -139,6 +145,8 @@ struct IdeaBoardView: View {
                     let lifted: Bool = dragged == note.id || source == note.id
                     let layer: Double = lifted ? 1 : 0
                     card(note)
+                        // its size before the board's zoom, in board points
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { sizes[note.id] = $0 }
                         .scaleEffect(scale)
                         .position(points[note.id] ?? .zero)
                         .zIndex(layer)
@@ -166,6 +174,10 @@ struct IdeaBoardView: View {
             .onChange(of: [size.width, size.height, hidden], initial: true) {
                 fitFirst(size: size, hidden: hidden)
             }
+            // sizes arrive after the first layout, and the places move with them
+            .onChange(of: drawn) {
+                fitFirst(size: size, hidden: hidden)
+            }
         }
     }
 
@@ -181,7 +193,8 @@ struct IdeaBoardView: View {
     /// Zoom and pan so every card is on screen, clear of the edges and the
     /// tool circles on the trailing side (16 + 44 + 16).
     private func fitAll() {
-        let centres: [CGPoint] = notes.notes.map { CGPoint(x: $0.boardX, y: $0.boardY) }
+        let drawn: [UUID: CGPoint] = drawnCentres()
+        let centres: [CGPoint] = notes.notes.compactMap { drawn[$0.id] }
         let margins = IdeaBoardFit.Margins(top: 16, leading: 16, bottom: 16, trailing: 76)
         let card = IdeaBoardDrop.card
         // never so far out that a card is shorter than a target
@@ -301,13 +314,30 @@ struct IdeaBoardView: View {
         return seen / 2
     }
 
+    /// The cards as the spread takes them: the store's order, each at its
+    /// stored centre with its drawn size (at least the card the board fits by).
+    private func spreadCards() -> [IdeaBoardSpread.Card] {
+        let least: CGSize = IdeaBoardDrop.card
+        return notes.notes.map { note in
+            let seen: CGSize = sizes[note.id] ?? least
+            return IdeaBoardSpread.Card(id: note.id, centre: CGPoint(x: note.boardX, y: note.boardY),
+                                        size: CGSize(width: max(seen.width, least.width), height: max(seen.height, least.height)))
+        }
+    }
+
+    /// Where each card is drawn, in board points: no card over another (S05c).
+    private func drawnCentres() -> [UUID: CGPoint] {
+        spread.places(spreadCards())
+    }
+
     /// Every card's centre on screen; the board's origin is at the middle
     /// across, and `midY` down.
-    private func positions(in size: CGSize, midY: CGFloat) -> [UUID: CGPoint] {
+    private func positions(in size: CGSize, midY: CGFloat, drawn: [UUID: CGPoint]) -> [UUID: CGPoint] {
         var result: [UUID: CGPoint] = [:]
         for note in notes.notes {
-            var x = CGFloat(note.boardX)
-            var y = CGFloat(note.boardY)
+            let at: CGPoint = drawn[note.id] ?? CGPoint(x: note.boardX, y: note.boardY)
+            var x = at.x
+            var y = at.y
             if note.id == dragged {
                 x += dragOffset.width / scale
                 y += dragOffset.height / scale
@@ -386,14 +416,35 @@ struct IdeaBoardView: View {
                 dragOffset = value.translation
             }
             .onEnded { value in
-                // let go on another card, it settles in the nearest free place
-                let dropped = CGPoint(x: note.boardX + Double(value.translation.width / scale),
-                                      y: note.boardY + Double(value.translation.height / scale))
-                let others: [CGPoint] = notes.notes.filter { $0.id != note.id }.map { CGPoint(x: $0.boardX, y: $0.boardY) }
-                let at: CGPoint = IdeaBoardDrop.settle(dropped, card: IdeaBoardDrop.card, others: others)
+                // let go on another card, it settles in the nearest free place,
+                // among the cards as they are drawn
+                let cards: [IdeaBoardSpread.Card] = spreadCards()
+                let drawn: [UUID: CGPoint] = spread.places(cards)
+                let from: CGPoint = drawn[note.id] ?? CGPoint(x: note.boardX, y: note.boardY)
+                let dropped = CGPoint(x: Double(from.x) + Double(value.translation.width / scale),
+                                      y: Double(from.y) + Double(value.translation.height / scale))
+                let own: CGSize = cards.first { $0.id == note.id }?.size ?? IdeaBoardDrop.card
+                let others: [(CGPoint, CGSize)] = cards.filter { $0.id != note.id }.map { (drawn[$0.id] ?? $0.centre, $0.size) }
+                let at: CGPoint = IdeaBoardSpread.settle(dropped, size: own, others: others)
                 notes.setPosition(note.id, x: Double(at.x), y: Double(at.y))
                 dragged = nil
                 dragOffset = .zero
             }
+    }
+}
+
+/// The board's last spread and what it was worked out from (S05c), so it
+/// is worked out again only when a stored place, a card or a size changes,
+/// not on every frame of a pan, a pinch or a drag.
+final class BoardSpreadMemo {
+    private var cards: [IdeaBoardSpread.Card] = []
+    private var drawn: [UUID: CGPoint] = [:]
+
+    func places(_ now: [IdeaBoardSpread.Card]) -> [UUID: CGPoint] {
+        if now != cards || (drawn.isEmpty && !now.isEmpty) {
+            cards = now
+            drawn = IdeaBoardSpread.places(now)
+        }
+        return drawn
     }
 }

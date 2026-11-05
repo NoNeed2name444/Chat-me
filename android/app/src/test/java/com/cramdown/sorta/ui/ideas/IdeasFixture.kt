@@ -41,6 +41,20 @@ object IdeasFixture {
     }
     val folders = listOf(garden, kitchen, bulbs)
 
+    /**
+     * The places of iOS's made-up export (MadeUpExport in IdeasUITestSupport.swift), set on a fresh
+     * store: the shed clear, the seed swap at (0, 0) with the bell 33 below it, the rye starter
+     * clear, and two more with no board place, at (0, 0), as an import leaves them (S05c).
+     */
+    val stacked = listOf(
+        Note(id = id(21), title = "Paint the shed green", boardX = 120.0, boardY = -40.0, createdAt = T),
+        Note(id = id(22), title = "Seed swap list", boardX = 0.0, boardY = 0.0, createdAt = T + 1),
+        Note(id = id(23), title = "Try a rye starter", boardX = -75.5, boardY = 210.25, createdAt = T + 2),
+        Note(id = id(24), title = "A bell for the bike", boardX = 0.0, boardY = 33.0, createdAt = T + 3),
+        Note(id = id(25), title = "Oil the gate", createdAt = T + 4),
+        Note(id = id(26), title = "Ask about the allotment waiting list", createdAt = T + 5),
+    )
+
     /** A store in a new directory under [parent], holding the made-up ideas, or empty when [filled] is false. */
     fun store(parent: File, filled: Boolean = true): IdeaStore {
         val dir = File(parent, "fixture-" + UUID.randomUUID()).also { it.mkdirs() }

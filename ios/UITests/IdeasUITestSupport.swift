@@ -311,6 +311,8 @@ extension XCUIElement {
 /// and in none; four hand-made links; three ideas placed on the board.
 enum MadeUpExport {
     static func id(_ n: Int) -> String { String(format: "00000000-0000-4000-8000-%012X", n) }
+    /// The ideas' titles, in the export's order.
+    static let titles = ["Paint the shed green", "Seed swap list", "Try a rye starter", "A bell for the bike"]
 
     static let manifest = """
     {"app":"Stethoscore","counts":{"cards":0,"files":0,"notes":4,"questions":0,"scheduled":0,"sets":0,"studyDays":0},\

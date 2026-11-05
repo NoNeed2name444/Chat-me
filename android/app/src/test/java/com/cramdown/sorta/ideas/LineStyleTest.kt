@@ -267,4 +267,49 @@ class LineStyleTest {
         assertTrue("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap: $settled",
             others.none { overlaps(settled, it) } && moved > 0 && moved <= 150 + 8 + 8)
     }
+
+    // ---- L9 the board draws no card over another (S05c) ----
+
+    private fun card(n: Int, x: Double, y: Double, h: Double = 88.0) = IdeaBoardSpread.Card("c$n", BoardPoint(x, y), 150.0, h)
+    private fun noneCover(cards: List<IdeaBoardSpread.Card>, at: Map<String, BoardPoint>): Boolean {
+        for (i in cards.indices) for (j in i + 1 until cards.size) {
+            val a = cards[i]; val b = cards[j]
+            val p = at[a.id] ?: return false
+            val q = at[b.id] ?: return false
+            if (IdeaBoardDrop.covers(p, a.width, a.height, q, b.width, b.height, 8.0 - 1e-6)) return false
+        }
+        return true
+    }
+
+    @Test fun l9SpreadDrawsNoCardOverAnother() {
+        val apart = listOf(card(1, 0.0, 0.0), card(2, 200.0, 0.0), card(3, 0.0, 120.0))
+        val apartAt = IdeaBoardSpread.places(apart)
+        assertTrue("L9 cards that cover none stay where they are stored: $apartAt", apart.all { apartAt[it.id] == it.centre })
+        val pair = listOf(card(1, 10.0, 10.0), card(2, 10.0, 10.0))
+        val pairAt = IdeaBoardSpread.places(pair)
+        assertTrue("L9 two on one place end apart, the first kept: $pairAt", pairAt[pair[0].id] == pair[0].centre && noneCover(pair, pairAt))
+        val stack = (1..5).map { card(it, 0.0, 0.0) }
+        val stackAt = IdeaBoardSpread.places(stack)
+        assertTrue("L9 five at (0, 0) end apart, none covering another: $stackAt", stackAt.size == 5 && noneCover(stack, stackAt))
+        // 96 down clears two 88 dp cards, not a 200 dp one
+        val tall = listOf(card(1, 0.0, 0.0, h = 200.0), card(2, 0.0, 96.0))
+        val tallAt = IdeaBoardSpread.places(tall)
+        assertTrue("L9 a tall card and a short one are kept apart by their own sizes: $tallAt",
+            tallAt[tall[0].id] == tall[0].centre && tallAt[tall[1].id] != tall[1].centre && noneCover(tall, tallAt))
+        assertEquals("L9 the same cards give the same places", stackAt, IdeaBoardSpread.places(stack))
+        assertEquals("L9 the store's order decides who stays", pair[1].centre, IdeaBoardSpread.places(listOf(pair[1], pair[0]))[pair[1].id])
+        val crowd = (1..300).map { card(it, 0.0, 0.0) }
+        val crowdAt = IdeaBoardSpread.places(crowd, rings = 40)
+        assertTrue("L9 a crowd past the rings still ends with none covering another", crowdAt.size == 300 && noneCover(crowd, crowdAt))
+        // a card let go of settles clear of the drawn cards, as the board does it
+        val a = card(1, 0.0, 0.0); val b = card(2, 30.0, 0.0)
+        val drawn = IdeaBoardSpread.places(listOf(a, b))
+        val drop = IdeaBoardSpread.settle(BoardPoint(30.0, 0.0), 150.0, 88.0,
+            listOf(a.copy(centre = drawn.getValue(a.id)), b.copy(centre = drawn.getValue(b.id))))
+        val c = card(3, drop.x, drop.y)
+        val after = IdeaBoardSpread.places(listOf(a, c, b))
+        assertTrue("L9 a card let go of clear of the drawn cards is drawn where it settled, ahead of a moved one in the order: $after",
+            after[c.id] == drop && noneCover(listOf(a, c, b), after))
+        assertTrue("L9 no cards, no places", IdeaBoardSpread.places(emptyList()).isEmpty())
+    }
 }

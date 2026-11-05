@@ -368,6 +368,13 @@ nonisolated enum IdeaBoardDrop {
     /// lines of title), which a new idea is spaced by.
     static let tallest = CGSize(width: 150, height: 128)
 
+    /// Two cards cover each other, or come closer than `gap`: their centres
+    /// nearer than half their widths (heights) and the gap, across and down.
+    static func covers(_ a: CGPoint, _ sa: CGSize, _ b: CGPoint, _ sb: CGSize, gap: Double) -> Bool {
+        abs(Double(a.x - b.x)) < Double(sa.width + sb.width) / 2 + gap
+            && abs(Double(a.y - b.y)) < Double(sa.height + sb.height) / 2 + gap
+    }
+
     static func settle(_ p: CGPoint, card: CGSize, others: [CGPoint], gap: Double = 8, step: Double = 8,
                        rings: Int = 200) -> CGPoint {
         let w: Double = Double(card.width) + gap
@@ -383,6 +390,87 @@ nonisolated enum IdeaBoardDrop {
                 let a: Double = Double(k) * Double.pi / 12
                 let x: Double = x0 + r * cos(a), y: Double = y0 + r * sin(a)
                 if free(x, y) { return CGPoint(x: x, y: y) }
+            }
+        }
+        return p
+    }
+}
+
+/// Where the 2D board draws its cards (S05c): each at its stored centre,
+/// unless it would cover a card drawn before it, in the store's order; then
+/// at the nearest place that covers none, in IdeaBoardDrop's rings, with
+/// each pair's own sizes. On screen only: the stored places stay as they
+/// are, so an import's overlapping places, ideas with none (all at 0, 0)
+/// and cards grown with the text size are drawn apart. The same input gives
+/// the same places.
+nonisolated enum IdeaBoardSpread {
+    struct Card: Equatable {
+        var id: UUID
+        var centre: CGPoint
+        var size: CGSize
+    }
+
+    static func places(_ cards: [Card], gap: Double = 8, step: Double = 8, rings: Int = 2000) -> [UUID: CGPoint] {
+        guard !cards.isEmpty else { return [:] }
+        // placed cards in cells the size of the largest card and the gap, so
+        // a place is checked against the 3 by 3 cells round it
+        let cellW: Double = (cards.map { Double($0.size.width) }.max() ?? 1) + gap
+        let cellH: Double = (cards.map { Double($0.size.height) }.max() ?? 1) + gap
+        struct Cell: Hashable { var i: Int; var j: Int }
+        var grid: [Cell: [(CGPoint, CGSize)]] = [:]
+        var right: Double = -Double.infinity
+        var result: [UUID: CGPoint] = [:]
+        func cell(_ p: CGPoint) -> Cell {
+            Cell(i: Int((Double(p.x) / cellW).rounded(.down)), j: Int((Double(p.y) / cellH).rounded(.down)))
+        }
+        func free(_ p: CGPoint, _ size: CGSize) -> Bool {
+            let c = cell(p)
+            for di in -1...1 {
+                for dj in -1...1 {
+                    for (q, s) in grid[Cell(i: c.i + di, j: c.j + dj)] ?? []
+                    where IdeaBoardDrop.covers(p, size, q, s, gap: gap) { return false }
+                }
+            }
+            return true
+        }
+        func place(_ card: Card) -> CGPoint {
+            let p = card.centre
+            if free(p, card.size) { return p }
+            for ring in 1...max(rings, 1) {
+                let r: Double = Double(ring) * step
+                for k in 0..<24 {
+                    let a: Double = Double(k) * Double.pi / 12
+                    let q = CGPoint(x: Double(p.x) + r * cos(a), y: Double(p.y) + r * sin(a))
+                    if free(q, card.size) { return q }
+                }
+            }
+            // past the rings: beyond every placed card, at its own height
+            return CGPoint(x: right + Double(card.size.width) / 2 + gap, y: Double(p.y))
+        }
+        for card in cards {
+            let at = place(card)
+            grid[cell(at), default: []].append((at, card.size))
+            right = max(right, Double(at.x) + Double(card.size.width) / 2)
+            result[card.id] = at
+        }
+        return result
+    }
+
+    /// Where a card let go of at `p` settles among the drawn cards (`others`,
+    /// each with its size): IdeaBoardDrop.settle's search, with each pair's
+    /// own sizes.
+    static func settle(_ p: CGPoint, size: CGSize, others: [(CGPoint, CGSize)], gap: Double = 8,
+                       step: Double = 8, rings: Int = 200) -> CGPoint {
+        func free(_ q: CGPoint) -> Bool {
+            !others.contains { IdeaBoardDrop.covers(q, size, $0.0, $0.1, gap: gap) }
+        }
+        if free(p) { return p }
+        for ring in 1...max(rings, 1) {
+            let r: Double = Double(ring) * step
+            for k in 0..<24 {
+                let a: Double = Double(k) * Double.pi / 12
+                let q = CGPoint(x: Double(p.x) + r * cos(a), y: Double(p.y) + r * sin(a))
+                if free(q) { return q }
             }
         }
         return p
