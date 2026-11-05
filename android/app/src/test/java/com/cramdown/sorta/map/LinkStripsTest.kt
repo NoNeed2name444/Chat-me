@@ -106,6 +106,51 @@ class LinkStripsTest {
         assertTrue("it ends at the B trim", sqrt((drawn.x - b[4]) * (drawn.x - b[4]) + drawn.y * drawn.y + drawn.z * drawn.z) < 1e-4f)
     }
 
+    @Test fun theFramesWriterDrawsWhatEachLinksOwnBendsDraw() {
+        // write() refills one bend for each end a link (no garbage a frame): it must draw what
+        // add() draws with forStyle's bends, black hole and gas giant ends included
+        val stride = SpaceBodies.BEAM_STRIDE
+        val beams = FloatArray(3 * stride)
+        val ends = listOf(
+            floatArrayOf(0f, 0f, 0f, 0f, 9f, 1f, 0f, 2f),   // a black hole sends to a gas giant
+            floatArrayOf(2f, 3f, 1f, 2f, -4f, 0f, 5f, 0f),  // a gas giant sends to a black hole
+            floatArrayOf(1f, 1f, 1f, 5f, 6f, 2f, 2f, 3f),   // a comet to a rocky planet: no bends
+        )
+        val centres = listOf(Vec3(-0.5f, 0.2f, 0f), Vec3(9.4f, 1.3f, -0.2f))
+        val axes = listOf(Vec3(0.3f, 1f, 0.2f), Vec3(0f, 0f, 0f))  // the second has no length: y stands in
+        for ((k, e) in ends.withIndex()) {
+            val o = k * stride
+            beams[o] = e[0]; beams[o + 1] = e[1]; beams[o + 2] = e[2]; beams[o + 3] = e[3]
+            beams[o + 4] = e[4]; beams[o + 5] = e[5]; beams[o + 6] = e[6]; beams[o + 7] = e[7]
+            beams[o + 8] = 3f + k; beams[o + 9] = 0f; beams[o + 10] = 0.6f
+            for ((side, at) in listOf(o + 11, o + 17).withIndex()) {
+                val c = centres[(k + side) % 2]; val a = axes[(k + side) % 2]
+                beams[at] = c.x; beams[at + 1] = c.y; beams[at + 2] = c.z
+                beams[at + 3] = a.x; beams[at + 4] = a.y; beams[at + 5] = a.z
+            }
+        }
+        for (straight in listOf(false, true)) {
+            val written = LinkStrips(40).apply { write(beams, ends.size, 0.5f, straight) }
+            val added = LinkStrips(40)
+            for (k in ends.indices) {
+                val o = k * stride
+                val sa = beams[o + 3].toInt(); val sb = beams[o + 7].toInt()
+                added.add(Vec3(beams[o], beams[o + 1], beams[o + 2]), Vec3(beams[o + 4], beams[o + 5], beams[o + 6]), sa, sb,
+                    beams[o + 8], beams[o + 9], beams[o + 10],
+                    LinkBend.forStyle(sa, Vec3(beams[o + 11], beams[o + 12], beams[o + 13]), Vec3(beams[o + 14], beams[o + 15], beams[o + 16])),
+                    LinkBend.forStyle(sb, Vec3(beams[o + 17], beams[o + 18], beams[o + 19]), Vec3(beams[o + 20], beams[o + 21], beams[o + 22])),
+                    0.5f, straight)
+            }
+            assertEquals(added.count, written.count)
+            val floats = added.vertices * LinkStrips.STRIDE
+            for (i in 0 until floats) assertEquals("float $i, straight $straight", added.data[i], written.data[i], 1e-5f)
+        }
+        // and the black hole's end really bends: its strip leaves the straight segment
+        val curved = LinkStrips(40).apply { write(beams, 1, 0.5f, false) }
+        val far = (0 until curved.perLink).maxOf { gap(point(curved, 0, it), Vec3(0f, 0f, 0f), Vec3(9f, 1f, 0f)) }
+        assertTrue("bent, by $far", far > 0.01f)
+    }
+
     @Test fun aLongLinksDistancesFitTheShadersCap() {
         val strips = LinkStrips(20)
         strips.add(Vec3.ZERO, Vec3(200f, 0f, 0f), 1, 1, 0f, 0f, 1f, null, null, 1f, false)

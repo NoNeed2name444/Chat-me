@@ -58,22 +58,25 @@ class LinkStrips(val samples: Int) {
     private val lengths = FloatArray(samples + 1)
     private val tangent = FloatArray(3)
     private val path = LinkPath(Vec3.ZERO, Vec3.ZERO)
+    // one bend for each end, refilled for every link [write] draws, so a frame makes no garbage
+    private val scratchA = LinkBend(Vec3.ZERO, Vec3(0f, 1f, 0f), 0f, 0f)
+    private val scratchB = LinkBend(Vec3.ZERO, Vec3(0f, 1f, 0f), 0f, 0f)
 
     fun clear() { count = 0 }
 
     /**
      * Writes every beam of [beams] (SpaceBodies' beams, [SpaceBodies.BEAM_STRIDE] floats each, [beamCount]
      * of them) as a strip, after clearing; [unit] is a note's radius, [straight] the Lines setting.
+     * It runs every frame, so it makes no garbage.
      */
     fun write(beams: FloatArray, beamCount: Int, unit: Float, straight: Boolean) {
         clear()
         for (k in 0 until beamCount) {
             val o = k * SpaceBodies.BEAM_STRIDE
             val sa = beams[o + 3].toInt(); val sb = beams[o + 7].toInt()
-            add(Vec3(beams[o], beams[o + 1], beams[o + 2]), Vec3(beams[o + 4], beams[o + 5], beams[o + 6]), sa, sb,
+            add(beams[o], beams[o + 1], beams[o + 2], beams[o + 4], beams[o + 5], beams[o + 6], sa, sb,
                 beams[o + 8], beams[o + 9], beams[o + 10],
-                LinkBend.forStyle(sa, Vec3(beams[o + 11], beams[o + 12], beams[o + 13]), Vec3(beams[o + 14], beams[o + 15], beams[o + 16])),
-                LinkBend.forStyle(sb, Vec3(beams[o + 17], beams[o + 18], beams[o + 19]), Vec3(beams[o + 20], beams[o + 21], beams[o + 22])),
+                scratchA.set(sa, beams, o + 11), scratchB.set(sb, beams, o + 17),
                 unit, straight)
         }
     }
@@ -83,15 +86,23 @@ class LinkStrips(val samples: Int) {
      * how far it has grown (eased), [bendA] and [bendB] its bends near each end (Straight ignores them).
      */
     fun add(start: Vec3, end: Vec3, styleA: Int, styleB: Int, seed: Float, lit: Float, grow: Float,
-            bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean) {
+            bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean) =
+        add(start.x, start.y, start.z, end.x, end.y, end.z, styleA, styleB, seed, lit, grow, bendA, bendB, unit, straight)
+
+    /** The same with the ends as floats ([sx], [sy], [sz] to [ex], [ey], [ez]), making no garbage. */
+    fun add(sx: Float, sy: Float, sz: Float, ex: Float, ey: Float, ez: Float, styleA: Int, styleB: Int,
+            seed: Float, lit: Float, grow: Float, bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean) {
         val need = (count + 1) * perLink * STRIDE
         if (data.size < need) data = data.copyOf(max(need, data.size * 2))
         val n = samples
-        path.start = start; path.end = end; path.grow = grow
+        path.sx = sx; path.sy = sy; path.sz = sz; path.ex = ex; path.ey = ey; path.ez = ez; path.grow = grow
         path.bendA = bendA; path.bendB = bendB
-        val total = if (straight) GraphStraightLine.sample(start, end, grow, n, points, lengths)
+        val total = if (straight) GraphStraightLine.sample(sx, sy, sz, ex, ey, ez, grow, n, points, lengths)
                     else LinkCurve.sample(path, n, points, lengths)
-        val dir = LinkCurve.unit(end - start, Vec3(1f, 0f, 0f))
+        // the fallback direction for a sample with no length: the link's own, or x for a link of none
+        var dx = ex - sx; var dy = ey - sy; var dz = ez - sz
+        val size = sqrt(dx * dx + dy * dy + dz * dz)
+        if (size > 0.00001f) { dx /= size; dy /= size; dz /= size } else { dx = 1f; dy = 0f; dz = 0f }
         // distances in note radii; a long link's are shrunk to fit the shader's cap, and its drawn
         // length is coded in sixteenths, as iOS packs them
         val u = max(unit, 1e-6f)
@@ -100,7 +111,7 @@ class LinkStrips(val samples: Int) {
         val len = floor(coded * 16f) / 16f
         var o = count * perLink * STRIDE
         for (k in 0..n) {
-            LinkCurve.tangent(points, k, n, dir, tangent)
+            LinkCurve.tangent(points, k, n, dx, dy, dz, tangent)
             val along = min(lengths[k] / u * scale, LinkCurve.ALONG_CAP)
             for (side in 0..1) {
                 data[o] = points[k * 3]; data[o + 1] = points[k * 3 + 1]; data[o + 2] = points[k * 3 + 2]

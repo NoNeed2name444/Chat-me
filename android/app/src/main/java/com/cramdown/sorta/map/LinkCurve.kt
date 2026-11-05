@@ -19,7 +19,27 @@ import kotlin.math.sqrt
 // garbage. Pure Kotlin: LinkCurveTest carries over iOS's GraphicsTests G4 to G6.
 
 /** How a link is pulled in near one end: towards the plane square to [axis] through [centre] by [pull] (0 to 1), and swung round the axis by up to [swing] radians. */
-class LinkBend(val centre: Vec3, val axis: Vec3, val pull: Float, val swing: Float) {
+class LinkBend(centre: Vec3, axis: Vec3, var pull: Float, var swing: Float) {
+    // kept as floats, so a frame's links can refill one bend (set) without making garbage
+    var cx = centre.x; var cy = centre.y; var cz = centre.z
+    var ax = axis.x; var ay = axis.y; var az = axis.z
+    val centre: Vec3 get() = Vec3(cx, cy, cz)
+    val axis: Vec3 get() = Vec3(ax, ay, az)
+
+    /**
+     * Refills this bend as [forStyle] would make it from the centre at [src] [at] and the axis at
+     * [at] + 3 (three floats each); returns it, or null for a style that does not bend.
+     */
+    fun set(code: Int, src: FloatArray, at: Int): LinkBend? {
+        if (code != 0 && code != 2) return null
+        cx = src[at]; cy = src[at + 1]; cz = src[at + 2]
+        val x = src[at + 3]; val y = src[at + 4]; val z = src[at + 5]
+        val size = kotlin.math.sqrt(x * x + y * y + z * z)
+        if (size > 0.00001f) { ax = x / size; ay = y / size; az = z / size } else { ax = 0f; ay = 1f; az = 0f }
+        if (code == 0) { pull = 0.7f; swing = 0.55f } else { pull = 0.35f; swing = 0f }
+        return this
+    }
+
     companion object {
         /** A black hole's (style code 0) or a gas giant's (code 2); null for any other style, which leaves the link straight. */
         fun forStyle(code: Int, centre: Vec3, axis: Vec3): LinkBend? {
@@ -33,9 +53,8 @@ class LinkBend(val centre: Vec3, val axis: Vec3, val pull: Float, val swing: Flo
 
 /** Everything that fixes one link's path this frame. */
 class LinkPath(
-    /** Where it leaves the sending note and reaches the receiving one (already trimmed). */
-    var start: Vec3,
-    var end: Vec3,
+    start: Vec3,
+    end: Vec3,
     /** Which way it bows, unit length, and how far at the middle. */
     var arch: Vec3 = Vec3.ZERO,
     var archSize: Float = 0f,
@@ -44,7 +63,19 @@ class LinkPath(
     /** Bends near the sending (A) and receiving (B) ends. */
     var bendA: LinkBend? = null,
     var bendB: LinkBend? = null,
-)
+) {
+    // the ends as floats, so a frame's links can refill one path without making garbage
+    var sx = start.x; var sy = start.y; var sz = start.z
+    var ex = end.x; var ey = end.y; var ez = end.z
+
+    /** Where it leaves the sending note and reaches the receiving one (already trimmed). */
+    var start: Vec3
+        get() = Vec3(sx, sy, sz)
+        set(v) { sx = v.x; sy = v.y; sz = v.z }
+    var end: Vec3
+        get() = Vec3(ex, ey, ez)
+        set(v) { ex = v.x; ey = v.y; ez = v.z }
+}
 
 object LinkCurve {
     /** The longest distance along a link the shader is given (as iOS's, where the texture coordinate packs more above it). */
@@ -53,10 +84,9 @@ object LinkCurve {
     /** The point [t] of the way along the grown part of the link (0 to 1), into [out] at [at]. */
     fun point(path: LinkPath, t: Float, out: FloatArray, at: Int = 0) {
         val s = t * path.grow
-        val a = path.start; val b = path.end
-        var x = a.x + (b.x - a.x) * s
-        var y = a.y + (b.y - a.y) * s
-        var z = a.z + (b.z - a.z) * s
+        var x = path.sx + (path.ex - path.sx) * s
+        var y = path.sy + (path.ey - path.sy) * s
+        var z = path.sz + (path.ez - path.sz) * s
         if (path.archSize > 0f) {
             val hump = 4f * s * (1f - s) * path.archSize
             x += path.arch.x * hump; y += path.arch.y * hump; z += path.arch.z * hump
@@ -100,7 +130,11 @@ object LinkCurve {
     fun alongScale(total: Float): Float = if (total > ALONG_CAP) ALONG_CAP / total else 1f
 
     /** The direction along the curve at sample [k] of [n], from its neighbours (one-sided at the ends), into [out] at [at]. */
-    fun tangent(points: FloatArray, k: Int, n: Int, fallback: Vec3, out: FloatArray, at: Int = 0) {
+    fun tangent(points: FloatArray, k: Int, n: Int, fallback: Vec3, out: FloatArray, at: Int = 0) =
+        tangent(points, k, n, fallback.x, fallback.y, fallback.z, out, at)
+
+    /** The same with the fallback direction as three floats ([fx], [fy], [fz]), making no garbage. */
+    fun tangent(points: FloatArray, k: Int, n: Int, fx: Float, fy: Float, fz: Float, out: FloatArray, at: Int = 0) {
         val before = max(k - 1, 0) * 3
         val after = min(k + 1, n) * 3
         val dx = points[after] - points[before]; val dy = points[after + 1] - points[before + 1]; val dz = points[after + 2] - points[before + 2]
@@ -108,7 +142,7 @@ object LinkCurve {
         if (size > 0.00001f) {
             out[at] = dx / size; out[at + 1] = dy / size; out[at + 2] = dz / size
         } else {
-            out[at] = fallback.x; out[at + 1] = fallback.y; out[at + 2] = fallback.z
+            out[at] = fx; out[at + 1] = fy; out[at + 2] = fz
         }
     }
 
@@ -121,27 +155,27 @@ object LinkCurve {
         val t = ((s - 0.45f) / 0.55f).coerceIn(0f, 1f)
         val w = t * t * (3f - 2f * t)
         if (w <= 0.0001f) return
-        var rx = p[at] - b.centre.x; var ry = p[at + 1] - b.centre.y; var rz = p[at + 2] - b.centre.z
+        var rx = p[at] - b.cx; var ry = p[at + 1] - b.cy; var rz = p[at + 2] - b.cz
         val dist = sqrt(rx * rx + ry * ry + rz * rz)
         if (dist <= 0.0001f) return
-        val n = b.axis
-        val lift = (rx * n.x + ry * n.y + rz * n.z) * b.pull * w
-        rx -= n.x * lift; ry -= n.y * lift; rz -= n.z * lift
+        val ax = b.ax; val ay = b.ay; val az = b.az
+        val lift = (rx * ax + ry * ay + rz * az) * b.pull * w
+        rx -= ax * lift; ry -= ay * lift; rz -= az * lift
         if (b.swing > 0f) {
             // Rodrigues, as rotate(_:about:by:)
             val angle = b.swing * w * w
             val c = cos(angle); val sn = sin(angle)
-            val along = (n.x * rx + n.y * ry + n.z * rz) * (1f - c)
-            val sx = n.y * rz - n.z * ry; val sy = n.z * rx - n.x * rz; val sz = n.x * ry - n.y * rx
-            val nx = rx * c + sx * sn + n.x * along
-            val ny = ry * c + sy * sn + n.y * along
-            val nz = rz * c + sz * sn + n.z * along
+            val along = (ax * rx + ay * ry + az * rz) * (1f - c)
+            val sx = ay * rz - az * ry; val sy = az * rx - ax * rz; val sz = ax * ry - ay * rx
+            val nx = rx * c + sx * sn + ax * along
+            val ny = ry * c + sy * sn + ay * along
+            val nz = rz * c + sz * sn + az * along
             rx = nx; ry = ny; rz = nz
         }
         val now = sqrt(rx * rx + ry * ry + rz * rz)
         if (now <= 0.0001f) return
         val k = dist / now
-        p[at] = b.centre.x + rx * k; p[at + 1] = b.centre.y + ry * k; p[at + 2] = b.centre.z + rz * k
+        p[at] = b.cx + rx * k; p[at + 1] = b.cy + ry * k; p[at + 2] = b.cz + rz * k
     }
 
     // vector helpers, as iOS's

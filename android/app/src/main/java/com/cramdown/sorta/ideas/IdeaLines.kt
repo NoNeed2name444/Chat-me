@@ -87,20 +87,25 @@ object GraphStraightLine {
      * frame's links make no garbage): `count + 1` points into [points] and their length coordinates
      * into [lengths]. Returns the drawn length.
      */
-    fun sample(start: Vec3, end: Vec3, grow: Float, count: Int, points: FloatArray, lengths: FloatArray): Float {
+    fun sample(start: Vec3, end: Vec3, grow: Float, count: Int, points: FloatArray, lengths: FloatArray): Float =
+        sample(start.x, start.y, start.z, end.x, end.y, end.z, grow, count, points, lengths)
+
+    /** The same with the ends as floats ([sx], [sy], [sz] to [ex], [ey], [ez]). */
+    fun sample(sx: Float, sy: Float, sz: Float, ex: Float, ey: Float, ez: Float, grow: Float, count: Int,
+               points: FloatArray, lengths: FloatArray): Float {
         val n = max(count, 1)
         require(points.size >= (n + 1) * 3 && lengths.size >= n + 1) { "room for ${n + 1} points" }
         val grown = min(max(grow, 0f), 1f)
-        val rx = (end.x - start.x) * grown; val ry = (end.y - start.y) * grown; val rz = (end.z - start.z) * grown
+        val rx = (ex - sx) * grown; val ry = (ey - sy) * grown; val rz = (ez - sz) * grown
         val total = sqrt(rx * rx + ry * ry + rz * rz)
         val step = 1f / n
         for (k in 0..n) {
             val f = k * step
-            points[k * 3] = start.x + rx * f; points[k * 3 + 1] = start.y + ry * f; points[k * 3 + 2] = start.z + rz * f
+            points[k * 3] = sx + rx * f; points[k * 3 + 1] = sy + ry * f; points[k * 3 + 2] = sz + rz * f
             lengths[k] = total * f
         }
         // the last point exactly on the end, free of rounding
-        points[n * 3] = start.x + rx; points[n * 3 + 1] = start.y + ry; points[n * 3 + 2] = start.z + rz
+        points[n * 3] = sx + rx; points[n * 3 + 1] = sy + ry; points[n * 3 + 2] = sz + rz
         lengths[n] = total
         return total
     }

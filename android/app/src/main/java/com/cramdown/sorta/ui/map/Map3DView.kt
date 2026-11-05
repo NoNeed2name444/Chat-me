@@ -302,9 +302,10 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
         else LinkMemory.remember(scene.build, scene.ids, scene.links)
         onDispose {}
     }
-    // and once the map leaves the screen, a map opened again grows every link, as iOS's
+    // and once the map leaves the screen, a map opened again grows every link, as iOS's; a turn or
+    // a fold rebuilds the activity, not the map, so the memory is kept for the map built again then
     val shownBuild by rememberUpdatedState(scene.build)
-    DisposableEffect(Unit) { onDispose { LinkMemory.forget(shownBuild) } }
+    DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
         if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
     }
