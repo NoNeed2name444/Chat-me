@@ -453,21 +453,27 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
             MapNameShow.place(nameBody(node), nameText(i).second, density.density, board.scale(i, now, lively)) to look
         }
     }
-    // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card
-    val spot = remember(screenNodes, viewSize, insets, cover) {
-        if (!pills) emptyList() else {
-            val margin = with(density) { 48.dp.toPx() }
-            val low = viewSize.height - insets.bottom - cover - margin
-            screenNodes.filter { it.crisp && it.pixels > 2f && it.x in margin..(viewSize.width - margin) && it.y in (insets.top + margin)..low }
-                .maxByOrNull { it.pixels }?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
+    // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card. Only
+    // the tests read it, so it is found where the semantics are, in one pass with no lists made
+    fun spot(): List<Float> {
+        if (!pills) return emptyList()
+        val margin = with(density) { 48.dp.toPx() }
+        val right = viewSize.width - margin
+        val high = insets.top + margin
+        val low = viewSize.height - insets.bottom - cover - margin
+        var best: ScreenNode? = null
+        for (n in screenNodes) {
+            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < high || n.y > low) continue
+            if (best == null || n.pixels > best.pixels) best = n
         }
+        return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot)
+        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
         if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {

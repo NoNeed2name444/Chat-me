@@ -170,8 +170,10 @@ class MapNameShowTest {
         assertEquals(h * 0.85f, small.textSize, 1e-4f)
     }
 
-    @Test fun abovePlaceForACameraTurnedAnyWay() {
-        // a body projected through the orbit camera at many turns: its name always sits above it on screen
+    @Test fun straightAboveTheProjectedBodyAtAnyTurn() {
+        // place works on the screen alone, so on screen "up" is up whatever the camera does: what a
+        // turn changes is where the body lands and how big it is drawn. Through the orbit camera at
+        // many turns, the name sits straight above the projected body, clear of its projected radius
         val width = 1080f; val height = 2000f
         val text = NameText(0f, -40f, 200f, 10f)
         for (yaw in listOf(0f, 1f, 2.5f, -2f)) for (pitch in listOf(-1.2f, -0.4f, 0f, 0.7f, 1.4f)) {
@@ -201,5 +203,12 @@ class MapNameShowTest {
         assertEquals(folder, MapNameShow.cut(folder, folder = true))
         assertEquals("Twenty characters ok · empty", UniverseTree.folderLabel("Twenty characters ok", 0))
         assertTrue(abs(MapNameShow.cut("", false).length) == 0)
+        // counted and cut by code point: an emoji across the 27th place stays whole
+        val seedling = "\uD83C\uDF31"
+        val emoji = "a".repeat(26) + seedling + seedling + "bc"
+        assertEquals("a".repeat(26) + seedling + "…", MapNameShow.cut(emoji))
+        val whole = "a".repeat(27) + seedling
+        assertEquals("28 code points, 29 chars, kept whole", whole, MapNameShow.cut(whole))
+        assertFalse("no lone surrogate", MapNameShow.cut("a".repeat(26) + seedling.repeat(3)).let { it.isNotEmpty() && Character.isHighSurrogate(it[it.length - 2]) })
     }
 }

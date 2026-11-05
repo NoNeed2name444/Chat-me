@@ -129,12 +129,13 @@ struct GraphLegendSheet: View {
         }
     }
 
-    /// What VoiceOver reads for a row: "Name: text. To add one: how".
+    /// What VoiceOver reads for a row: "Name: text. How", the how line read
+    /// on its own (it names its own action, and not every row is a thing to
+    /// add, To sort for one).
     private static func spoken(_ row: GraphLegendRow) -> String {
         let said: String = row.name + ": " + lowered(row.text)
         guard !row.how.isEmpty else { return said }
-        let how: String = " To add one: " + row.how
-        return said + how
+        return said + " " + row.how
     }
 
     /// The row's text, starting lower case, for "Name: text".
@@ -227,15 +228,15 @@ struct GraphLegendContent {
     private static let spaceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.circle.fill", name: "Black hole",
                        text: "A top-level folder: the heart of a galaxy. Ideas filed straight in it orbit close; its folders shine round it as stars. Bigger holds more ideas.",
-                       tint: gold, how: "Make a folder: Choose folder \u{203A} New folder."),
+                       tint: gold, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "sun.max.fill", name: "Star",
                        text: "A folder inside a folder: yellow, orange one level deeper, red deeper still. Bigger holds more; a folder is always drawn a little smaller than the one it sits in. An empty folder is a dark star.",
-                       tint: .yellow, how: "A folder inside a folder: hold a folder in Sort \u{203A} New folder inside."),
+                       tint: .yellow, how: "Make a folder inside a folder: in Sort, hold a folder \u{203A} New folder inside."),
         GraphLegendRow(symbol: "circle.lefthalf.filled", name: "Gas giant",
                        text: "A page. Bigger is longer; rings mean over 250 words.", tint: gasTint),
         GraphLegendRow(symbol: "globe.europe.africa.fill", name: "Rocky planet",
                        text: "An idea. Brighter means more links.", tint: rockTint,
-                       how: "Add an idea: type it in Sort."),
+                       how: "Add an idea: open a folder in Sort and type it."),
         GraphLegendRow(symbol: "moon.fill", name: "Moon",
                        text: "A short idea linked only to the one it circles.", tint: moonTint,
                        how: "A short idea linked to one other idea."),
@@ -282,10 +283,10 @@ struct GraphLegendContent {
     private static let neuronRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Cell",
                        text: "A top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float inside it. Bigger holds more.",
-                       tint: teal, how: "Make a folder: Choose folder \u{203A} New folder."),
+                       tint: teal, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Cell part",
                        text: "A folder inside a folder: an organelle inside its cell, and a smaller one inside that for each folder deeper down. Each holds its own ideas.",
-                       tint: green, how: "A folder inside a folder: hold a folder in Sort \u{203A} New folder inside."),
+                       tint: green, how: "Make a folder inside a folder: in Sort, hold a folder \u{203A} New folder inside."),
         GraphLegendRow(symbol: "circle.fill", name: "Vesicle",
                        text: "A page: a bright-rimmed vesicle floating inside the folder that holds it. Longer pages are bigger.",
                        tint: teal),
@@ -336,7 +337,7 @@ extension GraphLegendContent {
     private static let performanceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Folder",
                        text: "A bright hub with its ideas round it in a ball. Each top-level folder and everything in it has its own colour; a folder inside a folder is a lighter shade.",
-                       tint: hubWhite, how: "Make a folder: Choose folder \u{203A} New folder."),
+                       tint: hubWhite, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "circle.fill", name: "Page",
                        text: "A larger point. Brighter means more links.", tint: pointRose),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Idea",

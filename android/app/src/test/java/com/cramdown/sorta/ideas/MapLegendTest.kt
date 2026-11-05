@@ -75,7 +75,8 @@ class MapLegendTest {
             assertFalse("names New page: $line", line.contains("New page"))
         }
         assertEquals(listOf("Choose folder › New folder: a new cell.", "Type an idea in Sort: a new granule."), GraphTheme.NEURONS.cardSteps.take(2))
-        assertEquals(listOf("Choose folder › New folder: a new cluster round its hub.", "Type an idea in Sort: a new point."),
+        // Android's Performance draws no hub (S05g), so the step names the folder's colour
+        assertEquals(listOf("Choose folder › New folder: its ideas take a new colour.", "Type an idea in Sort: a new point."),
             GraphTheme.PERFORMANCE.cardSteps.take(2))
     }
 
@@ -88,6 +89,8 @@ class MapLegendTest {
             assertTrue("$theme: a hold for its options", help.contains("Hold"))
             assertTrue("$theme: turn, slide, zoom", help.contains("Drag to turn, two fingers to slide, pinch to zoom."))
             assertFalse("$theme: the stale words are gone", help.contains("no card") || help.contains("no hold"))
+            assertFalse("$theme: one sentence a clause, no semicolons", help.contains(";"))
+            assertTrue("$theme: the touch card's words", help.contains("Tap again or Open to read"))
         }
         assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains("Fly in") && MapLegend.touchHelp(GraphTheme.NEURONS).contains("Recentre"))
     }
@@ -95,7 +98,11 @@ class MapLegendTest {
     @Test fun eachRowReadsAsOneItem() {
         val cell = MapLegend.of(GraphTheme.NEURONS).rows.first()
         assertEquals("Cell: a top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float " +
-            "inside it. Bigger holds more. To add one: Make a folder: Choose folder › New folder.", MapLegend.spoken(cell))
+            "inside it. Bigger holds more. Make a folder: on any idea, Choose folder › New folder.", MapLegend.spoken(cell))
+        // the how line read on its own: To sort is not a thing to add
+        val toSort = MapLegend.of(GraphTheme.NEURONS).rows[4]
+        assertEquals("To sort: the ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins " +
+            "that folder’s cell. Choose folder › To sort.", MapLegend.spoken(toSort))
         val comet = MapLegend.of(GraphTheme.SPACE).rows[5]
         assertEquals("Comet: an idea with no links.", MapLegend.spoken(comet))
     }

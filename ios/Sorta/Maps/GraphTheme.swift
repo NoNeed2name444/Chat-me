@@ -136,7 +136,7 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .space:
             return ["Choose folder \u{203A} New folder: a new galaxy round its black hole.",
-                    "Type an idea in Sort: a new rocky planet.",
+                    "Type an idea in a folder in Sort: a new rocky planet.",
                     "Type [[ and another idea\u{2019}s title in an idea: a link joins them."]
         case .neurons:
             return ["Choose folder \u{203A} New folder: a new cell.",

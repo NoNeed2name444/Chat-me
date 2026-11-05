@@ -37,6 +37,11 @@ for theme in GraphTheme.allCases {
     }
 }
 check("steps: Neurons starts with a new folder", GraphTheme.neurons.cardSteps.first == "Choose folder \u{203A} New folder: a new cell.")
+// an idea typed at Sort's top level goes to To sort and is drawn as a comet,
+// so Space's rocky planet comes from an idea typed in a folder
+check("steps: Space's rocky planet is an idea typed in a folder",
+      GraphTheme.space.cardSteps.dropFirst().first == "Type an idea in a folder in Sort: a new rocky planet.",
+      "\(GraphTheme.space.cardSteps)")
 
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

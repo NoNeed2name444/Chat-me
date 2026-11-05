@@ -26,8 +26,8 @@ data class LegendContent(val rungs: List<LegendRung>, val ladderCaption: String,
 
 object MapLegend {
     /** The words of the how-to lines both platforms share (S05f item 4). */
-    const val MAKE_FOLDER = "Make a folder: Choose folder › New folder."
-    const val FOLDER_INSIDE = "A folder inside a folder: hold a folder in Sort › New folder inside."
+    const val MAKE_FOLDER = "Make a folder: on any idea, Choose folder › New folder."
+    const val FOLDER_INSIDE = "Make a folder inside a folder: in Sort, hold a folder › New folder inside."
     const val ADD_IDEA = "Add an idea: type it in Sort."
     const val LINK_IDEAS = "Link two ideas: type [[ and one idea’s title in the other."
 
@@ -41,24 +41,28 @@ object MapLegend {
 
     /**
      * How to touch Android's map, under the legend's rows and read by TalkBack after the map's own
-     * label (GraphTheme.hint): a tap previews a body on its card, a second tap or Open reads it, a
-     * hold opens its options, a tap on empty space closes the card; in Neurons, Fly in opens a cell
-     * and Recentre closes it; one finger turns, two slide, a pinch zooms.
+     * label (GraphTheme.hint): a tap previews a body on its card, a second tap or Open reads it (a
+     * folder's card says Open folder), a hold opens its options, a tap on empty space closes the
+     * card; in Neurons, Fly in on a cell's or part's card opens it and Recentre closes it; one finger
+     * turns, two slide, a pinch zooms. One sentence a clause, in the touch card's words (map_touch_again).
      */
     fun touchHelp(theme: GraphTheme): String = when (theme) {
-        GraphTheme.SPACE -> "Tap a body to preview its idea on a card. Tap it again, or Open, to read it. " +
-            "Hold a body for its options; tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
-        GraphTheme.NEURONS -> "Tap a cell, a part or an idea to preview it on a card. Tap it again, or Open, to read it. " +
-            "On a cell’s card, Fly in opens the cell; Recentre closes it again. " +
-            "Hold a body for its options; tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
-        GraphTheme.PERFORMANCE -> "Tap a point to preview its idea on a card. Tap it again, or Open, to read it. " +
-            "Hold a point for its options; tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+        GraphTheme.SPACE -> "Tap a body to preview its idea on a card. Tap again or Open to read it. " +
+            "Hold a body for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+        GraphTheme.NEURONS -> "Tap a cell, a part or an idea to preview it on a card. Tap again or Open to read an idea, or Open folder for a folder. " +
+            "On a cell’s or part’s card, Fly in opens it on the map. Recentre closes it again. " +
+            "Hold a body for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+        GraphTheme.PERFORMANCE -> "Tap a point to preview its idea on a card. Tap again or Open to read it. " +
+            "Hold a point for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
     }
 
-    /** What TalkBack reads for a row, as iOS's VoiceOver: "Name: text. To add one: how". */
+    /**
+     * What TalkBack reads for a row, as iOS's VoiceOver: "Name: text. How", the how line read on its
+     * own (it names its own action, and not every row is a thing to add, To sort for one).
+     */
     fun spoken(row: LegendRow): String {
         val said = row.name + ": " + lowered(row.text)
-        return if (row.how.isEmpty()) said else "$said To add one: ${row.how}"
+        return if (row.how.isEmpty()) said else "$said ${row.how}"
     }
 
     /** The row's text starting lower case, for "Name: text". */
@@ -140,7 +144,7 @@ object MapLegend {
         LegendRow("circle.hexagongrid.fill", "Folder", "Each top-level folder and everything in it has its own colour.", hubWhite, MAKE_FOLDER),
         LegendRow("smallcircle.filled.circle", "Idea", "A point in its folder’s colour. A page is a point too.", pointBlue, ADD_IDEA),
         LegendRow("sun.min.fill", "Glow",
-            "Ideas too far away to show one by one: one soft light stands for them, and links into it end at its middle. Come closer and it opens into its points.",
+            "Ideas too far away to show one by one share one soft light. Links into it end at its middle. Come closer and it opens into its points.",
             glowAmber),
         LegendRow("line.diagonal", "Lines", "Links, coloured by the ideas at their ends, fainter in the distance.", lineGrey, LINK_IDEAS),
         LegendRow("speedometer", "Speed", "The readout at the top left counts the ideas, the links and the frames a second.", lineGrey),

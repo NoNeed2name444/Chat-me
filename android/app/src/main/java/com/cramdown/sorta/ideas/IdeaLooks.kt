@@ -52,7 +52,7 @@ enum class GraphTheme(val rawValue: String, val title: String) {
             "pages are vesicles and ideas granules. Ideas in no folder share one cell. " +
             "Links grow out of the cells as axons carrying impulses."
         PERFORMANCE -> "Every idea is a point and every link a line, drawn so 100,000 fit at once. " +
-            "Each top-level folder has its own colour; far away a folder’s ideas merge into one glow."
+            "Each top-level folder has its own colour. Ideas too far away to show one by one share one soft light."
     }
 
     val cardSteps: List<String> get() = when (this) {
@@ -63,7 +63,7 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         NEURONS -> listOf("Choose folder › New folder: a new cell.",
             "Type an idea in Sort: a new granule.",
             "Type [[ and another idea’s title in an idea: an axon joins them.")
-        PERFORMANCE -> listOf("Choose folder › New folder: a new cluster round its hub.",
+        PERFORMANCE -> listOf("Choose folder › New folder: its ideas take a new colour.",
             "Type an idea in Sort: a new point.",
             "Type [[ and another idea’s title in an idea: a line joins them.")
     }

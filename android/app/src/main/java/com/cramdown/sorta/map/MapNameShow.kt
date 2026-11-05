@@ -93,9 +93,15 @@ object MapNameShow {
         return (POP_FROM + (1 - POP_FROM) * (1 - left * left)).toFloat()
     }
 
-    /** The words a name shows: a title past [LONG] characters cut to its first 27 and "…"; a folder's label comes already cut ([UniverseTree.folderLabel]). */
-    fun cut(title: String, folder: Boolean = false): String =
-        if (!folder && title.length > LONG) title.take(LONG - 1) + "…" else title
+    /**
+     * The words a name shows: a title past [LONG] characters cut to its first 27 and "…"; a folder's
+     * label comes already cut ([UniverseTree.folderLabel]). Counted and cut by code point, so an
+     * emoji or any character past the BMP stays whole (iOS counts whole Characters).
+     */
+    fun cut(title: String, folder: Boolean = false): String {
+        if (folder || title.codePointCount(0, title.length) <= LONG) return title
+        return title.substring(0, title.offsetByCodePoints(0, LONG - 1)) + "…"
+    }
 
     /**
      * Where [body]'s name goes: its words' foot (the bottom of [text]'s box) at the body's centre less

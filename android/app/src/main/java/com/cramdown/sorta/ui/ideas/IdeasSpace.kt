@@ -572,8 +572,9 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
     ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = wide),
         containerColor = wardColor(WardToken.background)) {
         ReaderNavBar(theme.legendTitle, trailing = { ReaderDoneButton(onClick = onDone) })
+        // the tiles' edges and the touch help on the gutter: the tile's own outer s, and the rest here
         Column(Modifier.fillMaxWidth().testTag(MapPanelTags.legend(theme)).verticalScroll(rememberScrollState())
-            .padding(horizontal = WardSpace.m.wardDp)) {
+            .padding(horizontal = (WardSpace.gutter - WardSpace.s).wardDp)) {
             if (content.rungs.isNotEmpty()) LegendLadder(content)
             content.rows.forEach { LegendRowTile(it) }
             Text(content.touch, Modifier.padding(horizontal = WardSpace.s.wardDp).padding(top = WardSpace.s.wardDp),
