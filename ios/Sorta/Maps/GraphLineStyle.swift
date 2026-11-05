@@ -408,6 +408,13 @@ nonisolated enum IdeaBoardSpread {
         var id: UUID
         var centre: CGPoint
         var size: CGSize
+
+        // by hand: with Foundation alone, as the Mac's backup suite builds
+        // this file, CGPoint and CGSize are not Equatable
+        static func == (a: Card, b: Card) -> Bool {
+            a.id == b.id && a.centre.x == b.centre.x && a.centre.y == b.centre.y
+                && a.size.width == b.size.width && a.size.height == b.size.height
+        }
     }
 
     static func places(_ cards: [Card], gap: Double = 8, step: Double = 8, rings: Int = 2000) -> [UUID: CGPoint] {
