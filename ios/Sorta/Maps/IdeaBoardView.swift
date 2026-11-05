@@ -256,6 +256,9 @@ struct IdeaBoardView: View {
         .gesture(cardDrag(note))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+        // its stored place, which the board may draw it away from (S05c), for
+        // the UI tests; VoiceOver doesn't read an identifier
+        .accessibilityIdentifier("board-card \(note.boardX) \(note.boardY)")
         // as Android's hold names it, and as both hints say it
         .accessibilityAction(named: "Start a connection") { source = note.id }
     }

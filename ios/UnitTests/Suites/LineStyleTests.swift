@@ -329,6 +329,13 @@ check("L9 cards that cover none stay where they are stored",
 let spPair: [IdeaBoardSpread.Card] = [spBoardCard(1, 10, 10), spBoardCard(2, 10, 10)]
 let spPairAt = IdeaBoardSpread.places(spPair)
 check("L9 two on one place end apart, the first kept", spPairAt[spPair[0].id] == spPair[0].centre && spNoneCover(spPair, spPairAt), "\(spPairAt)")
+// the second is drawn away from the first; the third covers the second's
+// stored place but neither drawn card, so it keeps its own
+let spClear: [IdeaBoardSpread.Card] = [spBoardCard(1, 0, 0), spBoardCard(2, 10, 0), spBoardCard(3, 165, -50)]
+let spClearAt: [UUID: CGPoint] = IdeaBoardSpread.places(spClear)
+check("L9 a card stored clear of every drawn card keeps its place, though it covers another's stored place",
+      spClearAt[spClear[2].id] == spClear[2].centre && spClearAt[spClear[1].id] != spClear[1].centre && spNoneCover(spClear, spClearAt),
+      "\(spClearAt)")
 let spStack: [IdeaBoardSpread.Card] = (1...5).map { spBoardCard($0, 0, 0) }
 let spStackAt = IdeaBoardSpread.places(spStack)
 check("L9 five at (0, 0) end apart, none covering another", spStackAt.count == 5 && spNoneCover(spStack, spStackAt), "\(spStackAt)")

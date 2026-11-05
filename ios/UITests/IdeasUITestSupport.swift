@@ -313,9 +313,19 @@ enum MadeUpExport {
     static func id(_ n: Int) -> String { String(format: "00000000-0000-4000-8000-%012X", n) }
     /// The ideas' titles, in the export's order.
     static let titles = ["Paint the shed green", "Seed swap list", "Try a rye starter", "A bell for the bike"]
+    /// Two more ideas with no board place, so at (0, 0), as an import leaves
+    /// them (`base64(stacked: true)`, S05c).
+    static let placeless = ["Oil the gate", "Ask about the allotment waiting list"]
+    /// Each idea's stored board place, as its board card's identifier names
+    /// it (`IdeaBoardView`, "board-card x y").
+    static let places: [String: CGPoint] = [
+        "Paint the shed green": CGPoint(x: 120, y: -40), "Seed swap list": .zero,
+        "Try a rye starter": CGPoint(x: -75.5, y: 210.25), "A bell for the bike": CGPoint(x: 0, y: 33),
+        "Oil the gate": .zero, "Ask about the allotment waiting list": .zero,
+    ]
 
     static let manifest = """
-    {"app":"Stethoscore","counts":{"cards":0,"files":0,"notes":4,"questions":0,"scheduled":0,"sets":0,"studyDays":0},\
+    {"app":"Stethoscore","counts":{"cards":0,"files":0,"notes":NOTES,"questions":0,"scheduled":0,"sets":0,"studyDays":0},\
     "createdAt":"2026-09-20T10:00:00Z","format":"stethoscore-backup","version":VERSION}
     """
 
@@ -340,16 +350,27 @@ enum MadeUpExport {
     "updatedAt":"2026-09-05T10:00:00Z"}]}
     """
 
+    static let placelessNotes = """
+    {"body":"","createdAt":"2026-09-06T10:00:00Z","id":"\(id(5))","kind":"idea","links":[],"tags":[],\
+    "title":"Oil the gate","updatedAt":"2026-09-06T10:00:00Z"},\
+    {"body":"","createdAt":"2026-09-07T10:00:00Z","id":"\(id(6))","kind":"idea","links":[],"tags":[],\
+    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"}
+    """
+
     /// The backup as base64, for `-SortaImportFile`; `version` 2 is a newer
-    /// Stethoscore's.
-    static func base64(version: Int = 1) throws -> String {
+    /// Stethoscore's; `stacked` adds the two `placeless` ideas.
+    static func base64(version: Int = 1, stacked: Bool = false) throws -> String {
+        let last = "\"updatedAt\":\"2026-09-05T10:00:00Z\"}]}"
+        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + placelessNotes + "]}") : notes
+        precondition(!stacked || ideas != notes, "the stacked export adds its two ideas")
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorta-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let parts: [(String, String)] = [
-            ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")),
-            ("notes.json", notes),
+            ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")
+                .replacingOccurrences(of: "NOTES", with: stacked ? "6" : "4")),
+            ("notes.json", ideas),
         ]
         var files: [(name: String, file: URL)] = []
         for (index, part) in parts.enumerated() {

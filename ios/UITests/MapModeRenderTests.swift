@@ -18,10 +18,10 @@ final class MapModeRenderTests: XCTestCase {
     }
 
     func testMapRenders() throws {
-        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(), "-graphFreeze"])
+        // the made-up export with two more ideas that have no board place, at
+        // (0, 0) with Seed swap list (S05c)
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(stacked: true), "-graphFreeze"])
         importExport(app)
-        app.captureIdea("Oil the gate")
-        app.captureIdea("Ask about the allotment waiting list")
         XCTAssertTrue(app.ideaRow("Ask about the allotment waiting list").waitForExistence(timeout: 10))
         app.keyboards.buttons["Done"].firstMatch.tapIfThere()
         let window = app.windows.firstMatch.frame
@@ -45,9 +45,12 @@ final class MapModeRenderTests: XCTestCase {
             // 88 x 0.5 at the floor is 44 exactly: half a point for the frame's rounding
             XCTAssertGreaterThanOrEqual(card.frame.height, 43.5, "the \(title) card at the first view: \(card.frame)")
         }
-        // no card over another, though the export puts Seed swap list and A
-        // bell for the bike 33 points apart (S05c)
-        assertBoardApart(app, MadeUpExport.titles + ["Oil the gate", "Ask about the allotment waiting list"])
+        // no card over another, though the export puts three ideas at (0, 0)
+        // and A bell for the bike 33 points below them (S05c); the stored
+        // places are as the export has them
+        let all: [String] = MadeUpExport.titles + MadeUpExport.placeless
+        assertBoardApart(app, all)
+        assertPlacesKept(app, all)
         // a card let go of on another settles clear of every card (S05c)
         let bell = mapCard(app, "A bell for the bike")
         let before: CGRect = bell.frame
@@ -56,7 +59,9 @@ final class MapModeRenderTests: XCTestCase {
             .press(forDuration: 0.05, thenDragTo: onto, withVelocity: 300, thenHoldForDuration: 0.2)
         sleep(1)
         XCTAssertNotEqual(bell.frame, before, "the bell card was let go of on Seed swap list: \(before)")
-        assertBoardApart(app, MadeUpExport.titles + ["Oil the gate", "Ask about the allotment waiting list"])
+        assertBoardApart(app, all)
+        // only the card let go of is stored where it settled
+        assertPlacesKept(app, all, except: "A bell for the bike")
 
         app.chooseLook("look-space")
         let map = app.descendants(matching: .any)["graph3D"].firstMatch
@@ -106,8 +111,10 @@ final class MapModeRenderTests: XCTestCase {
 
         app.chooseLook("look-2d")
         XCTAssertTrue(app.boardCard("A bell for the bike").waitForExistence(timeout: 10), "2D: the board")
-        // cards grown with the text size are drawn apart too (S05c)
+        // cards grown with the text size are drawn apart too, the stored
+        // places kept (S05c)
         assertBoardApart(app, MadeUpExport.titles)
+        assertPlacesKept(app, MadeUpExport.titles)
         let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
         let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
         XCTAssertTrue(list.waitForExistence(timeout: 10), "the To sort chip")
@@ -242,6 +249,23 @@ final class MapModeRenderTests: XCTestCase {
             return (title, card.frame)
         }
         assertApart(frames, "the 2D board", file: file, line: line)
+    }
+
+    /// Each named card's stored place, which its identifier names
+    /// ("board-card x y"), is the export's; `moved`'s is not.
+    private func assertPlacesKept(_ app: XCUIApplication, _ titles: [String], except moved: String? = nil,
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        for title in titles {
+            guard let p = MadeUpExport.places[title] else { return XCTFail("no place for \(title)", file: file, line: line) }
+            let stored = "board-card \(Double(p.x)) \(Double(p.y))"
+            let named: String = mapCard(app, title).identifier
+            if title == moved {
+                XCTAssertTrue(named.hasPrefix("board-card ") && named != stored,
+                              "the \(title) card is stored where it settled: \(named)", file: file, line: line)
+            } else {
+                XCTAssertEqual(named, stored, "the \(title) card's stored place", file: file, line: line)
+            }
+        }
     }
 
     /// No two of the targets overlap (IdeasBehaviourTests' check).

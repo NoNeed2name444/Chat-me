@@ -288,6 +288,12 @@ class LineStyleTest {
         val pair = listOf(card(1, 10.0, 10.0), card(2, 10.0, 10.0))
         val pairAt = IdeaBoardSpread.places(pair)
         assertTrue("L9 two on one place end apart, the first kept: $pairAt", pairAt[pair[0].id] == pair[0].centre && noneCover(pair, pairAt))
+        // the second is drawn away from the first; the third covers the second's stored place but
+        // neither drawn card, so it keeps its own
+        val clear = listOf(card(1, 0.0, 0.0), card(2, 10.0, 0.0), card(3, 165.0, -50.0))
+        val clearAt = IdeaBoardSpread.places(clear)
+        assertTrue("L9 a card stored clear of every drawn card keeps its place, though it covers another's stored place: $clearAt",
+            clearAt[clear[2].id] == clear[2].centre && clearAt[clear[1].id] != clear[1].centre && noneCover(clear, clearAt))
         val stack = (1..5).map { card(it, 0.0, 0.0) }
         val stackAt = IdeaBoardSpread.places(stack)
         assertTrue("L9 five at (0, 0) end apart, none covering another: $stackAt", stackAt.size == 5 && noneCover(stack, stackAt))
