@@ -34,10 +34,12 @@ import java.io.File
 // S05b A6: Map mode on made-up ideas (IdeasFixture), on the windows of SortRenderTest, light and
 // dark, written to build/outputs/roborazzi/ as mapmode_<screen>_<window>_<mode>.png. Robolectric
 // can't draw the GL map, so the map is the 2D look's board; the 3D looks' renders are the
-// emulator's (androidTest MapModeSpaceRenderTest, MapRenderTest). Each window takes the board and an
-// empty store's map: on a phone and a closed foldable, Map mode with its switch; on a tablet and an
+// emulator's (androidTest MapModeSpaceRenderTest, MapRenderTest). Each window takes the board, an
+// empty store's map, and the board with S05c's stacked places (cards on one place and at (0, 0),
+// drawn apart): on a phone and a closed foldable, Map mode with its switch; on a tablet and an
 // open foldable, the two panes, Sort beside the map. A7's font scale 2.0 on a phone takes the board
-// with the switch, the look chip's menu open and the list sheet (mapmode_*_phone_scale2_light.png).
+// with the switch, the look chip's menu open, the list sheet and the stacked board
+// (mapmode_*_phone_scale2_light.png).
 // Each PNG is read back as SortRenderTest's are: the window's size, the page's colour as its ground
 // (under the sheet the scrim darkens it), and no pixel the logo's coral.
 @RunWith(RobolectricTestRunner::class)
@@ -51,16 +53,20 @@ class MapModeRenderTest {
 
     /** A screen: its name in the file, whether its store is filled, and what is opened over the map. */
     private enum class Over { NONE, LOOKS, LIST }
-    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE)
+    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE, val stacked: Boolean = false)
 
-    private val shots = listOf(Shot("board", true), Shot("empty", false), Shot("looks", true, Over.LOOKS), Shot("list", true, Over.LIST))
+    // "stacked": the board with S05c's places (IdeasFixture.stacked), cards on one place and at (0, 0)
+    private val shots = listOf(Shot("board", true), Shot("empty", false), Shot("looks", true, Over.LOOKS), Shot("list", true, Over.LIST),
+        Shot("stacked", true, stacked = true))
 
     private var which by mutableIntStateOf(0)
 
     @OptIn(ExperimentalRoborazziApi::class)
-    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty"), scale: Float = 1f) = checks {
+    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty", "stacked"), scale: Float = 1f) = checks {
         val list = shots.filter { it.name in names }
-        val models = list.map { IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, it.filled)) }
+        val models = list.map {
+            IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, it.filled, if (it.stacked) IdeasFixture.stacked else IdeasFixture.notes))
+        }
         IdeasSettings(compose.activity).setLook(MapLook.TWO_D)
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(scale)) {
@@ -165,7 +171,7 @@ class MapModeRenderTest {
 
     // A7: font scale 2.0 on a phone: the switch (on the board), the look menu open, the list sheet
     @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
-    @Test fun phoneAtFontScaleTwo() = render("phone_scale2", dark = false, names = listOf("board", "looks", "list"), scale = 2f)
+    @Test fun phoneAtFontScaleTwo() = render("phone_scale2", dark = false, names = listOf("board", "looks", "list", "stacked"), scale = 2f)
 
     private companion object {
         /** The logo's coral (work/T0137: the light icon's fill). */

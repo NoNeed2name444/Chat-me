@@ -55,11 +55,11 @@ object IdeasFixture {
         Note(id = id(26), title = "Ask about the allotment waiting list", createdAt = T + 5),
     )
 
-    /** A store in a new directory under [parent], holding the made-up ideas, or empty when [filled] is false. */
-    fun store(parent: File, filled: Boolean = true): IdeaStore {
+    /** A store in a new directory under [parent], holding [ideas] (the made-up ideas), or empty when [filled] is false. */
+    fun store(parent: File, filled: Boolean = true, ideas: List<Note> = notes): IdeaStore {
         val dir = File(parent, "fixture-" + UUID.randomUUID()).also { it.mkdirs() }
         val store = IdeaStore(dir)
-        if (filled) store.replaceIdeas(notes, folders)
+        if (filled) store.replaceIdeas(ideas, folders)
         return store
     }
 }
