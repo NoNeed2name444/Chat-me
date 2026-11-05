@@ -49,13 +49,15 @@ else
   echo "::warning::$kind: the warm-up launch failed, after $((SECONDS - warming)) seconds"
 fi
 failed=0
-# The ideas set on the iPad types once before its counted tests
-# (KeyboardWarmUp, in UITests/IdeasUITestSupport.swift): on a freshly booted
-# iPad the first idea typed stalled in UIKit's keyboard code in 3 of 5 runs
-# by day (S05c's notes 2 and 8: Chat-me copies 3554514 and a5c44ea), and the
-# same test by night passed straight after, each time. Its result is noted,
-# not counted.
-if [ "$set_" = "ideas" ] && [ "$kind" = "ipad" ]; then
+# The ideas set types once before its counted tests (KeyboardWarmUp, in
+# UITests/IdeasUITestSupport.swift): on a freshly booted iPad the first idea
+# typed stalled in UIKit's keyboard code in 3 of 5 runs by day (S05c's notes
+# 2 and 8: Chat-me copies 3554514 and a5c44ea), and the same test by night
+# passed straight after, each time. The iPhone too since 5 Nov: its first
+# key, in the first test, waited 15 s to be sent and 41 s for the app to go
+# idle, and the field had lost the caret (Chat-me copy 38904fd). Its result
+# is noted, not counted.
+if [ "$set_" = "ideas" ]; then
   warm=$SECONDS
   xcrun simctl ui "$UDID" appearance light
   if xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \

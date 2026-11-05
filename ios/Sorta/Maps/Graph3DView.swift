@@ -97,9 +97,9 @@ struct Graph3DView: View {
     /// The legend ("What the bodies mean"), from the Look menu or the
     /// first-run card.
     @State private var showingLegend: Bool = false
-    /// The first-run card's height as last drawn, kept while it steps aside
-    /// for a peek card (S05d).
-    @State private var cardHeight: CGFloat = 0
+    /// The first-run card's top edge as last drawn, in the window's
+    /// coordinates, kept while it steps aside for a peek card (S05d).
+    @State private var cardTop: CGFloat?
     /// The notes' look (GraphStyleChoice), remembered; a change rebuilds.
     @AppStorage(GraphStyleChoice.key) private var nodeStyle: String = GraphStyleChoice.standard
     @AppStorage(GraphStyleChoice.foldersKey) private var folderStyles: String = ""
@@ -288,7 +288,7 @@ struct Graph3DView: View {
             GeometryReader { geo in
                 let insets: GraphInsets = screenInsets(geo.safeAreaInsets)
                 GraphSCNView(built: built, filter: filter, recenter: recenter,
-                             insets: insets, card: cardCover(built, foot: geo.safeAreaInsets.bottom),
+                             insets: insets, card: cardCover(built, viewBottom: geo.frame(in: .global).maxY),
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
@@ -329,9 +329,9 @@ struct Graph3DView: View {
                 }, done: {
                     markCardSeen(built.theme)
                 })
-                // its height as drawn, in whichever form it shows: the first
+                // its top as drawn, in whichever form it shows: the first
                 // view is framed above it (cardCover)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardHeight = $0 }
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { cardTop = $0 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, WardSpace.gutter)
                 .padding(.trailing, WardSpace.gutter + WardControlSize.target + WardSpace.m)
@@ -452,9 +452,9 @@ struct Graph3DView: View {
     }
 
     private func markCardSeen(_ theme: GraphTheme) {
-        // the next theme's card is measured afresh, not taken for this one's
-        // height (S05d)
-        cardHeight = 0
+        // the next theme's card is measured afresh, not taken for where this
+        // one sat (S05d)
+        cardTop = nil
         touchSeen = GraphMapTouch.marking(touchSeen, theme)
         if theme == .space {
             hintSeen = true
@@ -465,18 +465,21 @@ struct Graph3DView: View {
     }
 
     /// How far up from the map's foot the first-run card reaches while it is
-    /// not put away (S05d): the safe area's foot it sits on, its margin and
-    /// its height as drawn. It counts by the card's own rules, not the
-    /// moments it steps aside for a peek card or the Link length bar, so
-    /// those never move the camera. 0 once it is put away, in the design
-    /// preview, and before it is first drawn. Half a touch target more: the
-    /// framing keeps each body's middle above the cover, and a body's touch
-    /// frame (voiceFrame, 44 pt round its middle) must clear the card too, as
-    /// the drawn edge of a large star does (CI, 5 Nov: the iPhone's star 3 pt
-    /// under the card without it).
-    private func cardCover(_ built: GraphScene, foot: CGFloat) -> Float {
-        guard built.universe, hintShown(built.theme), !GraphPreview.isOn, cardHeight > 0 else { return 0 }
-        return Float(foot + WardSpace.l + cardHeight + WardControlSize.target / 2)
+    /// not put away (S05d): from the map view's bottom edge (`viewBottom`) to
+    /// the card's top as drawn, both in the window's coordinates. Measured,
+    /// not added up from the safe area: the map view ignores the safe area,
+    /// so its reader's insets can read 0 while the card sits above Map mode's
+    /// switcher (CI, 5 Nov: the cover came out about 100 pt short on the
+    /// iPhone, and a planet sat under the card). It counts by the card's own
+    /// rules, not the moments it steps aside for a peek card or the Link
+    /// length bar, so those never move the camera. 0 once it is put away, in
+    /// the design preview, and before it is first drawn. Half a touch target
+    /// more: the framing keeps each body's middle above the cover, and a
+    /// body's touch frame (voiceFrame, 44 pt round its middle) must clear the
+    /// card too.
+    private func cardCover(_ built: GraphScene, viewBottom: CGFloat) -> Float {
+        guard built.universe, hintShown(built.theme), !GraphPreview.isOn, let top = cardTop else { return 0 }
+        return Float(max(viewBottom - top, 0) + WardControlSize.target / 2)
     }
 
     /// The first-run card shows until it is put away: its steps the first
