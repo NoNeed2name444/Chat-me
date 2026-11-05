@@ -393,3 +393,17 @@ enum MadeUpExport {
     /// A file that isn't a zip at all.
     static let notABackup: String = Data("a shopping list, not a backup".utf8).base64EncodedString()
 }
+
+/// Not a check: the iPad's first keyboard after a cold boot, typed once before
+/// the counted tests (tools/run_ui_tests.sh, the ideas set on the iPad). On a
+/// freshly booted iPad the first idea typed in the capture field stalled in
+/// UIKit's keyboard code in 3 of 5 runs by day (S05c's notes 2 and 8), and the
+/// same test by night passed straight after on the same simulator each time.
+/// The script runs this first, notes how it went, and counts only the tests
+/// after it; every counted test still has to pass by name.
+final class KeyboardWarmUp: XCTestCase {
+    func testFirstKeyboard() throws {
+        let app = launchIdeas(IdeasStoreName())
+        app.captureIdea("Warm up the keyboard")
+    }
+}

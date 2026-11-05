@@ -92,13 +92,13 @@ final class MapModeRenderTests: XCTestCase {
         // the map still (S05d)
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "the first-run card, the list sheet gone")
         sleep(1)
-        let before: [CGRect] = bodyFrames(app)
+        let bodiesBefore: [CGRect] = bodyFrames(app)
         hint.buttons["Got it"].tap()
         XCTAssertTrue(gone(hint), "Got it puts the first-run card away")
         sleep(1)
-        let after: [CGRect] = bodyFrames(app)
-        XCTAssertEqual(after.count, before.count, "the same bodies after Got it")
-        for (was, now) in zip(before, after) {
+        let bodiesAfter: [CGRect] = bodyFrames(app)
+        XCTAssertEqual(bodiesAfter.count, bodiesBefore.count, "the same bodies after Got it")
+        for (was, now) in zip(bodiesBefore, bodiesAfter) {
             XCTAssertEqual(now.midX, was.midX, accuracy: 1, "a body moved when the card went: \(was) to \(now)")
             XCTAssertEqual(now.midY, was.midY, accuracy: 1, "a body moved when the card went: \(was) to \(now)")
         }

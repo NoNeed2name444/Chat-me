@@ -49,6 +49,30 @@ else
   echo "::warning::$kind: the warm-up launch failed, after $((SECONDS - warming)) seconds"
 fi
 failed=0
+# The ideas set on the iPad types once before its counted tests
+# (KeyboardWarmUp, in UITests/IdeasUITestSupport.swift): on a freshly booted
+# iPad the first idea typed stalled in UIKit's keyboard code in 3 of 5 runs
+# by day (S05c's notes 2 and 8: Chat-me copies 3554514 and a5c44ea), and the
+# same test by night passed straight after, each time. Its result is noted,
+# not counted.
+if [ "$set_" = "ideas" ] && [ "$kind" = "ipad" ]; then
+  warm=$SECONDS
+  xcrun simctl ui "$UDID" appearance light
+  if xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+       -destination "id=$UDID" -derivedDataPath build \
+       -resultBundlePath "../results/$kind-keyboard-warm-up.xcresult" \
+       "-only-testing:SortaUITests/KeyboardWarmUp/testFirstKeyboard" \
+       -test-timeouts-enabled YES \
+       -default-test-execution-time-allowance 180 \
+       -maximum-test-execution-time-allowance 180 \
+       CODE_SIGNING_ALLOWED=NO \
+       test-without-building > "../results/$kind-keyboard-warm-up.log" 2>&1 \
+     && grep -qE "KeyboardWarmUp testFirstKeyboard\]' passed" "../results/$kind-keyboard-warm-up.log"; then
+    echo "$kind: the keyboard warm-up typed an idea in $((SECONDS - warm)) seconds"
+  else
+    echo "::warning::$kind: the keyboard warm-up did not pass, in $((SECONDS - warm)) seconds; the counted tests follow"
+  fi
+fi
 # Each run is <appearance>:<target>/<class>/<test>, or <appearance>:<target>
 # for a whole unit-test bundle. The gallery's screenshots are step 2's
 # renders of the look kit, by day and by night.
