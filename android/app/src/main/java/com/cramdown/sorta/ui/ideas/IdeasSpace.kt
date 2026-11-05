@@ -586,7 +586,8 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
 
 /** The size ladder: circles biggest to smallest, each captioned, and the line under them; one item for TalkBack. */
 @Composable private fun LegendLadder(content: LegendContent) {
-    Column(Modifier.fillMaxWidth().padding(vertical = WardSpace.s.wardDp).clearAndSetSemantics { contentDescription = content.ladderLabel },
+    // on the gutter with the tiles: the sheet's column gives gutter − s, this the s
+    Column(Modifier.fillMaxWidth().padding(horizontal = WardSpace.s.wardDp, vertical = WardSpace.s.wardDp).clearAndSetSemantics { contentDescription = content.ladderLabel },
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             content.rungs.forEach { rung ->

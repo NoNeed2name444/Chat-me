@@ -26,7 +26,7 @@ data class LegendContent(val rungs: List<LegendRung>, val ladderCaption: String,
 
 object MapLegend {
     /** The words of the how-to lines both platforms share (S05f item 4). */
-    const val MAKE_FOLDER = "Make a folder: on any idea, Choose folder › New folder."
+    const val MAKE_FOLDER = "Make a folder: hold an idea on the map, then Choose folder › New folder."
     const val FOLDER_INSIDE = "Make a folder inside a folder: in Sort, hold a folder › New folder inside."
     const val ADD_IDEA = "Add an idea: type it in Sort."
     const val LINK_IDEAS = "Link two ideas: type [[ and one idea’s title in the other."
@@ -58,7 +58,7 @@ object MapLegend {
 
     /**
      * What TalkBack reads for a row, as iOS's VoiceOver: "Name: text. How", the how line read on its
-     * own (it names its own action, and not every row is a thing to add, To sort for one).
+     * own (each starts with what to do, and not every row is a thing to add, To sort for one).
      */
     fun spoken(row: LegendRow): String {
         val said = row.name + ": " + lowered(row.text)
@@ -141,7 +141,7 @@ object MapLegend {
     )
 
     private val performanceRows = listOf(
-        LegendRow("circle.hexagongrid.fill", "Folder", "Each top-level folder and everything in it has its own colour.", hubWhite, MAKE_FOLDER),
+        LegendRow("circle.hexagongrid.fill", "Folder", "Everything in a top-level folder is drawn in one colour.", hubWhite, MAKE_FOLDER),
         LegendRow("smallcircle.filled.circle", "Idea", "A point in its folder’s colour. A page is a point too.", pointBlue, ADD_IDEA),
         LegendRow("sun.min.fill", "Glow",
             "Ideas too far away to show one by one share one soft light. Links into it end at its middle. Come closer and it opens into its points.",

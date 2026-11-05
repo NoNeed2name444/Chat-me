@@ -130,20 +130,21 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
     }
 
     /// The first-run card's three ways to add, with the app's own controls
-    /// (Choose folder's New folder, an idea typed in Sort, and [[ ]] in a
+    /// (an idea held on the map, Choose folder's New folder, which there
+    /// makes a top-level folder; an idea typed in Sort; and [[ ]] in a
     /// note; Map mode has no + menu and no bar, and nothing makes a page).
     var cardSteps: [String] {
         switch self {
         case .space:
-            return ["Choose folder \u{203A} New folder: a new galaxy round its black hole.",
+            return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new galaxy round its black hole.",
                     "Type an idea in a folder in Sort: a new rocky planet.",
                     "Type [[ and another idea\u{2019}s title in an idea: a link joins them."]
         case .neurons:
-            return ["Choose folder \u{203A} New folder: a new cell.",
+            return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new cell.",
                     "Type an idea in Sort: a new granule.",
                     "Type [[ and another idea\u{2019}s title in an idea: an axon joins them."]
         case .performance:
-            return ["Choose folder \u{203A} New folder: a new cluster round its hub.",
+            return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new cluster round its hub.",
                     "Type an idea in Sort: a new point.",
                     "Type [[ and another idea\u{2019}s title in an idea: a line joins them."]
         }

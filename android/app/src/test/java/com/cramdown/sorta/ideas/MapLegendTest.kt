@@ -74,9 +74,9 @@ class MapLegendTest {
             assertFalse("names the bar: $line", line.contains("the bar"))
             assertFalse("names New page: $line", line.contains("New page"))
         }
-        assertEquals(listOf("Choose folder › New folder: a new cell.", "Type an idea in Sort: a new granule."), GraphTheme.NEURONS.cardSteps.take(2))
+        assertEquals(listOf("Hold an idea › Choose folder › New folder: a new cell.", "Type an idea in Sort: a new granule."), GraphTheme.NEURONS.cardSteps.take(2))
         // Android's Performance draws no hub (S05g), so the step names the folder's colour
-        assertEquals(listOf("Choose folder › New folder: its ideas take a new colour.", "Type an idea in Sort: a new point."),
+        assertEquals(listOf("Hold an idea › Choose folder › New folder: a folder of points in one colour.", "Type an idea in Sort: a new point."),
             GraphTheme.PERFORMANCE.cardSteps.take(2))
     }
 
@@ -98,7 +98,7 @@ class MapLegendTest {
     @Test fun eachRowReadsAsOneItem() {
         val cell = MapLegend.of(GraphTheme.NEURONS).rows.first()
         assertEquals("Cell: a top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float " +
-            "inside it. Bigger holds more. Make a folder: on any idea, Choose folder › New folder.", MapLegend.spoken(cell))
+            "inside it. Bigger holds more. Make a folder: hold an idea on the map, then Choose folder › New folder.", MapLegend.spoken(cell))
         // the how line read on its own: To sort is not a thing to add
         val toSort = MapLegend.of(GraphTheme.NEURONS).rows[4]
         assertEquals("To sort: the ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins " +

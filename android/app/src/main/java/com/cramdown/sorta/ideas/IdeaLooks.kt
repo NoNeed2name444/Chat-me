@@ -52,18 +52,19 @@ enum class GraphTheme(val rawValue: String, val title: String) {
             "pages are vesicles and ideas granules. Ideas in no folder share one cell. " +
             "Links grow out of the cells as axons carrying impulses."
         PERFORMANCE -> "Every idea is a point and every link a line, drawn so 100,000 fit at once. " +
-            "Each top-level folder has its own colour. Ideas too far away to show one by one share one soft light."
+            "Everything in a top-level folder is drawn in one colour. Ideas too far away to show one by one share one soft light."
     }
 
     val cardSteps: List<String> get() = when (this) {
         SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them, and each idea’s links choose its body.",
             "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
-        // Map mode has no + menu and no bar (S05f item 4): a folder comes from Choose folder, an
+        // Map mode has no + menu and no bar (S05f item 4): a top-level folder comes from Choose
+        // folder on an idea held on the map (in a folder in Sort it would make one inside), an
         // idea from Sort, and nothing in Sorta makes a page
-        NEURONS -> listOf("Choose folder › New folder: a new cell.",
+        NEURONS -> listOf("Hold an idea › Choose folder › New folder: a new cell.",
             "Type an idea in Sort: a new granule.",
             "Type [[ and another idea’s title in an idea: an axon joins them.")
-        PERFORMANCE -> listOf("Choose folder › New folder: its ideas take a new colour.",
+        PERFORMANCE -> listOf("Hold an idea › Choose folder › New folder: a folder of points in one colour.",
             "Type an idea in Sort: a new point.",
             "Type [[ and another idea’s title in an idea: a line joins them.")
     }

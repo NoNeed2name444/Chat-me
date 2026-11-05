@@ -130,8 +130,8 @@ struct GraphLegendSheet: View {
     }
 
     /// What VoiceOver reads for a row: "Name: text. How", the how line read
-    /// on its own (it names its own action, and not every row is a thing to
-    /// add, To sort for one).
+    /// on its own (each starts with what to do, and not every row is a thing
+    /// to add, To sort for one).
     private static func spoken(_ row: GraphLegendRow) -> String {
         let said: String = row.name + ": " + lowered(row.text)
         guard !row.how.isEmpty else { return said }
@@ -228,7 +228,7 @@ struct GraphLegendContent {
     private static let spaceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.circle.fill", name: "Black hole",
                        text: "A top-level folder: the heart of a galaxy. Ideas filed straight in it orbit close; its folders shine round it as stars. Bigger holds more ideas.",
-                       tint: gold, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
+                       tint: gold, how: "Make a folder: hold an idea on the map, then Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "sun.max.fill", name: "Star",
                        text: "A folder inside a folder: yellow, orange one level deeper, red deeper still. Bigger holds more; a folder is always drawn a little smaller than the one it sits in. An empty folder is a dark star.",
                        tint: .yellow, how: "Make a folder inside a folder: in Sort, hold a folder \u{203A} New folder inside."),
@@ -239,13 +239,13 @@ struct GraphLegendContent {
                        how: "Add an idea: open a folder in Sort and type it."),
         GraphLegendRow(symbol: "moon.fill", name: "Moon",
                        text: "A short idea linked only to the one it circles.", tint: moonTint,
-                       how: "A short idea linked to one other idea."),
+                       how: "Link a short idea to one other idea."),
         GraphLegendRow(symbol: "dot.radiowaves.left.and.right", name: "Pulsar",
                        text: "An idea linking ideas in two or more other folders. Its links pulse together.",
                        tint: pulsarTint, how: "Link an idea to ideas in two other folders."),
         GraphLegendRow(symbol: "sparkle", name: "Comet",
                        text: "An idea in no folder. It swings past the folder it links to most; file it and it settles into orbit. Older ones wait in the far cloud.",
-                       tint: cometTint, how: "An idea in no folder (Choose folder \u{203A} To sort)."),
+                       tint: cometTint, how: "Move an idea out of its folder: Choose folder \u{203A} To sort."),
         GraphLegendRow(symbol: "point.3.connected.trianglepath.dotted", name: "Links",
                        text: "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.",
                        tint: beamTint, how: "Link two ideas: type [[ and one idea\u{2019}s title in the other.")
@@ -283,7 +283,7 @@ struct GraphLegendContent {
     private static let neuronRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Cell",
                        text: "A top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float inside it. Bigger holds more.",
-                       tint: teal, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
+                       tint: teal, how: "Make a folder: hold an idea on the map, then Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Cell part",
                        text: "A folder inside a folder: an organelle inside its cell, and a smaller one inside that for each folder deeper down. Each holds its own ideas.",
                        tint: green, how: "Make a folder inside a folder: in Sort, hold a folder \u{203A} New folder inside."),
@@ -337,7 +337,7 @@ extension GraphLegendContent {
     private static let performanceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Folder",
                        text: "A bright hub with its ideas round it in a ball. Each top-level folder and everything in it has its own colour; a folder inside a folder is a lighter shade.",
-                       tint: hubWhite, how: "Make a folder: on any idea, Choose folder \u{203A} New folder."),
+                       tint: hubWhite, how: "Make a folder: hold an idea on the map, then Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "circle.fill", name: "Page",
                        text: "A larger point. Brighter means more links.", tint: pointRose),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Idea",

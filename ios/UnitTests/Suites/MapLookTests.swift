@@ -36,7 +36,7 @@ for theme in GraphTheme.allCases {
               !step.contains("+ \u{203A}") && !step.contains("the bar") && !step.contains("New page"))
     }
 }
-check("steps: Neurons starts with a new folder", GraphTheme.neurons.cardSteps.first == "Choose folder \u{203A} New folder: a new cell.")
+check("steps: Neurons starts with a new folder", GraphTheme.neurons.cardSteps.first == "Hold an idea \u{203A} Choose folder \u{203A} New folder: a new cell.")
 // an idea typed at Sort's top level goes to To sort and is drawn as a comet,
 // so Space's rocky planet comes from an idea typed in a folder
 check("steps: Space's rocky planet is an idea typed in a folder",
