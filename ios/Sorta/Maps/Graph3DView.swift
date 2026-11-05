@@ -469,10 +469,14 @@ struct Graph3DView: View {
     /// its height as drawn. It counts by the card's own rules, not the
     /// moments it steps aside for a peek card or the Link length bar, so
     /// those never move the camera. 0 once it is put away, in the design
-    /// preview, and before it is first drawn.
+    /// preview, and before it is first drawn. Half a touch target more: the
+    /// framing keeps each body's middle above the cover, and a body's touch
+    /// frame (voiceFrame, 44 pt round its middle) must clear the card too, as
+    /// the drawn edge of a large star does (CI, 5 Nov: the iPhone's star 3 pt
+    /// under the card without it).
     private func cardCover(_ built: GraphScene, foot: CGFloat) -> Float {
         guard built.universe, hintShown(built.theme), !GraphPreview.isOn, cardHeight > 0 else { return 0 }
-        return Float(foot + WardSpace.l + cardHeight)
+        return Float(foot + WardSpace.l + cardHeight + WardControlSize.target / 2)
     }
 
     /// The first-run card shows until it is put away: its steps the first

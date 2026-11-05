@@ -110,7 +110,10 @@ final class MapModeRenderTests: XCTestCase {
         // the map's own summary names Neuron's once it is (built.theme)
         let summary = app.descendants(matching: .any)["graph3D"].firstMatch
         let built = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Network of ideas"), object: summary)
-        XCTAssertEqual(XCTWaiter().wait(for: [built], timeout: 30), .completed, "Neuron's scene, built: \(summary.label)")
+        // as long as Space's first build is given (60 s, above): on a slow
+        // iPad (CI, 5 Nov) Neuron's build ran past 30 s with the chip already
+        // on Neuron
+        XCTAssertEqual(XCTWaiter().wait(for: [built], timeout: 60), .completed, "Neuron's scene, built: \(summary.label)")
         sleep(2)
         waitDrawn(app, summary, window, "Neurons")
         sleep(2)
