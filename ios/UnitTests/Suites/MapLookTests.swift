@@ -29,5 +29,14 @@ for look in MapLook.allCases where look != .twoD {
           look.theme.map { MapLook.stored(board: false, theme: $0.rawValue) } == look)
 }
 
+// the first-run steps name controls Sorta has: no + menu, no bar, no New page (S05f item 4)
+for theme in GraphTheme.allCases {
+    for step in theme.cardSteps {
+        check("steps: \(theme) names a control Sorta has: \(step)",
+              !step.contains("+ \u{203A}") && !step.contains("the bar") && !step.contains("New page"))
+    }
+}
+check("steps: Neurons starts with a new folder", GraphTheme.neurons.cardSteps.first == "Choose folder \u{203A} New folder: a new cell.")
+
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

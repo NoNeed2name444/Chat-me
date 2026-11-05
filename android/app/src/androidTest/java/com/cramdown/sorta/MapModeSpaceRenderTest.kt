@@ -2,12 +2,15 @@ package com.cramdown.sorta
 
 import android.content.Intent
 import android.os.SystemClock
+import android.view.ViewConfiguration
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -15,6 +18,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -58,6 +62,11 @@ import kotlin.math.max
  * to Straight in the Look menu, with the map open, draws the same scene's links straight: a still
  * each, mapmode-straight-<light|dark>-<device>.png (mapmode-space is the Curved one). Curved is then
  * set again.
+ *
+ * S05f: the bodies' names, as the map reports them (MapDrawn.names). At rest none shows, in Space or
+ * Neurons. In Space a finger held on a body shows its name in one pill above it, gone once the
+ * finger moves on; in both, a tap chooses a body and its name stays while its card is up: a still
+ * each, mapmode-named-<space|neurons>-<light|dark>-<device>.png.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -128,6 +137,8 @@ class MapModeSpaceRenderTest {
         chooseLines(GraphLineStyle.CURVED)
         try { compose.waitUntil(30_000) { mapDrawn()?.straight == false } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.straight == false) { "Lines: Curved did not reach Space's scene for $name: ${mapDrawn()}" }
+        // S05f: Space's names, at rest, under a finger and for a chosen body
+        requireNames("space", dark, press = true)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -143,7 +154,63 @@ class MapModeSpaceRenderTest {
         shot(neurons)
         requireMapDrawn(neurons)
         requireClearOfTheCard(neurons)
+        // S05f: Neuron's names, at rest and for a chosen body
+        requireNames("neurons", dark, press = false)
     }
+
+    /**
+     * S05f A3: no name at rest; with [press], a finger held on a body (the map's spot, the biggest
+     * crisp body clear of the chrome) shows its name, one pill above it, gone once the finger moves
+     * past the slop, a turn and not a tap, so no card; then a tap on a body chooses it, its card comes
+     * up and its name stays, one pill above it, still there a second later.
+     */
+    private fun requireNames(look: String, dark: Boolean, press: Boolean) {
+        val name = "mapmode-named-$look-${if (dark) "dark" else "light"}-$device"
+        compose.waitForIdle()
+        check(mapDrawn()?.names?.isEmpty() == true) { "A name shows at rest for $name: ${mapDrawn()?.names}" }
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        if (press) {
+            val (index, at) = spot(name)
+            compose.onNode(map).performTouchInput { down(at) }
+            try { compose.waitUntil(5_000) { mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
+            requireOnePill(index, "a finger held on a body for $name")
+            val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
+            compose.onNode(map).performTouchInput { moveBy(Offset(slop * 3f, 0f)) }
+            try { compose.waitUntil(5_000) { mapDrawn()?.names?.isEmpty() == true } } catch (_: ComposeTimeoutException) {}
+            check(mapDrawn()?.names?.isEmpty() == true) { "The name stayed after the finger moved on for $name: ${mapDrawn()?.names}" }
+            compose.onNode(map).performTouchInput { up() }
+            compose.waitForIdle()
+            check(!shown(MapPanelTags.PEEK)) { "A turn brought up a card for $name" }
+            SystemClock.sleep(500) // the turn's last frame, so the spot is where the body now is
+        }
+        val (index, at) = spot(name)
+        compose.onNode(map).performTouchInput { click(at) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK)) { "A tap on a body brought up no card for $name" }
+        requireOnePill(index, "a chosen body, its card up, for $name")
+        shot(name)
+        SystemClock.sleep(1_000)
+        requireOnePill(index, "a chosen body a second later, its card still up, for $name")
+    }
+
+    /** The map's spot: a body's index and its centre, in the map's own pixels. */
+    private fun spot(name: String): Pair<Int, Offset> {
+        try { compose.waitUntil(10_000) { mapDrawn()?.spot?.size == 3 } } catch (_: ComposeTimeoutException) {}
+        val spot = checkNotNull(mapDrawn()).spot
+        check(spot.size == 3) { "No body clear of the chrome to put a finger on for $name: ${mapDrawn()}" }
+        return spot[0].toInt() to Offset(spot[1], spot[2])
+    }
+
+    /** One name on show, [index]'s, its pill above its body and centred on it. */
+    private fun requireOnePill(index: Int, what: String) {
+        val names = checkNotNull(mapDrawn()).names
+        check(names.size == 1 && names[0].index == index) { "Not one name, the body's ($index), for $what: $names" }
+        val pill = names[0]
+        val middle = (pill.box[0] + pill.box[2]) / 2
+        check(pill.box[3] < pill.body[1] && abs(middle - pill.body[0]) <= 2f) { "The name is not above its body for $what: $pill" }
+    }
+
+    private fun shown(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
     /**
      * The first-run card shows, and every body the map drew is above its top: the drawn bodies' box

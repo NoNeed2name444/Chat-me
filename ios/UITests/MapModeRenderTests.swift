@@ -251,7 +251,92 @@ final class MapModeRenderTests: XCTestCase {
         app.chooseLook("look-space")
     }
 
+    /// Each 3D look's legend, and Space's and Neurons' first-run cards, name
+    /// only controls Sorta has (S05f A4): no line names a "+ ›" menu or the
+    /// bar. Each legend is opened from the Look tool and read to its last
+    /// row; Performance has no first-run card.
+    func testLegendsNameSortasControls() throws {
+        // every first-run card back, as on a new install (S05d)
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(), "-graphFreeze",
+                                                 "-SortaFirstRun"])
+        importExport(app)
+        XCTAssertTrue(app.ideaRow("A bell for the bike").waitForExistence(timeout: 10), "the made-up export")
+        app.keyboards.buttons["Done"].firstMatch.tapIfThere()
+        if app.windows.firstMatch.frame.width < 700 { app.switchMode(to: "mode-map") }
+
+        let looks: [(look: String, title: String, last: String)] = [
+            ("look-space", "How your universe is built", "Links: "),
+            ("look-neuron", "How your network is built", "Axons and synapses: "),
+            ("look-performance", "How the Performance map is built", "Lines: "),
+        ]
+        for (look, title, last) in looks {
+            app.chooseLook(look)
+            XCTAssertTrue(app.descendants(matching: .any)["graph3D"].firstMatch.waitForExistence(timeout: 60),
+                          "\(look): the 3D map")
+            if look != "look-performance" {
+                let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+                XCTAssertTrue(hint.waitForExistence(timeout: 30), "\(look): its first-run card")
+                assertNamesSortasControls(texts(in: hint), "\(look)'s first-run card")
+            }
+
+            let tool = app.buttons["Look"].firstMatch
+            XCTAssertTrue(tool.waitForExistence(timeout: 10), "\(look): the Look tool")
+            tool.tap()
+            let open = app.buttons[title].firstMatch
+            XCTAssertTrue(open.waitForExistence(timeout: 5), "\(look): the legend in the Look menu")
+            open.tap()
+            let heading = app.staticTexts[title].firstMatch
+            XCTAssertTrue(heading.waitForExistence(timeout: 10), "\(look): the legend opened")
+            _ = heading.settledFrame
+
+            // read it to its end: a phone's sheet opens at half height, so
+            // the first drag grows it and the rest scroll
+            var seen: Set<String> = texts(in: app)
+            for _ in 0..<10 {
+                let from = heading.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    .withOffset(CGVector(dx: 0, dy: 320))
+                from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -240)))
+                sleep(1)
+                let now: Set<String> = texts(in: app)
+                if now.isSubset(of: seen) { break }
+                seen.formUnion(now)
+            }
+            XCTAssertTrue(seen.contains { $0.hasPrefix(last) }, "\(look): the legend read to its last row, \(last)")
+            assertNamesSortasControls(seen, "\(look)'s legend")
+
+            let bar = app.navigationBars.containing(NSPredicate(format: "label == %@", title)).firstMatch
+            bar.buttons["Done"].firstMatch.tap()
+            XCTAssertTrue(gone(heading), "\(look): Done closes the legend")
+        }
+        // Space: the look as the other tests find it
+        app.chooseLook("look-space")
+    }
+
     // MARK: helpers
+
+    /// Every label and value under `element`, from one snapshot.
+    private func texts(in element: XCUIElement) -> Set<String> {
+        guard let root = try? element.snapshot() else { return [] }
+        var out: Set<String> = []
+        func walk(_ node: XCUIElementSnapshot) {
+            if !node.label.isEmpty { out.insert(node.label) }
+            if let value = node.value as? String, !value.isEmpty { out.insert(value) }
+            node.children.forEach(walk)
+        }
+        walk(root)
+        return out
+    }
+
+    /// None of `lines` names a "+ ›" menu or the bar, which Sorta has
+    /// neither of (S05f item 4).
+    private func assertNamesSortasControls(_ lines: Set<String>, _ place: String,
+                                           file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(lines.isEmpty, "\(place): its words", file: file, line: line)
+        for text in lines {
+            XCTAssertFalse(text.contains("+ \u{203A}"), "\(place) names a + menu: \(text)", file: file, line: line)
+            XCTAssertFalse(text.contains("the bar"), "\(place) names the bar: \(text)", file: file, line: line)
+        }
+    }
 
     /// An idea's card on the board, not its row beside it on two panes.
     private func mapCard(_ app: XCUIApplication, _ title: String) -> XCUIElement {

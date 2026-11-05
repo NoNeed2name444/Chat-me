@@ -3,9 +3,10 @@ import SwiftUI
 /// A theme's legend ("How your universe is built", "How your network is
 /// built", "How the fast map is built"), from the Look menu or the
 /// first-run card: a size ladder across the top, then one row per kind of
-/// body - what it is, and how to make one with the app's own controls (the
-/// + button in the Ideas bar, a folder's menu in the List, [[ ]] in a note)
-/// - then how to move about. The words and pictures are the theme's own
+/// body - what it is, and how to make one with the app's own controls
+/// (Choose folder's New folder, a folder's hold menu in Sort, an idea typed
+/// in Sort, [[ ]] in a note; nothing makes a page, so a page's row has no
+/// how line) - then how to move about. The words and pictures are the theme's own
 /// (GraphLegendContent).
 struct GraphLegendSheet: View {
     var theme: GraphTheme = .space
@@ -226,16 +227,15 @@ struct GraphLegendContent {
     private static let spaceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.circle.fill", name: "Black hole",
                        text: "A top-level folder: the heart of a galaxy. Ideas filed straight in it orbit close; its folders shine round it as stars. Bigger holds more ideas.",
-                       tint: gold, how: "Make a folder: + \u{203A} New folder."),
+                       tint: gold, how: "Make a folder: Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "sun.max.fill", name: "Star",
                        text: "A folder inside a folder: yellow, orange one level deeper, red deeper still. Bigger holds more; a folder is always drawn a little smaller than the one it sits in. An empty folder is a dark star.",
-                       tint: .yellow, how: "A folder inside a folder: its menu in the List \u{203A} New folder inside."),
+                       tint: .yellow, how: "A folder inside a folder: hold a folder in Sort \u{203A} New folder inside."),
         GraphLegendRow(symbol: "circle.lefthalf.filled", name: "Gas giant",
-                       text: "A page. Bigger is longer; rings mean over 250 words.", tint: gasTint,
-                       how: "Add a page: + \u{203A} New page."),
+                       text: "A page. Bigger is longer; rings mean over 250 words.", tint: gasTint),
         GraphLegendRow(symbol: "globe.europe.africa.fill", name: "Rocky planet",
                        text: "An idea. Brighter means more links.", tint: rockTint,
-                       how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
+                       how: "Add an idea: type it in Sort."),
         GraphLegendRow(symbol: "moon.fill", name: "Moon",
                        text: "A short idea linked only to the one it circles.", tint: moonTint,
                        how: "A short idea linked to one other idea."),
@@ -282,16 +282,16 @@ struct GraphLegendContent {
     private static let neuronRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Cell",
                        text: "A top-level folder: a whole cell, glowing through its membrane round a bright nucleus. Its folders and ideas float inside it. Bigger holds more.",
-                       tint: teal, how: "Make a folder: + \u{203A} New folder."),
+                       tint: teal, how: "Make a folder: Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Cell part",
                        text: "A folder inside a folder: an organelle inside its cell, and a smaller one inside that for each folder deeper down. Each holds its own ideas.",
-                       tint: green, how: "A folder inside a folder: its menu in the List \u{203A} New folder inside."),
+                       tint: green, how: "A folder inside a folder: hold a folder in Sort \u{203A} New folder inside."),
         GraphLegendRow(symbol: "circle.fill", name: "Vesicle",
                        text: "A page: a bright-rimmed vesicle floating inside the folder that holds it. Longer pages are bigger.",
-                       tint: teal, how: "Add a page: + \u{203A} New page."),
+                       tint: teal),
         GraphLegendRow(symbol: "aqi.medium", name: "Granule",
                        text: "An idea: a small bright granule inside the folder that holds it. Brighter means more links.",
-                       tint: interTint, how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
+                       tint: interTint, how: "Add an idea: type it in Sort."),
         GraphLegendRow(symbol: "tray.fill", name: "To sort",
                        text: "The ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins that folder\u{2019}s cell.",
                        tint: teal, how: "Choose folder \u{203A} To sort."),
@@ -336,13 +336,12 @@ extension GraphLegendContent {
     private static let performanceRows: [GraphLegendRow] = [
         GraphLegendRow(symbol: "circle.hexagongrid.fill", name: "Folder",
                        text: "A bright hub with its ideas round it in a ball. Each top-level folder and everything in it has its own colour; a folder inside a folder is a lighter shade.",
-                       tint: hubWhite, how: "Make a folder: + \u{203A} New folder."),
+                       tint: hubWhite, how: "Make a folder: Choose folder \u{203A} New folder."),
         GraphLegendRow(symbol: "circle.fill", name: "Page",
-                       text: "A larger point. Brighter means more links.", tint: pointRose,
-                       how: "Add a page: + \u{203A} New page."),
+                       text: "A larger point. Brighter means more links.", tint: pointRose),
         GraphLegendRow(symbol: "smallcircle.filled.circle", name: "Idea",
                        text: "A smaller point. Brighter means more links.", tint: pointBlue,
-                       how: "Add an idea: + \u{203A} New idea, or type it in the bar."),
+                       how: "Add an idea: type it in Sort."),
         GraphLegendRow(symbol: "sun.min.fill", name: "Glow",
                        text: "A folder too far away to show its ideas one by one: one soft light stands for all of them, and links into it end at its middle. Come closer and it opens into its points.",
                        tint: glowAmber),

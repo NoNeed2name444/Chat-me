@@ -13,8 +13,33 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.ViewInAr
+import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.Adjust
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Circle
+import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.Flare
+import androidx.compose.material.icons.rounded.Grain
+import androidx.compose.material.icons.rounded.Hive
+import androidx.compose.material.icons.rounded.HorizontalRule
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.RadioButtonChecked
+import androidx.compose.material.icons.rounded.Sensors
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import com.cramdown.sorta.ideas.LegendContent
+import com.cramdown.sorta.ideas.LegendRow
+import com.cramdown.sorta.ideas.LegendTint
+import com.cramdown.sorta.ideas.MapLegend
+import com.cramdown.sorta.ui.sources.wardRowTile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -188,7 +213,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                             else -> { chosen = body; held = null }
                         }
                     },
-                    onEmpty = { chosen = null; held = null }, shown = shown) { shown = it }
+                    onEmpty = { chosen = null; held = null }, chosenId = chosen?.id, heldId = held?.first?.id, shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -251,7 +276,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             }
         }
     }
-    if (legend) LegendSheet(theme) { legend = false }
+    if (legend) LegendSheet(theme, readout = theme == GraphTheme.PERFORMANCE && settings.readout) { legend = false }
     if (folderLooks) FolderLooksSheet(book, settings) { folderLooks = false }
     renaming?.let { body ->
         val note = book.notes.firstOrNull { body.kind == ThemeBodyKind.NOTE && it.id.equals(body.id, ignoreCase = true) }
@@ -294,7 +319,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
 
 /**
  * The user's notes on the map, rebuilt off the main thread when they, the look or the Link length
- * change. [onBody] hears a body tapped or held (and where), [onEmpty] a tap on empty space. Its
+ * change. [onBody] hears a body tapped or held (and where), [onEmpty] a tap on empty space;
+ * [chosenId] and [heldId] are the chosen and held bodies, whose names stay on show. Its
  * first view fits what the chrome leaves: under [top] and above [hidden], as the 2D board's.
  * [onShown] hears that the map is drawn, once its first frame is; until [shown] comes back, with the
  * screen's night look and tools, the wait covers the map, so the two come in the same frame.
@@ -303,6 +329,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   card: Dp,
                                   onBody: (MapBody, Boolean, Offset) -> Unit, onEmpty: () -> Unit,
+                                  chosenId: String?, heldId: String?,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -390,7 +417,9 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,
             onDrawn = { drawnOnce = true }, top = top, hidden = hidden, card = card,
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
-            straight = settings.lineStyle.isStraight)
+            straight = settings.lineStyle.isStraight,
+            // the chosen and held bodies keep their names on show (S05f)
+            chosenId = chosenId, heldId = heldId)
         if (!shown) Building(null)
     }
 }
@@ -531,21 +560,107 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
         trailingIcon = if (chosen) ({ Icon(Icons.Outlined.Check, "Chosen", tint = wardColor(WardToken.primaryInk)) }) else null)
 }
 
-/** The theme's legend (GraphThemeCard): what the map is made of, and how to grow it. */
+/**
+ * The theme's legend (GraphLegendSheet, S05f): a size ladder, one row per kind of body Android's map
+ * draws, and how to touch the map, its words and rungs MapLegend's. Half or full height on a phone,
+ * full height on a window 600 dp wide and up (GraphLegendPresentation).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun LegendSheet(theme: GraphTheme, onDone: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDone, containerColor = wardColor(WardToken.background)) {
+@Composable internal fun LegendSheet(theme: GraphTheme, readout: Boolean, onDone: () -> Unit) {
+    val content = MapLegend.of(theme, readout)
+    val wide = currentWindowShape().width >= WindowShape.compactMax
+    ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = wide),
+        containerColor = wardColor(WardToken.background)) {
         ReaderNavBar(theme.legendTitle, trailing = { ReaderDoneButton(onClick = onDone) })
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = WardSpace.gutter.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-            Text(theme.cardTitle, Modifier.semantics { heading() }, style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
-            Text(theme.cardText, style = WardType.body.textStyle(), color = wardColor(WardToken.ink))
-            theme.cardSteps.forEachIndexed { i, step ->
-                Text("${i + 1}. $step", style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
-            }
-            Text(theme.hint, style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+        Column(Modifier.fillMaxWidth().testTag(MapPanelTags.legend(theme)).verticalScroll(rememberScrollState())
+            .padding(horizontal = WardSpace.m.wardDp)) {
+            if (content.rungs.isNotEmpty()) LegendLadder(content)
+            content.rows.forEach { LegendRowTile(it) }
+            Text(content.touch, Modifier.padding(horizontal = WardSpace.s.wardDp).padding(top = WardSpace.s.wardDp),
+                style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
             Spacer(Modifier.height(WardSpace.xl.wardDp))
         }
     }
+}
+
+/** The size ladder: circles biggest to smallest, each captioned, and the line under them; one item for TalkBack. */
+@Composable private fun LegendLadder(content: LegendContent) {
+    Column(Modifier.fillMaxWidth().padding(vertical = WardSpace.s.wardDp).clearAndSetSemantics { contentDescription = content.ladderLabel },
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            content.rungs.forEach { rung ->
+                Column(Modifier.weight(1f).padding(horizontal = WardSpace.xs.wardDp), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                    // the rungs' one height, not a gap, so their captions start level
+                    Canvas(Modifier.fillMaxWidth().height(LEGEND_RUNG_HEIGHT.dp)) {
+                        val r = rung.size.dp.toPx() / 2
+                        drawCircle(rung.fill.color(), r)
+                        val ring = rung.ring
+                        if (ring != null && rung.ringed) {
+                            val w = rung.size.dp.toPx() * 1.8f; val h = rung.size.dp.toPx() * 0.55f
+                            drawOval(ring.color(), Offset(center.x - w / 2, center.y - h / 2), androidx.compose.ui.geometry.Size(w, h),
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+                        } else if (ring != null && rung.halo) {
+                            drawCircle(ring.color(), r + 1.5.dp.toPx(), style = androidx.compose.ui.graphics.drawscope.Stroke(2.5.dp.toPx()))
+                        }
+                    }
+                    // two lines rather than cut short or shrunk
+                    Text(rung.caption, style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 2)
+                }
+            }
+        }
+        Text(content.ladderCaption, style = WardTextStyle.footnote.textStyle(WardWeight.semibold), color = wardColor(WardToken.ink))
+    }
+}
+
+/** One kind of body: its tinted glyph in a column of its own, its name, its line and how to make one; one item for TalkBack. */
+@Composable private fun LegendRowTile(row: LegendRow) {
+    Row(Modifier.fillMaxWidth().wardRowTile().padding(vertical = WardSpace.xs.wardDp).clearAndSetSemantics { contentDescription = MapLegend.spoken(row) },
+        horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+        // the column the glyphs line up in, not a gap
+        Box(Modifier.width(LEGEND_GLYPH_COLUMN.dp), contentAlignment = Alignment.TopCenter) {
+            Icon(legendGlyph(row.symbol), null, Modifier.size(wardGlyph(WardTextStyle.title3.size)), tint = row.tint.color())
+        }
+        // 2, under the scale's 4, so the lines read as one item (WardRow)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(row.name, style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
+            Text(row.text, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
+            if (row.how.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.Top) {
+                // the words in ink, the colour on the glyph alone
+                Icon(Icons.Rounded.AddCircleOutline, null, Modifier.padding(top = 2.dp).size(wardGlyph(WardTextStyle.footnote.size)), tint = row.tint.color())
+                Text(row.how, style = WardTextStyle.footnote.textStyle(WardWeight.medium), color = wardColor(WardToken.ink))
+            }
+        }
+    }
+}
+
+/** A rung's slot height and the rows' glyph column, in dp (GraphLegendSheet's 36 and 30). */
+private const val LEGEND_RUNG_HEIGHT = 36
+private const val LEGEND_GLYPH_COLUMN = 30
+
+private fun LegendTint.color() = androidx.compose.ui.graphics.Color(r.toFloat(), g.toFloat(), b.toFloat(), a.toFloat())
+
+/** iOS's SF Symbol for a legend row, as the Material icon the app ships that stands in for it (S05f plan, Q2). */
+private fun legendGlyph(symbol: String): ImageVector = when (symbol) {
+    "circle.circle.fill" -> Icons.Rounded.Adjust
+    "sun.max.fill" -> Icons.Rounded.WbSunny
+    "circle.lefthalf.filled" -> Icons.Rounded.Contrast
+    "globe.europe.africa.fill" -> Icons.Rounded.Public
+    "dot.radiowaves.left.and.right" -> Icons.Rounded.Sensors
+    "sparkle" -> Icons.Rounded.Flare
+    "point.3.connected.trianglepath.dotted" -> Icons.Rounded.Link
+    "circle.hexagongrid.fill" -> Icons.Rounded.Hive
+    "smallcircle.filled.circle" -> Icons.Rounded.RadioButtonChecked
+    "circle.fill" -> Icons.Rounded.Circle
+    "aqi.medium" -> Icons.Rounded.Grain
+    "tray.fill" -> Icons.Rounded.Inbox
+    "arrow.up.left.and.arrow.down.right" -> Icons.Rounded.OpenInFull
+    "bolt.horizontal.fill" -> Icons.Rounded.Bolt
+    "sun.min.fill" -> Icons.Rounded.LightMode
+    "line.diagonal" -> Icons.Rounded.HorizontalRule
+    "speedometer" -> Icons.Rounded.Speed
+    else -> Icons.Rounded.Circle
 }
 
 /** Folder looks: each top-level folder's notes as one style, or "Same as all". */

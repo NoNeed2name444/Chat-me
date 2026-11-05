@@ -41,10 +41,18 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
@@ -65,6 +73,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
+import com.cramdown.sorta.map.LabelBackdrop
+import com.cramdown.sorta.map.LabelEstimate
+import com.cramdown.sorta.map.LabelGlow
+import com.cramdown.sorta.map.LabelLook
+import com.cramdown.sorta.map.LabelRgb
+import com.cramdown.sorta.map.LabelSampler
+import com.cramdown.sorta.map.LabelSettings
+import com.cramdown.sorta.map.LabelShine
+import com.cramdown.sorta.map.MapNameShow
+import com.cramdown.sorta.map.NameBody
+import com.cramdown.sorta.map.NamePill
+import com.cramdown.sorta.map.NameText
+import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.LinkMemory
 import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.MapCardCover
@@ -87,6 +108,7 @@ import com.cramdown.sorta.ui.ward.wardDp
 import com.cramdown.sorta.ui.wardColor
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.first
 import kotlin.math.cbrt
 import kotlin.math.max
 
@@ -100,6 +122,9 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                val links: IntArray = IntArray(0), val linkHalf: Float = 0f) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
+
+    /** The body [id] stands for, ignoring case (an idea's id may come upper case); null for none or no such body (S05f). */
+    fun indexOf(id: String?): Int? = id?.let { wanted -> ids.indexOfFirst { it.equals(wanted, ignoreCase = true) } }?.takeIf { it >= 0 }
 
     companion object {
         private val BUILDS = AtomicInteger()
@@ -236,6 +261,13 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
      * scene (S05e); the Neurons' bridges ignore it, as iOS's.
      */
     straight: Boolean = false,
+    /**
+     * The chosen body (its card is up) and the held one (its options are open), as [MapScene.ids]
+     * ids, null for none (S05f): in Space and Neurons each keeps its name on show, as the pressed and
+     * hovered bodies' do, and no other body has one.
+     */
+    chosenId: String? = null,
+    heldId: String? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -337,12 +369,105 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     val firstDrawn = !gles3 || drawnNow.frames >= 1
     val box = remember(screenNodes) { drawnBox(screenNodes) }
     LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
+
+    // The names (S05f): in Space and Neurons only the hovered, pressed, held and chosen bodies have
+    // one, on iOS's pill, popping in, its words' style kept readable over what is behind it
+    // (MapNameShow, LabelContrast); the plain theme keeps MapNames' layout, a name on every body.
+    val pills = scene.theme != MapTheme.PLAIN && scene.titles.isNotEmpty()
+    val lively = remember(scene) { android.animation.ValueAnimator.areAnimatorsEnabled() }
+    val nameSettings = remember(scene) { LabelSettings(increaseContrast = increaseContrast(context)) }
+    var pressedName by remember(scene) { mutableStateOf<Int?>(null) }
+    var hoveredName by remember(scene) { mutableStateOf<Int?>(null) }
+    var nameClock by remember(scene) { mutableLongStateOf(0L) }
+    val board = remember(scene) { MapNameShow.Board() }
+    val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
+    val heldName = remember(scene, heldId) { scene.indexOf(heldId) }
+    // each Space body's look by its index, for its size and its light (the tree keeps them by node)
+    val spaceStyles = remember(scene) {
+        if (scene.theme != MapTheme.SPACE) null
+        else IntArray(scene.ids.size).also { for (k in 0 until tree.nodeCount) tree.order[k].takeIf { i -> i in it.indices }?.let { i -> it[i] = tree.groups[k].toInt() } }
+    }
+    // a body's pick radius: its own radius, a Space look's share of the note's (iOS's pickRadius)
+    fun nameBody(n: ScreenNode): NameBody {
+        val share = spaceStyles?.getOrNull(n.index)?.let { SpaceStyle.of(it).bodyScale } ?: 1f
+        return NameBody(n.index, n.x, n.y, n.pixels, n.crisp, n.pixels / 2f * share)
+    }
+    fun shine(i: Int): LabelShine = spaceStyles?.getOrNull(i)?.let { LabelShine.space(SpaceStyle.of(it)) }
+        ?: scene.neurons?.plan?.bodies?.getOrNull(i)?.let { LabelShine.neurons(it.role) } ?: LabelShine.DARK
+    val namePaint = remember(density) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = android.graphics.Typeface.DEFAULT_BOLD; textSize = MapNameShow.WORDS_DP * density.density
+        }
+    }
+    val drawPaint = remember(namePaint) { android.graphics.Paint(namePaint) }
+    // each name's words, cut as iOS's, and their box at full size, measured the first time it shows
+    val nameTexts = remember(scene, namePaint) { HashMap<Int, Pair<String, NameText>>() }
+    fun nameText(i: Int): Pair<String, NameText> = nameTexts.getOrPut(i) {
+        val folder = scene.neurons?.plan?.bodies?.getOrNull(i)?.let { it.kind != ThemeBodyKind.NOTE } ?: false
+        val words = MapNameShow.cut(scene.titles.getOrElse(i) { "" }, folder)
+        val r = android.graphics.Rect().also { namePaint.getTextBounds(words, 0, words.length, it) }
+        words to NameText(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), r.bottom.toFloat())
+    }
+    // what is behind a name's pill, estimated from the bodies on screen (LabelEstimate), and its body's tint
+    fun nameMeasure(nodes: List<ScreenNode>): (Int) -> Pair<LabelBackdrop, LabelRgb>? {
+        var glows: List<LabelGlow>? = null
+        val cx = viewSize.width / 2.0; val cy = viewSize.height / 2.0
+        val focal = camera.focalPixels(viewSize.height.toFloat()).toDouble()
+        val backdrop = LabelShine.backdrop(neurons = scene.theme == MapTheme.NEURONS)
+        return measure@{ i ->
+            val node = nodes.firstOrNull { it.index == i } ?: return@measure null
+            val p = MapNameShow.place(nameBody(node), nameText(i).second, density.density, 1f)
+            val lights = glows ?: nodes.mapNotNull { n -> LabelEstimate.glow(n.x.toDouble(), n.y.toDouble(), nameBody(n).radius.toDouble(), shine(n.index), cx, cy, focal) }
+                .also { glows = it }
+            val points = LabelEstimate.pillPoints((p.left + p.right) / 2.0, (p.top + p.bottom) / 2.0, (p.right - p.left) / 2.0, (p.bottom - p.top) / 2.0, cx, cy, focal)
+            LabelEstimate.measure(points, lights, backdrop) to shine(i).colour
+        }
+    }
+    val nameWanted: List<Int> = if (!pills) emptyList() else {
+        val asked = listOfNotNull(hoveredName, pressedName, heldName, chosenName)
+        if (asked.isEmpty()) emptyList() else {
+            val bodies = HashMap<Int, NameBody>()
+            for (n in screenNodes) if (n.index in asked) bodies[n.index] = nameBody(n)
+            MapNameShow.wanted(hoveredName, pressedName, heldName, chosenName, bodies)
+        }
+    }
+    // a name goes up at once and pops in, its style eases, frame by frame while either moves; then it
+    // waits for the bodies to move (a turn, a zoom) before it measures again
+    LaunchedEffect(board, nameWanted) {
+        board.keep(nameWanted, System.nanoTime() / 1e9)
+        nameClock = System.nanoTime()
+        if (nameWanted.isEmpty()) return@LaunchedEffect
+        while (true) {
+            val nodes = screenNodes
+            val moving = withFrameNanos { board.step(System.nanoTime() / 1e9, lively, nameSettings, LabelSampler.interval(smooth = false), nameMeasure(nodes)) }
+            nameClock = System.nanoTime()
+            if (!moving) snapshotFlow { screenNodes }.first { it !== nodes }
+        }
+    }
+    val namesNow: List<Pair<NamePill, LabelLook>> = if (nameWanted.isEmpty()) emptyList() else {
+        val now = nameClock.let { System.nanoTime() / 1e9 }
+        val measure = nameMeasure(screenNodes)
+        nameWanted.mapNotNull { i ->
+            val node = screenNodes.firstOrNull { it.index == i } ?: return@mapNotNull null
+            val look = board.look(i, nameSettings, measure) ?: return@mapNotNull null
+            MapNameShow.place(nameBody(node), nameText(i).second, density.density, board.scale(i, now, lively)) to look
+        }
+    }
+    // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card
+    val spot = remember(screenNodes, viewSize, insets, cover) {
+        if (!pills) emptyList() else {
+            val margin = with(density) { 48.dp.toPx() }
+            val low = viewSize.height - insets.bottom - cover - margin
+            screenNodes.filter { it.crisp && it.pixels > 2f && it.x in margin..(viewSize.width - margin) && it.y in (insets.top + margin)..low }
+                .maxByOrNull { it.pixels }?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
+        }
+    }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        })
+        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot)
         if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
@@ -394,35 +519,86 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
                     loop.touched()
                     var moved = 0f
                     var multi = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) break
-                        loop.touched()
-                        if (pressed.size >= 2) {
-                            multi = true
-                            val zoom = event.calculateZoom()
-                            val pan = event.calculatePan()
-                            synchronized(camera) {
-                                camera.zoom(zoom)
-                                camera.pan(pan.x / size.height, pan.y / size.height)
+                    // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
+                    val press = MapNameShow.Press(slop)
+                    if (pills) {
+                        press.down(MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, MapNameShow.PICK_DP.dp.toPx())?.index)
+                        pressedName = press.pressed
+                    }
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            loop.touched()
+                            press.fingers(pressed.size)
+                            if (pressed.size >= 2) {
+                                multi = true
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                synchronized(camera) {
+                                    camera.zoom(zoom)
+                                    camera.pan(pan.x / size.height, pan.y / size.height)
+                                }
+                                moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
+                            } else {
+                                val change = pressed.first()
+                                val delta = change.position - change.previousPosition
+                                moved += delta.getDistance()
+                                press.move(delta.getDistance())
+                                if (moved > slop || multi) synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
                             }
-                            moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
-                        } else {
-                            val change = pressed.first()
-                            val delta = change.position - change.previousPosition
-                            moved += delta.getDistance()
-                            if (moved > slop || multi) synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
+                            if (pills && pressedName != press.pressed) pressedName = press.pressed
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
-                        event.changes.forEach { if (it.positionChanged()) it.consume() }
+                    } finally {
+                        // lifted, or the gesture cancelled: the press is over either way
+                        press.up()
+                        if (pressedName != null) pressedName = null
                     }
                     if (!multi && moved <= slop && onOpenNode != null) {
-                        val hit = screenNodes.filter { it.pixels > 2f }.minByOrNull { (Offset(it.x, it.y) - down.position).getDistance() }
-                        if (hit != null && (Offset(hit.x, hit.y) - down.position).getDistance() < 40.dp.toPx()) onOpenNode(hit.index)
+                        val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, MapNameShow.PICK_DP.dp.toPx())
+                        if (hit != null) onOpenNode(hit.index)
+                    }
+                }
+            }.pointerInput(scene) {
+                // a pointer with no button down (a mouse, a stylus) names the body under it (S05f)
+                if (!pills) return@pointerInput
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val kind = when (event.type) {
+                            PointerEventType.Enter -> MapNameShow.HoverEvent.ENTER
+                            PointerEventType.Move -> MapNameShow.HoverEvent.MOVE
+                            PointerEventType.Exit -> MapNameShow.HoverEvent.EXIT
+                            else -> continue
+                        }
+                        val change = event.changes.firstOrNull() ?: continue
+                        if (change.type == PointerType.Touch) continue
+                        val buttonDown = event.changes.any { it.pressed }
+                        val picked = if (kind == MapNameShow.HoverEvent.EXIT || buttonDown) null
+                            else MapNameShow.pick(screenNodes.map(::nameBody), change.position.x, change.position.y, MapNameShow.PICK_DP.dp.toPx())?.index
+                        val next = MapNameShow.hover(hoveredName, kind, buttonDown, picked)
+                        if (next != hoveredName) hoveredName = next
                     }
                 }
             },
         ) {
+            if (pills) {
+                // the names on show (S05f): the rim, the pill over it, the words on top, in front of every body
+                drawIntoCanvas { canvas ->
+                    for ((p, look) in namesNow) {
+                        val rimHeight = p.bottom - p.top
+                        drawRoundRect(look.rimShade.color(look.rimAlpha), Offset(p.left, p.top), Size(p.right - p.left, rimHeight), CornerRadius(rimHeight / 2))
+                        val pillHeight = p.pillBottom - p.pillTop
+                        drawRoundRect(look.pill.color(look.opacity), Offset(p.pillLeft, p.pillTop), Size(p.pillRight - p.pillLeft, pillHeight), CornerRadius(pillHeight / 2))
+                        drawPaint.textSize = p.textSize
+                        drawPaint.color = look.text.color(1.0).toArgb()
+                        canvas.nativeCanvas.drawText(nameText(p.index).first, p.textX, p.baseline, drawPaint)
+                    }
+                }
+                return@Canvas
+            }
             // the names (MapNames): biggest body first, each clear of the names placed, the links and
             // the other bodies, under its body or else beside it; one with no room waits
             if (scene.titles.isEmpty()) return@Canvas
@@ -466,6 +642,9 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
             color = Color(0xFF8FA6C4), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
     }
 }
+
+/** A name pill's colour, at [alpha]. */
+private fun LabelRgb.color(alpha: Double) = Color(r.toFloat(), g.toFloat(), b.toFloat(), alpha.toFloat().coerceIn(0f, 1f))
 
 /** Increase Contrast: the system's contrast raised (Android 14+), as iOS's accessibility setting. */
 private fun increaseContrast(context: Context): Boolean {

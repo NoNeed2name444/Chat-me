@@ -92,6 +92,9 @@ object MapPanelTags {
     const val TOUCH_HINT = "touchHint"
     const val EMPTY_HINT = "graphEmptyHint"
     const val ADD_FOLDER = "graphAddFolder"
+
+    /** A theme's legend sheet, iOS's identifiers (GraphLegendSheet): universeLegend, neuronsLegend, performanceLegend. */
+    fun legend(theme: GraphTheme): String = if (theme == GraphTheme.SPACE) "universeLegend" else theme.rawValue + "Legend"
 }
 
 /** A body on the map: an idea, a folder or the home, with its theme's role ([MapPeekInput.role]). */

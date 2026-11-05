@@ -93,6 +93,13 @@ data class MapDrawn(
     val links: Int = 0,
     val samples: Int = 0,
     val straight: Boolean = false,
+    /**
+     * Added by Map3DView too (S05f): the names on show in Space and Neurons, and [spot], a body a test
+     * can put a finger on: the biggest crisp body clear of the chrome, as its index, centre x and y in
+     * the view's pixels (empty when none is). No words.
+     */
+    val names: List<MapDrawnName> = emptyList(),
+    val spot: List<Float> = emptyList(),
 ) {
     /**
      * This record after one more finished frame that drew [bodiesNow] bodies, [elapsedMs] after the
@@ -116,6 +123,9 @@ data class MapDrawn(
         const val ENOUGH = 3
     }
 }
+
+/** A name on show (MapDrawn.names): its body's index, its pill's box (left, top, right, bottom) and its body's centre (x, y), in the view's pixels. */
+data class MapDrawnName(val index: Int, val box: List<Float>, val body: List<Float>)
 
 /**
  * When an idle map stops drawing (Map3DView's frame loop): once nothing has moved for a second

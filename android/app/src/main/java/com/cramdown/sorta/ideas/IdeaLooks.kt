@@ -33,15 +33,10 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     }
 
     /**
-     * How to touch Android's map, which TalkBack reads after [mapLabel] too: a tap opens (there is
-     * no card and no hold, IdeasSpace), one finger turns, two slide and pinch.
+     * How to touch Android's map, which TalkBack reads after [mapLabel] too: the legend's touch
+     * help, word for word (MapLegend.touchHelp, S05f), so the two never disagree.
      */
-    val hint: String get() = when (this) {
-        SPACE -> "Tap a body to open its idea. Drag to turn, two fingers to slide, pinch to zoom."
-        NEURONS -> "Tap a cell or a part to open it, and an idea inside to read it. Recentre closes them again. " +
-            "Drag to turn, two fingers to slide, pinch to zoom."
-        PERFORMANCE -> "Tap a point to open its idea. Drag to turn, two fingers to slide, pinch to zoom."
-    }
+    val hint: String get() = MapLegend.touchHelp(this)
 
     val cardTitle: String get() = when (this) {
         SPACE -> "Your ideas as a universe"
@@ -63,11 +58,13 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     val cardSteps: List<String> get() = when (this) {
         SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them, and each idea’s links choose its body.",
             "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
-        NEURONS -> listOf("Tap + › New folder: a new cell.",
-            "Tap + › New page for a vesicle, New idea for a granule.",
+        // Map mode has no + menu and no bar (S05f item 4): a folder comes from Choose folder, an
+        // idea from Sort, and nothing in Sorta makes a page
+        NEURONS -> listOf("Choose folder › New folder: a new cell.",
+            "Type an idea in Sort: a new granule.",
             "Type [[ and another idea’s title in an idea: an axon joins them.")
-        PERFORMANCE -> listOf("Tap + › New folder: a new cluster round its hub.",
-            "Tap + › New page for a larger point, New idea for a smaller one.",
+        PERFORMANCE -> listOf("Choose folder › New folder: a new cluster round its hub.",
+            "Type an idea in Sort: a new point.",
             "Type [[ and another idea’s title in an idea: a line joins them.")
     }
 

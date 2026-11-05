@@ -20,8 +20,9 @@
 # ideas (S05, S05b): on the iPhone, the Ideas screens' behaviour tests
 # (IdeasBehaviourTests and MapModeTests, each whole class in one run), the
 # Sort screen's and Map mode's renders by day and by night (IdeasRenderTests,
-# MapModeRenderTests), and each one's largest text size; on the iPad, the
-# two sets of renders by day and by night. A whole class passes only when
+# MapModeRenderTests), Map mode's legends read for the controls they name
+# (S05f), and each one's largest text size; on the iPad, the two sets of
+# renders by day and by night and the legends. A whole class passes only when
 # every test in its file passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
@@ -101,7 +102,8 @@ case "$set_" in
     runs=(light:SortaUITests/IdeasRenderTests/testScreensRender
           dark:SortaUITests/IdeasRenderTests/testScreensRender
           light:SortaUITests/MapModeRenderTests/testMapRenders
-          dark:SortaUITests/MapModeRenderTests/testMapRenders)
+          dark:SortaUITests/MapModeRenderTests/testMapRenders
+          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls)
     if [ "$kind" = "iphone" ]; then
       runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
             light:SortaUITests/IdeasRenderTests/testLargestTextSize
