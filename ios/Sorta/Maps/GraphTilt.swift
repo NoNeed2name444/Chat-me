@@ -52,6 +52,24 @@ nonisolated struct GraphInsets: Equatable {
         self.bottom = bottom
         self.right = right
     }
+
+    /// These edges with the foot raised to `cover`, where that is more: the
+    /// first-run card (GraphUniverseHint) covers the view from its top edge
+    /// down while it is up, so the first view is framed above it (S05d). A
+    /// cover of 0 leaves the edges as they are.
+    func coveringFoot(_ cover: Float) -> GraphInsets {
+        GraphInsets(top: top, left: left, bottom: max(bottom, cover), right: right)
+    }
+}
+
+/// When the first-run card's cover changes, whether a camera still at its
+/// first view is framed again (S05d): when the cover comes or grows, so the
+/// first view clears the card; never when it shrinks or goes, so putting the
+/// card away moves nothing. The next Recentre frames the view without it.
+nonisolated enum GraphCardCover {
+    static func refits(from old: Float, to new: Float) -> Bool {
+        new > old
+    }
 }
 
 /// One tilted framing: the camera `distance` back along its own axis and

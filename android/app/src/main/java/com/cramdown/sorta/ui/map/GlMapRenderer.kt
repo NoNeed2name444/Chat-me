@@ -75,6 +75,13 @@ data class MapDrawn(
     val renderer: String = "",
     val maxPointSize: Float = 0f,
     val bodyStyles: Int = 0,
+    /**
+     * Added by the map's own view (Map3DView), for the emulator's tests (S05d): the drawn bodies'
+     * screen box (left, top, right, bottom, in the view's pixels; empty before any is drawn) and the
+     * camera's pose (target x, y, z, distance, yaw, pitch).
+     */
+    val box: List<Float> = emptyList(),
+    val pose: List<Float> = emptyList(),
 ) {
     /** This record after one more finished frame that drew [bodiesNow] bodies, [elapsedMs] after the surface's start. */
     fun after(bodiesNow: Int, elapsedMs: Long): MapDrawn {
@@ -121,6 +128,18 @@ enum class MapTheme { PLAIN, SPACE, NEURONS }
  */
 /** [perUnit] is how many pixels a world unit spans at its depth, which sizes its links' bands for the names. */
 data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f)
+
+/**
+ * The screen box of the drawn [nodes], each its drawn size ([ScreenNode.pixels] across) round its
+ * centre: left, top, right, bottom, in the view's pixels; empty when none is drawn bigger than a
+ * speck (MapDrawn.box, S05d).
+ */
+fun drawnBox(nodes: List<ScreenNode>): List<Float> {
+    val drawn = nodes.filter { it.pixels > 2f }
+    if (drawn.isEmpty()) return emptyList()
+    return listOf(drawn.minOf { it.x - it.pixels / 2 }, drawn.minOf { it.y - it.pixels / 2 },
+        drawn.maxOf { it.x + it.pixels / 2 }, drawn.maxOf { it.y + it.pixels / 2 })
+}
 
 /**
  * Draws the 3D Ideas map with OpenGL ES 3.0, the baseline every Android 8+ phone has.

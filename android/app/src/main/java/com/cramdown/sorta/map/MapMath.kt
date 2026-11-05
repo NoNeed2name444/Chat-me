@@ -182,7 +182,24 @@ class OrbitCamera(
 
 /** How much of the map's view, on each side, the chrome covers, in pixels (iOS's GraphInsets). */
 data class MapInsets(val top: Float = 0f, val left: Float = 0f, val bottom: Float = 0f, val right: Float = 0f) {
+    /**
+     * These edges with the foot raised to [cover], where that is more: the first-run card covers the
+     * view from its top edge down while it is up, so the first view is framed above it (S05d; iOS's
+     * GraphInsets.coveringFoot). A cover of 0 leaves the edges as they are.
+     */
+    fun coveringFoot(cover: Float): MapInsets = if (cover <= bottom) this else copy(bottom = cover)
+
     companion object { val NONE = MapInsets() }
+}
+
+/**
+ * When the first-run card's cover changes, whether a camera still at its first view is framed
+ * again (S05d; iOS's GraphCardCover): when the cover comes or grows, so the first view clears the
+ * card; never when it shrinks or goes, so putting the card away moves nothing. The next Recentre
+ * frames the view without it.
+ */
+object MapCardCover {
+    fun refits(from: Float, to: Float): Boolean = to > from
 }
 
 /** A first view ([OrbitCamera.fitWindow]): how far back the camera stands, and what it looks at. */

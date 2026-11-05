@@ -24,7 +24,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -125,6 +127,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     var chosen by remember(theme) { mutableStateOf<MapBody?>(null) }
     var held by remember(theme) { mutableStateOf<Pair<MapBody, Offset>?>(null) }
     var tuning by remember { mutableStateOf(false) }
+    // the first-run card's height as last drawn, in pixels, kept while it steps aside for a peek
+    // card or the Link length bar (S05d)
+    var cardPx by remember { mutableIntStateOf(0) }
     var renaming by remember { mutableStateOf<MapBody?>(null) }
     var deletingFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var addingFolder by remember { mutableStateOf(false) }
@@ -169,9 +174,13 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     WardEmptyState(Icons.Outlined.ViewInAr, stringResource(R.string.map_empty_title),
                         stringResource(R.string.map_empty_line))
                 }
-                // the first view keeps under the strip, or the status bar where there is none, and above the foot
+                // the first view keeps under the strip, or the status bar where there is none, above the
+                // foot, and above the first-run card while it is not put away (S05d): by the card's own
+                // rules, not the moments it steps aside, so those never move the camera
                 else -> NotesMap(book, settings, theme, recenter, openPath, panels.linkLength, onRoles = { roles = it },
                     top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
+                    card = if (theme != GraphTheme.PERFORMANCE && !panels.touchSeen(theme) && cardPx > 0)
+                        hidden + WardSpace.l.wardDp + with(LocalDensity.current) { cardPx.toDp() } else 0.dp,
                     onBody = { body, hold, at ->
                         when {
                             hold -> { chosen = body; held = body to at }
@@ -196,7 +205,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
                     bottom = hidden + WardSpace.l.wardDp)) {
-                MapTouchCard(more = { panels.markTouchSeen(theme); legend = true }, done = { panels.markTouchSeen(theme) })
+                // its height as drawn: the first view is framed above it (NotesMap's card)
+                MapTouchCard(more = { panels.markTouchSeen(theme); legend = true }, done = { panels.markTouchSeen(theme) },
+                    modifier = Modifier.onSizeChanged { cardPx = it.height })
             }
             // the Link length bar and the peek card, bottom-centred beside the tools (bottomPanels,
             // Graph3DView.swift:349-380); the card steps aside while a body's options are up
@@ -289,6 +300,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
  */
 @Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, openPath: List<String>,
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
+                                  card: Dp,
                                   onBody: (MapBody, Boolean, Offset) -> Unit, onEmpty: () -> Unit,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
@@ -375,7 +387,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 if (chosen != null) onBody(chosen, press.kind == MapTouchKind.HOLD, at)
             },
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,
-            onDrawn = { drawnOnce = true }, top = top, hidden = hidden)
+            onDrawn = { drawnOnce = true }, top = top, hidden = hidden, card = card)
         if (!shown) Building(null)
     }
 }

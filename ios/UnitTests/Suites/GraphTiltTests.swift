@@ -2,7 +2,8 @@
 // docs/design/depth-fade.md): the tilted fit against its closed form for a
 // symmetric sheet and the face-on fit at 0, the least distance, every padded
 // point inside; u(id) stable and order-free; the amplitude rule's choice;
-// the discs' overlap; and the band and shader text the tilt hands over to.
+// the discs' overlap; the band and shader text the tilt hands over to; and
+// the first-run card's cover (S05d).
 //
 // Compiled with Features/Notes/GraphTilt.swift, GraphDepthFade.swift,
 // GraphTheme.swift and Shared/Space/GraphicsQuality.swift (Foundation only).
@@ -187,6 +188,48 @@ check("G5c the limits keep every tilt between 10° and 75°",
       && 90 - neuronsSettings.minimumVerticalAngle == GraphTilt.highestDegrees
       && GraphTilt.lowestDegrees == 10
       && GraphTilt.highestDegrees == 75)
+
+// MARK: G6 - the first-run card's cover (S05d)
+
+// an iPhone upright: the strip's and the foot's glass, and a card whose top
+// is 420 points above the view's foot
+let glass = GraphInsets(top: 118, left: 4, bottom: 158, right: 6)
+check("G6a no card: the edges as they are", glass.coveringFoot(0) == glass)
+check("G6b a cover lower than the foot's glass changes nothing", glass.coveringFoot(120) == glass)
+let carded: GraphInsets = glass.coveringFoot(420)
+check("G6c a cover above it raises the foot alone",
+      carded == GraphInsets(top: 118, left: 4, bottom: 420, right: 6), "\(carded)")
+let wholeWindow: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: glass)
+let cardWindow: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: carded)
+check("G6d the window ends at the card's top",
+      near(cardWindow.share, (852 - 118 - 420) / 852, 1e-5) && near(cardWindow.up, (420 - 118) / 2 / 852, 1e-5),
+      "\(cardWindow)")
+check("G6e no card: the window as before",
+      GraphTilt.window(width: 393, height: 852, insets: glass.coveringFoot(0)) == wholeWindow)
+// every padded point of a made-up map, framed in that window, is drawn
+// between the strip and the card's top, face on and tilted
+for degrees: Float in [0, 35, 45] {
+    let theta: Float = degrees * Float.pi / 180
+    let fit: GraphTiltFit = GraphTilt.fit(points: cloud, pads: pads, window: cardWindow, fill: 0.88, tilt: theta)
+    var lowest: Float = 0
+    var highest: Float = 852
+    for (p, r) in zip(cloud, pads) {
+        let q: SIMD3<Float> = GraphTilt.rotX(-theta, p)
+        let front: Float = fit.distance - q.z - r
+        // the padded point's lower and upper edges, in points from the view's top
+        let low: Float = (1 - (q.y - fit.shift.y - r) / (front * GraphTilt.tanHalf)) / 2 * 852
+        let high: Float = (1 - (q.y - fit.shift.y + r) / (front * GraphTilt.tanHalf)) / 2 * 852
+        lowest = max(lowest, low)
+        highest = min(highest, high)
+    }
+    check("G6f \(degrees)°: every point above the card's top", lowest <= 852 - 420, "lowest at \(lowest)")
+    check("G6g \(degrees)°: and below the strip", highest >= 118, "highest at \(highest)")
+}
+check("G6h the cover comes or grows: a camera at its first view is framed again",
+      GraphCardCover.refits(from: 0, to: 300) && GraphCardCover.refits(from: 300, to: 340))
+check("G6i it shrinks, goes or stays: not",
+      !GraphCardCover.refits(from: 340, to: 300) && !GraphCardCover.refits(from: 300, to: 0)
+      && !GraphCardCover.refits(from: 300, to: 300) && !GraphCardCover.refits(from: 0, to: 0))
 
 print(failures.isEmpty ? "ALL PASS" : "FAILURES: \(failures.count)")
 if !failures.isEmpty { exit(1) }

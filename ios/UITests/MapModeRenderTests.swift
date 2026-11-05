@@ -9,8 +9,9 @@ import XCTest
 /// set), the appearance set on the simulator from outside. On the iPad the
 /// map is the pane beside the Sort screen. The largest text size runs on the
 /// iPhone only: the switch, the look menu open and the list sheet. The 3D
-/// looks are shot still (-graphFreeze), as MapRenderTests' are. None of the
-/// ideas is medical.
+/// looks are shot still (-graphFreeze), as MapRenderTests' are. Space and
+/// Neurons are shot at first run, their first-run card up, which covers no
+/// body; putting it away moves none (S05d). None of the ideas is medical.
 final class MapModeRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -20,7 +21,9 @@ final class MapModeRenderTests: XCTestCase {
     func testMapRenders() throws {
         // the made-up export with two more ideas that have no board place, at
         // (0, 0) with Seed swap list (S05c)
-        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(stacked: true), "-graphFreeze"])
+        // every first-run card back, as on a new install (S05d)
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(stacked: true), "-graphFreeze",
+                                                 "-SortaFirstRun"])
         importExport(app)
         XCTAssertTrue(app.ideaRow("Ask about the allotment waiting list").waitForExistence(timeout: 10))
         app.keyboards.buttons["Done"].firstMatch.tapIfThere()
@@ -70,6 +73,11 @@ final class MapModeRenderTests: XCTestCase {
         // the labels and the last bodies settle
         sleep(2)
         keepShot("mapmode-2-space")
+        // the first-run card, in its first form, covers no body of the first
+        // view (S05d)
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 10), "Space at first run: the first-run card")
+        assertClear(app, of: hint.frame, "Space")
 
         if !paned {
             let chip = app.descendants(matching: .any)["map-list-chip"].firstMatch
@@ -80,7 +88,65 @@ final class MapModeRenderTests: XCTestCase {
             keepShot("mapmode-3-list")
             app.buttons["map-list-done"].tap()
         }
+        // putting the card away moves nothing: every body is where it was,
+        // the map still (S05d)
+        XCTAssertTrue(hint.waitForExistence(timeout: 10), "the first-run card, the list sheet gone")
+        sleep(1)
+        let before: [CGRect] = bodyFrames(app)
+        hint.buttons["Got it"].tap()
+        XCTAssertTrue(gone(hint), "Got it puts the first-run card away")
+        sleep(1)
+        let after: [CGRect] = bodyFrames(app)
+        XCTAssertEqual(after.count, before.count, "the same bodies after Got it")
+        for (was, now) in zip(before, after) {
+            XCTAssertEqual(now.midX, was.midX, accuracy: 1, "a body moved when the card went: \(was) to \(now)")
+            XCTAssertEqual(now.midY, was.midY, accuracy: 1, "a body moved when the card went: \(was) to \(now)")
+        }
+
+        // Neurons at first run: its own card, which Space's Got it leaves
+        // unseen, clear of every body (S05d A6)
+        app.chooseLook("look-neuron")
+        sleep(2)
+        waitDrawn(app, app.descendants(matching: .any)["graph3D"].firstMatch, window, "Neurons")
+        sleep(2)
+        XCTAssertTrue(hint.waitForExistence(timeout: 10), "Neurons at first run: its first-run card")
+        assertClear(app, of: hint.frame, "Neurons")
+        keepShot("mapmode-4-neurons")
+        app.chooseLook("look-space")
         // Space: the look as the other tests find it
+    }
+
+    /// Every body the 3D map shows, where it is drawn (its VoiceOver
+    /// element's frame, 44 points round its centre), in the map's order,
+    /// from one snapshot of the screen.
+    private func bodyFrames(_ app: XCUIApplication) -> [CGRect] {
+        guard let root = try? app.snapshot() else { return [] }
+        var out: [CGRect] = []
+        func walk(_ node: XCUIElementSnapshot) {
+            if node.identifier == "graphBody", !node.frame.isEmpty { out.append(node.frame) }
+            node.children.forEach(walk)
+        }
+        walk(root)
+        return out
+    }
+
+    /// The map has bodies on screen, and none of them meets the first-run
+    /// card's frame.
+    private func assertClear(_ app: XCUIApplication, of card: CGRect, _ name: String,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        let bodies: [CGRect] = bodyFrames(app)
+        XCTAssertFalse(bodies.isEmpty, "\(name): its bodies, on screen", file: file, line: line)
+        for body in bodies {
+            XCTAssertFalse(body.intersects(card), "\(name): a body under the first-run card: \(body) \(card)",
+                           file: file, line: line)
+        }
+    }
+
+    /// Whether `element` has gone within ten seconds.
+    private func gone(_ element: XCUIElement) -> Bool {
+        let start = Date()
+        while element.exists && Date().timeIntervalSince(start) < 10 { usleep(200_000) }
+        return !element.exists
     }
 
     /// The largest Dynamic Type size (AX5) on a phone: the switch (its disc
@@ -89,7 +155,9 @@ final class MapModeRenderTests: XCTestCase {
     /// under 44 points and none touching another.
     func testLargestTextSizeOnTheMap() throws {
         let largest = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64()] + largest)
+        // the first-run cards as a new install has them: testMapRenders, run
+        // before this on the same simulator, puts Space's away (S05d)
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(), "-SortaFirstRun"] + largest)
         let window = app.windows.firstMatch.frame
         importExport(app)
 

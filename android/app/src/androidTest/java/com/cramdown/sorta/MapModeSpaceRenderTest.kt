@@ -3,12 +3,15 @@ package com.cramdown.sorta
 import android.content.Intent
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
@@ -17,10 +20,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
+import com.cramdown.sorta.ui.ideas.MapPanelTags
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
@@ -31,6 +36,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
+import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Map mode's Space on the emulator (S05b A6), by day and by night: Sorta itself (MainActivity) on a
@@ -40,6 +47,10 @@ import java.util.UUID
  * only on a real GL surface, which Robolectric has not, so these are the emulator's. Each run checks
  * the look chip names Space and that the map drew, as MapRenderTest's requireMapDrawn does; the
  * stills are taken as MapRenderTest's are.
+ *
+ * S05d: each run is a first run, so the first-run card shows. Every body the map drew is above the
+ * card's top, Got it leaves the camera where it was, and Neurons, chosen after it, shows its own
+ * card with every body above it too: a second still each, mapmode-neurons-<light|dark>-<device>.png.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -78,10 +89,51 @@ class MapModeSpaceRenderTest {
         }
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(MapLook.CHIP)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasTestTag(MapLook.CHIP)).assert(hasContentDescription(context.getString(R.string.look_chip_spoken, context.getString(R.string.look_space))))
-        try { compose.waitUntil(60_000) { framed(mapDrawn()) } } catch (_: ComposeTimeoutException) {}
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
         val name = "mapmode-space-${if (dark) "dark" else "light"}-$device"
         shot(name) // kept even when the check below fails, to see why
         requireMapDrawn(name)
+        // S05d: at first run the card shows in its one form, every body of the first view is drawn
+        // above it, and Got it puts it away without moving the camera
+        requireClearOfTheCard(name)
+        val pose = checkNotNull(mapDrawn()).pose
+        compose.onNode(hasText(context.getString(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT))).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNodes().isEmpty() }
+        SystemClock.sleep(1_500) // a glide or a jump would have shown by now
+        compose.waitForIdle()
+        val after = checkNotNull(mapDrawn()).pose
+        check(pose.size == 6 && after.size == 6 && pose.indices.all { abs(pose[it] - after[it]) <= 1e-4f * max(1f, abs(pose[it])) }) {
+            "Got it moved the camera for $name: $pose, then $after"
+        }
+        // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
+        compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasTestTag(MapLook.NEURON.identifier)).performClick()
+        compose.waitUntil(30_000) {
+            mapNode()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith(GraphTheme.NEURONS.mapLabel) } == true
+        }
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
+        val neurons = "mapmode-neurons-${if (dark) "dark" else "light"}-$device"
+        shot(neurons)
+        requireMapDrawn(neurons)
+        requireClearOfTheCard(neurons)
+    }
+
+    /**
+     * The first-run card shows, and every body the map drew is above its top: the drawn bodies' box
+     * (in the map's own pixels, from its top left) lies over the card's top edge (S05d A3).
+     */
+    private fun requireClearOfTheCard(name: String) {
+        try {
+            compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNodes().isNotEmpty() }
+        } catch (_: ComposeTimeoutException) { error("The first-run card is not showing for $name") }
+        val card = compose.onNode(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNode().boundsInRoot
+        val drawn = checkNotNull(mapDrawn())
+        check(drawn.box.size == 4) { "The map reports no drawn bodies' box for $name: $drawn" }
+        val map = checkNotNull(mapNode()).boundsInRoot
+        val bottom = map.top + drawn.box[3]
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: the bodies reach $bottom, the card's top is ${card.top}")
+        check(bottom <= card.top) { "A body is drawn under the first-run card for $name: the bodies reach $bottom, the card's top is ${card.top}; $drawn" }
     }
 
     private fun mapNode(): SemanticsNode? =

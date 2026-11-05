@@ -4,6 +4,19 @@ import SceneKit
 import UIKit
 import simd
 
+/// UI tests only: `-SortaFirstRun` puts every theme's first-run card back,
+/// as on a new install, once a launch, before the map first reads it. A
+/// render test that puts the card away (S05d) runs by day and then by night
+/// on the same simulator, and each run must see it.
+enum GraphFirstRun {
+    static let reset: Void = {
+        guard ProcessInfo.processInfo.arguments.contains("-SortaFirstRun") else { return }
+        for key in ["vignette.space.universeHintSeen", GraphTheme.hintsKey, GraphMapTouch.seenKey] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }()
+}
+
 /// The space: every note as a soft point in 3D and every connection as a fine
 /// thread between two, the way Obsidian's graph shows a vault - but something
 /// to turn round in the hand rather than a flat picture.
@@ -84,6 +97,9 @@ struct Graph3DView: View {
     /// The legend ("What the bodies mean"), from the Look menu or the
     /// first-run card.
     @State private var showingLegend: Bool = false
+    /// The first-run card's height as last drawn, kept while it steps aside
+    /// for a peek card (S05d).
+    @State private var cardHeight: CGFloat = 0
     /// The notes' look (GraphStyleChoice), remembered; a change rebuilds.
     @AppStorage(GraphStyleChoice.key) private var nodeStyle: String = GraphStyleChoice.standard
     @AppStorage(GraphStyleChoice.foldersKey) private var folderStyles: String = ""
@@ -141,6 +157,7 @@ struct Graph3DView: View {
         self.open = open
         self.openFolder = openFolder
         self.covered = covered
+        _ = GraphFirstRun.reset
     }
 
     var body: some View {
@@ -271,7 +288,8 @@ struct Graph3DView: View {
             GeometryReader { geo in
                 let insets: GraphInsets = screenInsets(geo.safeAreaInsets)
                 GraphSCNView(built: built, filter: filter, recenter: recenter,
-                             insets: insets, onTap: open, openFolder: openFolder,
+                             insets: insets, card: cardCover(built, foot: geo.safeAreaInsets.bottom),
+                             onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
                              labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp)
@@ -311,6 +329,9 @@ struct Graph3DView: View {
                 }, done: {
                     markCardSeen(built.theme)
                 })
+                // its height as drawn, in whichever form it shows: the first
+                // view is framed above it (cardCover)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardHeight = $0 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, WardSpace.gutter)
                 .padding(.trailing, WardSpace.gutter + WardControlSize.target + WardSpace.m)
@@ -438,6 +459,17 @@ struct Graph3DView: View {
         }
         guard !cardSeen(theme) else { return }
         themeHintsSeen = themeHintsSeen.isEmpty ? theme.rawValue : themeHintsSeen + "," + theme.rawValue
+    }
+
+    /// How far up from the map's foot the first-run card reaches while it is
+    /// not put away (S05d): the safe area's foot it sits on, its margin and
+    /// its height as drawn. It counts by the card's own rules, not the
+    /// moments it steps aside for a peek card or the Link length bar, so
+    /// those never move the camera. 0 once it is put away, in the design
+    /// preview, and before it is first drawn.
+    private func cardCover(_ built: GraphScene, foot: CGFloat) -> Float {
+        guard built.universe, hintShown(built.theme), !GraphPreview.isOn, cardHeight > 0 else { return 0 }
+        return Float(foot + WardSpace.l + cardHeight)
     }
 
     /// The first-run card shows until it is put away: its steps the first
@@ -1552,6 +1584,9 @@ struct GraphSCNView: UIViewRepresentable {
     /// How much of the view is under glass on each side; the graph is
     /// framed to the rest.
     let insets: GraphInsets
+    /// How far up from the view's foot the first-run card reaches, 0 when
+    /// it is put away: framed above while it is up (S05d).
+    var card: Float = 0
     let onTap: (UUID) -> Void
     var openFolder: (UUID?) -> Void = { _ in }
     /// The camera's requests from the card (GraphMapCommand), the chosen
@@ -1566,7 +1601,7 @@ struct GraphSCNView: UIViewRepresentable {
     var covered: Bool = false
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets)
+        Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets, card: card)
     }
 
     func makeUIView(context: Context) -> FramingSCNView {
@@ -1653,9 +1688,10 @@ struct GraphSCNView: UIViewRepresentable {
         if coordinator.recenterCount != recenter {
             coordinator.recenterCount = recenter
             coordinator.insets = insets
+            coordinator.card = card
             coordinator.recentre()
-        } else if coordinator.insets != insets {
-            coordinator.inset(to: insets)
+        } else if coordinator.insets != insets || coordinator.card != card {
+            coordinator.inset(to: insets, card: card)
         }
         coordinator.cover(covered)
     }
@@ -1688,6 +1724,8 @@ struct GraphSCNView: UIViewRepresentable {
         var recenterCount: Int
         /// How much of the view is under glass; framing fits the rest.
         var insets: GraphInsets
+        /// How far up from the foot the first-run card reaches (S05d).
+        var card: Float
         private(set) var sim: GraphSim?
         weak var view: SCNView?
         /// Hold a quarter second on a body, then move: it is picked up
@@ -1786,11 +1824,18 @@ struct GraphSCNView: UIViewRepresentable {
         private var covered: Bool = false
 
         init(onTap: @escaping (UUID) -> Void, openFolder: @escaping (UUID?) -> Void, recenter: Int,
-             insets: GraphInsets) {
+             insets: GraphInsets, card: Float) {
             self.onTap = onTap
             self.openFolder = openFolder
             self.recenterCount = recenter
             self.insets = insets
+            self.card = card
+        }
+
+        /// What framing fits the graph to: the glass, and the first-run
+        /// card while it is up (S05d).
+        private var framing: GraphInsets {
+            insets.coveringFoot(card)
         }
 
         /// Shows a newly built scene.
@@ -2121,11 +2166,23 @@ struct GraphSCNView: UIViewRepresentable {
         /// keyboard or the dock came or went). While the camera is still
         /// where the last framing left it, the graph glides to fit the new
         /// window; once it has been turned or zoomed, it is left alone and
-        /// the next Recentre uses the new window.
-        func inset(to new: GraphInsets) {
+        /// the next Recentre uses the new window. The first-run card's cover
+        /// (S05d): when it comes or grows, a camera still at its first view
+        /// is framed above it at once, as for a new size, since the card
+        /// comes with the first view and a glide there reads as motion;
+        /// when it is put away, the camera stays where it is
+        /// (GraphCardCover).
+        func inset(to new: GraphInsets, card cover: Float) {
+            let glass: Bool = new != insets
+            let grew: Bool = GraphCardCover.refits(from: card, to: cover)
             insets = new
+            card = cover
             guard framedWide != nil, untouched else { return }
-            refit(animated: true)
+            if glass {
+                refit(animated: true)
+            } else if grew {
+                refit(animated: false)
+            }
         }
 
         /// Whether the camera is still where the last framing put it.
@@ -2208,7 +2265,7 @@ struct GraphSCNView: UIViewRepresentable {
             let middle: SIMD3<Float> = GraphMapBounds.centre(turned)
             let around: [SIMD3<Float>] = turned.map { $0 - middle }
             let window: GraphWindow = GraphFraming.window(width: Float(size.width),
-                                                          height: Float(size.height), insets: insets)
+                                                          height: Float(size.height), insets: framing)
             let fit: GraphFit = GraphFit.of(theme, universe: universe)
             let theta: Float = GraphTilt.angle(theme, wide: wide)
             applyCameraSettings(tilt: theta)
@@ -2281,7 +2338,7 @@ struct GraphSCNView: UIViewRepresentable {
             let turn: simd_quatf = worldTurn(wide: wide)
             let turned: [SIMD3<Float>] = points.map { turn.act($0) }
             let window: GraphWindow = GraphFraming.window(width: Float(size.width),
-                                                          height: Float(size.height), insets: insets)
+                                                          height: Float(size.height), insets: framing)
             let local: SIMD3<Float> = sim.homePosition(i)
             let centre: SIMD3<Float> = turn.act(local)
             flown = i
@@ -2746,6 +2803,8 @@ struct GraphSCNView: UIViewRepresentable {
                 element.coordinator = self
                 element.slot = i
                 element.folder = folder
+                // for the UI tests, which read each body's drawn place (S05d)
+                element.accessibilityIdentifier = "graphBody"
                 element.accessibilityLabel = built.names[id] ?? "Untitled"
                 let role: String = built.roles[id] ?? ""
                 let word: String? = GraphPeek.roleWord(theme: built.theme.rawValue, role: role, folder: folder,

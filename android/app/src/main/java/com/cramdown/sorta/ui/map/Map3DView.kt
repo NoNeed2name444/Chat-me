@@ -65,6 +65,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
+import com.cramdown.sorta.map.MapCardCover
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.NeuronLookPlan
@@ -214,6 +215,13 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
      */
     top: androidx.compose.ui.unit.Dp = 0.dp,
     hidden: androidx.compose.ui.unit.Dp = 0.dp,
+    /**
+     * How far up from the map's foot the first-run card reaches, 0 once it is put away (S05d): the
+     * first view is framed above it while it is up. When it grows, a camera still at its first view
+     * follows; when it goes, the camera stays where it is and the next Recentre frames without it
+     * (MapCardCover).
+     */
+    card: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -226,10 +234,11 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     val modes = remember(display) { display?.supportedModes?.map { it.info() } ?: emptyList() }
     val maxHz = remember(modes) { RefreshRate.maxHz(modes, display?.refreshRate ?: 60f) }
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
-    var screenNodes by remember { mutableStateOf<List<ScreenNode>>(emptyList()) }
+    // per scene, as its renderer: another scene's bodies and counts are not this one's
+    var screenNodes by remember(scene) { mutableStateOf<List<ScreenNode>>(emptyList()) }
     // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
     val named = remember(scene) { HashMap<Int, Int>() }
-    var drawn by remember { mutableStateOf(MapDrawn()) }
+    var drawn by remember(scene) { mutableStateOf(MapDrawn()) }
     val hz = remember { floatArrayOf(display?.refreshRate ?: 60f) }
     val tree = scene.tree
     val camera = remember(scene) {
@@ -245,6 +254,9 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     val home = remember(scene) { HomeView(camera, scene.viewRadius) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
+    val cover = with(density) { card.toPx() }
+    // the card's cover the home was last fitted to
+    val framedCover = remember(home) { floatArrayOf(0f) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val renderer = remember(scene) {
@@ -264,10 +276,17 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     LaunchedEffect(recenter) {
         if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
     }
-    // the first view fits the shape the map has (on its size, below) and what the chrome leaves of
-    // it, again when the chrome changes
-    fun fitHome(size: IntSize) { if (synchronized(camera) { home.fit(camera, size.width, size.height, insets) }) loop.moved() }
+    // the first view fits the shape the map has (on its size, below) and what the chrome and the
+    // first-run card leave of it, again when the chrome changes or the card comes or grows
+    fun fitHome(size: IntSize, follow: Boolean = true) {
+        if (synchronized(camera) { home.fit(camera, size.width, size.height, insets.coveringFoot(framedCover[0]), follow) }) loop.moved()
+    }
     LaunchedEffect(home, insets) { fitHome(viewSize) }
+    LaunchedEffect(home, cover) {
+        val follow = MapCardCover.refits(framedCover[0], cover)
+        framedCover[0] = cover
+        fitHome(viewSize, follow)
+    }
 
     // Ask the window for the highest refresh mode at this resolution while the map is shown.
     DisposableEffect(activity, modes) {
@@ -283,9 +302,14 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     val drawnNow = drawn
     val latestDrawn by rememberUpdatedState(onDrawn)
     val firstDrawn = !gles3 || drawnNow.frames >= 1
+    val box = remember(screenNodes) { drawnBox(screenNodes) }
     LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
-        contentDescription = description; mapDrawn = drawnNow
+        contentDescription = description
+        // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
+        mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
+            listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
+        })
         if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
@@ -296,23 +320,27 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
                 style = WardType.body.textStyle(), color = wardColor(WardToken.inkSecondary), textAlign = TextAlign.Center)
             return@Box
         }
-        AndroidView(
-            factory = { ctx ->
-                GLSurfaceView(ctx).apply {
-                    setEGLContextClientVersion(3)
-                    preserveEGLContextOnPause = true
-                    setRenderer(renderer)
-                    renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-                    holder.addCallback(object : SurfaceHolder.Callback {
-                        override fun surfaceCreated(h: SurfaceHolder) = requestFrameRate(h.surface, maxHz)
-                        override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) = requestFrameRate(h.surface, maxHz)
-                        override fun surfaceDestroyed(h: SurfaceHolder) {}
-                    })
-                    loop.view = this
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        // a GL view takes its renderer once, so a new scene (another look, a Neurons cell opened, a
+        // new Link length) gets a view of its own; one kept would go on showing the old scene
+        androidx.compose.runtime.key(renderer) {
+            AndroidView(
+                factory = { ctx ->
+                    GLSurfaceView(ctx).apply {
+                        setEGLContextClientVersion(3)
+                        preserveEGLContextOnPause = true
+                        setRenderer(renderer)
+                        renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                        holder.addCallback(object : SurfaceHolder.Callback {
+                            override fun surfaceCreated(h: SurfaceHolder) = requestFrameRate(h.surface, maxHz)
+                            override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) = requestFrameRate(h.surface, maxHz)
+                            override fun surfaceDestroyed(h: SurfaceHolder) {}
+                        })
+                        loop.view = this
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         DisposableEffect(lifecycle, loop) {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
@@ -444,22 +472,34 @@ private class PaintMetrics(private val paint: android.graphics.Paint) : NameMetr
  * Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's map off at the sides and left a
  * tablet's small, and fitted the whole view, so what the bottom bar hides was never in its sum.
  */
-private class HomeView(camera: OrbitCamera, private val radius: Float) {
+internal class HomeView(camera: OrbitCamera, private val radius: Float) {
     private val centre = camera.target
     private var target = camera.target
     private var distance = camera.distance
     private val yaw = camera.yaw
     private val pitch = camera.pitch
     private val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = camera.fovY)
+    // where a camera still at its first view was left when the home moved without it (the card put
+    // away): it is still the first view, so the next change of the chrome takes it, as iOS's untouched
+    private var left: Pair<Vec3, Float>? = null
 
     fun restore(camera: OrbitCamera) { camera.target = target; camera.distance = distance; camera.yaw = yaw; camera.pitch = pitch }
 
-    /** Fits to a [width] x [height] view under [insets]; a camera still at home moves with it, and then this returns true. */
-    fun fit(camera: OrbitCamera, width: Int, height: Int, insets: MapInsets): Boolean {
+    private fun at(camera: OrbitCamera, target: Vec3, distance: Float) =
+        camera.target == target && camera.distance == distance && camera.yaw == yaw && camera.pitch == pitch
+
+    /**
+     * Fits to a [width] x [height] view under [insets]; a camera still at its first view moves with
+     * it when it [follow]s, and then this returns true. Without, the home moves and the camera stays
+     * (the first-run card put away, S05d), still counted at its first view for the next fit.
+     */
+    fun fit(camera: OrbitCamera, width: Int, height: Int, insets: MapInsets, follow: Boolean = true): Boolean {
         if (width <= 0 || height <= 0) return false
-        val there = camera.target == target && camera.distance == distance && camera.yaw == yaw && camera.pitch == pitch
+        val first = at(camera, target, distance) || left?.let { at(camera, it.first, it.second) } == true
+        left = if (first && !follow) camera.target to camera.distance else null
         val fit = lens.fitWindow(centre, radius, width.toFloat(), height.toFloat(), insets)
         distance = fit.distance; target = fit.target
+        val there = first && follow
         if (there) restore(camera)
         return there
     }
