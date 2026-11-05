@@ -37,6 +37,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
@@ -264,7 +265,7 @@ internal sealed class FolderPrompt {
         // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
-                Modifier.onSizeChanged { stripHeight = it.height }
+                Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
         }
     }

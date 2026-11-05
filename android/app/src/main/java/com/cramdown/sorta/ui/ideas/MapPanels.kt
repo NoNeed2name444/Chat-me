@@ -92,6 +92,8 @@ object MapPanelTags {
     const val TOUCH_HINT = "touchHint"
     const val EMPTY_HINT = "graphEmptyHint"
     const val ADD_FOLDER = "graphAddFolder"
+    /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
+    const val TOP_STRIP = "mapTopStrip"
 
     /** A theme's legend sheet, iOS's identifiers (GraphLegendSheet): universeLegend, neuronsLegend, performanceLegend. */
     fun legend(theme: GraphTheme): String = if (theme == GraphTheme.SPACE) "universeLegend" else theme.rawValue + "Legend"

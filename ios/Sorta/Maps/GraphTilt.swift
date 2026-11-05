@@ -53,6 +53,25 @@ nonisolated struct GraphInsets: Equatable {
         self.right = right
     }
 
+    /// The glass at the top and the foot of the space's view, measured
+    /// (S05d): from the view's own top and bottom edges to those of the part
+    /// of it not under glass, all four in one coordinate space; never less
+    /// than 0. The view ignores the safe area, so its reader's own insets
+    /// read 0 (CI, 5 Nov: the first view was framed from the screen's top,
+    /// and the top cells sat under Map mode's top strip and the status bar);
+    /// the part not under glass is the frame the map's place in the layout
+    /// has, below the strip and above the switcher. The sides, when given,
+    /// are measured the same way and both take the larger of the two, so a
+    /// right-to-left layout's mirrored frames give the same edges; given
+    /// none, left and right are 0.
+    static func measured(viewTop: Float, viewBottom: Float, seenTop: Float, seenBottom: Float,
+                         viewLeft: Float = 0, viewRight: Float = 0,
+                         seenLeft: Float = 0, seenRight: Float = 0) -> GraphInsets {
+        let side: Float = max(seenLeft - viewLeft, viewRight - seenRight, 0)
+        return GraphInsets(top: max(seenTop - viewTop, 0), left: side,
+                           bottom: max(viewBottom - seenBottom, 0), right: side)
+    }
+
     /// These edges with the foot raised to `cover`, where that is more: the
     /// first-run card (GraphUniverseHint) covers the view from its top edge
     /// down while it is up, so the first view is framed above it (S05d). A

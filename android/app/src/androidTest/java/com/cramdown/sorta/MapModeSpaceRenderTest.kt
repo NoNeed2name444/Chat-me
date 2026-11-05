@@ -183,21 +183,14 @@ class MapModeSpaceRenderTest {
             check(!shown(MapPanelTags.PEEK)) { "A turn brought up a card for $name" }
             SystemClock.sleep(500) // the turn's last frame, so the spot is where the body now is
         }
-        // measurement copy only (S05f A7): three seconds at rest, then three with the name on show
-        android.util.Log.i("SortaBudget", "mark rest $name")
-        SystemClock.sleep(3_000)
         val (index, at) = spot(name)
         compose.onNode(map).performTouchInput { click(at) }
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK)) { "A tap on a body brought up no card for $name" }
         requireOnePill(index, "a chosen body, its card up, for $name")
         shot(name)
-        android.util.Log.i("SortaBudget", "mark named $name")
         SystemClock.sleep(1_000)
         requireOnePill(index, "a chosen body a second later, its card still up, for $name")
-        SystemClock.sleep(2_000)
-        requireOnePill(index, "a chosen body three seconds later, for $name")
-        android.util.Log.i("SortaBudget", "mark end $name")
     }
 
     /** The map's spot: a body's index and its centre, in the map's own pixels. */
@@ -221,7 +214,8 @@ class MapModeSpaceRenderTest {
 
     /**
      * The first-run card shows, and every body the map drew is above its top: the drawn bodies' box
-     * (in the map's own pixels, from its top left) lies over the card's top edge (S05d A3).
+     * (in the map's own pixels, from its top left) lies over the card's top edge (S05d A3), and
+     * below the top strip's chips.
      */
     private fun requireClearOfTheCard(name: String) {
         try {
@@ -234,6 +228,11 @@ class MapModeSpaceRenderTest {
         val bottom = map.top + drawn.box[3]
         android.util.Log.i("MapModeSpaceRenderTest", "$name: the bodies reach $bottom, the card's top is ${card.top}")
         check(bottom <= card.top) { "A body is drawn under the first-run card for $name: the bodies reach $bottom, the card's top is ${card.top}; $drawn" }
+        // and every body starts below the top strip's chips, as iOS's assertBelowStrip checks
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        val top = map.top + drawn.box[1]
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: the bodies start at $top, the strip's bottom is ${strip.bottom}")
+        check(top >= strip.bottom) { "A body is drawn under the top strip's chips for $name: the bodies start at $top, the strip's bottom is ${strip.bottom}; $drawn" }
     }
 
     /**

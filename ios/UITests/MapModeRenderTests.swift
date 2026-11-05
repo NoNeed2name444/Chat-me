@@ -11,7 +11,8 @@ import XCTest
 /// iPhone only: the switch, the look menu open and the list sheet. The 3D
 /// looks are shot still (-graphFreeze), as MapRenderTests' are. Space and
 /// Neurons are shot at first run, their first-run card up, which covers no
-/// body; putting it away moves none (S05d). None of the ideas is medical.
+/// body, and every body below the top strip; putting the card away moves
+/// none (S05d). None of the ideas is medical.
 final class MapModeRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -78,6 +79,7 @@ final class MapModeRenderTests: XCTestCase {
         let hint = app.descendants(matching: .any)["universeHint"].firstMatch
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "Space at first run: the first-run card")
         assertClear(app, of: hint.frame, "Space")
+        assertBelowStrip(app, "Space")
 
         if !paned {
             let chip = app.descendants(matching: .any)["map-list-chip"].firstMatch
@@ -119,6 +121,7 @@ final class MapModeRenderTests: XCTestCase {
         sleep(2)
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "Neurons at first run: its first-run card")
         assertClear(app, of: hint.frame, "Neurons")
+        assertBelowStrip(app, "Neurons")
         keepShot("mapmode-4-neurons")
         app.chooseLook("look-space")
         // Space: the look as the other tests find it
@@ -147,6 +150,26 @@ final class MapModeRenderTests: XCTestCase {
         for body in bodies {
             XCTAssertFalse(body.intersects(card), "\(name): a body under the first-run card: \(body) \(card)",
                            file: file, line: line)
+        }
+    }
+
+    /// The map has bodies on screen, and each one is drawn below the top
+    /// strip's foot, the lower of its chips' (the To sort chip's, on a phone,
+    /// and the look chip's): the first view is framed below the strip, not
+    /// from the screen's top (S05d: the iPhone's top cells were under both
+    /// chips, CI run 42071068784).
+    private func assertBelowStrip(_ app: XCUIApplication, _ name: String,
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
+        XCTAssertTrue(look.waitForExistence(timeout: 10), "\(name): the look chip", file: file, line: line)
+        var foot: CGFloat = look.frame.maxY
+        let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
+        if list.exists { foot = max(foot, list.frame.maxY) }
+        let bodies: [CGRect] = bodyFrames(app)
+        XCTAssertFalse(bodies.isEmpty, "\(name): its bodies, on screen", file: file, line: line)
+        for body in bodies {
+            XCTAssertGreaterThanOrEqual(body.minY, foot, "\(name): a body under the top strip: \(body), its foot at \(foot)",
+                                        file: file, line: line)
         }
     }
 

@@ -231,5 +231,82 @@ check("G6i it shrinks, goes or stays: not",
       !GraphCardCover.refits(from: 340, to: 300) && !GraphCardCover.refits(from: 300, to: 0)
       && !GraphCardCover.refits(from: 300, to: 300) && !GraphCardCover.refits(from: 0, to: 0))
 
+// MARK: G7 - the glass at the top, measured (S05d)
+
+// The map's view ignores the safe area, so its reader's insets read 0 and
+// the iPhone's first Neurons view was framed from the screen's top: its two
+// top cells under the To sort and look chips (CI run 42071068784). The glass
+// is measured instead: an iPhone upright, 393 x 852, the view 0...852, the
+// map's place below the strip (the status bar's 59, 8 and a 44-point chip:
+// 111) and above the switcher (754); the Neurons card's top at 415.4, its
+// cover 852 - 415.4 + 22.
+let measuredGlass: GraphInsets = GraphInsets.measured(viewTop: 0, viewBottom: 852, seenTop: 111, seenBottom: 754)
+check("G7a the strip and the switcher, measured",
+      measuredGlass == GraphInsets(top: 111, bottom: 98), "\(measuredGlass)")
+check("G7b a place outside the view counts as no glass",
+      GraphInsets.measured(viewTop: 20, viewBottom: 800, seenTop: 10, seenBottom: 810) == GraphInsets())
+check("G7b2 the sides, measured: a landscape notch counts on both sides",
+      GraphInsets.measured(viewTop: 0, viewBottom: 400, seenTop: 50, seenBottom: 380,
+                           viewLeft: 0, viewRight: 900, seenLeft: 59, seenRight: 900)
+        == GraphInsets(top: 50, left: 59, bottom: 20, right: 59),
+      "\(GraphInsets.measured(viewTop: 0, viewBottom: 400, seenTop: 50, seenBottom: 380, viewLeft: 0, viewRight: 900, seenLeft: 59, seenRight: 900))")
+check("G7b3 mirrored frames give the same sides",
+      GraphInsets.measured(viewTop: 0, viewBottom: 400, seenTop: 0, seenBottom: 400,
+                           viewLeft: 0, viewRight: 900, seenLeft: 0, seenRight: 841)
+        == GraphInsets(left: 59, right: 59))
+/// A window's top and bottom edges, in points from the view's top.
+func edges(_ w: GraphWindow, height: Float) -> (top: Float, bottom: Float) {
+    let middle: Float = height * (0.5 - w.up)
+    return (middle - w.share * height / 2, middle + w.share * height / 2)
+}
+// room for both: the window runs from the strip's foot to the card's cover
+let roomy: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: measuredGlass.coveringFoot(400))
+let roomyEdges = edges(roomy, height: 852)
+check("G7c with room, the window is the strip's foot to the card's cover",
+      abs(roomyEdges.top - 111) < 0.01 && abs(roomyEdges.bottom - 452) < 0.01, "\(roomyEdges)")
+// the iPhone's Neurons card leaves 282.4 points, under a third (284): the
+// third is centred between the strip and the card, so neither wins and each
+// is crossed by the same 0.8 points, as Android's MapMath.fitWindow does
+let neuronCover: Float = 852 - 415.4 + 22
+let tight: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: measuredGlass.coveringFoot(neuronCover))
+let tightEdges = edges(tight, height: 852)
+let spill: Float = (852.0 / 3 - (852 - 111 - neuronCover)) / 2
+check("G7d short of a third: centred between them, crossing each by the same",
+      near(tight.share, 1.0 / 3, 1e-5) && abs((111 - tightEdges.top) - spill) < 0.01
+      && abs((tightEdges.bottom - (852 - neuronCover)) - spill) < 0.01 && spill < 1, "\(tightEdges) spill \(spill)")
+// the reading of 0 at the top put the window's top at the screen's
+let unread: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: GraphInsets().coveringFoot(neuronCover))
+check("G7e read as 0, the window began at the screen's top (the defect)", abs(edges(unread, height: 852).top) < 0.01)
+/// The highest and lowest edges, in points from the top of an 852-point
+/// view, of `points` with their `pads`, framed in `window` at `fill`.
+func drawnSpan(_ points: [SIMD3<Float>], _ radii: [Float], window: GraphWindow, fill: Float,
+               tilt: Float) -> (highest: Float, lowest: Float) {
+    let fit: GraphTiltFit = GraphTilt.fit(points: points, pads: radii, window: window, fill: fill, tilt: tilt)
+    var highest: Float = 852
+    var lowest: Float = 0
+    for (p, r) in zip(points, radii) {
+        let q: SIMD3<Float> = GraphTilt.rotX(-tilt, p)
+        let front: Float = fit.distance - q.z - r
+        lowest = max(lowest, (1 - (q.y - fit.shift.y - r) / (front * GraphTilt.tanHalf)) / 2 * 852)
+        highest = min(highest, (1 - (q.y - fit.shift.y + r) / (front * GraphTilt.tanHalf)) / 2 * 852)
+    }
+    return (highest, lowest)
+}
+// the made-up cloud framed as the Neurons' first view (fill 1, pitched
+// 35°) in that window: every point inside it, so below the strip but for
+// the third's shared spill, and above the card's top
+let neuronSpan = drawnSpan(cloud, [Float](repeating: 0, count: cloud.count), window: tight, fill: 1,
+                           tilt: GraphTilt.angle(.neurons))
+check("G7f Neurons: every point inside the window, so below the strip but for the spill",
+      neuronSpan.highest >= tightEdges.top - 0.01, "highest at \(neuronSpan.highest), window from \(tightEdges.top)")
+check("G7g and above the card's top", neuronSpan.lowest <= 415.4, "lowest at \(neuronSpan.lowest)")
+// Space's card is taller (its top at 395.3): its third crosses each by
+// 10.9 points, and its fill (0.88) keeps every padded point clear of both
+let spaceCover: Float = 852 - 395.3 + 22
+let spaceWindow: GraphWindow = GraphTilt.window(width: 393, height: 852, insets: measuredGlass.coveringFoot(spaceCover))
+let spaceSpan = drawnSpan(cloud, pads, window: spaceWindow, fill: 0.88, tilt: GraphTilt.angle(.space))
+check("G7h Space: every padded point below the strip", spaceSpan.highest >= 111, "highest at \(spaceSpan.highest)")
+check("G7i and above the card's top", spaceSpan.lowest <= 395.3, "lowest at \(spaceSpan.lowest)")
+
 print(failures.isEmpty ? "ALL PASS" : "FAILURES: \(failures.count)")
 if !failures.isEmpty { exit(1) }

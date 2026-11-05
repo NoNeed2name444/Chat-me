@@ -100,6 +100,10 @@ struct Graph3DView: View {
     /// The first-run card's top edge as last drawn, in the window's
     /// coordinates, kept while it steps aside for a peek card (S05d).
     @State private var cardTop: CGFloat?
+    /// The part of the map's place not under glass (below Map mode's top
+    /// strip and the status bar, above its switcher), in the window's
+    /// coordinates: the first view is framed to it (S05d, mapInsets).
+    @State private var seenFrame: CGRect?
     /// The notes' look (GraphStyleChoice), remembered; a change rebuilds.
     @AppStorage(GraphStyleChoice.key) private var nodeStyle: String = GraphStyleChoice.standard
     @AppStorage(GraphStyleChoice.foldersKey) private var folderStyles: String = ""
@@ -180,6 +184,10 @@ struct Graph3DView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // the map's place in the layout, inside the safe area the chrome
+        // leaves: measured while the scene is still laid out, so its first
+        // framing already has it (mapInsets)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { seenFrame = $0 }
         .task(id: signature) { await rebuild() }
         // back in front with a shader check that failed while away (not
         // kept, GraphProbeMemo): check again and build again (Chat-me audit
@@ -280,13 +288,13 @@ struct Graph3DView: View {
 
     /// The space itself, running on under the glass, with its tools in the
     /// safe area. The graph is fitted to the part of the view that is not
-    /// under glass (the safe area, read here), so no note starts hidden
-    /// under the bars. No SwiftUI transform ever touches the SceneKit view:
-    /// its own tilt comes from inside the scene.
+    /// under glass (the safe area, measured: mapInsets), so no note starts
+    /// hidden under the bars. No SwiftUI transform ever touches the
+    /// SceneKit view: its own tilt comes from inside the scene.
     private func space(_ built: GraphScene) -> some View {
         ZStack {
             GeometryReader { geo in
-                let insets: GraphInsets = screenInsets(geo.safeAreaInsets)
+                let insets: GraphInsets = mapInsets(geo)
                 GraphSCNView(built: built, filter: filter, recenter: recenter,
                              insets: insets, card: cardCover(built, viewBottom: geo.frame(in: .global).maxY),
                              onTap: open, openFolder: openFolder,
@@ -713,6 +721,27 @@ struct Graph3DView: View {
 
     private var linkBinding: Binding<Double> {
         Binding<Double>(get: { linkValue }, set: { linkLength = GraphLinkLength.clamped($0) })
+    }
+
+    /// The glass over the map's view (`geo`, which ignores the safe area):
+    /// on every edge, measured from the view's edges to those of the map's
+    /// place in the layout (seenFrame), both in the window's coordinates, as
+    /// the first-run card's cover is (S05d). The reader's own insets read 0
+    /// on every edge there, because the view ignores the whole safe area
+    /// (CI, 5 Nov: the iPhone's first view was framed from the screen's top,
+    /// its top cells under the To sort and look chips), so they serve only
+    /// before the place is first measured. Android takes the status bar and
+    /// the top strip as its top (Map3DView's `top`).
+    private func mapInsets(_ geo: GeometryProxy) -> GraphInsets {
+        let read: GraphInsets = screenInsets(geo.safeAreaInsets)
+        guard let seen = seenFrame, seen.height > 1, seen.width > 1 else { return read }
+        let view: CGRect = geo.frame(in: .global)
+        let measured = GraphInsets.measured(viewTop: Float(view.minY), viewBottom: Float(view.maxY),
+                                            seenTop: Float(seen.minY), seenBottom: Float(seen.maxY),
+                                            viewLeft: Float(view.minX), viewRight: Float(view.maxX),
+                                            seenLeft: Float(seen.minX), seenRight: Float(seen.maxX))
+        return GraphInsets(top: max(measured.top, read.top), left: max(measured.left, read.left),
+                           bottom: max(measured.bottom, read.bottom), right: max(measured.right, read.right))
     }
 
     /// The safe area's insets, left and right as on screen.
