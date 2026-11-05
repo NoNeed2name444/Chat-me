@@ -92,8 +92,15 @@ extension XCTestCase {
         let frame = element.frame
         XCTAssertGreaterThanOrEqual(frame.minX, window.minX - 0.5, "\(name) isn't cut at the left: \(frame)", file: file, line: line)
         XCTAssertLessThanOrEqual(frame.maxX, window.maxX + 0.5, "\(name) isn't cut at the right: \(frame)", file: file, line: line)
-        XCTAssertGreaterThanOrEqual(frame.height, 44, "\(name) is at least 44 tall: \(frame)", file: file, line: line)
-        XCTAssertGreaterThanOrEqual(frame.width, 44, "\(name) is at least 44 wide: \(frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(Self.points(frame.height), 44, "\(name) is at least 44 tall: \(frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(Self.points(frame.width), 44, "\(name) is at least 44 wide: \(frame)", file: file, line: line)
+    }
+
+    /// A length as drawn, without the float noise of a frame read back from
+    /// pixels: a 44 point row at y 124.333 on a 3x screen reads 43.99999999999999
+    /// (S05c). The smallest real shortfall is a pixel, a third of a point.
+    static func points(_ length: CGFloat) -> CGFloat {
+        (length * 1_000_000).rounded() / 1_000_000
     }
 }
 
