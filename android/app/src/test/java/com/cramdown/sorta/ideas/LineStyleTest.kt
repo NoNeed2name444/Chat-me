@@ -237,6 +237,27 @@ class LineStyleTest {
         val fitFloor = IdeaBoardFit.camera(farApart, card, phone, 220.0, room)
         assertTrue("L6 a vast board stops at the board's own floor, centred: $fitFloor",
             fitFloor.zoom == 0.3 && nearD(fitFloor.panX, 16 + (402 - 92) / 2.0 - 201))
+
+        // at the largest text sizes a card is far taller than the least card: the fit takes each
+        // card's own size, so the tall one at the foot is in too (S05c)
+        fun insideSized(points: List<BoardPoint>, sizes: List<IdeaBoardFit.Size>, cam: IdeaBoardFit.Camera): Boolean {
+            val midY = (phone.height - 220.0) / 2
+            return points.zip(sizes).all { (p, s) ->
+                val x = phone.width / 2 + cam.panX + p.x * cam.zoom
+                val y = midY + cam.panY + p.y * cam.zoom
+                val halfW = s.width * cam.zoom / 2
+                val halfH = s.height * cam.zoom / 2
+                x - halfW >= room.leading - 1e-6 && x + halfW <= phone.width - room.trailing + 1e-6 &&
+                    y - halfH >= room.top - 1e-6 && y + halfH <= phone.height - 220.0 - room.bottom + 1e-6
+            }
+        }
+        val tallAt = listOf(BoardPoint(0.0, -200.0), BoardPoint(0.0, 0.0), BoardPoint(0.0, 300.0))
+        val tallSizes = listOf(card, card, IdeaBoardFit.Size(150.0, 400.0))
+        val fitTall = IdeaBoardFit.camera(tallAt, card, phone, 220.0, room, sizes = tallSizes)
+        val fitLeast = IdeaBoardFit.camera(tallAt, card, phone, 220.0, room)
+        assertTrue("L6 a tall card at the foot is fitted by its own size, clear of the foot: $fitTall",
+            insideSized(tallAt, tallSizes, fitTall) && !insideSized(tallAt, tallSizes, fitLeast)
+                && IdeaBoardFit.camera(spread, card, phone, 220.0, room, sizes = spread.map { card }) == wide)
     }
 
     // ---- L7 the first view keeps every card big enough to tap ----

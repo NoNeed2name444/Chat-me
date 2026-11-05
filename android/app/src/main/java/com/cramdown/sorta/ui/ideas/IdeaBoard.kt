@@ -112,12 +112,16 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
 
     fun fitAll() {
         if (size == IntSize.Zero) return
+        // the cards as drawn: their spread centres and their own sizes, which at the largest
+        // text sizes are far taller than the least card
         val camera = IdeaBoardFit.camera(notes.map { drawnAt(it) }, IdeaBoardFit.Size(CARD_WIDTH, CARD_HEIGHT),
             IdeaBoardFit.Size(widthDp, heightDp), hiddenDp,
             // clear of the top strip ([top]) as of the tools at the trailing edge
             IdeaBoardFit.Margins(16.0 + top.value, 16.0, 16.0, 76.0),
-            // never so far out that a card is shorter than a target
-            IdeaBoardFit.firstRange(CARD_HEIGHT, WardControlSize.target))
+            // never so far out that a card is shorter than a target: the shortest card's height,
+            // which is never under the least card's
+            IdeaBoardFit.firstRange(cards.minOfOrNull { it.height } ?: CARD_HEIGHT, WardControlSize.target),
+            cards.map { IdeaBoardFit.Size(it.width, it.height) })
         zoom = camera.zoom; panX = camera.panX; panY = camera.panY
     }
     // the first view frames every card, until the board is moved by hand; again as the drawn

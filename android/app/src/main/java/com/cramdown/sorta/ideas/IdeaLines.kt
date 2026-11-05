@@ -211,20 +211,28 @@ object IdeaBoardFit {
     data class Margins(val top: Double, val leading: Double, val bottom: Double, val trailing: Double)
     data class Size(val width: Double, val height: Double)
 
+    /**
+     * [sizes], when given, are the cards' own sizes in [centres]' order (a card past its end is
+     * [card]): at the largest text sizes a card is far taller than [card], and the box is fitted
+     * to the cards as drawn (S05c). As iOS's.
+     */
     fun camera(centres: List<BoardPoint>, card: Size, view: Size, hidden: Double, margins: Margins,
-               zoomRange: ClosedFloatingPointRange<Double> = 0.3..1.0): Camera {
-        val first = centres.firstOrNull() ?: return Camera(1.0, 0.0, 0.0)
-        var minX = first.x; var maxX = minX; var minY = first.y; var maxY = minY
-        for (c in centres) {
-            minX = min(minX, c.x); maxX = max(maxX, c.x)
-            minY = min(minY, c.y); maxY = max(maxY, c.y)
+               zoomRange: ClosedFloatingPointRange<Double> = 0.3..1.0, sizes: List<Size> = emptyList()): Camera {
+        if (centres.isEmpty()) return Camera(1.0, 0.0, 0.0)
+        // the cards' outer edges
+        var minX = Double.POSITIVE_INFINITY; var maxX = Double.NEGATIVE_INFINITY
+        var minY = Double.POSITIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+        centres.forEachIndexed { k, c ->
+            val s = sizes.getOrNull(k) ?: card
+            minX = min(minX, c.x - s.width / 2); maxX = max(maxX, c.x + s.width / 2)
+            minY = min(minY, c.y - s.height / 2); maxY = max(maxY, c.y + s.height / 2)
         }
         val width = view.width
         val seen = max(view.height - hidden, 0.0)
         val roomW = max(width - margins.leading - margins.trailing, 1.0)
         val roomH = max(seen - margins.top - margins.bottom, 1.0)
-        val spanW = maxX - minX + card.width
-        val spanH = maxY - minY + card.height
+        val spanW = maxX - minX
+        val spanH = maxY - minY
         val fit = min(roomW / spanW, roomH / spanH)
         val zoom = min(max(fit, zoomRange.start), zoomRange.endInclusive)
         val panX = margins.leading + roomW / 2 - width / 2 - (minX + maxX) / 2 * zoom

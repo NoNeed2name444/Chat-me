@@ -125,6 +125,14 @@ final class MapModeRenderTests: XCTestCase {
         assertInside(disc, window, "the switch's disc on the map")
         assertApart([("the look chip", look.frame), ("the To sort chip", list.frame),
                      ("the switch's disc", disc.frame)], "the map's chrome")
+        // and no card under them: the first view fits the cards by their own
+        // sizes, which at AX5 are far taller than the least card (S05c)
+        for title in MadeUpExport.titles {
+            let card: CGRect = mapCard(app, title).frame
+            assertApart([(title, card), ("the look chip", look.frame), ("the To sort chip", list.frame),
+                         ("the switch's disc", disc.frame)], "the board under the map's chrome")
+            assertInside(mapCard(app, title), window, "the \(title) card")
+        }
 
         look.tap()
         for item in MapText.looks {

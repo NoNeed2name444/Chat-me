@@ -193,14 +193,21 @@ struct IdeaBoardView: View {
     /// Zoom and pan so every card is on screen, clear of the edges and the
     /// tool circles on the trailing side (16 + 44 + 16).
     private func fitAll() {
-        let drawn: [UUID: CGPoint] = drawnCentres()
-        let centres: [CGPoint] = notes.notes.compactMap { drawn[$0.id] }
+        // the cards as drawn: their spread centres and their own sizes, which
+        // at the largest text sizes are far taller than the least card
+        let cards: [IdeaBoardSpread.Card] = spreadCards()
+        let drawn: [UUID: CGPoint] = spread.places(cards)
+        let placed: [IdeaBoardSpread.Card] = cards.filter { drawn[$0.id] != nil }
+        let centres: [CGPoint] = placed.compactMap { drawn[$0.id] }
         let margins = IdeaBoardFit.Margins(top: 16, leading: 16, bottom: 16, trailing: 76)
         let card = IdeaBoardDrop.card
-        // never so far out that a card is shorter than a target
-        let range = IdeaBoardFit.firstRange(cardHeight: Double(card.height), target: Double(WardControlSize.target))
+        // never so far out that a card is shorter than a target: the
+        // shortest card's height, which is never under the least card's
+        let shortest: CGFloat = placed.map(\.size.height).min() ?? card.height
+        let range = IdeaBoardFit.firstRange(cardHeight: Double(shortest), target: Double(WardControlSize.target))
         let cam = IdeaBoardFit.camera(centres: centres, card: card, view: frame,
-                                      hidden: Double(underGlass), margins: margins, zoomRange: range)
+                                      hidden: Double(underGlass), margins: margins, zoomRange: range,
+                                      sizes: placed.map(\.size))
         zoom = cam.zoom
         pan = CGSize(width: cam.panX, height: cam.panY)
     }

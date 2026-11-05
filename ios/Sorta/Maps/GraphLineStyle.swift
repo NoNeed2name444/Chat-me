@@ -323,20 +323,26 @@ nonisolated enum IdeaBoardFit {
         var trailing: Double
     }
 
+    /// `sizes`, when given, are the cards' own sizes in `centres`' order (a
+    /// card past its end is `card`): at the largest text sizes a card is far
+    /// taller than `card`, and the box is fitted to the cards as drawn (S05c).
     static func camera(centres: [CGPoint], card: CGSize, view: CGSize, hidden: Double,
-                       margins: Margins, zoomRange: ClosedRange<Double> = 0.3...1) -> Camera {
-        guard let first = centres.first else { return Camera(zoom: 1, panX: 0, panY: 0) }
-        var minX = Double(first.x), maxX = minX, minY = Double(first.y), maxY = minY
-        for c in centres {
-            minX = min(minX, Double(c.x)); maxX = max(maxX, Double(c.x))
-            minY = min(minY, Double(c.y)); maxY = max(maxY, Double(c.y))
+                       margins: Margins, zoomRange: ClosedRange<Double> = 0.3...1,
+                       sizes: [CGSize] = []) -> Camera {
+        guard !centres.isEmpty else { return Camera(zoom: 1, panX: 0, panY: 0) }
+        // the cards' outer edges
+        var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+        for (k, c) in centres.enumerated() {
+            let s: CGSize = k < sizes.count ? sizes[k] : card
+            minX = min(minX, Double(c.x) - Double(s.width) / 2); maxX = max(maxX, Double(c.x) + Double(s.width) / 2)
+            minY = min(minY, Double(c.y) - Double(s.height) / 2); maxY = max(maxY, Double(c.y) + Double(s.height) / 2)
         }
         let width: Double = Double(view.width)
         let seen: Double = max(Double(view.height) - hidden, 0)
         let roomW: Double = max(width - margins.leading - margins.trailing, 1)
         let roomH: Double = max(seen - margins.top - margins.bottom, 1)
-        let spanW: Double = maxX - minX + Double(card.width)
-        let spanH: Double = maxY - minY + Double(card.height)
+        let spanW: Double = maxX - minX
+        let spanH: Double = maxY - minY
         let fit: Double = min(roomW / spanW, roomH / spanH)
         let zoom: Double = min(max(fit, zoomRange.lowerBound), zoomRange.upperBound)
         // the box's middle to the middle of the room

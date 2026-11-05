@@ -282,6 +282,33 @@ let fitFloor: IdeaBoardFit.Camera = IdeaBoardFit.camera(centres: farApart, card:
 check("L6 a vast board stops at the board's own floor, centred",
       fitFloor.zoom == 0.3 && nearD(fitFloor.panX, 16 + (402 - 92) / 2 - 201), "\(fitFloor)")
 
+// at the largest text sizes a card is far taller than the least card: the
+// fit takes each card's own size, so the tall one at the foot is in too (S05c)
+func insideSized(_ points: [CGPoint], _ sizes: [CGSize], _ cam: IdeaBoardFit.Camera, view: CGSize,
+                 hidden: Double, _ m: IdeaBoardFit.Margins) -> Bool {
+    let midY: Double = (Double(view.height) - hidden) / 2
+    for (p, s) in zip(points, sizes) {
+        let x: Double = Double(view.width) / 2 + cam.panX + Double(p.x) * cam.zoom
+        let y: Double = midY + cam.panY + Double(p.y) * cam.zoom
+        let halfW: Double = Double(s.width) * cam.zoom / 2
+        let halfH: Double = Double(s.height) * cam.zoom / 2
+        if x - halfW < m.leading - 1e-6 || x + halfW > Double(view.width) - m.trailing + 1e-6 { return false }
+        if y - halfH < m.top - 1e-6 || y + halfH > Double(view.height) - hidden - m.bottom + 1e-6 { return false }
+    }
+    return true
+}
+let tallAt: [CGPoint] = [CGPoint(x: 0, y: -200), CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 300)]
+let tallSizes: [CGSize] = [card, card, CGSize(width: 150, height: 400)]
+let fitTall: IdeaBoardFit.Camera = IdeaBoardFit.camera(centres: tallAt, card: card, view: phone,
+                                                    hidden: 220, margins: room, sizes: tallSizes)
+let fitLeast: IdeaBoardFit.Camera = IdeaBoardFit.camera(centres: tallAt, card: card, view: phone,
+                                                     hidden: 220, margins: room)
+check("L6 a tall card at the foot is fitted by its own size, clear of the foot",
+      insideSized(tallAt, tallSizes, fitTall, view: phone, hidden: 220, room)
+      && !insideSized(tallAt, tallSizes, fitLeast, view: phone, hidden: 220, room)
+      && IdeaBoardFit.camera(centres: spread, card: card, view: phone, hidden: 220, margins: room,
+                             sizes: spread.map { _ in card }) == wide, "\(fitTall)")
+
 // MARK: L7 the first view keeps every card big enough to tap
 
 let tapRange: ClosedRange<Double> = IdeaBoardFit.firstRange(cardHeight: 88, target: 44)

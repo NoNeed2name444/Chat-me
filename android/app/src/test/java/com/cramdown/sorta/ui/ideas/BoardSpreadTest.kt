@@ -35,7 +35,7 @@ import java.util.UUID
 // made-up export (IdeasFixture.stacked: two cards 33 apart, three at (0, 0)), shown on a phone at
 // font scale 1 and 2.0, no two cards' frames overlap, and the store's places are as they were set:
 // the board spreads the cards on screen only. A card let go of on another settles clear of every
-// card, and only its own place is stored.
+// card, and only its own place is stored. No card is under the map's chrome.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -106,6 +106,24 @@ class BoardSpreadTest {
         }
     }
 
+    /**
+     * No card under the map's chrome: the look chip, the To sort chip and the mode switch (its
+     * strip, or its disc). The first view fits the cards by their own sizes, which at the larger
+     * font scales are far taller than the least card (S05c).
+     */
+    private fun assertClearOfChrome(what: String) {
+        val chrome = listOf(MapLook.CHIP, MapTags.LIST_CHIP, SortaMode.TOGGLE, SortaMode.SORT.identifier, SortaMode.MAP.identifier)
+            .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().map { tag to it.boundsInRoot } }
+        assertTrue("$what: the look chip and the switch are found", chrome.any { it.first == MapLook.CHIP } && chrome.size >= 2)
+        for (title in IdeasFixture.stacked.map { it.title }) {
+            val card = frame(title)
+            for ((tag, bounds) in chrome) {
+                val over = card.intersect(bounds)
+                assertTrue("$what: $title $card is under $tag $bounds", over.width <= 0.5f || over.height <= 0.5f)
+            }
+        }
+    }
+
     private fun assertPlacesAsSet() {
         assertEquals("the store's places are as they were set",
             IdeasFixture.stacked.associate { it.id to (it.boardX to it.boardY) }, places())
@@ -114,12 +132,14 @@ class BoardSpreadTest {
     @Test fun cardsOnOnePlaceAreDrawnApartAtFontScaleOne() {
         showBoard(1f)
         assertApart("font scale 1")
+        assertClearOfChrome("font scale 1")
         assertPlacesAsSet()
     }
 
     @Test fun cardsOnOnePlaceAreDrawnApartAtFontScaleTwo() {
         showBoard(2f)
         assertApart("font scale 2.0")
+        assertClearOfChrome("font scale 2.0")
         assertPlacesAsSet()
     }
 
