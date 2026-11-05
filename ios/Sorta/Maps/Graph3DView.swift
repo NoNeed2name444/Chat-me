@@ -452,6 +452,9 @@ struct Graph3DView: View {
     }
 
     private func markCardSeen(_ theme: GraphTheme) {
+        // the next theme's card is measured afresh, not taken for this one's
+        // height (S05d)
+        cardHeight = 0
         touchSeen = GraphMapTouch.marking(touchSeen, theme)
         if theme == .space {
             hintSeen = true

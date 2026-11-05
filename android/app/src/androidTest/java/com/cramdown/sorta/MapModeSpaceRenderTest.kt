@@ -112,6 +112,9 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(30_000) {
             mapNode()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith(GraphTheme.NEURONS.mapLabel) } == true
         }
+        // the words name the look at once, while its scene is still built off the main thread: the
+        // scene is Neuron's once its camera is, which looks down at its own angle
+        compose.waitUntil(30_000) { mapDrawn()?.pose?.getOrNull(5)?.let { abs(it - pose[5]) > 1e-3f } == true }
         try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
         val neurons = "mapmode-neurons-${if (dark) "dark" else "light"}-$device"
         shot(neurons)

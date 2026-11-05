@@ -206,7 +206,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
                     bottom = hidden + WardSpace.l.wardDp)) {
                 // its height as drawn: the first view is framed above it (NotesMap's card)
-                MapTouchCard(more = { panels.markTouchSeen(theme); legend = true }, done = { panels.markTouchSeen(theme) },
+                // put away, its height is let go: the next theme's card is measured afresh (S05d)
+                MapTouchCard(more = { cardPx = 0; panels.markTouchSeen(theme); legend = true }, done = { cardPx = 0; panels.markTouchSeen(theme) },
                     modifier = Modifier.onSizeChanged { cardPx = it.height })
             }
             // the Link length bar and the peek card, bottom-centred beside the tools (bottomPanels,

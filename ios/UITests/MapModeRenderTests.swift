@@ -106,8 +106,13 @@ final class MapModeRenderTests: XCTestCase {
         // Neurons at first run: its own card, which Space's Got it leaves
         // unseen, clear of every body (S05d A6)
         app.chooseLook("look-neuron")
+        // the chip names the look at once, while the scene is still built:
+        // the map's own summary names Neuron's once it is (built.theme)
+        let summary = app.descendants(matching: .any)["graph3D"].firstMatch
+        let built = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Network of ideas"), object: summary)
+        XCTAssertEqual(XCTWaiter().wait(for: [built], timeout: 30), .completed, "Neuron's scene, built: \(summary.label)")
         sleep(2)
-        waitDrawn(app, app.descendants(matching: .any)["graph3D"].firstMatch, window, "Neurons")
+        waitDrawn(app, summary, window, "Neurons")
         sleep(2)
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "Neurons at first run: its first-run card")
         assertClear(app, of: hint.frame, "Neurons")
