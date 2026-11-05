@@ -9,6 +9,8 @@ import com.cramdown.sorta.map.FramePlan
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.FrameStats
 import com.cramdown.sorta.map.GuardBand
+import com.cramdown.sorta.map.LinkGrowth
+import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.LodSelector
 import com.cramdown.sorta.map.MapPalette
 import com.cramdown.sorta.map.NeuronDepth
@@ -20,6 +22,7 @@ import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.SpaceBodies
 import com.cramdown.sorta.map.SpaceDepth
 import com.cramdown.sorta.map.SpaceDepthBand
+import com.cramdown.sorta.map.SpaceLinkGrowth
 import com.cramdown.sorta.map.SpaceLod
 import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
@@ -61,6 +64,10 @@ data class MapReadout(
  * The rest says what this GL draws with: its renderer, the widest point it allows (summary
  * stars and the plain theme's nodes are points), the surface's size, and how many of the six
  * Space styles have their body shader (0 in the plain theme).
+ *
+ * The links' fields (S05e) say which scene is drawn ([build], MapScene.build), how many links the
+ * latest frame drew as strips, how many samples a strip has, and whether they were drawn straight
+ * (Lines); the record changes whenever one of them does, however many frames have been counted.
  */
 data class MapDrawn(
     val frames: Int = 0,
@@ -82,18 +89,26 @@ data class MapDrawn(
      */
     val box: List<Float> = emptyList(),
     val pose: List<Float> = emptyList(),
+    val build: Int = 0,
+    val links: Int = 0,
+    val samples: Int = 0,
+    val straight: Boolean = false,
 ) {
-    /** This record after one more finished frame that drew [bodiesNow] bodies, [elapsedMs] after the surface's start. */
-    fun after(bodiesNow: Int, elapsedMs: Long): MapDrawn {
+    /**
+     * This record after one more finished frame that drew [bodiesNow] bodies, [elapsedMs] after the
+     * surface's start, and [linksNow] links of [samplesNow] samples each, straight or not ([straightNow]).
+     */
+    fun after(bodiesNow: Int, elapsedMs: Long, linksNow: Int = links, samplesNow: Int = samples, straightNow: Boolean = straight): MapDrawn {
         val withBodies = bodiesNow > 0
-        if (frames >= ENOUGH && (bodyFrames >= ENOUGH || !withBodies)) return this
-        return copy(
+        val counted = if (frames >= ENOUGH && (bodyFrames >= ENOUGH || !withBodies)) this else copy(
             frames = min(frames + 1, ENOUGH),
             bodyFrames = if (withBodies) min(bodyFrames + 1, ENOUGH) else bodyFrames,
             bodies = if (withBodies) bodiesNow else bodies,
             firstFrameMs = if (firstFrameMs < 0) elapsedMs else firstFrameMs,
             firstBodyFrameMs = if (withBodies && firstBodyFrameMs < 0) elapsedMs else firstBodyFrameMs,
         )
+        if (counted.links == linksNow && counted.samples == samplesNow && counted.straight == straightNow) return counted
+        return counted.copy(links = linksNow, samples = samplesNow, straight = straightNow)
     }
 
     companion object {
@@ -178,14 +193,39 @@ class GlMapRenderer(
     private val viewRadius: Float = tree.radius[0],
     /** The Neurons theme's cells and links ([MapTheme.NEURONS]); its notes are drawn by NeuronGl, not as points. */
     neurons: NeuronScene? = null,
-    /** Whether the map moves on its own (off when the system's animations are off): the Neurons' states and impulses. */
+    /**
+     * Whether the map moves on its own (off when the system's animations are off): the Neurons'
+     * states and impulses, the links' motion and their growing in (S05e).
+     */
     lively: Boolean = true,
+    /** The scene's build number (MapScene.build), for the record (MapDrawn.build). */
+    private val build: Int = 0,
+    /** Lines: Straight when the renderer is made; [straight] follows the setting from then on. */
+    straight: Boolean = false,
+    /**
+     * The scene's links ([MapScene.links], pairs of its node indices), its notes' ids ([MapScene.ids])
+     * and what changed since the scene before ([LinkMemory.recall]): which links grow in and which
+     * shrink away (LinkGrowth). With none given every link is drawn whole.
+     */
+    links: IntArray = IntArray(0),
+    ids: List<String> = emptyList(),
+    recall: LinkRecall = LinkRecall.EVERYTHING,
 ) : GLSurfaceView.Renderer {
-    private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null) NeuronGl(neurons, lively) else null
+    private val linkGrowth = LinkGrowth.of(ids, links, recall, lively)
+    private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null)
+        NeuronGl(neurons, lively, linkGrowth.takeIf { it.links == neurons.plan.links.size }
+            ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
+    private val lively = lively
     private val space = theme == MapTheme.SPACE
-    private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius) else null
-    private val spaceGl: SpaceGl? = if (space) SpaceGl(assets) else null
+    private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius).also {
+        if (lively && linkGrowth.links == tree.edgeCount) it.growth = SpaceLinkGrowth(tree, links, linkGrowth)
+    } else null
+    /** A strip's samples: 40 at the High tier, 20 at Smooth (iOS GraphicsQuality). */
+    private val samples = if (tier == GraphicsTier.HIGH) 40 else 20
+    private val spaceGl: SpaceGl? = if (space) SpaceGl(assets, samples) else null
+    /** Lines: Straight, set from the page as the setting changes; the next frame draws it (Space only, as iOS's bridges ignore it). */
+    @Volatile var straight: Boolean = straight
     private val palette = if (space) SpacePalette.rgb else MapPalette.rgb
     private val styleScale = if (space) SpacePalette.pointScale else FloatArray(6) { 1f }
     private val startNanos = System.nanoTime()
@@ -299,7 +339,7 @@ class GlMapRenderer(
         neuronGl?.create()
         // a new context: its frames are counted afresh
         record = MapDrawn(renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "", maxPointSize = maxPointSize,
-            bodyStyles = bodies?.enabled?.count { it } ?: 0)
+            bodyStyles = bodies?.enabled?.count { it } ?: 0, build = build)
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -346,6 +386,7 @@ class GlMapRenderer(
         cache.pump(frame, budget.uploadBudget) { chunk, pages -> uploadChunk(chunk, pages) }
         // the shaders' clock, wrapped so float time stays fine-grained (every period is whole there)
         clock = (((System.nanoTime() - startNanos) / 1e9) % SpaceOptics.CLOCK_PERIOD).toFloat()
+        bodies?.growth?.tick(dt)
         val bodyCount = bodies?.let { b ->
             val right = Vec3(view[0], view[4], view[8]); val up = Vec3(view[1], view[5], view[9])
             b.update(plan, viewProj, eye, right, up, focal, SpaceLod.maxBodies(budget.detail), clock, band).also { applyMask(b) }
@@ -359,10 +400,14 @@ class GlMapRenderer(
         drawEdges(plan, eye, focal)
         drawSummaries(plan)
         val drawn = drawNodes(plan, eye, focal)
+        val straightNow = straight
+        var linksNow = 0
         if (bodies != null && spaceGl != null && bodyCount + bodies.beamCount > 0) {
             spaceGl.draw(bodies, viewProj, floatArrayOf(eye.x, eye.y, eye.z), floatArrayOf(view[0], view[4], view[8]),
                 floatArrayOf(view[1], view[5], view[9]), focal, clock, SpaceLod.shaderDetail(budget.detail),
-                bandUniform, focal / max(density, 0.1f), floatArrayOf(forward.x, forward.y, forward.z))
+                bandUniform, focal / max(density, 0.1f), floatArrayOf(forward.x, forward.y, forward.z),
+                straightNow, lively, contrast)
+            linksNow = spaceGl.linksDrawn
         }
         publishScreenNodes(plan)
 
@@ -379,7 +424,8 @@ class GlMapRenderer(
                 bodies = bodyCount,
             ))
         }
-        record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000)
+        record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000, linksNow,
+            if (space) samples else 0, space && straightNow)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -427,7 +473,8 @@ class GlMapRenderer(
                 frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = gl.linkCount,
                 drawnNodes = count, detail = budget.detail, bodies = count))
         }
-        record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000)
+        // the bridges ignore Lines, as iOS's (fillBridge returns before it reads straight)
+        record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }

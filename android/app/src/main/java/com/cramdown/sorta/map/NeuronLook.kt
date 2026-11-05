@@ -470,14 +470,19 @@ class NeuronPulses(count: Int, private val rate: Float, private val bursts: Floa
     val level = FloatArray(count)
     private var last = -1f
 
-    /** Moves the glows on to clock [time], [step] seconds after the last frame; `links` (b, seed) land. */
-    fun tick(time: Float, step: Float, ends: IntArray, seeds: IntArray) {
+    /**
+     * Moves the glows on to clock [time], [step] seconds after the last frame; `links` (b, seed) land,
+     * only those fully grown when [grown] (each link's eased growth) is given (iOS
+     * NeuronImpulses.land: a link still growing in carries no impulse yet).
+     */
+    fun tick(time: Float, step: Float, ends: IntArray, seeds: IntArray, grown: FloatArray? = null) {
         if (!(last >= 0 && time > last && time - last < 1)) { last = time; return }
         val fade = exp(-step / 0.35f)
         for (i in level.indices) if (level[i] > 0) level[i] *= fade
         if (rate > 0) for (k in ends.indices) {
             val b = ends[k]
             if (b < 0 || b >= level.size) continue
+            if (grown != null && k < grown.size && grown[k] <= 0.99f) continue
             if (NeuronImpulse.lands(seeds[k], last, time, rate, bursts)) level[b] = 1f
         }
         last = time

@@ -16,7 +16,8 @@ import kotlin.math.sqrt
  * nearest note could be [SpaceLod.BODY_PIXELS] across, so the million-node path pays nothing
  * for it. A note becomes its body once it covers more than that many pixels (SpaceLod), nearest
  * first, up to the frame budget's cap; the rest stay points. The bodies' links become glowing
- * beams.
+ * beams, which SpaceGl draws as strips along their curves (LinkStrips), grown as far as [growth]
+ * says (none: whole).
  *
  * The depth fade (SpaceDepth, iOS GraphSpaceDepthStage): a note past the band's end is gone
  * (neither a body nor animated), and the change between point and body has SpaceDepth.level's
@@ -36,8 +37,13 @@ import kotlin.math.sqrt
 class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 96) {
     companion object {
         const val STRIDE = 16
-        /** Per beam: the A end (x, y, z, style), the B end (x, y, z, style), seed (0...15), lit. */
-        const val BEAM_STRIDE = 10
+        /**
+         * Per beam: the A (sending) end trimmed (x, y, z) and its style, the B end trimmed and its
+         * style, seed (0...15), lit, how far it has grown (eased, 0...1), then what bends it near
+         * each end (iOS GraphRibbonWriter.path): the A body's centre and axis, the B body's centre and
+         * axis (a black hole's disk axis, a gas giant's spin axis; zero for the other styles).
+         */
+        const val BEAM_STRIDE = 23
         /** The light when there is no sun, a world direction towards it (iOS rpKey). */
         val KEY: Vec3 = Vec3(-0.4f, 0.5f, 0.8f).normalized()
         /** A chunk counts as open into its nodes from this openness. */
@@ -62,6 +68,9 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     /** Styles whose shader could not be made on this device stay points. */
     val enabled = BooleanArray(6) { true }
+
+    /** How far each link has grown (S05e); null draws every link whole. */
+    var growth: SpaceLinkGrowth? = null
 
     private val slot = IntArray(tree.nodeCount) { -1 }
     private val masked = BooleanArray(tree.nodeCount)
@@ -91,6 +100,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         for (k in 0 until plan.detailLeaves.size) {
             val leaf = plan.detailLeaves[k]
             if (plan.leafState[leaf * 4 + 3] < OPEN) continue
+            growth?.leafOpen(leaf)
             val cell = tree.leafCell[leaf]
             val dx = tree.cx[cell] - eye.x; val dy = tree.cy[cell] - eye.y; val dz = tree.cz[cell] - eye.z
             val nearest = sqrt(dx * dx + dy * dy + dz * dz) - tree.radius[cell]
@@ -256,11 +266,13 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     private val pa = FloatArray(3)
     private val pb = FloatArray(3)
+    private val ends = FloatArray(6)
 
     private fun buildBeams(plan: FramePlan) {
         beamCount = 0
         seen.clear(); leafSeen.clear()
         val edges = tree.leafEdges
+        val growth = growth
         for (j in 0 until count) {
             val leaf = tree.leafOfNode[nodes[j]]
             if (!leafSeen.add(leaf)) continue
@@ -271,30 +283,58 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 e += 2
                 if (slot[u] < 0 && slot[v] < 0) continue
                 if (!seen.add(Octree.pairKey(min(u, v), maxOf(u, v)))) continue
-                addBeam(plan, u, v)
+                val grow = growth?.shown(u, v) ?: 1f
+                if (grow <= 0.001f) continue
+                addBeam(plan, u, v, grow)
             }
+        }
+        // the links gone since the last scene, shrinking back into their sending ends
+        if (growth != null) for (g in 0 until growth.ghosts) {
+            if (beamCount >= SpaceLod.MAX_BEAMS) break
+            val u = growth.ghostNodes[2 * g]; val v = growth.ghostNodes[2 * g + 1]
+            if (u !in slot.indices || v !in slot.indices || (slot[u] < 0 && slot[v] < 0)) continue
+            val grow = growth.ghostShown(g)
+            if (grow <= 0.001f) continue
+            addBeam(plan, u, v, grow)
         }
     }
 
-    private fun addBeam(plan: FramePlan, u: Int, v: Int) {
+    /**
+     * One beam between chunk-order nodes [u] and [v], given in the link's own order (iOS addRibbon):
+     * the sending end is the higher style code (suns and pulsars send, black holes swallow), and of
+     * two ends with the same code, the link's first. Each end is trimmed clear of its body, each trim
+     * at most 0.45 of the length, so a short link is kept (iOS GraphRibbonWriter.path).
+     */
+    private fun addBeam(plan: FramePlan, u: Int, v: Int, grow: Float) {
         val su = tree.groups[u].toInt(); val sv = tree.groups[v].toInt()
-        // the A end sends: the higher style code (suns and pulsars send, black holes swallow)
-        val aEnd = if (su > sv || (su == sv && u < v)) u else v
+        val aEnd = if (sv > su) v else u
         val bEnd = if (aEnd == u) v else u
         val sa = tree.groups[aEnd].toInt(); val sb = tree.groups[bEnd].toInt()
         placed(plan, aEnd, pa); placed(plan, bEnd, pb)
-        val dx = pb[0] - pa[0]; val dy = pb[1] - pa[1]; val dz = pb[2] - pa[2]
-        val len = sqrt(dx * dx + dy * dy + dz * dz)
         val trimA = SpaceStyle.of(sa).linkRadius * nodeRadius * 0.85f
         val trimB = SpaceStyle.of(sb).linkRadius * nodeRadius * 0.85f
-        if (len <= trimA + trimB + 1e-4f) return
+        LinkStrips.trimmed(pa, 0, pb, 0, trimA, trimB, ends)
         val o = beamCount * BEAM_STRIDE
-        val ka = trimA / len; val kb = 1f - trimB / len
-        beams[o] = pa[0] + dx * ka; beams[o + 1] = pa[1] + dy * ka; beams[o + 2] = pa[2] + dz * ka; beams[o + 3] = sa.toFloat()
-        beams[o + 4] = pa[0] + dx * kb; beams[o + 5] = pa[1] + dy * kb; beams[o + 6] = pa[2] + dz * kb; beams[o + 7] = sb.toFloat()
+        beams[o] = ends[0]; beams[o + 1] = ends[1]; beams[o + 2] = ends[2]; beams[o + 3] = sa.toFloat()
+        beams[o + 4] = ends[3]; beams[o + 5] = ends[4]; beams[o + 6] = ends[5]; beams[o + 7] = sb.toFloat()
         beams[o + 8] = linkSeed(tree.order[aEnd], tree.order[bEnd])
         beams[o + 9] = 0f
+        beams[o + 10] = grow
+        beams[o + 11] = pa[0]; beams[o + 12] = pa[1]; beams[o + 13] = pa[2]
+        axis(aEnd, beams, o + 14)
+        beams[o + 17] = pb[0]; beams[o + 18] = pb[1]; beams[o + 19] = pb[2]
+        axis(bEnd, beams, o + 20)
         beamCount++
+    }
+
+    /** The axis a link bends round near [node], as its body is drawn (fill): a black hole's disk, a gas giant's ring; zero for the rest. */
+    private fun axis(node: Int, out: FloatArray, at: Int) {
+        val a = when (tree.groups[node].toInt()) {
+            SpaceStyle.BLACK_HOLE.code -> SpaceOptics.tiltedAxis(SpaceOptics.seed(tree.order[node]), 0.5f)
+            SpaceStyle.GAS_GIANT.code -> SpaceOptics.tiltedAxis(SpaceOptics.seed(tree.order[node]), 0.45f)
+            else -> Vec3.ZERO
+        }
+        out[at] = a.x; out[at + 1] = a.y; out[at + 2] = a.z
     }
 
     /** A link's own number, 0...15, as GraphRibbons gives each link one. */

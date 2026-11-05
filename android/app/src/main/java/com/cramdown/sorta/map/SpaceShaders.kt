@@ -1108,16 +1108,21 @@ void main() {
 }
 """
 
-    // ---- the link (GraphStyleShaders.link) as a glowing beam ----
+    // ---- the link (GraphSpaceShaders.link) as a glowing beam ----
 
-    // One quad per link that touches a body, facing the eye: x runs from the A end (the higher
-    // style code: suns and pulsars send, black holes swallow) to the B end, y across.
+    // One strip per link along its curve (LinkStrips, iOS GraphRibbonWriter.fill), from the A end
+    // (the sending one: suns and pulsars send, black holes swallow) to the B end. Each vertex is a
+    // point of the curve with the curve's tangent there and its side (-1 or 1); the strip is turned
+    // to face the eye here, as iOS turns it on the CPU, and kept at least 1.5 px wide. The rest is
+    // what iOS packs into the texture coordinates: the distance along (aTangent.w) and the drawn
+    // length (aLen, a growing link's tip tapering as an end), in note radii; the end styles, seed
+    // and lit (aInfo). vS0 is iOS's position across, fract(v) * 2 - 1, at its 0.002 and 0.998.
     private const val LINK_VS = """#version 300 es
 precision highp float;
-layout(location = 0) in vec2 aCorner;
-layout(location = 1) in vec4 aA;
-layout(location = 2) in vec4 aB;
-layout(location = 3) in vec2 aInfo;
+layout(location = 0) in vec4 aPoint;
+layout(location = 1) in vec4 aTangent;
+layout(location = 2) in vec4 aInfo;
+layout(location = 3) in float aLen;
 uniform mat4 uVP;
 uniform vec3 uEye;
 uniform float uUnit;
@@ -1129,20 +1134,26 @@ out float vDepth;
 flat out vec4 vInfo;
 flat out float vLen;
 void main() {
-    vec3 d = aB.xyz - aA.xyz;
-    float len = length(d);
-    vec3 dir = len > 1e-6 ? d / len : vec3(1.0, 0.0, 0.0);
-    vec3 p = aA.xyz + d * aCorner.x;
-    vec3 side = cross(dir, uEye - p);
+    vec3 p = aPoint.xyz;
+    vec3 t = aTangent.xyz;
+    vec3 side = cross(t, uEye - p);
     float sl = length(side);
-    side = sl > 1e-6 ? side / sl : vec3(0.0, 1.0, 0.0);
+    if (sl > 0.00001) {
+        side = side / sl;
+    } else {
+        // GraphLinkCurve.perpendicular: any direction square to the tangent
+        vec3 helper = abs(t.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+        vec3 c = cross(t, helper);
+        float cl = length(c);
+        side = cl > 0.00001 ? c / cl : vec3(0.0, 0.0, 1.0);
+    }
     float hw = max(uHalf * uUnit, 1.5 * length(uEye - p) / uFocal);
-    gl_Position = uVP * vec4(p + side * (aCorner.y * hw), 1.0);
+    gl_Position = uVP * vec4(p + side * (aPoint.w * hw), 1.0);
     vDepth = gl_Position.w;
-    vAlong = aCorner.x * len / uUnit;
-    vLen = len / uUnit;
-    vS0 = aCorner.y;
-    vInfo = vec4(aA.w, aB.w, aInfo.x, aInfo.y);
+    vAlong = aTangent.w;
+    vLen = aLen;
+    vS0 = aPoint.w * 0.996;
+    vInfo = aInfo;
 }
 """
 
@@ -1451,7 +1462,10 @@ void main() {
     rp_col = (vec3(1.0) - exp(-rp_col * 1.3)) * 0.92;
     // each fragment fades by its own depth along the view (a link may run from near to far)
     float rp_dfF = rpDepthFade(vDepth);
-    rp_col = rpFadedGlow(rp_col, rp_dfF);
+    // iOS writes the link's colour straight into SceneKit's linear space (no pow(2.2), unlike the
+    // bodies' glowEnd), so it shows as its 1/2.2 power; the same here on a framebuffer that is not
+    // sRGB, faded in linear light as iOS's rp_col * (1 - rp_dfF)
+    rp_col = rpFadedGlow(pow(max(rp_col, vec3(0.0)), vec3(0.45454545)), rp_dfF);
     fragColor = vec4(rp_col, 0.0);
 }
 """

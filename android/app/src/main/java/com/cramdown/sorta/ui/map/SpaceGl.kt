@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.EarthMaps
+import com.cramdown.sorta.map.LinkStrips
 import com.cramdown.sorta.map.SpaceBodies
 import com.cramdown.sorta.map.SpaceShaders
 import com.cramdown.sorta.map.SpaceStyle
@@ -20,13 +21,14 @@ import kotlin.math.min
  * Draws the Space theme's bodies and their links' beams (SpaceShaders) for [GlMapRenderer]:
  * one program per style, one camera-facing billboard per body, bodies drawn far to near with
  * premultiplied blending (a body hides what is behind it; its glows add), and the beams
- * before them. A style whose shader does not build on this device is left as points.
+ * before them, each one strip of [samples] + 1 vertex pairs along its curve (LinkStrips), drawn
+ * as NeuronGl draws its bridges: one buffer, one strip per link. A style whose shader does not
+ * build on this device is left as points.
  */
-internal class SpaceGl(private val assets: AssetManager?) {
+internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40) {
     private val programs = IntArray(6)
     private var linkProgram = 0
     private var quadVbo = 0
-    private var stripVbo = 0
     private var bodyVbo = 0
     private var beamVbo = 0
     private var bodyVao = 0
@@ -35,8 +37,11 @@ internal class SpaceGl(private val assets: AssetManager?) {
     private var auxTexture = 0
     private var earthReady = false
     private var bodyBuffer: FloatBuffer = floats(96 * SpaceBodies.STRIDE)
-    private var beamBuffer: FloatBuffer = floats(64 * SpaceBodies.BEAM_STRIDE)
+    private val strips = LinkStrips(samples)
+    private var stripBuffer: FloatBuffer = floats(64 * strips.perLink * LinkStrips.STRIDE)
     private var maxTexture = 2048
+    /** The links drawn in the latest frame (MapDrawn.links). */
+    var linksDrawn = 0; private set
 
     /** Called on the GL thread with a new context; marks which styles can be drawn. */
     fun create(bodies: SpaceBodies, detail: Float) {
@@ -47,30 +52,26 @@ internal class SpaceGl(private val assets: AssetManager?) {
         }
         linkProgram = runCatching { buildProgram(SpaceShaders.linkVertex, SpaceShaders.link) }
             .onFailure { Log.w("SpaceGl", "links: ${it.message}") }.getOrDefault(0)
-        val ids = IntArray(4)
-        GLES30.glGenBuffers(4, ids, 0)
-        quadVbo = ids[0]; stripVbo = ids[1]; bodyVbo = ids[2]; beamVbo = ids[3]
+        val ids = IntArray(3)
+        GLES30.glGenBuffers(3, ids, 0)
+        quadVbo = ids[0]; bodyVbo = ids[1]; beamVbo = ids[2]
         val quad = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, quad.size * 4, floats(quad.size).put(quad).flip(), GLES30.GL_STATIC_DRAW)
-        val strip = floatArrayOf(0f, -1f, 1f, -1f, 1f, 1f, 0f, -1f, 1f, 1f, 0f, 1f)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, stripVbo)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, strip.size * 4, floats(strip.size).put(strip).flip(), GLES30.GL_STATIC_DRAW)
         GLES30.glGenVertexArrays(2, ids, 0)
         bodyVao = ids[0]; beamVao = ids[1]
         GLES30.glBindVertexArray(bodyVao)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         for (loc in 1..4) { GLES30.glEnableVertexAttribArray(loc); GLES30.glVertexAttribDivisor(loc, 1) }
+        // the beams' strips: per vertex the point and side, the tangent and distance along, the
+        // link's styles, seed and lit, and its drawn length (LinkStrips)
         GLES30.glBindVertexArray(beamVao)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, stripVbo)
-        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, beamVbo)
-        val stride = SpaceBodies.BEAM_STRIDE * 4
-        for ((loc, comps, off) in listOf(Triple(1, 4, 0), Triple(2, 4, 16), Triple(3, 2, 32))) {
+        val stride = LinkStrips.STRIDE * 4
+        for ((loc, comps, off) in listOf(Triple(0, 4, 0), Triple(1, 4, 16), Triple(2, 4, 32), Triple(3, 1, 48))) {
             GLES30.glEnableVertexAttribArray(loc)
             GLES30.glVertexAttribPointer(loc, comps, GLES30.GL_FLOAT, false, stride, off)
-            GLES30.glVertexAttribDivisor(loc, 1)
         }
         GLES30.glBindVertexArray(0)
         val range = IntArray(1)
@@ -86,17 +87,24 @@ internal class SpaceGl(private val assets: AssetManager?) {
     /**
      * Draws the beams, then the bodies, with premultiplied blending; restores additive blending.
      * [fade] is the depth band (SpaceDepthBand.uniform), [focalDp] the focal length in dp for the
-     * shaders' detail by size, [forward] the camera's unit view direction.
+     * shaders' detail by size, [forward] the camera's unit view direction. [straight] is the Lines
+     * setting; [lively] false stills the links' motion (rpMotion 0, motion off), and [contrast]
+     * (Increase Contrast) makes them bolder (rpEnergy 1.5, rpSolid 1), as iOS's link material
+     * (GraphNodeFactory.link).
      */
     fun draw(bodies: SpaceBodies, viewProj: FloatArray, eye: FloatArray, right: FloatArray, up: FloatArray, focal: Float, clock: Float, shaderDetail: Float,
-             fade: FloatArray = FloatArray(4), focalDp: Float = 0f, forward: FloatArray = FloatArray(3)) {
+             fade: FloatArray = FloatArray(4), focalDp: Float = 0f, forward: FloatArray = FloatArray(3),
+             straight: Boolean = false, lively: Boolean = true, contrast: Boolean = false) {
         if (!earthReady) uploadEarth()
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        linksDrawn = 0
         if (bodies.beamCount > 0 && linkProgram != 0) {
-            beamBuffer = ensure(beamBuffer, bodies.beamCount * SpaceBodies.BEAM_STRIDE)
-            beamBuffer.put(bodies.beams, 0, bodies.beamCount * SpaceBodies.BEAM_STRIDE).flip()
+            strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight)
+            val floatsUsed = strips.vertices * LinkStrips.STRIDE
+            stripBuffer = ensure(stripBuffer, floatsUsed)
+            stripBuffer.put(strips.data, 0, floatsUsed).flip()
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, beamVbo)
-            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, bodies.beamCount * SpaceBodies.BEAM_STRIDE * 4, beamBuffer, GLES30.GL_STREAM_DRAW)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, floatsUsed * 4, stripBuffer, GLES30.GL_STREAM_DRAW)
             val p = linkProgram
             GLES30.glUseProgram(p)
             GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
@@ -105,13 +113,15 @@ internal class SpaceGl(private val assets: AssetManager?) {
             GLES30.glUniform1f(loc(p, "uHalf"), 0.18f)
             GLES30.glUniform1f(loc(p, "uFocal"), focal)
             GLES30.glUniform1f(loc(p, "rpClock"), clock)
-            GLES30.glUniform1f(loc(p, "rpMotion"), 1f)
-            GLES30.glUniform1f(loc(p, "rpEnergy"), 1f)
-            GLES30.glUniform1f(loc(p, "rpSolid"), 0f)
+            GLES30.glUniform1f(loc(p, "rpMotion"), if (lively) 1f else 0f)
+            GLES30.glUniform1f(loc(p, "rpEnergy"), if (contrast) 1.5f else 1f)
+            GLES30.glUniform1f(loc(p, "rpSolid"), if (contrast) 1f else 0f)
             GLES30.glUniform1f(loc(p, "rpReach"), 0.75f)
             GLES30.glUniform4fv(loc(p, "rpFade"), 1, fade, 0)
             GLES30.glBindVertexArray(beamVao)
-            GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, bodies.beamCount)
+            val perLink = strips.perLink
+            for (k in 0 until strips.count) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, k * perLink, perLink)
+            linksDrawn = strips.count
         }
         if (bodies.count > 0) {
             bodyBuffer = ensure(bodyBuffer, bodies.count * SpaceBodies.STRIDE)

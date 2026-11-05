@@ -3,6 +3,7 @@ package com.cramdown.sorta.ui.map
 import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.GraphicsTier
+import com.cramdown.sorta.map.LinkGrowth
 import com.cramdown.sorta.map.NeuronBodyLook
 import com.cramdown.sorta.map.NeuronBridge
 import com.cramdown.sorta.map.NeuronCellKind
@@ -32,8 +33,14 @@ import kotlin.math.min
  * arriving impulses, and every link as a bridge. Every material adds its light, reads no depth
  * and writes none (iOS: blendMode add, writesToDepthBuffer false), so the draws need no order
  * beyond iOS's rendering order. Runs on the GL thread only.
+ *
+ * Links grow in from their first cell as iOS's do ([growth], LinkGrowth: every link when the map
+ * first shows, then only the links new to a rebuilt scene; whole with motion off), their mouths
+ * opening with them, and impulses land only on links fully grown (iOS GraphNeuronLook.swift:896,
+ * 978). Links gone since the last scene shrink back into their first cell as ghosts.
  */
-class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
+class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
+               private val growth: LinkGrowth = LinkGrowth(BooleanArray(scene.plan.links.size), lively = lively)) {
     private class Mesh(val vao: Int, val count: Int)
     private class Program(val id: Int) {
         private val cache = HashMap<String, Int>()
@@ -49,8 +56,13 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
     private val mouths = NeuronMouths()
     private val ends = IntArray(plan.links.size) { plan.links[it].b }
     private val seeds = IntArray(plan.links.size) { NeuronBridge.themeSeed(it) }
-    private val samples = if (tier == GraphicsTier.HIGH) 40 else 20
+    /** Each strip's samples: 40 at the High tier, 20 at Smooth (iOS GraphicsQuality). */
+    val samples = if (tier == GraphicsTier.HIGH) 40 else 20
     private val bridge = NeuronBridge()
+    /** Each link's growth this frame, eased (LinkGrowth.shown), then each ghost's. */
+    private val shown = FloatArray(growth.size) { 1f }
+    /** The links (ghosts included) drawn in the latest frame (MapDrawn.links). */
+    @Volatile var linksDrawn = 0; private set
 
     private var soma: Program? = null; private var arbor: Program? = null; private var membrane: Program? = null
     private var halo: Program? = null; private var arrival: Program? = null; private var strip: Program? = null
@@ -109,7 +121,7 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, stripUv)
         GLES30.glEnableVertexAttribArray(2); GLES30.glVertexAttribPointer(2, 2, GLES30.GL_FLOAT, false, 8, 0)
         GLES30.glBindVertexArray(0)
-        val vertices = plan.links.size * (samples + 1) * 2
+        val vertices = (plan.links.size + growth.ghosts) * (samples + 1) * 2
         stripPosData = FloatArray(max(vertices, 1) * 3); stripUvData = FloatArray(max(vertices, 1) * 2)
         stripPosBuffer = floats(stripPosData.size); stripUvBuffer = floats(stripUvData.size)
     }
@@ -129,7 +141,12 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
         if (openedAt < 0 || clock < openedAt) openedAt = clock
         val step = if (lastClock >= 0 && clock > lastClock) clock - lastClock else 0f
         lastClock = clock
-        pulses.tick(clock, step, ends, seeds)
+        // every cell is there from the first frame, so each link's wait starts with it
+        for (i in 0 until growth.size) {
+            growth.tick(i, true, step)
+            shown[i] = growth.shown(i)
+        }
+        pulses.tick(clock, step, ends, seeds, shown)
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthMask(false)
         GLES30.glDisable(GLES30.GL_CULL_FACE)
@@ -152,10 +169,16 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
 
         // the links' mouths in the whole cells' membranes
         mouths.clear()
-        for (link in plan.links) {
-            if (link.a !in 0 until count || link.b !in 0 until count) continue
+        for ((e, link) in plan.links.withIndex()) {
+            if (link.a !in 0 until count || link.b !in 0 until count || shown[e] <= 0.001f) continue
             val half = if (link.kind == 5) NeuronLookPlan.NEAR_BRIDGE else NeuronLookPlan.FAR_BRIDGE
-            mouths.addLink(link.a, link.b, places[link.a], places[link.b], radius[link.a], radius[link.b], half, 1f, eye) { look.bodies[it].whole }
+            mouths.addLink(link.a, link.b, places[link.a], places[link.b], radius[link.a], radius[link.b], half, shown[e], eye) { look.bodies[it].whole }
+        }
+        for (g in 0 until growth.ghosts) {
+            val a = growth.ghostEnds[2 * g]; val b = growth.ghostEnds[2 * g + 1]
+            val grow = shown[growth.links + g]
+            if (a !in 0 until count || b !in 0 until count || grow <= 0.001f) continue
+            mouths.addLink(a, b, places[a], places[b], radius[a], radius[b], NeuronLookPlan.FAR_BRIDGE, grow, eye) { look.bodies[it].whole }
         }
 
         // bodies (iOS rendering order 6), then halos (7), then arrival glows (8)
@@ -289,16 +312,31 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
     private fun drawBridges(places: Array<Vec3>, radius: FloatArray, view: FloatArray, proj: FloatArray, eye: Vec3,
                             clock: Float, fade: FloatArray) {
         val p = strip ?: return
-        if (plan.links.isEmpty()) return
+        linksDrawn = 0
+        if (plan.links.isEmpty() && growth.ghosts == 0) return
         val perLink = (samples + 1) * 2
-        val drawn = BooleanArray(plan.links.size)
+        val drawn = BooleanArray(plan.links.size + growth.ghosts)
+        var drawnCount = 0
         for ((e, link) in plan.links.withIndex()) {
-            if (link.a !in places.indices || link.b !in places.indices) continue
+            // a link not grown at all is not drawn (iOS updateLines)
+            if (link.a !in places.indices || link.b !in places.indices || shown[e] <= 0.001f) continue
             val half = if (link.kind == 5) NeuronLookPlan.NEAR_BRIDGE else NeuronLookPlan.FAR_BRIDGE
-            bridge.fill(places[link.a], places[link.b], radius[link.a], radius[link.b], e, 1f, false, half, eye,
+            bridge.fill(places[link.a], places[link.b], radius[link.a], radius[link.b], e, shown[e], false, half, eye,
                 samples, stripPosData, stripUvData, e * perLink)
             drawn[e] = true
+            drawnCount++
         }
+        // the links gone since the last scene, seeded as iOS's ghosts (g + 7), between cells: tracts
+        for (g in 0 until growth.ghosts) {
+            val a = growth.ghostEnds[2 * g]; val b = growth.ghostEnds[2 * g + 1]
+            val slot = plan.links.size + g
+            if (a !in places.indices || b !in places.indices || shown[slot] <= 0.001f) continue
+            bridge.fill(places[a], places[b], radius[a], radius[b], g + 7, shown[slot], false, NeuronLookPlan.FAR_BRIDGE, eye,
+                samples, stripPosData, stripUvData, slot * perLink)
+            drawn[slot] = true
+            drawnCount++
+        }
+        linksDrawn = drawnCount
         stripPosBuffer.clear(); stripPosBuffer.put(stripPosData).flip()
         stripUvBuffer.clear(); stripUvBuffer.put(stripUvData).flip()
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, stripPos)
@@ -317,6 +355,10 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean) {
             for ((e, link) in plan.links.withIndex()) {
                 if (!drawn[e] || (link.kind == 5) != near) continue
                 GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, e * perLink, perLink)
+            }
+            if (!near) for (g in 0 until growth.ghosts) {
+                val slot = plan.links.size + g
+                if (drawn[slot]) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, slot * perLink, perLink)
             }
         }
     }

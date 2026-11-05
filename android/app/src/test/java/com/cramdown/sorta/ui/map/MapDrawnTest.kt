@@ -45,6 +45,23 @@ class MapDrawnTest {
         assertEquals(MapDrawn(MapDrawn.ENOUGH, MapDrawn.ENOUGH, 3, 16, 32, 1080, 1950, "SwiftShader", 1f, 6), d)
     }
 
+    @Test fun theLinksFieldsAreHandedOnWheneverTheyChangeEvenOnceSettled() {
+        // S05e: Space's first view, its links drawn as strips of 40 samples, Curved
+        var d = MapDrawn(build = 7)
+        repeat(MapDrawn.ENOUGH) { d = d.after(4, 16L * (it + 1), 5, 40, false) }
+        assertEquals(MapDrawn.ENOUGH, d.frames); assertEquals(5, d.links); assertEquals(40, d.samples); assertFalse(d.straight)
+        // settled and unchanged: the same record
+        assertSame(d, d.after(4, 1_000, 5, 40, false))
+        assertSame("left as they were", d, d.after(4, 1_016))
+        // Lines set to Straight: the same scene, its counts kept, and handed on at once
+        val straight = d.after(4, 2_000, 5, 40, true)
+        assertTrue(straight.straight)
+        assertEquals(7, straight.build); assertEquals(MapDrawn.ENOUGH, straight.frames); assertEquals(MapDrawn.ENOUGH, straight.bodyFrames)
+        assertSame(straight, straight.after(4, 2_016, 5, 40, true))
+        // the camera brought more links in
+        assertEquals(8, straight.after(4, 3_000, 8, 40, true).links)
+    }
+
     @Test fun anIdleMapStopsAfterAQuietSecondWithThreeFramesFinished() {
         val second = 1_000_000_000L
         // a phone: three frames inside the first 50 ms, so the quiet second decides

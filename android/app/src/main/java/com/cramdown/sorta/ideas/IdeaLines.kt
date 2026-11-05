@@ -82,6 +82,29 @@ object GraphStraightLine {
         return total
     }
 
+    /**
+     * The same into float arrays, three floats a point (as LinkCurve.sample writes them, so a
+     * frame's links make no garbage): `count + 1` points into [points] and their length coordinates
+     * into [lengths]. Returns the drawn length.
+     */
+    fun sample(start: Vec3, end: Vec3, grow: Float, count: Int, points: FloatArray, lengths: FloatArray): Float {
+        val n = max(count, 1)
+        require(points.size >= (n + 1) * 3 && lengths.size >= n + 1) { "room for ${n + 1} points" }
+        val grown = min(max(grow, 0f), 1f)
+        val rx = (end.x - start.x) * grown; val ry = (end.y - start.y) * grown; val rz = (end.z - start.z) * grown
+        val total = sqrt(rx * rx + ry * ry + rz * rz)
+        val step = 1f / n
+        for (k in 0..n) {
+            val f = k * step
+            points[k * 3] = start.x + rx * f; points[k * 3 + 1] = start.y + ry * f; points[k * 3 + 2] = start.z + rz * f
+            lengths[k] = total * f
+        }
+        // the last point exactly on the end, free of rounding
+        points[n * 3] = start.x + rx; points[n * 3 + 1] = start.y + ry; points[n * 3 + 2] = start.z + rz
+        lengths[n] = total
+        return total
+    }
+
     fun size(v: Vec3): Float = sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
 }
 
@@ -117,6 +140,15 @@ object IdeaLinkShape {
         val midY = (p.y + q.y) / 2
         return BoardPoint(midX - dy * factor, midY + dx * factor)
     }
+
+    /** A curved link as drawn: one quadratic from [start] to [end] through [control]. */
+    data class Curve(val start: BoardPoint, val control: BoardPoint, val end: BoardPoint)
+
+    /**
+     * A curved link's path: one quadratic from card centre [p] to card centre [q] through [control]
+     * (iOS IdeaBoardView.line: move(to: p), addQuadCurve(to: q, control:)).
+     */
+    fun curve(p: BoardPoint, q: BoardPoint, lane: Int = 0, lanes: Int = 1): Curve = Curve(p, control(p, q, lane, lanes), q)
 
     /** A straight link's two ends, moved sideways for its lane. */
     fun straightEnds(p: BoardPoint, q: BoardPoint, lane: Int = 0, lanes: Int = 1): Pair<BoardPoint, BoardPoint> {

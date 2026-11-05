@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -20,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
@@ -51,6 +53,11 @@ import kotlin.math.max
  * S05d: each run is a first run, so the first-run card shows. Every body the map drew is above the
  * card's top, Got it leaves the camera where it was, and Neurons, chosen after it, shows its own
  * card with every body above it too: a second still each, mapmode-neurons-<light|dark>-<device>.png.
+ *
+ * S05e: before Neurons, Space's first view draws its links as curved strips of 40 samples; Lines set
+ * to Straight in the Look menu, with the map open, draws the same scene's links straight: a still
+ * each, mapmode-straight-<light|dark>-<device>.png (mapmode-space is the Curved one). Curved is then
+ * set again.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -105,6 +112,22 @@ class MapModeSpaceRenderTest {
         check(pose.size == 6 && after.size == 6 && pose.indices.all { abs(pose[it] - after[it]) <= 1e-4f * max(1f, abs(pose[it])) }) {
             "Got it moved the camera for $name: $pose, then $after"
         }
+        // S05e: Space's first view draws its links, each a strip of 40 samples, curved
+        try { compose.waitUntil(30_000) { (mapDrawn()?.links ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
+        val curved = checkNotNull(mapDrawn())
+        check(curved.links > 0 && curved.samples == 40 && !curved.straight) { "Space's first view drew no curved links of 40 samples for $name: $curved" }
+        // Lines: Straight, set while the map is open: the same scene, its links drawn straight
+        chooseLines(GraphLineStyle.STRAIGHT)
+        try { compose.waitUntil(30_000) { mapDrawn()?.straight == true } } catch (_: ComposeTimeoutException) {}
+        val straight = checkNotNull(mapDrawn())
+        check(straight.straight && straight.build == curved.build && straight.links > 0 && straight.samples == 40) {
+            "Lines: Straight did not reach Space's scene for $name: before $curved, then $straight"
+        }
+        shot("mapmode-straight-${if (dark) "dark" else "light"}-$device")
+        // and Curved again, so Neurons is reached as before
+        chooseLines(GraphLineStyle.CURVED)
+        try { compose.waitUntil(30_000) { mapDrawn()?.straight == false } } catch (_: ComposeTimeoutException) {}
+        check(mapDrawn()?.straight == false) { "Lines: Curved did not reach Space's scene for $name: ${mapDrawn()}" }
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -137,6 +160,24 @@ class MapModeSpaceRenderTest {
         val bottom = map.top + drawn.box[3]
         android.util.Log.i("MapModeSpaceRenderTest", "$name: the bodies reach $bottom, the card's top is ${card.top}")
         check(bottom <= card.top) { "A body is drawn under the first-run card for $name: the bodies reach $bottom, the card's top is ${card.top}; $drawn" }
+    }
+
+    /**
+     * Lines set to [style] in Space's Look menu (its Look tool, which names the theme), as a person
+     * would while the map is open (S05e A3); then the menu is put away.
+     */
+    private fun chooseLines(style: GraphLineStyle) {
+        // IdeaToolButton's label and value, the Space map's own Look tool (the board's names its lines)
+        val look = hasContentDescription("Look") and hasClickAction() and
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, GraphTheme.SPACE.title)
+        compose.onNode(look).performClick()
+        // IdeaLinesPicker's segment words; the segment itself merges them
+        val segment = hasTestTag("lookLines-" + style.rawValue)
+        compose.waitUntil(10_000) { compose.onAllNodes(segment, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(segment, useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        ui.pressBack()
+        compose.waitUntil(10_000) { compose.onAllNodes(segment, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     }
 
     private fun mapNode(): SemanticsNode? =

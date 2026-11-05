@@ -65,6 +65,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
+import com.cramdown.sorta.map.LinkMemory
+import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.MapCardCover
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.MapInsets
@@ -84,6 +86,7 @@ import com.cramdown.sorta.ui.ward.textStyle
 import com.cramdown.sorta.ui.ward.wardDp
 import com.cramdown.sorta.ui.wardColor
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.cbrt
 import kotlin.math.max
 
@@ -95,7 +98,12 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                /** [MapTheme.NEURONS]: the cells and links NeuronGl draws; the tree then only holds their places, by body. */
                val neurons: NeuronScene? = null,
                val links: IntArray = IntArray(0), val linkHalf: Float = 0f) {
+    /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
+    val build: Int = BUILDS.incrementAndGet()
+
     companion object {
+        private val BUILDS = AtomicInteger()
+
         /**
          * The Neurons map: node i is the plan's body i at its home (labels, taps and the home view
          * read the tree; NeuronGl draws the bodies where they drift). [ids] and [titles] by body.
@@ -222,6 +230,12 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
      * (MapCardCover).
      */
     card: androidx.compose.ui.unit.Dp = 0.dp,
+    /**
+     * Lines: Straight (GraphLineStyle.inForce): the Space theme's links are drawn as straight
+     * segments. It reaches the renderer as it changes and the next frame draws it, with no new
+     * scene (S05e); the Neurons' bridges ignore it, as iOS's.
+     */
+    straight: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -260,6 +274,9 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val renderer = remember(scene) {
+        val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
+        // only the links new since the scene on screen grow in; every link when there is none (LinkMemory)
+        val recall = if (scene.theme == MapTheme.PLAIN) LinkRecall.EVERYTHING else LinkMemory.recall(scene.ids, scene.links, lively)
         GlMapRenderer(
             scene.tree, camera, scene.nodeRadius, displayHz = { hz[0] }, displayMaxHz = maxHz,
             onReadout = { r -> mainHandler.post { readout = r } },
@@ -268,11 +285,26 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
             density = context.resources.displayMetrics.density, contrast = increaseContrast(context),
             onDrawn = { d -> mainHandler.post { drawn = d } },
             viewRadius = scene.viewRadius,
-            neurons = scene.neurons, lively = android.animation.ValueAnimator.areAnimatorsEnabled(),
+            neurons = scene.neurons, lively = lively,
+            build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
         )
     }
     val gles3 = remember(context) { supportsGles3(context) }
     val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
+    // Lines: the renderer reads it each frame, so a change only needs a frame drawn
+    LaunchedEffect(renderer, straight) {
+        if (renderer.straight != straight) { renderer.straight = straight; loop.moved() }
+    }
+    // the scene on screen is the one the next scene's links are compared with (LinkMemory); the
+    // plain theme draws no growing links, so it leaves nothing to compare with
+    DisposableEffect(scene) {
+        if (scene.theme == MapTheme.PLAIN) LinkMemory.clear()
+        else LinkMemory.remember(scene.build, scene.ids, scene.links)
+        onDispose {}
+    }
+    // and once the map leaves the screen, a map opened again grows every link, as iOS's
+    val shownBuild by rememberUpdatedState(scene.build)
+    DisposableEffect(Unit) { onDispose { LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
         if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
     }

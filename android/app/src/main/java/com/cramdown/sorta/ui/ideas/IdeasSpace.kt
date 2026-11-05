@@ -388,7 +388,9 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 if (chosen != null) onBody(chosen, press.kind == MapTouchKind.HOLD, at)
             },
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,
-            onDrawn = { drawnOnce = true }, top = top, hidden = hidden, card = card)
+            onDrawn = { drawnOnce = true }, top = top, hidden = hidden, card = card,
+            // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
+            straight = settings.lineStyle.isStraight)
         if (!shown) Building(null)
     }
 }

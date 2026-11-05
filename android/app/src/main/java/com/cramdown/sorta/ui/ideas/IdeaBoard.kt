@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -45,7 +44,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.BoardPoint
-import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.IdeaBoardDrop
 import com.cramdown.sorta.ideas.IdeaBoardFit
 import com.cramdown.sorta.ideas.IdeaBoardSpread
@@ -175,11 +173,17 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
                 val nb = byId[b] ?: return@forEachIndexed
                 val p = onScreen(position(na)); val q = onScreen(position(nb))
                 val (lane, count) = lanes[k]
-                val points = IdeaLinkShape.samples(style, p, q, lane, count, if (style == GraphLineStyle.STRAIGHT) 1 else 24)
+                fun px(v: Double) = (v * d).toFloat()
+                // as iOS's IdeaBoardView.line: Straight one segment, Curved one quadratic
                 val path = Path()
-                points.forEachIndexed { i, pt ->
-                    val o = Offset((pt.x * d).toFloat(), (pt.y * d).toFloat())
-                    if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y)
+                if (style.isStraight) {
+                    val (from, to) = IdeaLinkShape.straightEnds(p, q, lane, count)
+                    path.moveTo(px(from.x), px(from.y))
+                    path.lineTo(px(to.x), px(to.y))
+                } else {
+                    val curve = IdeaLinkShape.curve(p, q, lane, count)
+                    path.moveTo(px(curve.start.x), px(curve.start.y))
+                    path.quadraticTo(px(curve.control.x), px(curve.control.y), px(curve.end.x), px(curve.end.y))
                 }
                 drawPath(path, ink, style = Stroke(width = max(1.0, 1.5 * zoom).toFloat() * d, cap = StrokeCap.Round))
             }
