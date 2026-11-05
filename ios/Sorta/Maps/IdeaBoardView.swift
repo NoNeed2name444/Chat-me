@@ -49,6 +49,8 @@ struct IdeaBoardView: View {
     /// The canvas's size and how much of it is under glass, for the fit.
     @State private var frame: CGSize = .zero
     @State private var underGlass: CGFloat = 0
+    /// The height of the board's safe part, above the foot.
+    @State private var safeHeight: CGFloat = 0
     /// Once the board has been dragged or pinched, it stays where it was put.
     @State private var moved = false
     /// Each card's drawn size, in board points, as it lays out (S05c).
@@ -80,6 +82,9 @@ struct IdeaBoardView: View {
             canvas
                 .ignoresSafeArea(.container, edges: .bottom)
         }
+        // the safe part's height, read here: the canvas, past the safe area,
+        // reads no bottom inset, so its hidden part is its height less this
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { safeHeight = $0 }
         .overlay(alignment: .top) {
             if source != nil || connecting {
                 hint
@@ -111,8 +116,11 @@ struct IdeaBoardView: View {
     private var canvas: some View {
         GeometryReader { geo in
             let size = geo.size
-            // the reader runs on under the bottom glass; this much is hidden
-            let hidden: CGFloat = geo.safeAreaInsets.bottom
+            // the reader runs on under the bottom glass (the foot: the
+            // notice and the mode switch); this much is hidden. Not
+            // geo.safeAreaInsets.bottom, which is 0 here, past the safe area
+            // (S05c: at AX5 the first view put a card under the switch)
+            let hidden: CGFloat = safeHeight > 0 ? max(size.height - safeHeight, 0) : geo.safeAreaInsets.bottom
             let midY: CGFloat = Self.middle(of: size, hidden: hidden)
             let drawn: [UUID: CGPoint] = drawnCentres()
             let points = positions(in: size, midY: midY, drawn: drawn)
