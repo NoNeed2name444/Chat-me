@@ -40,6 +40,7 @@ struct IdeasMapView: View {
 
     var body: some View {
         content
+            .mapTextCap()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // night over the 3D looks, as their own chrome is; only the
             // strip and the foot, so every sheet still follows the phone
@@ -48,18 +49,21 @@ struct IdeasMapView: View {
                     MapTopStrip(look: look, openLooks: { choosingLook = true },
                                 list: paned ? nil : { listing = true })
                         .environment(\.colorScheme, night ? .dark : scheme)
+                        .mapTextCap()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 IdeasFoot(mode: $mode, notices: !listing && !paned, switches: !paned)
                     .environment(\.colorScheme, night ? .dark : scheme)
+                    .mapTextCap()
             }
             // in the view itself, not a Menu or a popover: those closed when
             // the 3D map's scene replaced "Laying out your ideas"
             .overlay(alignment: .topTrailing) {
                 if choosingLook && !empty {
                     lookList
+                        .mapTextCap()
                 }
             }
             // on two panes the last idea can go from the Sort screen while
@@ -128,5 +132,17 @@ struct IdeasMapView: View {
             Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder)
                 .mapSky()
         }
+    }
+}
+
+extension View {
+    /// Map mode's text grows with the phone's text size up to AX1 and no
+    /// further (the owner, 5 Nov: at AX5 the map's text was far too big):
+    /// the map, its strip, its foot and the list of the looks. Its sheets,
+    /// the list and the editor, follow the phone, as the Sort screen does.
+    /// Android caps the map's font scale at the same size
+    /// (WardType.accessibilityScale).
+    func mapTextCap() -> some View {
+        dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 }

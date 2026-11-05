@@ -17,6 +17,9 @@ import androidx.compose.ui.test.swipe
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.ward.WardTextCap
+import com.cramdown.sorta.ui.ward.WardType
+import androidx.compose.ui.platform.LocalDensity
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WindowShapeHost
 import org.junit.Assert.assertEquals
@@ -35,7 +38,7 @@ import java.util.UUID
 // made-up export (IdeasFixture.stacked: two cards 33 apart, three at (0, 0)), shown on a phone at
 // font scale 1 and 2.0, no two cards' frames overlap, and the store's places are as they were set:
 // the board spreads the cards on screen only. A card let go of on another settles clear of every
-// card, and only its own place is stored. No card is under the map's chrome.
+// card, and only its own place is stored. No card is under the map's chrome. The map's text stops at AX1.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -141,6 +144,22 @@ class BoardSpreadTest {
         assertApart("font scale 2.0")
         assertClearOfChrome("font scale 2.0")
         assertPlacesAsSet()
+    }
+
+    // the owner, 5 Nov: Map mode's text stops at iOS's AX1; below it, the reader's own scale stands
+    @Test fun theMapsTextStopsAtAx1() {
+        val seen = mutableMapOf<Float, Float>()
+        compose.setContent {
+            for (scale in listOf(1f, 1.3f, 2f)) {
+                DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(scale)) {
+                    WardTextCap { seen[scale] = LocalDensity.current.fontScale }
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(1f, seen.getValue(1f), 0.001f)
+        assertEquals(1.3f, seen.getValue(1.3f), 0.001f)
+        assertEquals("at font scale 2.0, the map's is AX1's", WardType.accessibilityScale.toFloat(), seen.getValue(2f), 0.001f)
     }
 
     @Test fun aCardLetGoOfOnAnotherSettlesClearOfIt() {

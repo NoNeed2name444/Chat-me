@@ -256,7 +256,7 @@ internal sealed class FolderPrompt {
     val outer = LocalWardLook.current
 
     /** The map, edge to edge: the tools and the empty page keep above the foot ([hidden]) and the navigation bar. */
-    @Composable fun MapPane(paned: Boolean) {
+    @Composable fun MapPane(paned: Boolean) = WardTextCap {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
@@ -292,7 +292,9 @@ internal sealed class FolderPrompt {
 
     /** The foot: the banner, then the Sort / Map switch ([switches]; not on two panes), bottom centre. */
     @Composable fun BoxScope.Foot(switches: Boolean) {
-        SortaTheme(dark = night || outer.dark, section = outer.section) {
+        // Map mode's text stops at AX1 (WardTextCap), its foot's with it; the Sort screen's doesn't
+        @Composable fun Capped(content: @Composable () -> Unit) = if (split == null && mapShown) WardTextCap(content) else content()
+        Capped { SortaTheme(dark = night || outer.dark, section = outer.section) {
             Column(Modifier.align(Alignment.BottomCenter).widthIn(max = IdeasLayout.column.dp).fillMaxWidth()
                 .onSizeChanged { footHeight = it.height }, horizontalAlignment = Alignment.CenterHorizontally) {
                 if (!sheetUp) SnackbarHost(banner, Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.s.wardDp)) { data ->
@@ -301,7 +303,7 @@ internal sealed class FolderPrompt {
                 }
                 if (switches && open == null) ModeSwitch(mode, { mode = it }, settings) { focus.clearFocus() }
             }
-        }
+        } }
     }
 
     Box(Modifier.fillMaxSize().background(wardColor(WardToken.background))) {

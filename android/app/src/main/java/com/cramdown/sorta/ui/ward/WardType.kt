@@ -13,6 +13,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontVariation
 import com.cramdown.sorta.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -168,6 +170,18 @@ fun wardTypography(): Typography = Typography(
 
 /** Whether the reader's font scale is at iOS's accessibility sizes. */
 @Composable fun wardAccessibilitySize(): Boolean = WardType.isAccessibilitySize(LocalDensity.current.fontScale.toDouble())
+
+/**
+ * [content] with its text grown no further than iOS's AX1 ([WardType.accessibilityScale]): Map
+ * mode's cap (the owner, 5 Nov: at the largest sizes the map's text was far too big), as iOS's
+ * mapTextCap. Below the cap the reader's own scaling stands.
+ */
+@Composable fun WardTextCap(content: @Composable () -> Unit) {
+    val now = LocalDensity.current
+    val cap = WardType.accessibilityScale.toFloat()
+    if (now.fontScale <= cap) content()
+    else CompositionLocalProvider(LocalDensity provides Density(now.density, cap)) { content() }
+}
 
 /** The small caps' style: caption semibold, letters spaced at the standard sizes only (WardSmallCaps). */
 @Composable fun wardSmallCapsStyle(): TextStyle {
