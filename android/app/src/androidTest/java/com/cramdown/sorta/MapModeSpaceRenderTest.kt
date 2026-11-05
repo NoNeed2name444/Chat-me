@@ -183,14 +183,21 @@ class MapModeSpaceRenderTest {
             check(!shown(MapPanelTags.PEEK)) { "A turn brought up a card for $name" }
             SystemClock.sleep(500) // the turn's last frame, so the spot is where the body now is
         }
+        // measurement copy only (S05f A7): three seconds at rest, then three with the name on show
+        android.util.Log.i("SortaBudget", "mark rest $name")
+        SystemClock.sleep(3_000)
         val (index, at) = spot(name)
         compose.onNode(map).performTouchInput { click(at) }
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK)) { "A tap on a body brought up no card for $name" }
         requireOnePill(index, "a chosen body, its card up, for $name")
         shot(name)
+        android.util.Log.i("SortaBudget", "mark named $name")
         SystemClock.sleep(1_000)
         requireOnePill(index, "a chosen body a second later, its card still up, for $name")
+        SystemClock.sleep(2_000)
+        requireOnePill(index, "a chosen body three seconds later, for $name")
+        android.util.Log.i("SortaBudget", "mark end $name")
     }
 
     /** The map's spot: a body's index and its centre, in the map's own pixels. */
