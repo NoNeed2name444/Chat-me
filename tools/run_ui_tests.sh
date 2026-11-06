@@ -32,6 +32,19 @@ mkdir -p ../results
 booting=$SECONDS
 xcrun simctl bootstatus "$UDID" -b > /dev/null
 echo "$kind: the simulator booted in $((SECONDS - booting)) seconds"
+# iOS's slide-to-type introduction ("Speed up your typing by sliding your
+# finger…", Continue) takes the keyboard's place the first time a keyboard
+# shows, and when it went the field had lost the caret: in Chat-me run
+# 42086097207 the iPhone's first folder name got its "G" and no more (the
+# screen recording of IdeasBehaviourTests shows the card). Marked as shown
+# before any test, and read back.
+xcrun simctl spawn "$UDID" defaults write com.apple.Preferences DidShowContinuousPathIntroduction -bool true
+shown=$(xcrun simctl spawn "$UDID" defaults read com.apple.Preferences DidShowContinuousPathIntroduction 2>/dev/null || true)
+if [ "$shown" = "1" ]; then
+  echo "$kind: the slide-to-type introduction is marked as shown"
+else
+  echo "::warning::$kind: the slide-to-type introduction could not be marked as shown (read back: ${shown:-nothing})"
+fi
 # One launch of the map before any test, timed by none: just after boot the
 # simulator is still busy, and the first launch after an install fills
 # caches that no later one does. Without it the first map test hit the
