@@ -311,6 +311,8 @@ final class MapModeRenderTests: XCTestCase {
             let heading = app.staticTexts[title].firstMatch
             XCTAssertTrue(heading.waitForExistence(timeout: 10), "\(look): the legend opened")
             _ = heading.settledFrame
+            // its first view kept, for the renders check (S05f A6)
+            keepShot("mapmode-legend-\(look.dropFirst("look-".count))")
 
             // read it to its end: a phone's sheet opens at half height, so
             // the first drag grows it and the rest scroll

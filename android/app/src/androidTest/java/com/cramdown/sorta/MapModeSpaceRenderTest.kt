@@ -137,6 +137,8 @@ class MapModeSpaceRenderTest {
         chooseLines(GraphLineStyle.CURVED)
         try { compose.waitUntil(30_000) { mapDrawn()?.straight == false } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.straight == false) { "Lines: Curved did not reach Space's scene for $name: ${mapDrawn()}" }
+        // S05f A6: Space's legend, kept for the renders check
+        shotLegend(GraphTheme.SPACE, dark)
         // S05f: Space's names, at rest, under a finger and for a chosen body
         requireNames("space", dark, press = true)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
@@ -154,6 +156,8 @@ class MapModeSpaceRenderTest {
         shot(neurons)
         requireMapDrawn(neurons)
         requireClearOfTheCard(neurons)
+        // S05f A6: Neuron's legend, kept for the renders check
+        shotLegend(GraphTheme.NEURONS, dark)
         // S05f: Neuron's names, at rest and for a chosen body
         requireNames("neurons", dark, press = false)
     }
@@ -191,6 +195,25 @@ class MapModeSpaceRenderTest {
         shot(name)
         SystemClock.sleep(1_000)
         requireOnePill(index, "a chosen body a second later, its card still up, for $name")
+    }
+
+    /**
+     * The theme's legend, opened from its Look tool as a person would, kept as
+     * mapmode-legend-<theme>-<light|dark>-<device>.png (S05f A6), then put away.
+     */
+    private fun shotLegend(theme: GraphTheme, dark: Boolean) {
+        val look = hasContentDescription("Look") and hasClickAction() and
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, theme.title)
+        compose.onNode(look).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText(theme.legendTitle) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText(theme.legendTitle) and hasClickAction()).performClick()
+        val sheet = MapPanelTags.legend(theme)
+        compose.waitUntil(10_000) { shown(sheet) }
+        SystemClock.sleep(1_000) // the sheet comes to rest
+        shot("mapmode-legend-${theme.rawValue}-${if (dark) "dark" else "light"}-$device")
+        ui.pressBack()
+        compose.waitUntil(10_000) { !shown(sheet) }
+        compose.waitForIdle()
     }
 
     /** The map's spot: a body's index and its centre, in the map's own pixels. */
