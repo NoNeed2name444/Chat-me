@@ -29,6 +29,7 @@ import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
+import com.cramdown.sorta.map.MapNameShow
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
 import com.cramdown.sorta.ui.ideas.MapPanelTags
@@ -230,7 +231,13 @@ class MapModeSpaceRenderTest {
         check(names.size == 1 && names[0].index == index) { "Not one name, the body's ($index), for $what: $names" }
         val pill = names[0]
         val middle = (pill.box[0] + pill.box[2]) / 2
-        check(pill.box[3] < pill.body[1] && abs(middle - pill.body[0]) <= 2f) { "The name is not above its body for $what: $pill" }
+        // on the map whole, its rim inside the side margin; centred on its body unless that margin
+        // moved it in (MapNameShow.inside: a name near the side ran off the phone's screen)
+        val width = checkNotNull(mapDrawn()).width.toFloat()
+        val margin = MapNameShow.EDGE_DP * instrumentation.targetContext.resources.displayMetrics.density
+        check(pill.box[0] >= 0f && pill.box[2] <= width) { "The name runs off the map (0 to $width) for $what: $pill" }
+        val movedIn = abs(pill.box[0] - margin) <= 1f || abs(pill.box[2] - (width - margin)) <= 1f
+        check(pill.box[3] < pill.body[1] && (abs(middle - pill.body[0]) <= 2f || movedIn)) { "The name is not above its body for $what: $pill" }
     }
 
     private fun shown(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()

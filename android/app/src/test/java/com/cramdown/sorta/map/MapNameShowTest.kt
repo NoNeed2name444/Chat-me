@@ -146,6 +146,37 @@ class MapNameShowTest {
         assertEquals(LabelRgb.WHITE, look.text)
     }
 
+    /** A name over a body near the side stays on the screen: moved across, as little as it takes (S05f renders check). */
+    @Test fun aNameStaysInsideTheView() {
+        val density = 2.75f
+        val text = NameText(1f, -38f, 381f, 11f)
+        val width = 1080f
+        val margin = MapNameShow.EDGE_DP * density
+        // a body near the right edge, as Neurons' "Kitchen · 2 ideas" on the phone
+        val right = MapNameShow.place(NameBody(0, 1000f, 900f, 120f), text, density, 1f)
+        assertTrue("it would run off", right.right > width)
+        val kept = MapNameShow.inside(right, width, margin)
+        assertEquals("its rim ends the margin inside the right edge", width - margin, kept.right, 1e-3f)
+        val dx = kept.right - right.right
+        assertEquals("the pill, the rim and the words move together", right.pillLeft + dx, kept.pillLeft, 1e-3f)
+        assertEquals(right.pillRight + dx, kept.pillRight, 1e-3f)
+        assertEquals(right.left + dx, kept.left, 1e-3f)
+        assertEquals(right.textX + dx, kept.textX, 1e-3f)
+        assertEquals("only across", right.top, kept.top, 0f)
+        assertEquals(right.baseline, kept.baseline, 0f)
+        assertEquals("its body stays where it is", right.bodyX, kept.bodyX, 0f)
+        // and the left edge
+        val left = MapNameShow.place(NameBody(1, 40f, 900f, 120f), text, density, 1f)
+        assertEquals(margin, MapNameShow.inside(left, width, margin).left, 1e-3f)
+        // one with room is not moved at all
+        val middle = MapNameShow.place(NameBody(2, 540f, 900f, 120f), text, density, 1f)
+        assertEquals(middle, MapNameShow.inside(middle, width, margin))
+        // one wider than the room is centred in the view
+        val wide = MapNameShow.place(NameBody(3, 900f, 900f, 120f), NameText(0f, -38f, 1200f, 11f), density, 1f)
+        val centred = MapNameShow.inside(wide, width, margin)
+        assertEquals(width / 2, (centred.left + centred.right) / 2, 1e-3f)
+    }
+
     @Test fun thePlace() {
         val density = 2.5f
         val text = NameText(1f, -38f, 181f, 11f)

@@ -52,8 +52,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import com.cramdown.sorta.R
@@ -571,6 +574,7 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
     val wide = currentWindowShape().width >= WindowShape.compactMax
     ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = wide),
         containerColor = wardColor(WardToken.background)) {
+        LightIconsOverTheMap()
         ReaderNavBar(theme.legendTitle, trailing = { ReaderDoneButton(onClick = onDone) })
         // the tiles' edges and the touch help on the gutter: the tile's own outer s, and the rest here
         Column(Modifier.fillMaxWidth().testTag(MapPanelTags.legend(theme)).verticalScroll(rememberScrollState())
@@ -666,6 +670,21 @@ private fun legendGlyph(symbol: String): ImageVector = when (symbol) {
 }
 
 /** Folder looks: each top-level folder's notes as one style, or "Same as all". */
+/**
+ * A sheet over the 3D map keeps the map's light status-bar icons: the map is dark by day too, and
+ * Material's sheet gives its own window dark icons in light mode, so the clock went dark over the
+ * dark map with the legend up (S05f's renders check). The sheet sets them once, as its window is
+ * made, so they are set again here, on that window, from inside its content.
+ */
+@Composable private fun LightIconsOverTheMap() {
+    val view = LocalView.current
+    SideEffect {
+        var at: Any? = view
+        while (at != null && at !is DialogWindowProvider) at = (at as? android.view.View)?.parent
+        (at as? DialogWindowProvider)?.window?.let { WindowCompat.getInsetsController(it, it.decorView).isAppearanceLightStatusBars = false }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun FolderLooksSheet(book: IdeaBook, settings: IdeasSettings, onDone: () -> Unit) {
     val looks = GraphStyleChoice.folders(settings.folderStyles)
@@ -675,6 +694,7 @@ private fun legendGlyph(symbol: String): ImageVector = when (symbol) {
         settings.setFolderStyles(GraphStyleChoice.encode(next))
     }
     ModalBottomSheet(onDismissRequest = onDone, containerColor = wardColor(WardToken.background)) {
+        LightIconsOverTheMap()
         ReaderNavBar("Folder looks", trailing = { ReaderDoneButton(onClick = onDone) })
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = WardSpace.m.wardDp)) {
             book.subfolders(null).forEach { folder ->

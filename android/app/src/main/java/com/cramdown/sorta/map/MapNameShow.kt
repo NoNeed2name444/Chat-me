@@ -130,6 +130,29 @@ object MapNameShow {
         )
     }
 
+    /** How far inside the view's side edges a name's rim stays, in dp ([inside]). */
+    const val EDGE_DP = 8f
+
+    /**
+     * [pill] moved across, no further than it takes, so its rim lies [margin] pixels inside a view
+     * [width] pixels wide; one wider than that room is centred in the view. A name over a body near
+     * the side ran off the phone's screen (S05f's renders check: "Kitchen · 2 ideas" cut at the right
+     * edge). Only across: above the body, its height is already inside the map. iOS keeps its label
+     * centred on its body (a difference, written in S05f's result).
+     */
+    fun inside(pill: NamePill, width: Float, margin: Float): NamePill {
+        val wide = pill.right - pill.left
+        val dx = when {
+            wide >= width - 2 * margin -> width / 2f - (pill.left + pill.right) / 2f
+            pill.left < margin -> margin - pill.left
+            pill.right > width - margin -> width - margin - pill.right
+            else -> 0f
+        }
+        if (dx == 0f) return pill
+        return pill.copy(left = pill.left + dx, right = pill.right + dx, pillLeft = pill.pillLeft + dx,
+            pillRight = pill.pillRight + dx, textX = pill.textX + dx)
+    }
+
     /**
      * The pressed body (S05f): the one under a finger that went down on it and has not lifted, moved
      * past the touch slop, become a two-finger gesture or been cancelled. The map's pointer loop tells

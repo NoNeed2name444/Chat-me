@@ -416,7 +416,8 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
         val backdrop = LabelShine.backdrop(neurons = scene.theme == MapTheme.NEURONS)
         return measure@{ i ->
             val node = nodes.firstOrNull { it.index == i } ?: return@measure null
-            val p = MapNameShow.place(nameBody(node), nameText(i).second, density.density, 1f)
+            val p = MapNameShow.inside(MapNameShow.place(nameBody(node), nameText(i).second, density.density, 1f),
+                viewSize.width.toFloat(), MapNameShow.EDGE_DP * density.density)
             val lights = glows ?: nodes.mapNotNull { n -> LabelEstimate.glow(n.x.toDouble(), n.y.toDouble(), nameBody(n).radius.toDouble(), shine(n.index), cx, cy, focal) }
                 .also { glows = it }
             val points = LabelEstimate.pillPoints((p.left + p.right) / 2.0, (p.top + p.bottom) / 2.0, (p.right - p.left) / 2.0, (p.bottom - p.top) / 2.0, cx, cy, focal)
@@ -450,7 +451,8 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
         nameWanted.mapNotNull { i ->
             val node = screenNodes.firstOrNull { it.index == i } ?: return@mapNotNull null
             val look = board.look(i, nameSettings, measure) ?: return@mapNotNull null
-            MapNameShow.place(nameBody(node), nameText(i).second, density.density, board.scale(i, now, lively)) to look
+            MapNameShow.inside(MapNameShow.place(nameBody(node), nameText(i).second, density.density, board.scale(i, now, lively)),
+                viewSize.width.toFloat(), MapNameShow.EDGE_DP * density.density) to look
         }
     }
     // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card. Only
