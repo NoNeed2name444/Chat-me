@@ -227,6 +227,9 @@ final class IdeasBehaviourTests: XCTestCase {
         app.captureIdea("Oil the gate")
         let row = app.ideaRow("Oil the gate")
         XCTAssertTrue(row.waitForExistence(timeout: 10))
+        // the row at rest first: a swipe sent while the list still slid it
+        // in did nothing (Chat-me run 42134819551, 1 s after it appeared)
+        _ = row.settledFrame
         row.swipeLeft()
         // a long swipe deletes at once; a short one shows Delete
         let delete = app.buttons[IdeasText.delete].firstMatch
