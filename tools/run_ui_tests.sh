@@ -37,7 +37,10 @@ echo "$kind: the simulator booted in $((SECONDS - booting)) seconds"
 # shows, and when it went the field had lost the caret: in Chat-me run
 # 42086097207 the iPhone's first folder name got its "G" and no more (the
 # screen recording of IdeasBehaviourTests shows the card). Marked as shown
-# before any test, and read back.
+# before any test, and read back. The mark did not always hold: in run
+# 43001371954, attempt 3, it read back as shown and the card still came up
+# over a folder name's keyboard. So the tests also close the card with its
+# Continue when it shows (clearSlideToTypeIntro, IdeasUITestSupport.swift).
 xcrun simctl spawn "$UDID" defaults write com.apple.Preferences DidShowContinuousPathIntroduction -bool true
 shown=$(xcrun simctl spawn "$UDID" defaults read com.apple.Preferences DidShowContinuousPathIntroduction 2>/dev/null || true)
 if [ "$shown" = "1" ]; then

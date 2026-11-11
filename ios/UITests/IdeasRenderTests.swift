@@ -78,6 +78,7 @@ final class IdeasRenderTests: XCTestCase {
         XCTAssertTrue(app.capture.waitForExistence(timeout: 10), "back on the Sort screen")
         app.capture.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText(String(repeating: "Oil the gate and the shed's hinges. ", count: 4))
         let keyboard = app.keyboards.firstMatch.frame
         sleep(1)

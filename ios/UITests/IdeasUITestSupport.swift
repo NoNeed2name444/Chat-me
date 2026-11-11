@@ -176,6 +176,41 @@ extension XCUIApplication {
                        .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
     }
 
+    /// iOS's slide-to-type introduction ("Speed up your typing by sliding
+    /// your finger across the letters to compose a word.", Continue) can
+    /// take the keyboard's place when a keyboard comes up, and keys sent
+    /// then are lost: in Chat-me run 43001371954, attempt 3, "G" of
+    /// "Garden" took 31 s to send and found no caret, and the recording
+    /// shows the card over the keyboard. Marking it shown in the
+    /// simulator's defaults (run_ui_tests.sh) did not hold there, and the
+    /// keyboard warm-up had passed before it. So once the keyboard is up,
+    /// a card on show is closed with its Continue and the field tapped to
+    /// take the caret back. The card is looked for in the app, which hosts
+    /// the keyboard, and in SpringBoard.
+    @discardableResult
+    func clearSlideToTypeIntro(refocus field: XCUIElement) -> Bool {
+        guard keyboards.firstMatch.waitForExistence(timeout: 5) else { return false }
+        _ = keyboards.firstMatch.settledFrame
+        let intro = NSPredicate(format: "label BEGINSWITH %@", "Speed up your typing")
+        for owner in [self, XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let card = owner.descendants(matching: .any).matching(intro).firstMatch
+            guard card.exists else { continue }
+            let go = owner.buttons["Continue"].firstMatch
+            XCTAssertTrue(go.waitForExistence(timeout: 5), "the slide-to-type card has its Continue")
+            go.tap()
+            let gone = NSPredicate(format: "exists == false")
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 10),
+                           .completed, "the slide-to-type card has gone")
+            field.tap()
+            let focused = NSPredicate(format: "hasKeyboardFocus == true")
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: field)], timeout: 10),
+                           .completed, "the field has the caret again after the slide-to-type card")
+            _ = keyboards.firstMatch.settledFrame
+            return true
+        }
+        return false
+    }
+
     /// The well at rest: it has the caret, and holds nothing.
     static var captureReady: NSPredicate { NSPredicate(format: "hasKeyboardFocus == true AND (value == '' OR value == placeholderValue)") }
 
@@ -190,6 +225,7 @@ extension XCUIApplication {
                 capture.tap()
             }
         }
+        clearSlideToTypeIntro(refocus: capture)
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: capture)], timeout: 10),
                        .completed, "capture has the caret and is empty: it holds \(capture.value as? String ?? "nil")",
                        file: file, line: line)
@@ -234,6 +270,7 @@ extension XCUIApplication {
         XCTAssertTrue(keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
         _ = keyboards.firstMatch.settledFrame
         _ = nameField.settledFrame
+        clearSlideToTypeIntro(refocus: nameField)
         let focused = NSPredicate(format: "hasKeyboardFocus == true")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nameField)], timeout: 10),
                        .completed, "the name field has the caret")
@@ -281,6 +318,9 @@ extension XCUIElement {
     /// shows the deletes took the old words.
     func replaceText(with text: String) {
         coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+        if XCUIApplication().clearSlideToTypeIntro(refocus: self) {
+            coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+        }
         let old = (value as? String) ?? ""
         typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2))
         var typed = ""

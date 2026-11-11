@@ -24,6 +24,7 @@ final class IdeasBehaviourTests: XCTestCase {
         well.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 6, dy: 0)).tap()
         XCTAssertEqual(app.capture.value(forKey: "hasKeyboardFocus") as? Bool, true,
                        "a tap in the well's leading room put the caret in the field")
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("Paint the shed\n")
         XCTAssertTrue(app.ideaRow("Paint the shed").waitForExistence(timeout: 10), "Return saved the idea")
         XCTAssertEqual(app.capture.value(forKey: "hasKeyboardFocus") as? Bool, true, "the field kept the caret")
@@ -41,6 +42,7 @@ final class IdeasBehaviourTests: XCTestCase {
         let app = launchIdeas(IdeasStoreName())
         XCTAssertFalse(app.sortIt.isEnabled, "Sort it is off while the field is blank")
         app.capture.tap()
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("\n")
         app.capture.tap()
         app.capture.typeText("    \n")
@@ -54,6 +56,7 @@ final class IdeasBehaviourTests: XCTestCase {
     func testSortItSavesAndOpensTheChooser() {
         let app = launchIdeas(IdeasStoreName())
         app.capture.tap()
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("Seed swap list")
         XCTAssertTrue(app.sortIt.isEnabled, "Sort it is on once there are words")
         app.sortIt.tap()
@@ -263,6 +266,7 @@ final class IdeasBehaviourTests: XCTestCase {
         title.replaceText(with: "Alpha plan")
         let body = app.textViews["editor-body"]
         body.tap()
+        app.clearSlideToTypeIntro(refocus: body)
         body.typeText("Dig on Monday")
         app.buttons["editor-link"].tap()
         let beta = app.buttons.matching(identifier: "picker-idea").matching(NSPredicate(format: "label == %@", "Beta")).firstMatch

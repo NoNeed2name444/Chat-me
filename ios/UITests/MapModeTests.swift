@@ -42,6 +42,7 @@ final class MapModeTests: XCTestCase {
     func testTheMapShowsACapturedIdeaAndOpensItInTheEditor() {
         let app = launchIdeas(IdeasStoreName(), board2D)
         app.capture.tap()
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("Paint the shed green\n")
         XCTAssertTrue(app.ideaRow("Paint the shed green").waitForExistence(timeout: 10), "captured")
         app.switchMode(to: "mode-map")
@@ -55,6 +56,7 @@ final class MapModeTests: XCTestCase {
     func testTheListChipOpensTheListAndItsWordsOpenTheEditor() {
         let app = launchIdeas(IdeasStoreName(), board2D)
         app.capture.tap()
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("Paint the shed green\n")
         XCTAssertTrue(app.ideaRow("Paint the shed green").waitForExistence(timeout: 10), "captured")
         app.switchMode(to: "mode-map")
@@ -74,6 +76,7 @@ final class MapModeTests: XCTestCase {
         let store = IdeasStoreName()
         let app = launchIdeas(store)
         app.capture.tap()
+        app.clearSlideToTypeIntro(refocus: app.capture)
         app.capture.typeText("Paint the shed green\n")
         XCTAssertTrue(app.ideaRow("Paint the shed green").waitForExistence(timeout: 10), "captured")
         app.switchMode(to: "mode-map")
