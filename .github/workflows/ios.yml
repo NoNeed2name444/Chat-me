@@ -154,10 +154,13 @@ jobs:
   # iPhone and 2 render runs on the iPad, inside limits of 40 and 35. On
   # a7054fe the iPad's simulator took 178 s to boot and its warm-up launch
   # 475 s (605a19c: 87 and 277), and its step, about 19 minutes on 605a19c,
-  # passed 25: so 35, and the job 105.
+  # passed 25: so 35, and the job 105. S05d's keyboard warm-up and S05f's
+  # legends brought the iPhone's step to about 36 minutes on copy ca4797f
+  # (boot 104 s), and on copy 93ca857 (boot 145 s) it met its limit of 40 in
+  # the last test, every test before it passed: so 60, and the job 125.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 105
+    timeout-minutes: 125
     steps:
       - uses: actions/checkout@v7
         with:
@@ -186,7 +189,7 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 40
+        timeout-minutes: 60
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
