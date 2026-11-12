@@ -231,6 +231,9 @@
     <string name="map_peek_open_folder">Open folder</string>
     <string name="map_peek_fly_in">Fly in</string>
     <string name="map_peek_more">More</string>
+    <!-- Show links on an idea's card (iOS GraphPeek's secondary), and its words while they are shown -->
+    <string name="map_peek_show_links">Show links</string>
+    <string name="map_peek_all_links">All links</string>
     <plurals name="map_peek_ideas">
         <item quantity="one">%d idea</item>
         <item quantity="other">%d ideas</item>

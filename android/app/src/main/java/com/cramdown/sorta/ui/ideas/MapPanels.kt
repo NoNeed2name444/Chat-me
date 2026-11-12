@@ -19,7 +19,9 @@ import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.PanTool
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Adjust
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.DropdownMenu
@@ -83,6 +85,8 @@ object MapPanelTags {
     const val PEEK = "graphPeekCard"
     const val PEEK_TITLE = "graphPeekTitle"
     const val PEEK_OPEN = "graphPeekOpen"
+    /** The card's Show links (All links while shown), iOS's identifier (S05g). */
+    const val PEEK_LINKS = "graphPeekLinks"
     const val MENU = "graphNodeMenu"
     const val LINK_BAR = "linkLengthBar"
     const val LINK_SLIDER = "linkLengthSlider"
@@ -90,6 +94,8 @@ object MapPanelTags {
     const val LOOK_LINK_LENGTH = "lookLinkLength"
     const val HINT = "universeHint"
     const val TOUCH_HINT = "touchHint"
+    /** The first-run card's steps (iOS gives them no identifier of their own). */
+    const val HINT_STEPS = "universeHintSteps"
     const val EMPTY_HINT = "graphEmptyHint"
     const val ADD_FOLDER = "graphAddFolder"
     /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
@@ -114,6 +120,8 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     open = res.getString(R.string.map_peek_open),
     openFolder = res.getString(R.string.map_peek_open_folder),
     flyIn = res.getString(R.string.map_peek_fly_in),
+    showLinks = res.getString(R.string.map_peek_show_links),
+    allLinks = res.getString(R.string.map_peek_all_links),
     more = res.getString(R.string.map_peek_more),
     rename = res.getString(R.string.map_menu_rename),
     moveToFolder = res.getString(R.string.map_menu_move),
@@ -206,7 +214,20 @@ object MapTouchSeen {
     }
 }
 
-/** The panels' two stored values, in IdeasSettings' file under iOS's keys. */
+/**
+ * Whether a theme's first-run card has shown its steps (Graph3DView.cardSeen and markCardSeen,
+ * Graph3DView.swift:457-473): Space under its own old key, a Boolean, and the other themes in a
+ * comma list under [GraphTheme.HINTS_KEY].
+ */
+object MapStepsSeen {
+    const val SPACE_KEY = "vignette.space.universeHintSeen"
+    const val KEY = GraphTheme.HINTS_KEY
+
+    fun seen(raw: String, theme: String): Boolean = MapTouchSeen.seen(raw, theme)
+    fun marking(raw: String, theme: String): String = MapTouchSeen.marking(raw, theme)
+}
+
+/** The panels' stored values, in IdeasSettings' file under iOS's keys. */
 class MapPanelSettings(context: Context) {
     private val prefs: SharedPreferences? = runCatching { context.getSharedPreferences(IdeasSettings.FILE, Context.MODE_PRIVATE) }.getOrNull()
     private fun put(block: SharedPreferences.Editor.() -> Unit) { runCatching { prefs?.edit()?.apply(block)?.apply() } }
@@ -225,6 +246,27 @@ class MapPanelSettings(context: Context) {
         heldSeen = MapTouchSeen.marking(heldSeen, theme.rawValue)
         put { putString(MapTouchSeen.KEY, heldSeen) }
     }
+
+    // the first-run card's steps, seen per theme (S05g)
+    private var heldSpaceSteps by mutableStateOf(runCatching { prefs?.getBoolean(MapStepsSeen.SPACE_KEY, false) }.getOrNull() ?: false)
+    private var heldSteps by mutableStateOf(runCatching { prefs?.getString(MapStepsSeen.KEY, "") }.getOrNull() ?: "")
+    fun stepsSeen(theme: GraphTheme): Boolean =
+        if (theme == GraphTheme.SPACE) heldSpaceSteps else MapStepsSeen.seen(heldSteps, theme.rawValue)
+    fun markStepsSeen(theme: GraphTheme) {
+        if (theme == GraphTheme.SPACE) {
+            heldSpaceSteps = true
+            put { putBoolean(MapStepsSeen.SPACE_KEY, true) }
+            return
+        }
+        heldSteps = MapStepsSeen.marking(heldSteps, theme.rawValue)
+        put { putString(MapStepsSeen.KEY, heldSteps) }
+    }
+
+    /** Whether the first-run card shows in [theme]: until both its steps and the touch lines are seen (hintShown, :497-499). */
+    fun cardShown(theme: GraphTheme): Boolean = !stepsSeen(theme) || !touchSeen(theme)
+
+    /** Full list and Got it put the card away: both marked seen (markCardSeen). */
+    fun markCardSeen(theme: GraphTheme) { markTouchSeen(theme); markStepsSeen(theme) }
 }
 
 @Composable fun rememberMapPanelSettings(): MapPanelSettings {
@@ -244,14 +286,15 @@ class MapPanelSettings(context: Context) {
 /**
  * A small card raised high at the bottom (GraphPeekCardView): what the chosen body is, its first
  * lines and its links (an idea), or its counts and latest ideas (a folder). Tapping it, swiping it
- * up or Open reads it; a chip selects that idea; More opens the same options a hold does. Fly in,
- * for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]).
+ * up or Open reads it; a chip selects that idea; Show links, for an idea, keeps its own links on the
+ * map ([linksShown]: All links brings the rest back, S05g); More opens the same options a hold does.
+ * Fly in, for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable fun MapPeekCard(
     content: MapPeekContent, folder: Boolean, words: MapPeekWords,
     open: () -> Unit, flyIn: () -> Unit, chip: (String) -> Unit, option: (MapMenuItem) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier, linksShown: Boolean = false, showLinks: () -> Unit = {},
 ) {
     val source = remember { MutableInteractionSource() }
     var swiped by remember { mutableFloatStateOf(0f) }
@@ -302,6 +345,13 @@ class MapPanelSettings(context: Context) {
                 WardButtonBox(flyIn, kind = WardButtonKind.quiet, fills = false) {
                     Icon(Icons.Rounded.Adjust, null, Modifier.size(wardGlyph(17.0)))
                     Text(words.flyIn, maxLines = 1)
+                }
+            }
+            if (words.showLinks in content.secondary) {
+                // iOS's point.3.connected.trianglepath.dotted; the legend's Links row's stand-in (S05f)
+                WardButtonBox(showLinks, Modifier.testTag(MapPanelTags.PEEK_LINKS), kind = WardButtonKind.quiet, fills = false) {
+                    Icon(Icons.Rounded.Link, null, Modifier.size(wardGlyph(17.0)))
+                    Text(if (linksShown) words.allLinks else words.showLinks, maxLines = 1)
                 }
             }
             if (words.more in content.secondary) {
@@ -405,21 +455,33 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
 // MARK: - The first-run card and the no-folder hint
 
 /**
- * The first-run card (GraphUniverseHint, as it shows once its theme's steps are seen): how to touch
- * the map, in Android's own lines, since a body can't be held to move here. Full list opens the
- * theme's legend; either button puts it away for this theme.
+ * The first-run card (GraphUniverseHint, GraphLegend.swift:372-418): [title] (the theme's cardTitle
+ * while its [steps] are unseen, else "Touching the map"); how to touch the map while [touch] is
+ * unseen, in Android's own lines ("Hold for options": hold to move is S05g2's); then the theme's
+ * steps, each with a plus in the secondary ink. Full list opens the theme's legend; either button
+ * puts it away for this theme, steps and touch lines both.
  */
 @OptIn(ExperimentalLayoutApi::class)
-@Composable fun MapTouchCard(more: () -> Unit, done: () -> Unit, modifier: Modifier = Modifier) {
+@Composable fun MapTouchCard(more: () -> Unit, done: () -> Unit, modifier: Modifier = Modifier,
+                             title: String? = null, touch: Boolean = true, steps: List<String> = emptyList()) {
     WardCardFace(modifier.widthIn(max = MapPanel.HINT_WIDTH.dp).testTag(MapPanelTags.HINT), lift = WardLift.high) {
-        Text(stringResource(R.string.map_touch_title), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
-        Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+        Text(title ?: stringResource(R.string.map_touch_title), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
+        if (touch) Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
             // iOS's hand.tap, doc.text and a hand held still
             listOf(Icons.Outlined.TouchApp to R.string.map_touch_tap, Icons.Outlined.Description to R.string.map_touch_again,
                 Icons.Outlined.PanTool to R.string.map_touch_hold).forEach { (icon, words) ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                     Icon(icon, null, tint = wardColor(WardToken.ink), modifier = Modifier.size(wardGlyph(17.0)))
                     Text(stringResource(words), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
+                }
+            }
+        }
+        // iOS's plus.circle, the Sort screen's stand-in for it (S05f)
+        if (steps.isNotEmpty()) Column(Modifier.testTag(MapPanelTags.HINT_STEPS), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            steps.forEach { step ->
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                    Icon(Icons.Rounded.AddCircleOutline, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
+                    Text(step, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
                 }
             }
         }

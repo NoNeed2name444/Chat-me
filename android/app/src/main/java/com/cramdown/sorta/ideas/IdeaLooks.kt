@@ -56,7 +56,7 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     }
 
     val cardSteps: List<String> get() = when (this) {
-        SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them, and each idea’s links choose its body.",
+        SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them. Each idea’s links choose its body.",
             "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
         // Map mode has no + menu and no bar (S05f item 4): a top-level folder comes from Choose
         // folder on an idea held on the map (in a folder in Sort it would make one inside), an

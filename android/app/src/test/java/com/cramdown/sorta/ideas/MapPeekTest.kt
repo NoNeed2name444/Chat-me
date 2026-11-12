@@ -23,8 +23,8 @@ import org.robolectric.annotation.Config
 
 // The map's peek card, options and touches (S05b task 4), as iOS's GraphTouchTests checks
 // GraphPeek: what the card says for an idea, a folder and the home, in strings.xml's words; the
-// options Android offers; how a lifted touch is judged; and the Link length and first-run card's
-// stored values, under iOS's keys.
+// options Android offers; an idea's Show links (S05g); and the Link length and first-run card's
+// stored values, under iOS's keys. How a touch is judged is MapSelectionTest's.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class MapPeekTest {
@@ -49,7 +49,7 @@ class MapPeekTest {
         assertEquals(3, card.moreLinks)
         assertEquals("+3 more", words.moreLinks(card.moreLinks))
         assertEquals("Open", card.primary)
-        assertEquals(listOf("More"), card.secondary)
+        assertEquals(listOf("Show links", "More"), card.secondary)
         assertEquals("Oil the gate, Gas giant · Idea, 9 links. Heading Shed needs oil A quote", card.spoken)
     }
 
@@ -127,14 +127,16 @@ class MapPeekTest {
         assertEquals(listOf("Open"), labels(folder = false, home = true))
     }
 
-    @Test fun aTouchIsJudgedOnLift() {
-        assertEquals(MapTouchKind.TAP, MapTouch.judge(120, 3f, 8f, multi = false, holdMillis = 400))
-        assertEquals(MapTouchKind.HOLD, MapTouch.judge(400, 3f, 8f, multi = false, holdMillis = 400))
-        assertEquals(MapTouchKind.MOVE, MapTouch.judge(900, 9f, 8f, multi = false, holdMillis = 400))
-        assertEquals(MapTouchKind.MOVE, MapTouch.judge(100, 0f, 8f, multi = true, holdMillis = 400))
-        assertFalse("nothing chosen: a tap chooses", MapTouch.tapOpens(null, "a"))
-        assertFalse("another body: a tap chooses it", MapTouch.tapOpens("b", "a"))
-        assertTrue("the chosen body: a tap opens it, whatever the case of its id", MapTouch.tapOpens("ABC", "abc"))
+    @Test fun everyIdeaOffersShowLinksAndNoFolderOrHomeDoes() {
+        for (theme in listOf("space", "neurons", "performance")) {
+            val idea = MapPeek.content(MapPeekInput(theme, "", folder = false, title = "Gate"), words)
+            assertEquals(theme, listOf("Show links", "More"), idea.secondary)
+            val folder = MapPeek.content(MapPeekInput(theme, "0", folder = true, title = "Garden", flyIn = true), words)
+            assertFalse(theme, "Show links" in folder.secondary)
+        }
+        assertFalse("Show links" in MapPeek.content(MapPeekInput("neurons", "", folder = false, home = true, title = "To sort"), words).secondary)
+        assertEquals("Show links", words.showLinks)
+        assertEquals("All links", words.allLinks)
     }
 
     @Test fun theLinkLengthIsIOSsAndKept() {

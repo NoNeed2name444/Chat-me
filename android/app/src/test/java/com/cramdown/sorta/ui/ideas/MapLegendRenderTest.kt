@@ -34,7 +34,8 @@ import java.io.File
 // build/outputs/roborazzi/ as legend_<theme>_<window>_<mode>.png; Performance's with its Speed row,
 // as while the readout shows. Each is read back as MapModeRenderTest's are: the window's size and no
 // pixel the logo's coral. Its title and Done are there, Done a 48 dp target, the ladder and every row
-// one item for TalkBack each, as MapLegend.spoken reads it, and none wider than the window.
+// one item for TalkBack each, as MapLegend.spoken reads it, and none wider than the window; its touch
+// help the map's hint, naming Show links (S05g).
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MapLegendRenderTest {
@@ -90,6 +91,8 @@ class MapLegendRenderTest {
             }
         }
         c.check("$name: the touch help", compose.onAllNodes(hasText(content.touch)).fetchSemanticsNodes().size == 1)
+        // S05g: the map's hint word for word, Show links and All links as the card names them
+        c.check("$name: the touch help is the map's hint, with Show links", content.touch == t.hint && content.touch.contains("Show links"))
     }
 
     private fun look(c: WardChecks, name: String, file: File) {

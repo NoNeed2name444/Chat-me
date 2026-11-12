@@ -180,6 +180,120 @@ class OrbitCamera(
     }
 }
 
+/**
+ * The camera's moves when a body is chosen (S05g; Graph3DView.ease, Graph3DView.swift:2729-2782):
+ * a tap or hold eases the body's point on screen [SHARE] of the way to the middle of what the card
+ * leaves ([goal]) and the camera a tenth of the way closer to it, over [EASE_SECONDS]; a link chip
+ * glides its body all the way there over [GLIDE_SECONDS], inside the depth band ([glide],
+ * GraphDepthGlide). The camera and what it orbits move together, so its distance, yaw and pitch stay.
+ */
+object MapCameraEase {
+    /** How far the body's point moves towards the goal (iOS's 0.34; the packet's "a third"). */
+    const val SHARE = 0.34f
+    /** How much closer the camera comes: a tenth of the way to the body. */
+    const val CLOSER = 0.1f
+    const val EASE_SECONDS = 0.45f
+    const val GLIDE_SECONDS = 0.7f
+    /** The goal's height down the view: the middle of what the card (about 40% of it) leaves. */
+    const val GOAL_DOWN = 0.34f
+
+    /** The goal on a [width] x [height] view, in pixels from its top left. */
+    fun goal(width: Float, height: Float): Pair<Float, Float> = width / 2 to height * GOAL_DOWN
+
+    /**
+     * How far the camera and its target move for a tap on [body] (ease): null when the body is
+     * behind the eye or past the far plane, or the view has no size.
+     */
+    fun ease(camera: OrbitCamera, body: Vec3, width: Float, height: Float): Vec3? {
+        if (width <= 1f || height <= 1f) return null
+        val eye = camera.eye(); val forward = camera.forward(); val right = camera.right(); val up = camera.up()
+        val depth = (body - eye).dot(forward)
+        if (!(depth > camera.near()) || depth >= camera.far()) return null
+        val focal = camera.focalPixels(height)
+        val rel = body - eye
+        val sx = width / 2 + rel.dot(right) / depth * focal
+        val sy = height / 2 - rel.dot(up) / depth * focal
+        val (gx, gy) = goal(width, height)
+        val nx = sx + (gx - sx) * SHARE
+        val ny = sy + (gy - sy) * SHARE
+        // the point at the body's depth under (nx, ny), and the shift that brings the body there
+        val dx = (nx - sx) / focal * depth
+        val dy = -(ny - sy) / focal * depth
+        val shift = (right * dx + up * dy) * -1f
+        val closer = (body - eye) * CLOSER
+        return shift + closer
+    }
+
+    /**
+     * How far the camera and its target move for a chip's [body] (GraphDepthGlide.move,
+     * GraphDepthFade.swift:245-273): it lands on the line of sight through the goal, at its own depth
+     * when that is nearer than what the camera looks at, else at that depth. Null when neither can stand.
+     */
+    fun glide(camera: OrbitCamera, body: Vec3, width: Float, height: Float, nearest: Float = SpaceDepth.NEAREST_FOCUS): Vec3? {
+        if (width <= 1f || height <= 1f) return null
+        val eye = camera.eye(); val forward = camera.forward(); val right = camera.right(); val up = camera.up()
+        val focal = camera.focalPixels(height)
+        val (gx, gy) = goal(width, height)
+        val line = forward + right * ((gx - width / 2) / focal) + up * ((height / 2 - gy) / focal)
+        val lineLength = line.length()
+        if (!(lineLength > 1e-6f) || !lineLength.isFinite()) return null
+        val ray = line * (1f / lineLength)
+        val along = ray.dot(forward)
+        if (along <= 1e-4f) return null
+        val own = (body - eye).dot(forward)
+        val focus = (camera.target - eye).dot(forward)
+        val depth = when {
+            usable(own, nearest) && usable(focus, nearest) -> min(own, focus)
+            usable(own, nearest) -> own
+            usable(focus, nearest) -> focus
+            else -> return null
+        }
+        val arrive = body - ray * (depth / along)
+        val move = arrive - eye
+        if (!move.x.isFinite() || !move.y.isFinite() || !move.z.isFinite()) return null
+        return move
+    }
+
+    /** Whether a depth [z] can stand as the focus: ahead of the eye by more than twice the band's nearest (GraphDepthFocus.usable). */
+    fun usable(z: Float, nearest: Float = SpaceDepth.NEAREST_FOCUS): Boolean = z.isFinite() && z > nearest * 2
+
+    /** iOS's easeInEaseOut: the cubic Bézier (0.42, 0, 0.58, 1), its progress at time share [t]. */
+    fun eased(t: Float): Float {
+        val x = t.coerceIn(0f, 1f)
+        if (x <= 0f || x >= 1f) return x
+        // solve the curve's x(u) = x for u by Newton's method, then read y(u)
+        fun bez(u: Float, p1: Float, p2: Float): Float { val v = 1 - u; return 3 * v * v * u * p1 + 3 * v * u * u * p2 + u * u * u }
+        fun slope(u: Float, p1: Float, p2: Float): Float { val v = 1 - u; return 3 * v * v * p1 + 6 * v * u * (p2 - p1) + 3 * u * u * (1 - p2) }
+        var u = x
+        repeat(8) {
+            val d = slope(u, 0.42f, 0.58f)
+            if (abs(d) < 1e-6f) return@repeat
+            u = (u - (bez(u, 0.42f, 0.58f) - x) / d).coerceIn(0f, 1f)
+        }
+        return bez(u, 0f, 1f)
+    }
+}
+
+/**
+ * One move of the camera under way: [move] spread over [seconds] on [MapCameraEase.eased]. [step]
+ * hands back what to add to the camera's target since the last step, so a turn or a pan made
+ * meanwhile is kept. With [seconds] 0 it all comes at once.
+ */
+class CameraMove(val move: Vec3, val seconds: Float) {
+    private var done = 0f
+    private var elapsed = 0f
+    val finished: Boolean get() = done >= 1f
+
+    fun step(dt: Float): Vec3 {
+        if (finished) return Vec3.ZERO
+        elapsed += max(dt, 0f)
+        val now = if (seconds <= 0f || elapsed >= seconds) 1f else MapCameraEase.eased(elapsed / seconds)
+        val part = now - done
+        done = now
+        return move * part
+    }
+}
+
 /** How much of the map's view, on each side, the chrome covers, in pixels (iOS's GraphInsets). */
 data class MapInsets(val top: Float = 0f, val left: Float = 0f, val bottom: Float = 0f, val right: Float = 0f) {
     /**

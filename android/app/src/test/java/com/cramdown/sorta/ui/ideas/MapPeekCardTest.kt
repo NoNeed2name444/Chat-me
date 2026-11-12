@@ -29,21 +29,26 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
-// Android's peek card on Map mode's Space (S05b A4), as iOS's UI tests ask of its card: a tap on an
-// idea raises it, its Open and a second tap open the editor, its options' Delete, Choose folder and
-// Rename (through the naming sheet MapPanelsTouchTargetTest measures) act on the store, and a tap on
-// empty space lets it go. Each test on a fresh store of made-up ideas
-// (IdeasFixture), Sorta launched as SortaRun launches it.
+// Android's peek card on Map mode's Space (S05b A4, S05g), as iOS's UI tests ask of its card: a tap on
+// an idea raises it, its Open and a second tap open the editor (a second tap within the double tap's
+// 0.30 s is the double tap's own and opens nothing by itself), its Show links turns to All links and
+// back, its options' Delete, Choose folder and Rename (through the naming sheet
+// MapPanelsTouchTargetTest measures) act on the store, and a tap on empty space lets it go. Each test
+// on a fresh store of made-up ideas (IdeasFixture), Sorta launched as SortaRun launches it.
 //
 // Robolectric can't draw GL: the device reports no OpenGL ES 3, so Map3DView shows its words for that
 // and reports itself drawn at once, and IdeasSpace puts its panels up. With nothing drawn, no body is
 // on screen for a touch to hit (Map3DView's hit test reads the bodies GL placed), so a tap on a body is
-// handed in where that hit test hands it: Map3DView's onOpenNode, on the map's node as MapTapKey, with
-// the body's index in the scene. From there it is the app's own path: IdeasSpace's NotesMap makes the
-// MapBody, MapTouch.tapOpens decides, and the card is the one the screen shows. What this can't do: a
-// hit test on drawn bodies, and a hold on a body (the map hears a hold only with a body hit); the empty
-// tap is a real touch, judged by NotesMap's own handler.
+// handed in where that hit test hands it: Map3DView's onTap, on the map's node as MapTapKey, with the
+// body's index in the scene. From there it is the app's own path: IdeasSpace's NotesMap makes the
+// MapBody, MapSelection decides at the clock's time (SystemClock.uptimeMillis, which these tests move
+// on where a second tap must come after the double tap's gap), and the card is the one the screen
+// shows. What this can't do: a hit test on drawn bodies, and a hold on a body (the map hears a hold
+// only with a body hit); the empty tap is a real touch, judged by Map3DView's own gesture, which
+// stands under the no-GL words too.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -114,9 +119,36 @@ class MapPeekCardTest {
         launchOnSpace()
         tapBody(gate.id)
         cardFor(gate.title)
+        // past the double tap's gap: a tap of its own on the chosen idea
+        ShadowSystemClock.advanceBy(Duration.ofMillis(400))
         tapBody(gate.id)
         run.until { shown(EDITOR_TAG) }
         run.field(s(R.string.editor_title)).assert(hasText(gate.title))
+    }
+
+    @Test fun aQuickSecondTapIsTheDoubleTapsOwnAndOpensNothingByItself() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        tapBody(gate.id)
+        compose.waitForIdle()
+        assertFalse("no editor from the double tap's second tap", shown(EDITOR_TAG))
+        cardFor(gate.title)
+    }
+
+    @Test fun itsShowLinksTurnsToAllLinksAndBack() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        val links = hasTestTag(MapPanelTags.PEEK_LINKS)
+        compose.onNode(links).assert(hasText(words.showLinks))
+        compose.onNode(links).performClick()
+        compose.waitForIdle()
+        compose.onNode(links).assert(hasText(words.allLinks))
+        compose.onNode(links).performClick()
+        compose.waitForIdle()
+        compose.onNode(links).assert(hasText(words.showLinks))
+        cardFor(gate.title)
     }
 
     @Test fun itsDeleteDeletesTheIdeaFromTheStore() {

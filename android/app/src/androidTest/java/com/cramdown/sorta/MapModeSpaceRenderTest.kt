@@ -1,5 +1,6 @@
 package com.cramdown.sorta
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.SystemClock
 import android.view.ViewConfiguration
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -68,6 +70,12 @@ import kotlin.math.max
  * Neurons. In Space a finger held on a body shows its name in one pill above it, gone once the
  * finger moves on; in both, a tap chooses a body and its name stays while its card is up: a still
  * each, mapmode-named-<space|neurons>-<light|dark>-<device>.png.
+ *
+ * S05g: the first run's card shows Space's steps (mapmode-card-steps-<light|dark>-<device>.png); in
+ * Space and Neurons the body requireNames chose is marked and Show links fades the rest (stills
+ * mapmode-chosen-<look>-... and mapmode-links-<look>-...), a hold opens the options with the finger
+ * down, and a double tap on empty space brings back the first view (requireChoice). Performance is
+ * not reached here: the map reports no spot there (it shows no names), so no body can be tapped.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -113,6 +121,9 @@ class MapModeSpaceRenderTest {
         // S05d: at first run the card shows in its one form, every body of the first view is drawn
         // above it, and Got it puts it away without moving the camera
         requireClearOfTheCard(name)
+        // S05g A3: a first run's card shows Space's steps too, every body still above it
+        check(shown(MapPanelTags.HINT_STEPS)) { "The first-run card shows no steps for $name" }
+        shot("mapmode-card-steps-${if (dark) "dark" else "light"}-$device")
         val pose = checkNotNull(mapDrawn()).pose
         compose.onNode(hasText(context.getString(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT))).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNodes().isEmpty() }
@@ -141,7 +152,9 @@ class MapModeSpaceRenderTest {
         // S05f A6: Space's legend, kept for the renders check
         shotLegend(GraphTheme.SPACE, dark)
         // S05f: Space's names, at rest, under a finger and for a chosen body
-        requireNames("space", dark, press = true)
+        val (spaceChosen, spaceBefore) = requireNames("space", dark, press = true)
+        // S05g A3: the chosen body's mark, Show links, the hold and the empty double tap
+        requireChoice("space", dark, spaceChosen, spaceBefore, home = pose)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -157,10 +170,12 @@ class MapModeSpaceRenderTest {
         shot(neurons)
         requireMapDrawn(neurons)
         requireClearOfTheCard(neurons)
+        val neuronsHome = checkNotNull(mapDrawn()).pose
         // S05f A6: Neuron's legend, kept for the renders check
         shotLegend(GraphTheme.NEURONS, dark)
         // S05f: Neuron's names, at rest and for a chosen body
-        requireNames("neurons", dark, press = false)
+        val (neuronsChosen, neuronsBefore) = requireNames("neurons", dark, press = false)
+        requireChoice("neurons", dark, neuronsChosen, neuronsBefore, home = neuronsHome)
     }
 
     /**
@@ -169,7 +184,7 @@ class MapModeSpaceRenderTest {
      * past the slop, a turn and not a tap, so no card; then a tap on a body chooses it, its card comes
      * up and its name stays, one pill above it, still there a second later.
      */
-    private fun requireNames(look: String, dark: Boolean, press: Boolean) {
+    private fun requireNames(look: String, dark: Boolean, press: Boolean): Pair<Int, List<Float>> {
         val name = "mapmode-named-$look-${if (dark) "dark" else "light"}-$device"
         compose.waitForIdle()
         check(mapDrawn()?.names?.isEmpty() == true) { "A name shows at rest for $name: ${mapDrawn()?.names}" }
@@ -189,6 +204,7 @@ class MapModeSpaceRenderTest {
             SystemClock.sleep(500) // the turn's last frame, so the spot is where the body now is
         }
         val (index, at) = spot(name)
+        val before = checkNotNull(mapDrawn()).pose
         compose.onNode(map).performTouchInput { click(at) }
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK)) { "A tap on a body brought up no card for $name" }
@@ -196,6 +212,97 @@ class MapModeSpaceRenderTest {
         shot(name)
         SystemClock.sleep(1_000)
         requireOnePill(index, "a chosen body a second later, its card still up, for $name")
+        return index to before
+    }
+
+    /**
+     * S05g A3, after requireNames chose [index] with a tap, the camera then at [before]: the body is
+     * marked (Space's orbit ring, the Neurons' hot halo) and nothing fades; the camera has eased
+     * towards it while animations run, and stayed put with them off; a still,
+     * mapmode-chosen-<look>-<light|dark>-<device>.png. Show links fades what is outside its
+     * neighbourhood, keeps its lit links and reads All links: a still, mapmode-links-<look>-....
+     * All links brings everything back. A finger held still past 0.55 s opens its options with the
+     * finger still down; one held and moved before then turns the camera and opens nothing. A tap on
+     * empty space lets it go, and the second of a double tap brings back the first view, [home].
+     */
+    private fun requireChoice(look: String, dark: Boolean, index: Int, before: List<Float>, home: List<Float>) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-chosen-$look-$mode-$device"
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val res = instrumentation.targetContext.resources
+        fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.chosen == index && it.marked } == true } } catch (_: ComposeTimeoutException) {}
+        val chosen = checkNotNull(mapDrawn())
+        check(chosen.chosen == index && chosen.marked) { "The chosen body ($index) is not marked for $name: $chosen" }
+        check(!chosen.focus && chosen.faded == 0) { "Something fades with no Show links for $name: $chosen" }
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        val eased = checkNotNull(mapDrawn()).pose
+        val lively = ValueAnimator.areAnimatorsEnabled()
+        check(same(before, eased) != lively) {
+            "The camera ${if (lively) "did not ease towards" else "moved with animations off for"} the chosen body for $name: $before, then $eased"
+        }
+        shot(name)
+        // Show links
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_show_links))).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.focus == true } } catch (_: ComposeTimeoutException) {}
+        val focused = checkNotNull(mapDrawn())
+        check(focused.focus && focused.chosen == index && focused.faded > 0) { "Show links faded nothing for $name: $focused" }
+        check(focused.lit == chosen.lit && focused.focusLinks >= focused.lit) { "Show links lost the chosen body's lit links for $name: $chosen, then $focused" }
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_all_links)))
+        shot("mapmode-links-$look-$mode-$device")
+        // All links
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.focus == false } } catch (_: ComposeTimeoutException) {}
+        val back = checkNotNull(mapDrawn())
+        check(!back.focus && back.faded == 0 && back.focusLinks == 0 && back.chosen == index) { "All links did not bring everything back for $name: $back" }
+        // a finger held still past the hold: the options, the finger still down
+        val (_, at) = spot(name)
+        compose.onNode(map).performTouchInput { down(at) }
+        try { compose.waitUntil(5_000) { shown(MapPanelTags.MENU) } } catch (_: ComposeTimeoutException) {}
+        val opened = shown(MapPanelTags.MENU)
+        compose.onNode(map).performTouchInput { up() }
+        check(opened) { "A finger held still on a body opened no options for $name" }
+        ui.pressBack()
+        compose.waitUntil(10_000) { !shown(MapPanelTags.MENU) }
+        // held, then moved before the options: the camera turns, nothing opens
+        val (_, from) = spot(name)
+        val still = checkNotNull(mapDrawn()).pose
+        val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
+        compose.onNode(map).performTouchInput { down(from) }
+        SystemClock.sleep(300) // past the pick-up time, short of the options'
+        compose.onNode(map).performTouchInput { moveBy(Offset(slop * 4f, 0f)); moveBy(Offset(slop * 4f, 0f)); up() }
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        check(!shown(MapPanelTags.MENU)) { "A hold that moved opened the options for $name" }
+        check(!same(still, checkNotNull(mapDrawn()).pose)) { "A hold that moved did not turn the camera for $name" }
+        // empty space: a tap lets it go, two bring back the first view
+        val empty = emptySpot(name)
+        compose.onNode(map).performTouchInput { doubleClick(empty) }
+        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && same(home, checkNotNull(mapDrawn()).pose) } } catch (_: ComposeTimeoutException) {}
+        check(!shown(MapPanelTags.PEEK)) { "A tap on empty space left the card up for $name" }
+        check(same(home, checkNotNull(mapDrawn()).pose)) { "A double tap on empty space did not bring back the first view for $name: $home, now ${mapDrawn()?.pose}" }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
+        check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
+    }
+
+    /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
+    private fun emptySpot(name: String): Offset {
+        val drawn = checkNotNull(mapDrawn())
+        check(drawn.box.size == 4) { "No bodies' box to keep clear of for $name: $drawn" }
+        val map = checkNotNull(mapNode()).boundsInRoot
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val gap = 56f * density
+        val middle = (drawn.box[1] + drawn.box[3]) / 2
+        val stripBottom = strip.bottom - map.top
+        val choices = listOf(
+            Offset(drawn.box[0] / 2, middle) to drawn.box[0],
+            Offset((drawn.box[2] + map.width) / 2, middle) to (map.width - drawn.box[2]),
+            Offset(map.width / 2, (stripBottom + drawn.box[1]) / 2) to (drawn.box[1] - stripBottom),
+        )
+        val (point, room) = choices.maxBy { it.second }
+        check(room >= gap) { "No empty space ${gap / density} dp wide beside the bodies for $name: $drawn" }
+        return point
     }
 
     /**

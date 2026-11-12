@@ -47,9 +47,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 // S05b task 4, A6: the map's panels (MapPanels.kt), drawn as composables, since Robolectric can't
-// draw the GL map under them, in the style of SortTouchTargetTest. Each panel (an idea's peek card,
-// a folder's, the Link length bar, the first-run card, the no-folder hint, and the options More
-// opens) is drawn at font scale 1 and 2, on a phone and on a folded phone's outer screen. Every
+// draw the GL map under them, in the style of SortTouchTargetTest. Each panel (an idea's peek card
+// with its Show links (S05g), a folder's, the Link length bar, the first-run card with and without
+// its steps, the no-folder hint, and the options More opens) is drawn at font scale 1 and 2, on a phone and on a folded phone's outer screen. Every
 // node on it that can be tapped and is wholly in view is measured:
 //  - its touch area is at least 48 by 48 dp (WardControlSize.target);
 //  - no two targets' 48 dp squares overlap, a panel and the controls inside it apart (the card is
@@ -70,7 +70,7 @@ class MapPanelsTouchTargetTest {
     private class Panel(val name: String, val tag: String, val expect: List<String>, val draw: @Composable () -> Unit)
 
     private val panels get() = listOf(
-        Panel("an idea's peek card", MapPanelTags.PEEK, listOf("Open", "More", "Bulbs")) {
+        Panel("an idea's peek card", MapPanelTags.PEEK, listOf("Open", "Show links", "More", "Bulbs")) {
             val links = listOf("a" to "Bulbs", "b" to "Shed", "c" to "Gate")
             MapPeekCard(MapPeek.content(MapPeekInput("space", "gasGiant", folder = false, title = "Oil the gate before the frost comes in",
                 body = "First a line of words that runs on past the card's width.\nThen another.\nAnd a third.\nNot this one.", links = links), words),
@@ -85,6 +85,9 @@ class MapPanelsTouchTargetTest {
             MapLinkLengthBar(1.4, {}, {})
         },
         Panel("the first-run card", MapPanelTags.HINT, listOf("Full list", "Got it")) { MapTouchCard({}, {}) },
+        Panel("the first-run card with its steps", MapPanelTags.HINT, listOf("Full list", "Got it")) {
+            MapTouchCard({}, {}, title = GraphTheme.NEURONS.cardTitle, steps = GraphTheme.NEURONS.cardSteps)
+        },
         Panel("the no-folder hint", MapPanelTags.EMPTY_HINT, listOf("Add folder")) { MapEmptyHint(GraphTheme.NEURONS, {}) },
     )
 

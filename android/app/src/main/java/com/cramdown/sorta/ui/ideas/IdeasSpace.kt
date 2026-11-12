@@ -44,16 +44,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
@@ -62,8 +57,6 @@ import androidx.compose.ui.unit.IntOffset
 import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.MapMenuItem
 import com.cramdown.sorta.ideas.MapPeek
-import com.cramdown.sorta.ideas.MapTouch
-import com.cramdown.sorta.ideas.MapTouchKind
 import com.cramdown.sorta.ideas.NoteFolder
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -81,6 +74,9 @@ import com.cramdown.sorta.ideas.noteKind
 import com.cramdown.sorta.map.AnatomyInput
 import com.cramdown.sorta.map.AnatomyNote
 import com.cramdown.sorta.map.GraphUniverse
+import com.cramdown.sorta.map.MapSelection
+import com.cramdown.sorta.map.MapSelectionEffect
+import com.cramdown.sorta.map.MapSelectionEvent
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.ThemeBodyKind
@@ -92,6 +88,7 @@ import com.cramdown.sorta.map.NoteLike
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SyntheticGraph
 import com.cramdown.sorta.ui.map.Map3DView
+import com.cramdown.sorta.ui.map.MapEase
 import com.cramdown.sorta.ui.map.MapScene
 import com.cramdown.sorta.ui.map.MapTheme
 import com.cramdown.sorta.ui.sources.ReaderDoneButton
@@ -112,9 +109,11 @@ import java.util.Locale
 // bottom-trailing corner over the bottom bar, on a map only: Look and Recentre. The map runs
 // edge to edge and the tools keep to the safe area, as iOS's do. Android's map has no force
 // simulation, so bodies do not drift and cannot be held and moved. Touching it is iOS's model
-// (GraphTouchModel.swift:3-20) with MapPanels' panels: a tap chooses a body and raises its peek
-// card, a second tap or Open reads it, a hold (judged on lift: the map reports only where a touch
-// ended) opens its options, and a tap on empty space lets it go.
+// (GraphTouchModel.swift:3-20, S05g) with MapPanels' panels: one MapSelection decides, as iOS's
+// GraphSelection, what each touch the map reports does. A tap chooses a body (marked, its links lit,
+// the camera easing towards it) and raises its peek card, a second tap, a double tap or Open reads
+// it, a finger held still on it opens its options before it lifts, Show links keeps its own links,
+// and a tap on empty space lets it go.
 
 /** A note as the map reads it: its links from the book's edges, its group its top-level folder. */
 private class NoteNode(override val id: String, override val title: String, override val links: List<String>, override val tags: List<String>) : NoteLike
@@ -154,6 +153,10 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     // the chosen body (its card), the one held (its options, where it was held), and the Link length bar
     var chosen by remember(theme) { mutableStateOf<MapBody?>(null) }
     var held by remember(theme) { mutableStateOf<Pair<MapBody, Offset>?>(null) }
+    // what each touch does (GraphSelection, S05g); Show links' body; the camera's move for a choice
+    val selection = remember(theme) { MapSelection() }
+    var linksId by remember(theme) { mutableStateOf<String?>(null) }
+    var ease by remember(theme) { mutableStateOf<MapEase?>(null) }
     var tuning by remember { mutableStateOf(false) }
     // the first-run card's height as last drawn, in pixels, kept while it steps aside for a peek
     // card or the Link length bar (S05d)
@@ -176,6 +179,36 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             ThemeBodyKind.HOME -> openFolder(null)
         }
     }
+    /**
+     * Hands [event] to the selection and acts on its effects in order, as iOS's perform does
+     * (Graph3DView.swift:530-546). [body] is the body the touch found, [at] where it was held.
+     */
+    fun react(event: MapSelectionEvent, body: MapBody? = null, at: Offset = Offset.Zero) {
+        for (effect in selection.handle(event, android.os.SystemClock.uptimeMillis() / 1000.0)) when (effect) {
+            is MapSelectionEffect.Select -> {
+                chosen = body?.takeIf { it.id.equals(effect.id, ignoreCase = true) }
+                    ?: MapBody(effect.id, ThemeBodyKind.NOTE, roles[effect.id.uppercase()] ?: "")
+                held = null
+                ease = MapEase(effect.id, effect.glide, (ease?.serial ?: 0) + 1)
+            }
+            MapSelectionEffect.Clear -> { chosen = null; held = null }
+            is MapSelectionEffect.Open -> (chosen?.takeIf { it.id.equals(effect.id, ignoreCase = true) } ?: body)?.let { openBody(it) }
+            is MapSelectionEffect.Links -> linksId = effect.id
+            is MapSelectionEffect.Menu -> (chosen?.takeIf { it.id.equals(effect.id, ignoreCase = true) } ?: body)?.let { held = it to at }
+        }
+    }
+    // back from what was opened over the map: still chosen (GraphSelection's closed)
+    LaunchedEffect(covered) { if (!covered) react(MapSelectionEvent.Closed) }
+    // a chosen idea or folder deleted: it goes, its card and Show links with it
+    LaunchedEffect(book.notes, book.folders) {
+        val body = chosen ?: return@LaunchedEffect
+        val there = when (body.kind) {
+            ThemeBodyKind.NOTE -> book.notes.any { it.id.equals(body.id, ignoreCase = true) }
+            ThemeBodyKind.FOLDER -> book.folders.any { it.id.equals(body.id, ignoreCase = true) }
+            ThemeBodyKind.HOME -> true
+        }
+        if (!there) react(MapSelectionEvent.Gone(body.id))
+    }
     // a body's options (Graph3DView.choose, Graph3DView.swift:542-553)
     fun pick(item: MapMenuItem, body: MapBody) {
         held = null
@@ -184,7 +217,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             MapMenuItem.OPEN -> openBody(body)
             MapMenuItem.RENAME -> renaming = body
             MapMenuItem.MOVE -> note?.let { choose(it.id) }
-            MapMenuItem.DELETE -> if (note != null) { chosen = null; delete(note.id) }
+            MapMenuItem.DELETE -> if (note != null) { react(MapSelectionEvent.Gone(body.id)); delete(note.id) }
                 else book.folders.firstOrNull { body.kind == ThemeBodyKind.FOLDER && it.id.equals(body.id, ignoreCase = true) }?.let { deletingFolder = it }
         }
     }
@@ -207,16 +240,12 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 // rules, not the moments it steps aside, so those never move the camera
                 else -> NotesMap(book, settings, theme, recenter, openPath, panels.linkLength, onRoles = { roles = it },
                     top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
-                    card = if (theme != GraphTheme.PERFORMANCE && !panels.touchSeen(theme) && cardPx > 0)
+                    card = if (theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && cardPx > 0)
                         hidden + WardSpace.l.wardDp + with(LocalDensity.current) { cardPx.toDp() } else 0.dp,
-                    onBody = { body, hold, at ->
-                        when {
-                            hold -> { chosen = body; held = body to at }
-                            MapTouch.tapOpens(chosen?.id, body.id) -> openBody(body)
-                            else -> { chosen = body; held = null }
-                        }
-                    },
-                    onEmpty = { chosen = null; held = null }, chosenId = chosen?.id, heldId = held?.first?.id, shown = shown) { shown = it }
+                    onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
+                    onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
+                    onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -228,15 +257,19 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     start = WardSpace.xl.wardDp, end = WardSpace.xl.wardDp)) {
                 MapEmptyHint(theme, add = { addingFolder = true })
             }
-            // the first-run card, bottom-leading, clear of the round tools (Graph3DView.swift:302-318)
-            if (panelsShown && theme != GraphTheme.PERFORMANCE && !panels.touchSeen(theme) && peek == null && !tuning) Box(Modifier.align(Alignment.BottomStart)
+            // the first-run card, bottom-leading, clear of the round tools (Graph3DView.swift:302-318),
+            // while its steps or its touch lines are unseen (hintShown, :497-499)
+            if (panelsShown && theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && peek == null && !tuning) Box(Modifier.align(Alignment.BottomStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
                     bottom = hidden + WardSpace.l.wardDp)) {
                 // its height as drawn: the first view is framed above it (NotesMap's card)
                 // put away, its height is let go: the next theme's card is measured afresh (S05d)
-                MapTouchCard(more = { cardPx = 0; panels.markTouchSeen(theme); legend = true }, done = { cardPx = 0; panels.markTouchSeen(theme) },
-                    modifier = Modifier.onSizeChanged { cardPx = it.height })
+                val stepsUnseen = !panels.stepsSeen(theme)
+                MapTouchCard(more = { cardPx = 0; panels.markCardSeen(theme); legend = true }, done = { cardPx = 0; panels.markCardSeen(theme) },
+                    modifier = Modifier.onSizeChanged { cardPx = it.height },
+                    title = if (stepsUnseen) theme.cardTitle else null, touch = !panels.touchSeen(theme),
+                    steps = if (stepsUnseen) theme.cardSteps else emptyList())
             }
             // the Link length bar and the peek card, bottom-centred beside the tools (bottomPanels,
             // Graph3DView.swift:349-380); the card steps aside while a body's options are up
@@ -249,10 +282,11 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 if (held == null && peek != null) {
                     val (body, content) = peek
                     androidx.compose.runtime.key(body.id) {
-                        MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { openBody(body) },
+                        MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { react(MapSelectionEvent.OpenCard, body) },
                             flyIn = { cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it } },
-                            chip = { id -> chosen = MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "") },
-                            option = { pick(it, body) })
+                            chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
+                            option = { pick(it, body) },
+                            linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) })
                     }
                 }
             }
@@ -272,7 +306,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)) {
                 IdeaToolCluster {
                     SpaceLookTool(book, settings, theme, showLegend = { legend = true }, showFolderLooks = { folderLooks = true }, openFolder = openFolder,
-                        linkLength = panels.linkLength, tuneLinks = if (demo == null) ({ tuning = true; chosen = null; held = null }) else null)
+                        linkLength = panels.linkLength, tuneLinks = if (demo == null) ({ tuning = true; held = null; react(MapSelectionEvent.TapEmpty) }) else null)
                     // iOS's smallcircle.filled.circle, on every Recentre
                     IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { recenter++ }
                 }
@@ -302,18 +336,12 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             title = { Text(stringResource(R.string.folder_delete_title, folder.name), color = wardColor(WardToken.ink)) },
             text = { Text(stringResource(R.string.folder_delete_body, parent), color = wardColor(WardToken.ink)) },
             confirmButton = {
-                TextButton({ deletingFolder = null; chosen = null; book.deleteFolder(folder.id) }) {
+                TextButton({ deletingFolder = null; react(MapSelectionEvent.Gone(folder.id)); book.deleteFolder(folder.id) }) {
                     Text(stringResource(R.string.folder_delete_confirm), color = wardColor(WardToken.danger))
                 }
             },
             dismissButton = { TextButton({ deletingFolder = null }) { Text(stringResource(R.string.sheet_cancel), color = wardColor(WardToken.primaryInk)) } })
     }
-}
-
-/** What the map's own touch handler can't say: how long a touch was held, and whether it found a body. */
-private class MapPress {
-    var kind = MapTouchKind.TAP
-    var hit = false
 }
 
 /** The user's notes on the map, rebuilt off the main thread when they or the look change. */
@@ -322,8 +350,10 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
 
 /**
  * The user's notes on the map, rebuilt off the main thread when they, the look or the Link length
- * change. [onBody] hears a body tapped or held (and where), [onEmpty] a tap on empty space;
- * [chosenId] and [heldId] are the chosen and held bodies, whose names stay on show. Its
+ * change. [onTap] hears a tap, on a body or on empty space (null), [onDoubleTap] a double tap on a
+ * body and [onHold] a body held still (and where), each as the map decides it while the finger is
+ * down (S05g); [chosenId] and [heldId] are the chosen and held bodies, whose names stay on show,
+ * [linksId] the body Show links is on, and [ease] the camera's move for a choice. Its
  * first view fits what the chrome leaves: under [top] and above [hidden], as the 2D board's.
  * [onShown] hears that the map is drawn, once its first frame is; until [shown] comes back, with the
  * screen's night look and tools, the wait covers the map, so the two come in the same frame.
@@ -331,8 +361,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
 @Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, openPath: List<String>,
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   card: Dp,
-                                  onBody: (MapBody, Boolean, Offset) -> Unit, onEmpty: () -> Unit,
-                                  chosenId: String?, heldId: String?,
+                                  onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
+                                  chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -376,53 +406,31 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val ready = map.scene
     val description = "${theme.mapLabel}: ${notes.size} ${if (notes.size == 1) "idea" else "ideas"}, ${edges.size} ${if (edges.size == 1) "link" else "links"}. " +
         theme.hint
-    // Map3DView reports only a tap's body, when the finger lifts. So the touch is watched on its way
-    // in (the Initial pass, before the map's own handler) to judge it (MapTouch.judge), and on its
-    // way out (the Final pass, after) to tell a tap on nothing from one on a body.
-    val press = remember { MapPress() }
-    val config = LocalViewConfiguration.current
-    val latestEmpty by rememberUpdatedState(onEmpty)
-    var at by remember { mutableStateOf(Offset.Zero) }
-    Box(Modifier.fillMaxSize().pointerInput(Unit) {
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            var moved = 0f
-            var multi = false
-            var lifted = down.uptimeMillis
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val pressed = event.changes.filter { it.pressed }
-                if (pressed.size >= 2) multi = true
-                if (pressed.isEmpty()) { lifted = event.changes.maxOfOrNull { it.uptimeMillis } ?: lifted; break }
-                val change = pressed.first()
-                moved += (change.position - change.previousPosition).getDistance()
+    // each body the map reports, as the card and the selection take it (an idea's role from its look)
+    fun bodyOf(index: Int): MapBody? {
+        val body = ready.neurons?.plan?.bodies?.getOrNull(index)
+        return when {
+            body != null -> MapBody(body.id, body.kind, body.role.toString())
+            else -> ready.ids.getOrNull(index)?.let { id ->
+                MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
             }
-            press.kind = MapTouch.judge(lifted - down.uptimeMillis, moved, config.touchSlop, multi, config.longPressTimeoutMillis)
-            press.hit = false
-            at = down.position
-            // the same lift, after the map has looked for a body under it
-            awaitPointerEvent(PointerEventPass.Final)
-            if (!press.hit && press.kind == MapTouchKind.TAP) latestEmpty()
         }
-    }) {
+    }
+    val latestTap by rememberUpdatedState(onTap)
+    val latestDouble by rememberUpdatedState(onDoubleTap)
+    val latestHold by rememberUpdatedState(onHold)
+    Box(Modifier.fillMaxSize()) {
         Map3DView(ready, Modifier.fillMaxSize(), description = description,
-            onOpenNode = { index ->
-                press.hit = true
-                val body = ready.neurons?.plan?.bodies?.getOrNull(index)
-                val chosen = when {
-                    body != null -> MapBody(body.id, body.kind, body.role.toString())
-                    else -> ready.ids.getOrNull(index)?.let { id ->
-                        MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
-                    }
-                }
-                if (chosen != null) onBody(chosen, press.kind == MapTouchKind.HOLD, at)
-            },
+            // the map decides each touch while the finger is down (S05g); a body it can't name is empty space
+            onTap = { index -> latestTap(index?.let(::bodyOf)) },
+            onDoubleTap = { index -> bodyOf(index)?.let { latestDouble(it) } },
+            onHold = { index, at -> bodyOf(index)?.let { latestHold(it, at) } },
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,
             onDrawn = { drawnOnce = true }, top = top, hidden = hidden, card = card,
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
-            // the chosen and held bodies keep their names on show (S05f)
-            chosenId = chosenId, heldId = heldId)
+            // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease)
         if (!shown) Building(null)
     }
 }
@@ -583,6 +591,9 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
             content.rows.forEach { LegendRowTile(it) }
             Text(content.touch, Modifier.padding(horizontal = WardSpace.s.wardDp).padding(top = WardSpace.s.wardDp),
                 style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
+            // the last line clears the navigation bar on a phone and the sheet's foot on a tablet (S05g):
+            // the app's own inset, as IdeasView reads it, then the sheet's own foot
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             Spacer(Modifier.height(WardSpace.xl.wardDp))
         }
     }

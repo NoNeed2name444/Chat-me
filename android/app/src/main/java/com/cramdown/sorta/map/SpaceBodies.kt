@@ -33,10 +33,16 @@ import kotlin.math.sqrt
  * - gas giant: A its spin axis (the ring lies square to it);
  * - pulsar: light.x its nebula's turn, A its beam, A.w 2 + how edge-on its nebula is, B its spin axis;
  * - comet: A its ion tail, B its dust tail (SpaceOptics.cometTails).
+ * A fifth vec4 (S05g), the mark: x its fade under Show links (1, or [MapMark.FADED] outside
+ * [focus]), y 1 for the [chosen] body; z and w spare.
+ *
+ * The chosen body (S05g): its links' beams are lit (beam float 9, as iOS's lit bit), its radius
+ * is scaled by [chosenScale] (the pop), and under Show links ([focus] set) only its own beams are
+ * built, the links gone since the last scene shrinking away, unlit, as before.
  */
 class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 96) {
     companion object {
-        const val STRIDE = 16
+        const val STRIDE = 20
         /**
          * Per beam: the A (sending) end trimmed (x, y, z) and its style, the B end trimmed and its
          * style, seed (0...15), lit, how far it has grown (eased, 0...1), then what bends it near
@@ -71,6 +77,16 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     /** How far each link has grown (S05e); null draws every link whole. */
     var growth: SpaceLinkGrowth? = null
+
+    /** The chosen body, a chunk-order node, or −1 (S05g). */
+    var chosen: Int = -1
+    /** Its radius's scale this frame (MapPop.scale). */
+    var chosenScale: Float = 1f
+    /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
+    var focus: IntArray? = null
+    /** Bodies drawn faded this frame (MapDrawn.faded), and beams drawn lit (MapDrawn.lit). */
+    var fadedCount = 0; private set
+    var litCount = 0; private set
 
     private val slot = IntArray(tree.nodeCount) { -1 }
     private val masked = BooleanArray(tree.nodeCount)
@@ -123,6 +139,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         for (k in 0 until previousCount) slot[previous[k]] = -1
         count = order.size
         styleStart.fill(0)
+        fadedCount = 0
         for ((j, h) in order.withIndex()) {
             val node = heapNode[h]
             nodes[j] = node
@@ -230,10 +247,20 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             }
         }
         val o = j * STRIDE
-        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = nodeRadius
+        val chosenHere = node == chosen
+        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) nodeRadius * chosenScale else nodeRadius
         data[o + 4] = light.x; data[o + 5] = light.y; data[o + 6] = light.z; data[o + 7] = seed
         data[o + 8] = a.x; data[o + 9] = a.y; data[o + 10] = a.z; data[o + 11] = codeA
         data[o + 12] = b.x; data[o + 13] = b.y; data[o + 14] = b.z; data[o + 15] = SpaceLod.pixels(nodeRadius, focal, depth)
+        val fade = fadeOf(node)
+        if (fade < 1f) fadedCount++
+        data[o + 16] = fade; data[o + 17] = if (chosenHere) 1f else 0f; data[o + 18] = 0f; data[o + 19] = 0f
+    }
+
+    /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]. */
+    fun fadeOf(node: Int): Float {
+        val near = focus ?: return 1f
+        return if (MapFocus.holdsAny(near, node, node + 1)) 1f else MapMark.FADED
     }
 
     /** The four suns nearest [c] (not [self]), as SpaceOptics.light takes them. */
@@ -270,6 +297,8 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     private fun buildBeams(plan: FramePlan) {
         beamCount = 0
+        litCount = 0
+        val only = if (focus != null) chosen else -1
         seen.clear(); leafSeen.clear()
         val edges = tree.leafEdges
         val growth = growth
@@ -282,6 +311,8 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 val u = edges[e]; val v = edges[e + 1]
                 e += 2
                 if (slot[u] < 0 && slot[v] < 0) continue
+                // Show links: only the chosen body's own (focusLinks)
+                if (focus != null && !MapFocus.own(only, u, v)) continue
                 if (!seen.add(Octree.pairKey(min(u, v), maxOf(u, v)))) continue
                 val grow = growth?.shown(u, v) ?: 1f
                 if (grow <= 0.001f) continue
@@ -295,7 +326,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             if (u !in slot.indices || v !in slot.indices || (slot[u] < 0 && slot[v] < 0)) continue
             val grow = growth.ghostShown(g)
             if (grow <= 0.001f) continue
-            addBeam(plan, u, v, grow)
+            addBeam(plan, u, v, grow, ghost = true)
         }
     }
 
@@ -305,7 +336,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
      * two ends with the same code, the link's first. Each end is trimmed clear of its body, each trim
      * at most 0.45 of the length, so a short link is kept (iOS GraphRibbonWriter.path).
      */
-    private fun addBeam(plan: FramePlan, u: Int, v: Int, grow: Float) {
+    private fun addBeam(plan: FramePlan, u: Int, v: Int, grow: Float, ghost: Boolean = false) {
         val su = tree.groups[u].toInt(); val sv = tree.groups[v].toInt()
         val aEnd = if (sv > su) v else u
         val bEnd = if (aEnd == u) v else u
@@ -318,7 +349,10 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         beams[o] = ends[0]; beams[o + 1] = ends[1]; beams[o + 2] = ends[2]; beams[o + 3] = sa.toFloat()
         beams[o + 4] = ends[3]; beams[o + 5] = ends[4]; beams[o + 6] = ends[5]; beams[o + 7] = sb.toFloat()
         beams[o + 8] = linkSeed(tree.order[aEnd], tree.order[bEnd])
-        beams[o + 9] = 0f
+        // lit: the chosen body's links (iOS's lit bit; the grabbed body's are S05g2's)
+        val lit = !ghost && chosen >= 0 && (u == chosen || v == chosen)
+        beams[o + 9] = if (lit) 1f else 0f
+        if (lit) litCount++
         beams[o + 10] = grow
         beams[o + 11] = pa[0]; beams[o + 12] = pa[1]; beams[o + 13] = pa[2]
         axis(aEnd, beams, o + 14)

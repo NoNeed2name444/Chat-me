@@ -43,10 +43,12 @@ class FramePlan(leafCount: Int) {
     var visibleCells = 0
     var summaryCount = 0
     var bundleCount = 0
+    /** Summaries drawn at [MapMark.FADED] under Show links ([LodSelector.focus]), S05g. */
+    var fadedSummaries = 0
 
     fun reset() {
         detailLeaves.clear(); summaries.clear(); bundles.clear()
-        detailNodes = 0; visibleCells = 0; summaryCount = 0; bundleCount = 0
+        detailNodes = 0; visibleCells = 0; summaryCount = 0; bundleCount = 0; fadedSummaries = 0
     }
 
     companion object { const val SUMMARY_STRIDE = 7; const val BUNDLE_STRIDE = 10 }
@@ -184,10 +186,19 @@ class LodSelector(val tree: Octree, val cache: ChunkCache?) {
         }
     }
 
+    /**
+     * Under Show links (S05g), the chosen body's neighbourhood in chunk order, sorted: a summary
+     * holding none of it is drawn at [MapMark.FADED] (focusLinks). Null draws every summary whole.
+     */
+    var focus: IntArray? = null
+
     private fun emitSummary(cell: Int, pixels: Float, scale: Float, x: Float, y: Float, z: Float) {
         val diameter = (pixels * 1.1f).coerceIn(2.5f, 120f) * scale
         if (diameter < 0.4f) return
-        val brightness = 0.35f + 0.65f * ln(1f + tree.count[cell]) / max(logMax, 1e-3f)
+        val near = focus
+        val faded = near != null && !MapFocus.holdsAny(near, tree.start[cell], tree.end[cell])
+        if (faded) plan.fadedSummaries++
+        val brightness = (0.35f + 0.65f * ln(1f + tree.count[cell]) / max(logMax, 1e-3f)) * (if (faded) MapMark.FADED else 1f)
         // the mean of many topics drifts to grey, so its hue is pushed back out: the mix still decides the colour
         val r = tree.colorR[cell]; val g = tree.colorG[cell]; val b = tree.colorB[cell]
         val lum = 0.3f * r + 0.59f * g + 0.11f * b

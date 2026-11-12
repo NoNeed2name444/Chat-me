@@ -23,11 +23,14 @@ import kotlin.math.min
  * premultiplied blending (a body hides what is behind it; its glows add), and the beams
  * before them, each one strip of [samples] + 1 vertex pairs along its curve (LinkStrips), drawn
  * as NeuronGl draws its bridges: one buffer, one strip per link. A style whose shader does not
- * build on this device is left as points.
+ * build on this device is left as points. The chosen body's orbit ring (S05g) is one more quad,
+ * its far half drawn before the bodies and its near half after them.
  */
 internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40) {
     private val programs = IntArray(6)
     private var linkProgram = 0
+    private var orbitProgram = 0
+    private var ringVao = 0
     private var quadVbo = 0
     private var bodyVbo = 0
     private var beamVbo = 0
@@ -42,6 +45,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
     private var maxTexture = 2048
     /** The links drawn in the latest frame (MapDrawn.links). */
     var linksDrawn = 0; private set
+    /** Whether the orbit ring was drawn in the latest frame (MapDrawn.marked). */
+    var ringDrawn = false; private set
 
     /** Called on the GL thread with a new context; marks which styles can be drawn. */
     fun create(bodies: SpaceBodies, detail: Float) {
@@ -52,18 +57,25 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
         }
         linkProgram = runCatching { buildProgram(SpaceShaders.linkVertex, SpaceShaders.link) }
             .onFailure { Log.w("SpaceGl", "links: ${it.message}") }.getOrDefault(0)
+        orbitProgram = runCatching { buildProgram(SpaceShaders.orbitVertex, SpaceShaders.orbit) }
+            .onFailure { Log.w("SpaceGl", "orbit: ${it.message}") }.getOrDefault(0)
         val ids = IntArray(3)
         GLES30.glGenBuffers(3, ids, 0)
         quadVbo = ids[0]; bodyVbo = ids[1]; beamVbo = ids[2]
         val quad = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, quad.size * 4, floats(quad.size).put(quad).flip(), GLES30.GL_STATIC_DRAW)
-        GLES30.glGenVertexArrays(2, ids, 0)
-        bodyVao = ids[0]; beamVao = ids[1]
+        GLES30.glGenVertexArrays(3, ids, 0)
+        bodyVao = ids[0]; beamVao = ids[1]; ringVao = ids[2]
         GLES30.glBindVertexArray(bodyVao)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
         GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
-        for (loc in 1..4) { GLES30.glEnableVertexAttribArray(loc); GLES30.glVertexAttribDivisor(loc, 1) }
+        // per body: five vec4s (SpaceBodies.STRIDE), the fifth its mark (S05g)
+        for (loc in 1..5) { GLES30.glEnableVertexAttribArray(loc); GLES30.glVertexAttribDivisor(loc, 1) }
+        // the orbit ring: the same quad, alone
+        GLES30.glBindVertexArray(ringVao)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         // the beams' strips: per vertex the point and side, the tangent and distance along, the
         // link's styles, seed and lit, and its drawn length (LinkStrips)
         GLES30.glBindVertexArray(beamVao)
@@ -90,14 +102,17 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
      * shaders' detail by size, [forward] the camera's unit view direction. [straight] is the Lines
      * setting; [lively] false stills the links' motion (rpMotion 0, motion off), and [contrast]
      * (Increase Contrast) makes them bolder (rpEnergy 1.5, rpSolid 1), as iOS's link material
-     * (GraphNodeFactory.link).
+     * (GraphNodeFactory.link). [ring] is the chosen body's orbit ring (MapMark.orbitModel), null for
+     * none, at view depth [ringDepth] and brightness [ringGlow] (the pop's bloom).
      */
     fun draw(bodies: SpaceBodies, viewProj: FloatArray, eye: FloatArray, right: FloatArray, up: FloatArray, focal: Float, clock: Float, shaderDetail: Float,
              fade: FloatArray = FloatArray(4), focalDp: Float = 0f, forward: FloatArray = FloatArray(3),
-             straight: Boolean = false, lively: Boolean = true, contrast: Boolean = false) {
+             straight: Boolean = false, lively: Boolean = true, contrast: Boolean = false,
+             ring: FloatArray? = null, ringDepth: Float = 0f, ringGlow: Float = 1f) {
         if (!earthReady) uploadEarth()
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         linksDrawn = 0
+        ringDrawn = false
         if (bodies.beamCount > 0 && linkProgram != 0) {
             strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight)
             val floatsUsed = strips.vertices * LinkStrips.STRIDE
@@ -123,6 +138,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
             for (k in 0 until strips.count) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, k * perLink, perLink)
             linksDrawn = strips.count
         }
+        // the ring's far half, which the bodies then cover
+        if (ring != null) drawRing(ring, viewProj, clock, lively, fade, ringDepth, ringGlow, 1f)
         if (bodies.count > 0) {
             bodyBuffer = ensure(bodyBuffer, bodies.count * SpaceBodies.STRIDE)
             bodyBuffer.put(bodies.data, 0, bodies.count * SpaceBodies.STRIDE).flip()
@@ -134,7 +151,7 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
                 val from = bodies.styleStart[style.code]; val to = bodies.styleStart[style.code + 1]
                 val p = programs[style.code]
                 if (to <= from || p == 0) continue
-                for (k in 0 until 4) GLES30.glVertexAttribPointer(1 + k, 4, GLES30.GL_FLOAT, false, stride, from * stride + k * 16)
+                for (k in 0 until 5) GLES30.glVertexAttribPointer(1 + k, 4, GLES30.GL_FLOAT, false, stride, from * stride + k * 16)
                 GLES30.glUseProgram(p)
                 GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
                 GLES30.glUniform3fv(loc(p, "uEye"), 1, eye, 0)
@@ -171,8 +188,28 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
                 GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, to - from)
             }
         }
+        // and its near half, over them
+        if (ring != null) drawRing(ring, viewProj, clock, lively, fade, ringDepth, ringGlow, -1f)
         GLES30.glBindVertexArray(0)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+    }
+
+    /** One half of the orbit ring: [side] 1 the half beyond the body's centre, −1 the near half. Additive (alpha 0). */
+    private fun drawRing(model: FloatArray, viewProj: FloatArray, clock: Float, lively: Boolean, fade: FloatArray, depth: Float, glow: Float, side: Float) {
+        val p = orbitProgram
+        if (p == 0) return
+        GLES30.glUseProgram(p)
+        GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
+        GLES30.glUniformMatrix4fv(loc(p, "uModel"), 1, false, model, 0)
+        GLES30.glUniform1f(loc(p, "rpClock"), clock)
+        GLES30.glUniform1f(loc(p, "rpMotion"), if (lively) 1f else 0f)
+        GLES30.glUniform4fv(loc(p, "rpFade"), 1, fade, 0)
+        GLES30.glUniform1f(loc(p, "uCentreDepth"), depth)
+        GLES30.glUniform1f(loc(p, "uSide"), side)
+        GLES30.glUniform1f(loc(p, "uGlow"), glow)
+        GLES30.glBindVertexArray(ringVao)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 6)
+        ringDrawn = true
     }
 
     private fun uploadEarth() {

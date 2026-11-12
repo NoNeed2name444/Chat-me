@@ -6,8 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // The map's legends (MapLegend, S05f), against iOS's GraphLegendContent: each theme's ladder and
-// rows in iOS's order with iOS's names, symbols and tints, only what Android's map draws (none of
-// S05g's work), how-to lines that name controls Sorta has, and touch help the map's hint repeats.
+// rows in iOS's order with iOS's names, symbols and tints, only what Android's map draws (of S05g's
+// work, Show links and the empty double tap), how-to lines that name controls Sorta has, and touch
+// help the map's hint repeats.
 class MapLegendTest {
     private val everyLine: List<String>
         get() = GraphTheme.entries.flatMap { theme ->
@@ -57,11 +58,12 @@ class MapLegendTest {
         assertEquals(LegendTint(1.0, 0.71, 0.26, 0.35), c.rungs[0].fill)
     }
 
-    @Test fun noneAboutS05gsWork() {
+    @Test fun noneAboutWorkStillToCome() {
         val all = everyLine.joinToString("\n").lowercase()
-        for (later in listOf("moon", "cell states", "hold to move", "move it", "twice", "folder lines", "thin grey lines", "hub with", "tour",
-            "show links", "breathing", "orbits")) {
-            assertFalse("\"$later\" waits for S05g", all.contains(later))
+        // S05g brought Show links and the empty double tap (theTouchHelpIsTheHint); the rest waits
+        for (later in listOf("moon", "cell states", "hold to move", "move it", "folder lines", "thin grey lines", "hub with", "tour",
+            "breathing", "orbits")) {
+            assertFalse("\"$later\" waits for later work", all.contains(later))
         }
         // and no row says what Android does not draw: no page body in Space, no larger page point in Performance
         assertFalse(MapLegend.of(GraphTheme.PERFORMANCE, true).rows.any { it.name == "Page" })
@@ -91,6 +93,10 @@ class MapLegendTest {
             assertFalse("$theme: the stale words are gone", help.contains("no card") || help.contains("no hold"))
             assertFalse("$theme: one sentence a clause, no semicolons", help.contains(";"))
             assertTrue("$theme: the touch card's words", help.contains("Tap again or Open to read"))
+            // S05g: Show links and All links as the card names them, the empty double tap, and no move yet (S05g2's)
+            assertTrue("$theme: Show links and All links", help.contains("Show links") && help.contains("All links"))
+            assertTrue("$theme: two taps on empty space", help.contains("Tap it twice for the whole map."))
+            assertFalse("$theme: nothing moves a body yet", help.lowercase().contains("move"))
         }
         assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains("Fly in") && MapLegend.touchHelp(GraphTheme.NEURONS).contains("Recentre"))
     }

@@ -4,6 +4,8 @@ import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.LinkGrowth
+import com.cramdown.sorta.map.MapFocus
+import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.NeuronBodyLook
 import com.cramdown.sorta.map.NeuronBridge
 import com.cramdown.sorta.map.NeuronCellKind
@@ -38,6 +40,10 @@ import kotlin.math.min
  * first shows, then only the links new to a rebuilt scene; whole with motion off), their mouths
  * opening with them, and impulses land only on links fully grown (iOS GraphNeuronLook.swift:896,
  * 978). Links gone since the last scene shrink back into their first cell as ghosts.
+ *
+ * The chosen body (S05g): its halo drawn hot whether or not it has a standing one (iOS's hot ring:
+ * rpGain 1.8 and its tints, at rest), its size scaled by the pop, its bridges lit; under Show links
+ * ([focus]) only its own bridges, and every body outside its neighbourhood at 0.15 (focusLinks).
  */
 class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
                private val growth: LinkGrowth = LinkGrowth(BooleanArray(scene.plan.links.size), lively = lively)) {
@@ -63,6 +69,19 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
     private val shown = FloatArray(growth.size) { 1f }
     /** The links (ghosts included) drawn in the latest frame (MapDrawn.links). */
     @Volatile var linksDrawn = 0; private set
+
+    /** The chosen body (its index, the scene's), or −1; set on the GL thread before [draw]. */
+    var chosen = -1
+    /** The pop this frame: the chosen body's size, and its halo's brightness and size (MapPop). */
+    var chosenScale = 1f
+    var chosenGlow = 1f
+    var chosenSwell = 1f
+    /** Under Show links, the chosen body's neighbourhood (sorted body indices); null when everything shows. */
+    var focus: IntArray? = null
+    /** In the latest frame: whether the hot halo was drawn, the bridges drawn lit, and the bodies drawn faded. */
+    var hotDrawn = false; private set
+    var litDrawn = 0; private set
+    var fadedDrawn = 0; private set
 
     private var soma: Program? = null; private var arbor: Program? = null; private var membrane: Program? = null
     private var halo: Program? = null; private var arrival: Program? = null; private var strip: Program? = null
@@ -183,11 +202,19 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
 
         // bodies (iOS rendering order 6), then halos (7), then arrival glows (8)
         val opening = NeuronPulses.opening(0f, 1f, clock - openedAt)
-        for (b in look.bodies) drawBody(b, places[b.index], view, proj, clock, opening, fade)
-        for (b in look.bodies) if (b.standingHalo) drawHalo(b, places[b.index], view, proj, clock, fade)
+        val near = focus
+        val opacity = FloatArray(count) { i -> if (near == null || MapFocus.holdsAny(near, i, i + 1)) 1f else MapMark.FADED }
+        fadedDrawn = opacity.count { it < 1f }
+        hotDrawn = false
+        for (b in look.bodies) drawBody(b, places[b.index], view, proj, clock, opening, fade,
+            if (b.index == chosen) chosenScale else 1f, opacity.getOrElse(b.index) { 1f })
+        for (b in look.bodies) {
+            val hot = b.index == chosen
+            if (b.standingHalo || hot) drawHalo(b, places[b.index], view, proj, clock, fade, hot, opacity.getOrElse(b.index) { 1f })
+        }
         for (b in look.bodies) {
             val level = pulses.shown(b.index)
-            if (level > 0f) drawArrival(b, places[b.index], level, view, proj, fade)
+            if (level > 0f) drawArrival(b, places[b.index], level * opacity.getOrElse(b.index) { 1f }, view, proj, fade)
         }
         drawBridges(places, radius, view, proj, eye, clock, fade)
         GLES30.glBindVertexArray(0)
@@ -213,7 +240,7 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         model[12] = at.x; model[13] = at.y; model[14] = at.z; model[15] = 1f
     }
 
-    private fun common(p: Program, view: FloatArray, proj: FloatArray, at: Vec3, clock: Float, fade: FloatArray) {
+    private fun common(p: Program, view: FloatArray, proj: FloatArray, at: Vec3, clock: Float, fade: FloatArray, opacity: Float = 1f) {
         GLES30.glUseProgram(p.id)
         GLES30.glUniformMatrix4fv(p.at("uView"), 1, false, view, 0)
         GLES30.glUniformMatrix4fv(p.at("uProj"), 1, false, proj, 0)
@@ -222,7 +249,7 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         GLES30.glUniform1f(p.at("rpClock"), clock)
         GLES30.glUniform1f(p.at("rpMotion"), motion)
         GLES30.glUniform1f(p.at("rpDetail"), detail)
-        GLES30.glUniform1f(p.at("uOpacity"), 1f)
+        GLES30.glUniform1f(p.at("uOpacity"), opacity)
     }
 
     private fun mesh(p: Program, mesh: Mesh, view: FloatArray) {
@@ -235,13 +262,16 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
 
     private fun tint(p: Program, name: String, c: Vec3) = GLES30.glUniform3f(p.at(name), c.x, c.y, c.z)
 
-    private fun drawBody(b: NeuronBodyLook, at: Vec3, view: FloatArray, proj: FloatArray, clock: Float, opening: Float, fade: FloatArray) {
+    private fun drawBody(b: NeuronBodyLook, at: Vec3, view: FloatArray, proj: FloatArray, clock: Float, opening: Float, fade: FloatArray,
+                         grow: Float = 1f, opacity: Float = 1f) {
+        // the pop: the chosen body's size on its spring
+        val size = b.size * grow
         val hasArbor = b.arborTurn != null
         val pose = if (lively) NeuronMotion.pose(b.state, b.inner, hasArbor, b.lag, clock) else NeuronMotion.Pose(1f, 1f, 0f, 0f, 0f)
-        val somaAt = at + b.up * (pose.somaMove * b.size)
+        val somaAt = at + b.up * (pose.somaMove * size)
         // the soma (GraphNeuronLook.somaMaterial values)
         soma?.let { p ->
-            common(p, view, proj, at, clock, fade)
+            common(p, view, proj, at, clock, fade, opacity)
             GLES30.glUniform1f(p.at("rpSway"), clock * motion)
             GLES30.glUniform1f(p.at("rpWobble"), if (lively) b.kind.wobble else 0f)
             GLES30.glUniform1f(p.at("rpNucleus"), b.kind.nucleus)
@@ -250,14 +280,14 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
             GLES30.glUniform1f(p.at("rpFill"), b.kind.fill)
             GLES30.glUniform1f(p.at("rpMembrane"), if (b.whole) 1f else 0f)
             tint(p, "rpTintA", b.membraneColour); tint(p, "rpTintB", NeuronPalette.nucleus); tint(p, "rpTintC", NeuronLookPlan.sparkle)
-            setModel(somaAt, b.somaTurn, b.size * pose.soma)
+            setModel(somaAt, b.somaTurn, size * pose.soma)
             mesh(p, sphere!!, view)
         }
         if (b.whole) {
             // the membrane, a child of the soma: its transform, and its mouths in the soma's frame
             val skin = membraneMeshes[b.variant] ?: return
             membrane?.let { p ->
-                common(p, view, proj, at, clock, fade)
+                common(p, view, proj, at, clock, fade, opacity)
                 GLES30.glUniform1f(p.at("rpSway"), clock * motion)
                 GLES30.glUniform1f(p.at("rpWobble"), if (lively) b.kind.wobble else 0f)
                 tint(p, "rpTintA", b.gold)
@@ -268,18 +298,18 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
                     if (m == null) GLES30.glUniform4f(p.at("rpMouth$k"), 0f, 0f, 0f, 0f)
                     else { val d = unturn.act(m.dir); GLES30.glUniform4f(p.at("rpMouth$k"), d.x, d.y, d.z, m.width) }
                 }
-                setModel(somaAt, b.somaTurn, b.size * pose.soma)
+                setModel(somaAt, b.somaTurn, size * pose.soma)
                 mesh(p, skin, view)
             }
         } else if (b.arborTurn != null) {
             val tree = arborMeshes[b.kind to b.variant] ?: return
             arbor?.let { p ->
-                common(p, view, proj, at, clock, fade)
+                common(p, view, proj, at, clock, fade, opacity)
                 GLES30.glUniform1f(p.at("rpSway"), clock * motion)
                 GLES30.glUniform1f(p.at("rpWobble"), 0.03f)
                 tint(p, "rpTintA", b.gold)
                 val turn = if (pose.arborTurn != 0f) Quat.angleAxis(pose.arborTurn, b.up) * b.arborTurn else b.arborTurn
-                setModel(at + b.up * (pose.arborMove * b.size), turn, b.size * pose.arbor)
+                setModel(at + b.up * (pose.arborMove * size), turn, size * pose.arbor)
                 mesh(p, tree, view)
             }
         }
@@ -292,10 +322,24 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    private fun drawHalo(b: NeuronBodyLook, at: Vec3, view: FloatArray, proj: FloatArray, clock: Float, fade: FloatArray) {
+    /**
+     * A body's halo; [hot] for the chosen body's: iOS's hot ring (GraphNeuronLook.swift:220-221,
+     * :697-702), gain 1.8 with its tints and its state at rest, brighter and bigger by the pop's bloom.
+     */
+    private fun drawHalo(b: NeuronBodyLook, at: Vec3, view: FloatArray, proj: FloatArray, clock: Float, fade: FloatArray,
+                         hot: Boolean = false, opacity: Float = 1f) {
         val p = halo ?: return
-        common(p, view, proj, at, clock, fade)
-        GLES30.glUniform1f(p.at("rpGain"), 1f)
+        common(p, view, proj, at, clock, fade, opacity)
+        if (hot) {
+            GLES30.glUniform1f(p.at("rpGain"), MapMark.HOT_GAIN * chosenGlow)
+            GLES30.glUniform1f(p.at("rpState"), 0f)
+            GLES30.glUniform3fv(p.at("rpTintA"), 1, MapMark.HOT_TINT_A, 0)
+            GLES30.glUniform3fv(p.at("rpTintC"), 1, MapMark.HOT_TINT_C, 0)
+            billboard(p, at, b.size * chosenScale * chosenSwell * 2.5f)
+            hotDrawn = true
+            return
+        }
+        GLES30.glUniform1f(p.at("rpGain"), MapMark.HALO_GAIN)
         GLES30.glUniform1f(p.at("rpState"), b.state.code.toFloat())
         tint(p, "rpTintA", b.haloTint); tint(p, "rpTintC", Vec3.ZERO)
         billboard(p, at, b.size * 2.5f)
@@ -313,19 +357,28 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
                             clock: Float, fade: FloatArray) {
         val p = strip ?: return
         linksDrawn = 0
+        litDrawn = 0
         if (plan.links.isEmpty() && growth.ghosts == 0) return
         val perLink = (samples + 1) * 2
         val drawn = BooleanArray(plan.links.size + growth.ghosts)
         var drawnCount = 0
+        var litCount = 0
+        val only = if (focus != null) chosen else -1
         for ((e, link) in plan.links.withIndex()) {
             // a link not grown at all is not drawn (iOS updateLines)
             if (link.a !in places.indices || link.b !in places.indices || shown[e] <= 0.001f) continue
+            // Show links: only the chosen body's own (focusLinks)
+            if (focus != null && !MapFocus.own(only, link.a, link.b)) continue
             val half = if (link.kind == 5) NeuronLookPlan.NEAR_BRIDGE else NeuronLookPlan.FAR_BRIDGE
-            bridge.fill(places[link.a], places[link.b], radius[link.a], radius[link.b], e, shown[e], false, half, eye,
+            // lit: the chosen body's links (the grabbed body's are S05g2's)
+            val lit = MapFocus.own(chosen, link.a, link.b)
+            if (lit) litCount++
+            bridge.fill(places[link.a], places[link.b], radius[link.a], radius[link.b], e, shown[e], lit, half, eye,
                 samples, stripPosData, stripUvData, e * perLink)
             drawn[e] = true
             drawnCount++
         }
+        litDrawn = litCount
         // the links gone since the last scene, seeded as iOS's ghosts (g + 7), between cells: tracts
         for (g in 0 until growth.ghosts) {
             val a = growth.ghostEnds[2 * g]; val b = growth.ghostEnds[2 * g + 1]

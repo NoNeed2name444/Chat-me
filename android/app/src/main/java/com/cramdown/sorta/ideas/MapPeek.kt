@@ -2,12 +2,11 @@ package com.cramdown.sorta.ideas
 
 import com.cramdown.sorta.map.SpaceStyle
 
-// What the map's peek card says, and what a touch on the map was: a port of iOS's GraphPeek,
-// GraphPeekInput and GraphPeekContent (ios/Sorta/Maps/GraphTouchModel.swift:212-360) and of the
-// parts of GraphTouchRules.judge (:28-89) Android's map can tell apart. The words come in as a
-// [MapPeekWords], which MapPanels builds from strings.xml, so this file stays pure Kotlin (MapPeekTest).
-// Android's own: no Show links (its GL map has no chosen body to show links from), Fly in only where
-// it opens a Neurons cell, and none of Link to… or Add note here in the options.
+// What the map's peek card says: a port of iOS's GraphPeek, GraphPeekInput and GraphPeekContent
+// (ios/Sorta/Maps/GraphTouchModel.swift:212-360). What a touch on the map was is map/MapSelection.kt's
+// (S05g). The words come in as a [MapPeekWords], which MapPanels builds from strings.xml, so this file
+// stays pure Kotlin (MapPeekTest). Android's own: Fly in only where it opens a Neurons cell, and none
+// of Link to… or Add note here in the options.
 
 /** What the card is told about a body (GraphPeekInput). */
 data class MapPeekInput(
@@ -47,7 +46,7 @@ data class MapPeekContent(
     val moreLinks: Int,
     /** "Open" or "Open folder". */
     val primary: String,
-    /** "More" for an idea; "Fly in" for a folder that can fly in. */
+    /** "Show links" and "More" for an idea; "Fly in" for a folder that can fly in. */
     val secondary: List<String>,
     /** What TalkBack reads for the card. */
     val spoken: String,
@@ -68,6 +67,9 @@ class MapPeekWords(
     val open: String,
     val openFolder: String,
     val flyIn: String,
+    /** An idea's Show links, and its words while the links are shown (GraphMapPanels.swift:160-170). */
+    val showLinks: String,
+    val allLinks: String,
     val more: String,
     val rename: String,
     val moveToFolder: String,
@@ -151,7 +153,7 @@ object MapPeek {
         val more = maxOf(sorted.size - chips.size, 0)
         val lines = firstLines(input.body).ifEmpty { listOf(words.nothingYet) }
         val spoken = "$title, $kind, ${words.links(input.links.size)}. " + lines.joinToString(" ")
-        return MapPeekContent(title, kind, lines, chips, more, words.open, listOf(words.more), spoken)
+        return MapPeekContent(title, kind, lines, chips, more, words.open, listOf(words.showLinks, words.more), spoken)
     }
 
     /**
@@ -164,24 +166,4 @@ object MapPeek {
         folder -> listOf(MapMenuItem.OPEN, MapMenuItem.RENAME, MapMenuItem.DELETE)
         else -> listOf(MapMenuItem.OPEN, MapMenuItem.RENAME, MapMenuItem.MOVE, MapMenuItem.DELETE)
     }
-}
-
-/** What a touch on the map was, once lifted. */
-enum class MapTouchKind { TAP, HOLD, MOVE }
-
-/**
- * Judges a lifted touch (GraphTouchRules.judge, GraphTouchModel.swift:72-84): moved past the slop,
- * or with two fingers, it turned or zoomed the map; held still past the long-press time, it asks
- * for the body's options; otherwise a tap. Android's map has no force simulation, so a hold that
- * moves turns the map rather than picking the body up.
- */
-object MapTouch {
-    fun judge(heldMillis: Long, moved: Float, slop: Float, multi: Boolean, holdMillis: Long): MapTouchKind = when {
-        multi || moved > slop -> MapTouchKind.MOVE
-        heldMillis >= holdMillis -> MapTouchKind.HOLD
-        else -> MapTouchKind.TAP
-    }
-
-    /** A tap on [id] with [chosen] chosen (GraphSelection.handle's tapBody): the same body opens, another is chosen. */
-    fun tapOpens(chosen: String?, id: String): Boolean = chosen != null && chosen.equals(id, ignoreCase = true)
 }

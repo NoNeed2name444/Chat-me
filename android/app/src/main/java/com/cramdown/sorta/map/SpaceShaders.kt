@@ -25,6 +25,7 @@ layout(location = 1) in vec4 aCenter;
 layout(location = 2) in vec4 aLight;
 layout(location = 3) in vec4 aA;
 layout(location = 4) in vec4 aB;
+layout(location = 5) in vec4 aMark;
 uniform mat4 uVP;
 uniform vec3 uRight;
 uniform vec3 uUp;
@@ -34,6 +35,7 @@ flat out vec4 vCenter;
 flat out vec4 vLight;
 flat out vec4 vA;
 flat out vec4 vB;
+flat out vec4 vMark;
 void main() {
     vec3 w = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (uExtent * aCenter.w);
     gl_Position = uVP * vec4(w, 1.0);
@@ -42,12 +44,15 @@ void main() {
     vLight = aLight;
     vA = aA;
     vB = aB;
+    vMark = aMark;
 }
 """
 
     // Per body: vCenter (its place, the note's radius r), vLight (the light's direction, the
     // note's seed), vA and vB (a direction each and a number: see SpaceBodies), and vB.w the
-    // note's size on screen in pixels.
+    // note's size on screen in pixels; vMark (S05g) its fade under Show links (1, or 0.15 outside
+    // the chosen body's neighbourhood, as iOS's focusLinks sets each node's opacity) and 1 when it
+    // is the chosen body.
     private const val BODY_FS_HEAD = """#version 300 es
 precision highp float;
 precision highp int;
@@ -67,6 +72,7 @@ flat in vec4 vCenter;
 flat in vec4 vLight;
 flat in vec4 vA;
 flat in vec4 vB;
+flat in vec4 vMark;
 out vec4 fragColor;
 """
 
@@ -274,7 +280,11 @@ void rpDetailFor(vec3 c, float r) {
 
     // ---- the black hole (GraphStyleShaders.bhRing) ----
 
+    // The chosen black hole is drawn brighter, untinted as every hole here: iOS's hot ring at 1.7
+    // and hot disk at 1.45 (GraphLook.ring, .disk: diffuse.intensity), on the ring's and the disk's
+    // own terms of the one pass that draws both (S05g).
     private const val BH = """
+float rpHot(float rp_gain) { return vMark.y > 0.5 ? rp_gain : 1.0; }
 vec3 bhRing(float rp_qx, float rp_qy, float rp_codeIn, float rp_seedIn) {
     float rp_r = length(vec2(rp_qx, rp_qy)) + 0.00001;
     float rp_code = rp_codeIn - 2.0;
@@ -367,16 +377,16 @@ vec3 bhRing(float rp_qx, float rp_qy, float rp_codeIn, float rp_seedIn) {
     rp_hue = mix(rp_hue, vec3(0.86, 0.92, 1.0), clamp((rp_heat - 1.1) / 0.4, 0.0, 1.0));
     float rp_lum = rp_prof * rp_mat * rp_boost * (1.0 + 0.7 * rp_m);
     rp_lum = rp_lum / (1.0 + 0.45 * rp_lum);
-    rp_col = rp_col + rp_hue * (rp_lum * 1.3 * rp_on * rpDisk);
+    rp_col = rp_col + rp_hue * (rp_lum * 1.3 * rp_on * rpDisk * rpHot(1.45));
     rp_lit = max(rp_lit, rp_lum * rp_on);
     float rp_id = (rp_rr - rp_rin) / 0.018;
-    float rp_isco = exp(-rp_id * rp_id) * rp_seen * clamp(rp_boost, 0.3, 2.5) * rpDisk;
+    float rp_isco = exp(-rp_id * rp_id) * rp_seen * clamp(rp_boost, 0.3, 2.5) * rpDisk * rpHot(1.45);
     rp_col = rp_col + vec3(1.0, 0.86, 0.6) * (rp_isco * 0.55);
     float rp_sr = rp_rr / rp_rout;
     float rp_arm = rp_phi + 2.6 * log(max(rp_sr, 0.5)) - rp_t * 0.5;
     float rp_sh = rpNoise(vec3(cos(rp_arm) * 2.0, sin(rp_arm) * 2.0, rp_rr * 3.0 - rp_t * 0.4));
     float rp_shed = smoothstep(0.85, 1.0, rp_sr) * exp(-max(rp_sr - 1.0, 0.0) * 2.6) * smoothstep(0.5, 0.8, rp_sh);
-    rp_col = rp_col + vec3(1.0, 0.42, 0.08) * (rp_shed * rp_m * rp_seen * clamp(rp_boost, 0.2, 3.0) * 0.5 * rpDisk);
+    rp_col = rp_col + vec3(1.0, 0.42, 0.08) * (rp_shed * rp_m * rp_seen * clamp(rp_boost, 0.2, 3.0) * 0.5 * rpDisk * rpHot(1.45));
     }
     float rp_side = 0.5 + 0.5 * rp_e.x * rp_k;
     float rp_pd = (rp_b - 1.012) / 0.011;
@@ -384,7 +394,7 @@ vec3 bhRing(float rp_qx, float rp_qy, float rp_codeIn, float rp_seedIn) {
     float rp_ld = (rp_b - 1.05) / 0.016;
     float rp_echo = exp(-rp_ld * rp_ld) * (0.3 + 0.8 * rp_side) * (0.6 + 0.6 * rp_s1) * rpDisk * (1.0 - rp_dl);
     vec3 rp_ringHue = mix(vec3(1.0, 0.7, 0.35), vec3(1.0, 0.95, 0.86), rp_side);
-    rp_col = rp_col + rp_ringHue * (rp_ring * (1.1 + 0.6 * rp_m) + rp_echo * 0.5);
+    rp_col = rp_col + rp_ringHue * (rp_ring * (1.1 + 0.6 * rp_m) + rp_echo * 0.5) * rpHot(1.7);
     float rp_out = max(rp_b - 1.0, 0.0);
     rp_col = rp_col + vec3(1.0, 0.5, 0.15) * (exp(-rp_out / 0.35) * 0.05 * step(1.0, rp_b) * (0.5 + rp_side));
     if (rp_dl > 0.0) {
@@ -423,6 +433,8 @@ void main() {
     float shadow = clamp((1.0 - b) * side / 3.0 + 0.5, 0.0, 1.0);
     // the shadow is a solid body: it dissolves into the sky's colour, not to a dark hole
     fragColor = vec4(col + rpFadedBody(vec3(0.0), rp_dfF) * shadow, shadow) * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -593,6 +605,8 @@ void main() {
     vec2 q = rpPlane(c, R * 4.0);
     if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(sunCorona(q.x, q.y, vA.w), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -730,6 +744,8 @@ void main() {
     vec4 res = (mt > 0.0 && (t < 0.0 || mt < t)) ? rpOver(moon, planet) : rpOver(planet, moon);
     res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5), rpSeen(vLight.xyz, c), vec3(0.42, 0.66, 1.0), 1.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -884,6 +900,8 @@ void main() {
     }
     res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5), rpSeen(vLight.xyz, c), rpTintA * 0.8, 0.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -988,6 +1006,8 @@ void main() {
     float off = length(cross(rd, c - uEye)) / R;
     if (abs(s.x) <= 1.0 && abs(s.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(pulsarBeam(s.x, s.y, face, off), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -1105,6 +1125,8 @@ void main() {
     vec2 td = vec2(d.x / (r * 1.5), d.y / (r * 2.975) - 1.0);
     if (abs(td.x) <= 1.0 && abs(td.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometDust(td.x, td.y, 0.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
+    // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
+    fragColor = fragColor * vMark.x;
 }
 """
 
@@ -1469,6 +1491,64 @@ void main() {
     fragColor = vec4(rp_col, 0.0);
 }
 """
+
+    // ---- the chosen body's orbit ring (GraphSpaceShaders.orbit, S05g) ----
+
+    // One quad, iOS's unit plane (corners at ±0.5 in its own xy) placed by uModel: the body's place,
+    // the ring's size, rolled × tipped (MapMark.orbitModel). Bodies are billboards with no depth, so
+    // the ring is drawn twice: the half beyond the body's centre before the bodies (they cover it),
+    // the near half after them (uSide 1, then -1), as SceneKit's depth test hides its far side.
+    private const val ORBIT_VS = """#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+uniform mat4 uVP;
+uniform mat4 uModel;
+out vec2 vQ;
+out float vDepth;
+void main() {
+    gl_Position = uVP * (uModel * vec4(aCorner * 0.5, 0.0, 1.0));
+    vDepth = gl_Position.w;
+    vQ = aCorner;
+}
+"""
+
+    private const val ORBIT_FS_HEAD = """#version 300 es
+precision highp float;
+uniform float rpClock;
+uniform float rpMotion;
+uniform vec4 rpFade;
+uniform float uCentreDepth;
+uniform float uSide;
+uniform float uGlow;
+in vec2 vQ;
+in float vDepth;
+out vec4 fragColor;
+"""
+
+    // iOS's text, its plane's rp_qx, rp_qy and rp_r from the quad; its fadedGlowEnd as every glow's
+    // here (rpFadedGlow, by the body's depth); uGlow the pop's bloom (MapPop.glow)
+    private const val ORBIT_MAIN = """
+void main() {
+    if ((vDepth - uCentreDepth) * uSide < 0.0) discard;
+    float rp_qx = vQ.x;
+    float rp_qy = vQ.y;
+    float rp_r = length(vec2(rp_qx, rp_qy)) + 0.00001;
+    float rp_t = rpClock * rpMotion;
+    float rp_a = atan(rp_qy, rp_qx);
+    float rp_d = (rp_r - 0.9) / 0.012;
+    float rp_line = exp(-rp_d * rp_d);
+    float rp_da = rp_a - rp_t * 1.4 - 0.8;
+    rp_da = rp_da - 6.2831853 * floor(rp_da / 6.2831853);
+    float rp_tail = exp(-rp_da * 1.6) + exp(-(6.2831853 - rp_da) * 30.0);
+    vec3 rp_hue = mix(vec3(1.0, 0.753, 0.302), vec3(1.0, 0.95, 0.84), clamp(rp_tail, 0.0, 1.0));
+    vec3 rp_col = rp_hue * (rp_line * (0.28 + 1.1 * rp_tail)) * uGlow;
+    float rp_dfF = rpDepthFade(uCentreDepth);
+    fragColor = vec4(rpFadedGlow(rp_col, rp_dfF), 0.0);
+}
+"""
+
+    val orbitVertex: String get() = ORBIT_VS
+    val orbit: String get() = ORBIT_FS_HEAD + FADE + ORBIT_MAIN
 
     val bodyVertex: String get() = BODY_VS
     val linkVertex: String get() = LINK_VS

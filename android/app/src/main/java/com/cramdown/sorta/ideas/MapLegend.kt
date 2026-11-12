@@ -42,18 +42,28 @@ object MapLegend {
     /**
      * How to touch Android's map, under the legend's rows and read by TalkBack after the map's own
      * label (GraphTheme.hint): a tap previews a body on its card, a second tap or Open reads it (a
-     * folder's card says Open folder), a hold opens its options, a tap on empty space closes the
-     * card; in Neurons, Fly in on a cell's or part's card opens it and Recentre closes it; one finger
-     * turns, two slide, a pinch zooms. One sentence a clause, in the touch card's words (map_touch_again).
+     * folder's card says Open folder); Show links on an idea's card keeps its own links (Space,
+     * Neurons) or brightens them (Performance) and All links brings the rest back (S05g); a body
+     * held still opens its options while the finger is down; a tap on empty space closes the card
+     * and two bring back the whole map; in Neurons, Fly in on a cell's or part's card opens it and
+     * Recentre closes it; one finger turns, two slide, a pinch zooms. One idea a sentence, in the
+     * card's words (map_touch_again, map_peek_show_links, map_peek_all_links). No move: hold to
+     * move is S05g2's.
      */
     fun touchHelp(theme: GraphTheme): String = when (theme) {
         GraphTheme.SPACE -> "Tap a body to preview its idea on a card. Tap again or Open to read it. " +
-            "Hold a body for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+            "Show links on the card keeps only its links and dims the rest. All links brings everything back. " +
+            "Hold a body still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.NEURONS -> "Tap a cell, a part or an idea to preview it on a card. Tap again or Open to read an idea, or Open folder for a folder. " +
             "On a cell’s or part’s card, Fly in opens it on the map. Recentre closes it again. " +
-            "Hold a body for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+            "Show links on an idea’s card keeps only its links and dims the rest. All links brings everything back. " +
+            "Hold a body still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.PERFORMANCE -> "Tap a point to preview its idea on a card. Tap again or Open to read it. " +
-            "Hold a point for its options. Tap empty space to close the card. Drag to turn, two fingers to slide, pinch to zoom."
+            "Show links on the card brightens its links and dims the others. All links brings everything back. " +
+            "Hold a point still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Drag to turn, two fingers to slide, pinch to zoom."
     }
 
     /**

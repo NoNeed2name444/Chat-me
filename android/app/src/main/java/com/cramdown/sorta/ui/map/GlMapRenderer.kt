@@ -12,7 +12,10 @@ import com.cramdown.sorta.map.GuardBand
 import com.cramdown.sorta.map.LinkGrowth
 import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.LodSelector
+import com.cramdown.sorta.map.MapFocus
+import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.MapPalette
+import com.cramdown.sorta.map.MapPop
 import com.cramdown.sorta.map.NeuronDepth
 import com.cramdown.sorta.map.NeuronPalette
 import com.cramdown.sorta.map.NeuronScene
@@ -26,6 +29,7 @@ import com.cramdown.sorta.map.SpaceLinkGrowth
 import com.cramdown.sorta.map.SpaceLod
 import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
+import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.Vec3
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -100,7 +104,25 @@ data class MapDrawn(
      */
     val names: List<MapDrawnName> = emptyList(),
     val spot: List<Float> = emptyList(),
+    /**
+     * The chosen body as the renderer drew it (S05g): its scene index, −1 for none; whether its mark
+     * (Space's orbit ring, the Neurons' hot halo, Performance's white ring) was drawn in the latest
+     * frame; how many links were drawn lit; and under Show links ([focus]) how many links were drawn
+     * ([focusLinks]: beams, bridges, and the chosen body's own links in the chunks drawn) and how
+     * many bodies, points and summaries were drawn at 0.15 ([faded]). No words.
+     */
+    val chosen: Int = -1,
+    val marked: Boolean = false,
+    val lit: Int = 0,
+    val focus: Boolean = false,
+    val focusLinks: Int = 0,
+    val faded: Int = 0,
 ) {
+    /** This record with the chosen body's marks as the latest frame drew them; the same record when nothing changed. */
+    fun marking(chosenNow: Int, markedNow: Boolean, litNow: Int, focusNow: Boolean, focusLinksNow: Int, fadedNow: Int): MapDrawn =
+        if (chosen == chosenNow && marked == markedNow && lit == litNow && focus == focusNow && focusLinks == focusLinksNow && faded == fadedNow) this
+        else copy(chosen = chosenNow, marked = markedNow, lit = litNow, focus = focusNow, focusLinks = focusLinksNow, faded = fadedNow)
+
     /**
      * This record after one more finished frame that drew [bodiesNow] bodies, [elapsedMs] after the
      * surface's start, and [linksNow] links of [samplesNow] samples each, straight or not ([straightNow]).
@@ -178,6 +200,11 @@ fun drawnBox(nodes: List<ScreenNode>): List<Float> {
  * In the [MapTheme.SPACE] theme a note's colour group is its style (SpaceStyle), the near
  * notes become their bodies (SpaceBodies, drawn by SpaceGl over everything else, their points
  * hidden by a one-byte-per-node mask) and the links glow warm, tinted by their notes' styles.
+ *
+ * The chosen body ([chosen], S05g) is marked in each theme (Space's orbit ring, the Neurons' hot
+ * halo, Performance's larger point with a white ring), pops while animations run, and lights its
+ * links; under [linksShown] (Show links) the far layers learn it from uniforms and one more
+ * one-byte-per-node mask (the neighbourhood), not from a rebuilt cache.
  */
 class GlMapRenderer(
     val tree: Octree,
@@ -227,6 +254,14 @@ class GlMapRenderer(
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
     private val lively = lively
+    /** The scene's links (pairs of its body indices), for Show links' neighbourhood. */
+    private val sceneLinks = links
+    private val sceneCount = neurons?.plan?.bodies?.size ?: tree.nodeCount
+    /** The Neurons' nesting, for the neighbourhood's members and the cells above (focusLinks); null elsewhere. */
+    private val parents: IntArray? = neurons?.plan?.bodies?.let { b -> IntArray(b.size) { b[it].parent } }
+    private val notes: BooleanArray? = neurons?.plan?.bodies?.let { b -> BooleanArray(b.size) { b[it].kind == ThemeBodyKind.NOTE } }
+    /** Each scene index's node in chunk order (the inverse of Octree.order). */
+    private val chunkOf = IntArray(tree.nodeCount) { -1 }.also { inv -> for (k in 0 until tree.nodeCount) tree.order[k].let { i -> if (i in inv.indices) inv[i] = k } }
     private val space = theme == MapTheme.SPACE
     private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius).also {
         if (lively && linkGrowth.links == tree.edgeCount) it.growth = SpaceLinkGrowth(tree, links, linkGrowth)
@@ -293,6 +328,39 @@ class GlMapRenderer(
     @Volatile var band: SpaceDepthBand = SpaceDepthBand.OFF; private set
     private var bandUniform = band.uniform
 
+    /** The chosen body (S05g), a scene index, −1 for none; set from the page, the next frame draws it. */
+    @Volatile var chosen: Int = -1
+    /** Show links: only the chosen body's links, the rest faded (focusLinks). */
+    @Volatile var linksShown: Boolean = false
+    private val pop = MapPop(lively && theme != MapTheme.PLAIN)
+    private var orbitGrow = 1f
+    private var poppedFor = -1
+    private var focusedChosen = -1
+    private var focusedShown = false
+    /** The chosen node in chunk order this frame, −1 for none; and the neighbourhood, chunk order, sorted, under Show links. */
+    private var chosenChunk = -1
+    private var focusChunks: IntArray? = null
+    /** The chosen body's own chunk links, by leaf: how many of each leaf's link pairs are its (a link between two leaves is in both). */
+    private val ownByLeaf = HashMap<Int, Int>()
+    private var focusTexture = 0
+    /** One byte per node (chunk order): 255 inside the chosen body's neighbourhood under Show links. */
+    private val focusMask = ByteArray(1024 * maskHeight)
+    private var focusTexels = IntArray(0)
+
+    /**
+     * Where body [index] (the scene's) is: its place in the octree, or a Neurons body where it has
+     * drifted to now; null for no such body. For the camera's ease (MapCameraEase).
+     */
+    fun bodyAt(index: Int): Vec3? {
+        if (neuronGl != null) {
+            if (index !in 0 until neuronGl.bodyCount) return null
+            return neuronGl.position(index, if (neuronLively) (System.nanoTime() - startNanos) / 1e9 else 0.0)
+        }
+        val k = chunkOf.getOrElse(index) { -1 }
+        if (k < 0) return null
+        return Vec3(tree.positions[3 * k], tree.positions[3 * k + 1], tree.positions[3 * k + 2])
+    }
+
     init { require(tree.leafCount < 65_536) { "chunk ids are 16-bit" } }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -307,6 +375,7 @@ class GlMapRenderer(
         uploadNodes()
         uploadLeafTexture()
         uploadMask()
+        uploadFocusMask()
         val ids = IntArray(4)
         GLES30.glGenBuffers(4, ids, 0)
         edgeIbo = ids[0]; summaryVbo = ids[1]; bundleVbo = ids[2]; cornerVbo = ids[3]
@@ -374,6 +443,7 @@ class GlMapRenderer(
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
         }
+        stepChoice(dt)
         // the depth fade follows what the camera looks at: its orbit target
         val focusDepth = SpaceDepth.depth(target, eye, forward)
         if (neuronGl != null) {
@@ -392,6 +462,7 @@ class GlMapRenderer(
         viewProj = Mat4.multiply(proj, view)
         val guardCamera = synchronized(camera) { OrbitCamera(camera.target, camera.distance, camera.yaw, camera.pitch, camera.fovY) }
         val guard = GuardBand.predict(guardCamera, aspect, velocity, lookaheadSeconds = 0.35f)
+        lod.focus = if (space) focusChunks else null
         val plan = lod.select(eye, focal, guard.view, guard, budget.openPixels, budget.maxDetailNodes, dt, frame)
         cache.pump(frame, budget.uploadBudget) { chunk, pages -> uploadChunk(chunk, pages) }
         // the shaders' clock, wrapped so float time stays fine-grained (every period is whole there)
@@ -401,23 +472,43 @@ class GlMapRenderer(
             val right = Vec3(view[0], view[4], view[8]); val up = Vec3(view[1], view[5], view[9])
             b.update(plan, viewProj, eye, right, up, focal, SpaceLod.maxBodies(budget.detail), clock, band).also { applyMask(b) }
         } ?: 0
+        // the chosen body's orbit ring, where its node is placed this frame (Space)
+        var ring: FloatArray? = null
+        var ringDepth = 0f
+        if (space && chosenChunk >= 0) {
+            val leaf = tree.leafOfNode[chosenChunk]
+            val t = plan.leafState[leaf * 4 + 3]
+            if (t > 0f) {
+                val s = leaf * 4
+                val p = Vec3(plan.leafState[s] + (tree.positions[3 * chosenChunk] - plan.leafState[s]) * t,
+                    plan.leafState[s + 1] + (tree.positions[3 * chosenChunk + 1] - plan.leafState[s + 1]) * t,
+                    plan.leafState[s + 2] + (tree.positions[3 * chosenChunk + 2] - plan.leafState[s + 2]) * t)
+                ringDepth = (p - eye).dot(forward)
+                if (ringDepth > 0f && !band.gone(ringDepth)) ring = MapMark.orbitModel(p.x, p.y, p.z, MapMark.orbitSize(nodeRadius, orbitGrow, pop.scale))
+            }
+        }
         animating = bodyCount > 0 || (bodies?.beamCount ?: 0) > 0 || moved > 1e-5f || plan.detailLeaves.size.let { n -> (0 until n).any { plan.leafState[plan.detailLeaves[it] * 4 + 3] < 1f } } || cache.uploadedThisFrame > 0
+            || pop.moving || (chosenChunk >= 0 && orbitGrow < 1f) || (ring != null && lively)
 
         if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         uploadLeafState(plan)
-        drawBundles(plan)
-        drawEdges(plan, eye, focal)
+        val focusOn = focusChunks != null && chosenChunk >= 0
+        // Show links: Space draws no bundle (none carries the chosen body's link); Performance draws them at 0.15
+        if (!(space && focusOn)) drawBundles(plan, if (focusOn) MapMark.FADED else 1f)
+        drawEdges(plan, eye, focal, if (!focusOn || chosenChunk < 0) 0f else if (space) 1f else if (theme == MapTheme.PLAIN) 2f else 0f)
         drawSummaries(plan)
         val drawn = drawNodes(plan, eye, focal)
         val straightNow = straight
         var linksNow = 0
-        if (bodies != null && spaceGl != null && bodyCount + bodies.beamCount > 0) {
+        var ringNow = false
+        if (bodies != null && spaceGl != null && (bodyCount + bodies.beamCount > 0 || ring != null)) {
             spaceGl.draw(bodies, viewProj, floatArrayOf(eye.x, eye.y, eye.z), floatArrayOf(view[0], view[4], view[8]),
                 floatArrayOf(view[1], view[5], view[9]), focal, clock, SpaceLod.shaderDetail(budget.detail),
                 bandUniform, focal / max(density, 0.1f), floatArrayOf(forward.x, forward.y, forward.z),
-                straightNow, lively, contrast)
+                straightNow, lively, contrast, ring, ringDepth, pop.glow)
             linksNow = spaceGl.linksDrawn
+            ringNow = spaceGl.ringDrawn
         }
         publishScreenNodes(plan)
 
@@ -436,8 +527,96 @@ class GlMapRenderer(
         }
         record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000, linksNow,
             if (space) samples else 0, space && straightNow)
+        // the chosen body's marks, and Show links' counts (S05g)
+        val ownChunkLinks = if (focusOn) ownLinksDrawn(plan) else 0
+        val marked = if (space) ringNow else chosenChunk >= 0 && chosenDrawn(plan)
+        val faded = if (space && focusOn) fadedPoints(plan) + plan.fadedSummaries else 0
+        record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
+            if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
+    }
+
+    /** The chosen body as drawn: its scene index, −1 for none. */
+    private fun markedChosen(): Int = focusedChosen
+
+    /**
+     * Each frame: a new choice kicks the pop and grows the orbit ring in from 1.35 (at once with
+     * animations off), and a new choice or Show links works out the neighbourhood again; then the
+     * pop and the ring step [dt] seconds.
+     */
+    private fun stepChoice(dt: Float) {
+        val wanted = chosen.takeIf { it in 0 until sceneCount } ?: -1
+        val show = linksShown
+        if (wanted != poppedFor) {
+            poppedFor = wanted
+            pop.reset()
+            if (wanted >= 0) { pop.kick(); orbitGrow = MapMark.orbitStart(lively) }
+        }
+        if (wanted != focusedChosen || show != focusedShown) refocus(wanted, show)
+        pop.step(dt)
+        orbitGrow = MapMark.orbitGrow(orbitGrow, dt)
+        bodies?.chosenScale = pop.scale
+        neuronGl?.let { it.chosenScale = pop.scale; it.chosenGlow = pop.glow; it.chosenSwell = pop.swell }
+    }
+
+    /** The chosen body and Show links changed: who is marked, the neighbourhood, its mask texels, and the chosen body's own chunk links by leaf. */
+    private fun refocus(wanted: Int, show: Boolean) {
+        focusedChosen = wanted; focusedShown = show
+        val near = if (show && wanted >= 0) MapFocus.neighbourhood(wanted, sceneCount, sceneLinks, parents, notes) else null
+        neuronGl?.let { it.chosen = wanted; it.focus = near }
+        chosenChunk = if (neuronGl != null) -1 else chunkOf.getOrElse(wanted) { -1 }
+        val chunks = if (neuronGl != null || near == null) null
+            else near.map { chunkOf.getOrElse(it) { -1 } }.filter { it >= 0 }.sorted().toIntArray()
+        focusChunks = chunks
+        bodies?.chosen = chosenChunk
+        bodies?.focus = if (space) chunks else null
+        ownByLeaf.clear()
+        if (chosenChunk >= 0) {
+            val home = tree.leafOfNode[chosenChunk]
+            var e = tree.leafEdgeStart[home]
+            val end = tree.leafEdgeStart[home + 1]
+            while (e + 1 < end) {
+                val u = tree.leafEdges[e]; val v = tree.leafEdges[e + 1]
+                e += 2
+                if (!MapFocus.own(chosenChunk, u, v)) continue
+                ownByLeaf[home] = (ownByLeaf[home] ?: 0) + 1
+                val other = tree.leafOfNode[if (u == chosenChunk) v else u]
+                if (other != home) ownByLeaf[other] = (ownByLeaf[other] ?: 0) + 1
+            }
+        }
+        if (space) writeFocusMask(if (chunks != null) chunks else IntArray(0))
+    }
+
+    /** The chosen body's own links in the chunks drawn this frame (their pages streamed in). */
+    private fun ownLinksDrawn(plan: FramePlan): Int {
+        if (ownByLeaf.isEmpty()) return 0
+        var n = 0
+        for (k in 0 until plan.detailLeaves.size) {
+            val leaf = plan.detailLeaves[k]
+            val own = ownByLeaf[leaf] ?: continue
+            if (cache.pages(leaf) != null) n += own
+        }
+        return n
+    }
+
+    /** Whether the chosen node's chunk is drawn node by node this frame (Performance's ring). */
+    private fun chosenDrawn(plan: FramePlan): Boolean {
+        val leaf = tree.leafOfNode[chosenChunk]
+        if (plan.leafState[leaf * 4 + 3] <= 0f) return false
+        for (k in 0 until plan.detailLeaves.size) if (plan.detailLeaves[k] == leaf) return true
+        return false
+    }
+
+    /** Under Show links in Space: the nodes in the chunks drawn node by node outside the neighbourhood (points and bodies alike). */
+    private fun fadedPoints(plan: FramePlan): Int {
+        val near = focusChunks ?: return 0
+        var n = 0
+        for (k in 0 until plan.detailLeaves.size) {
+            val cell = tree.leafCell[plan.detailLeaves[k]]
+            n += tree.count[cell] - MapFocus.countIn(near, tree.start[cell], tree.end[cell])
+        }
+        return n
     }
 
     /**
@@ -453,7 +632,7 @@ class GlMapRenderer(
         clock = (seconds % SpaceOptics.CLOCK_PERIOD).toFloat()
         val moved = lastEye?.let { (eye - it).length() } ?: 0f
         lastEye = eye
-        animating = neuronLively || moved > 1e-5f
+        animating = neuronLively || moved > 1e-5f || pop.moving
         val deep = NeuronPalette.deep
         GLES30.glClearColor(deep.x, deep.y, deep.z, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -485,6 +664,8 @@ class GlMapRenderer(
         }
         // the bridges ignore Lines, as iOS's (fillBridge returns before it reads straight)
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
+        val focusOn = gl.focus != null
+        record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -551,6 +732,40 @@ class GlMapRenderer(
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
     }
 
+    private fun uploadFocusMask() {
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0); focusTexture = ids[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1024, maskHeight, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.wrap(focusMask))
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+    }
+
+    /** Clears the old neighbourhood's texels and writes the new one's, a texel each (Space, Show links). */
+    private fun writeFocusMask(near: IntArray) {
+        if (focusTexture == 0) {
+            // no context yet: the bytes are kept and uploaded with the texture
+            for (node in focusTexels) if (node in focusMask.indices) focusMask[node] = 0
+            for (node in near) if (node in focusMask.indices) focusMask[node] = -1
+            focusTexels = near
+            return
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        fun texel(node: Int, value: Byte) {
+            if (node !in focusMask.indices) return
+            focusMask[node] = value
+            maskTexel.clear(); maskTexel.put(value).flip()
+            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, node % 1024, node / 1024, 1, 1, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, maskTexel)
+        }
+        for (node in focusTexels) texel(node, 0)
+        for (node in near) texel(node, -1)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        focusTexels = near
+    }
+
     /** Hides the points of the nodes that became bodies and shows the ones that stopped, a texel each. */
     private fun applyMask(b: SpaceBodies) {
         if (b.maskChanges.size == 0) return
@@ -608,6 +823,13 @@ class GlMapRenderer(
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, maskTexture)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uBodyMask"), 1)
+        // the chosen body and Show links (S05g): Performance's ring, Space's faded points
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uFocusMask"), 2)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocus"), if (space && focusChunks != null && chosenChunk >= 0) 1f else 0f)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uChosen"), if (theme == MapTheme.PLAIN) chosenChunk else -1)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uDensity"), density)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocal"), focal)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uNodeRadius"), nodeRadius)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMaxPoint"), min(maxPointSize, 64f))
@@ -630,9 +852,12 @@ class GlMapRenderer(
         return drawn
     }
 
-    private fun drawEdges(plan: FramePlan, eye: Vec3, focal: Float) {
+    /** [focusMode]: 0 every link as it is, 1 Space's Show links (only the chosen body's), 2 Performance's (its ×3, the rest ×0.15). */
+    private fun drawEdges(plan: FramePlan, eye: Vec3, focal: Float, focusMode: Float = 0f) {
         if (plan.detailLeaves.size == 0) return
         setCommon(edgeProgram, focal)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(edgeProgram, "uFocusNode"), chosenChunk)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(edgeProgram, "uFocusMode"), focusMode)
         GLES30.glBindVertexArray(edgeVao)
         for (k in 0 until plan.detailLeaves.size) {
             val leaf = plan.detailLeaves[k]
@@ -662,7 +887,8 @@ class GlMapRenderer(
         GLES30.glBindVertexArray(0)
     }
 
-    private fun drawBundles(plan: FramePlan) {
+    /** [fade]: each bundle's brightness, 0.15 under Performance's Show links. */
+    private fun drawBundles(plan: FramePlan, fade: Float = 1f) {
         if (plan.bundleCount == 0) return
         bundleBuffer = ensure(bundleBuffer, plan.bundles.size)
         bundleBuffer.put(plan.bundles.data, 0, plan.bundles.size).flip()
@@ -670,6 +896,7 @@ class GlMapRenderer(
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(bundleProgram, "uVP"), 1, false, viewProj, 0)
         GLES30.glUniform2f(GLES30.glGetUniformLocation(bundleProgram, "uViewport"), width.toFloat(), height.toFloat())
         GLES30.glUniform4fv(GLES30.glGetUniformLocation(bundleProgram, "rpFade"), 1, bandUniform, 0)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(bundleProgram, "uBundleFade"), fade)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, bundleVbo)
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, plan.bundles.size * 4, bundleBuffer, GLES30.GL_STREAM_DRAW)
         GLES30.glBindVertexArray(bundleVao)
@@ -763,10 +990,22 @@ uniform float uSpace;
 uniform float rpClock;
 uniform mediump sampler2D uBodyMask;
 uniform vec4 rpFade;
+// the chosen body (S05g): its chunk-order node or -1 (Performance's mark; the links' Show links),
+// Show links in Space (uFocus 1) and its neighbourhood's mask, pixels per dp
+uniform int uChosen;
+uniform int uFocusNode;
+uniform float uFocus;
+uniform mediump sampler2D uFocusMask;
+uniform float uDensity;
 """ + LIGHT + """// Space theme: 1 while this node is drawn as its body (its point hides)
 float bodyMasked() {
     if (uSpace < 0.5) return 0.0;
     return texelFetch(uBodyMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r;
+}
+// Show links in Space: 0.15 for a node outside the chosen body's neighbourhood (focusLinks), else 1
+float focusFade() {
+    if (uFocus < 0.5) return 1.0;
+    return texelFetch(uFocusMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r > 0.5 ? 1.0 : ${MapMark.FADED};
 }
 vec4 leafState() { int l = int(aLeaf); return texelFetch(uLeafState, ivec2(l % 1024, l / 1024), 0); }
 vec3 placed(vec4 st) { return mix(st.xyz, uCenter + aPos * uHalf, st.w); }
@@ -775,6 +1014,7 @@ vec3 placed(vec4 st) { return mix(st.xyz, uCenter + aPos * uHalf, st.w); }
         private val NODE_VS = NODE_HEADER + """
 out vec3 vColor;
 out float vSize;
+flat out float vRing;
 void main() {
     vec4 st = leafState();
     gl_Position = uVP * vec4(placed(st), 1.0);
@@ -782,19 +1022,28 @@ void main() {
     // detail follows the pixels a node covers: a plain point, then shading, then glow
     float px = 2.0 * uNodeRadius * uFocal / w * st.w * uStyleScale[int(aGroup) % 6];
     vSize = clamp(px, 1.0, uMaxPoint);
-    gl_PointSize = vSize;
     // a node smaller than a pixel lights the pixel by the area it covers, so dense far
     // clusters stay coloured instead of adding up to white
     float cover = clamp(px, 0.35, 1.0);
-    vColor = uPalette[int(aGroup) % 6] * cover * cover * rpLight(w);
+    vRing = 0.0;
+    // Performance's chosen point (GraphPerfShaders perf_body_vertex): 1.4 times as big, never under
+    // 7 dp, after the clamp, whole, with a white ring
+    if (gl_VertexID == uChosen) {
+        vSize = max(vSize * ${MapMark.PERF_GROW}, ${MapMark.PERF_LEAST_DP} * uDensity);
+        cover = 1.0;
+        vRing = 1.0;
+    }
+    gl_PointSize = vSize;
+    vColor = uPalette[int(aGroup) % 6] * cover * cover * rpLight(w) * focusFade();
     if (bodyMasked() > 0.5 || rpGone(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 """
 
-        private const val NODE_FS = """#version 300 es
+        private val NODE_FS = """#version 300 es
 precision mediump float;
 in vec3 vColor;
 in float vSize;
+flat in float vRing;
 out vec4 fragColor;
 void main() {
     vec2 c = gl_PointCoord * 2.0 - 1.0;
@@ -807,13 +1056,22 @@ void main() {
     float z = sqrt(max(0.0, 1.0 - r2 / (coreR * coreR)));
     float shade = mix(1.0, 0.45 + 0.55 * z + 0.35 * pow(max(0.0, dot(normalize(vec3(c, z)), normalize(vec3(-0.4, 0.5, 0.8)))), 12.0), smoothstep(3.0, 10.0, vSize));
     float halo = glow * 0.55 * exp(-r2 * 5.0);
-    fragColor = vec4(vColor * (core * shade * 0.9 + halo), 1.0);
+    vec3 col = vColor * (core * shade * 0.9 + halo);
+    // the chosen point's white band, over its core's radius (perf_body_fragment)
+    if (vRing > 0.5) {
+        float rc = r / coreR;
+        col = mix(col, vec3(1.0), smoothstep(0.66, 0.74, rc) * (1.0 - smoothstep(0.86, 0.94, rc)));
+    }
+    fragColor = vec4(col, 1.0);
 }
 """
 
         private val EDGE_VS = NODE_HEADER + """
 out vec3 vColor;
+// 1 at the chosen body's end of a link, 0 at the other: above 0 along a link only where it is the chosen body's own
+out highp float vTouch;
 void main() {
+    vTouch = gl_VertexID == uFocusNode ? 1.0 : 0.0;
     vec4 st = leafState();
     gl_Position = uVP * vec4(placed(st), 1.0);
     vColor = uPalette[int(aGroup) % 6];
@@ -828,15 +1086,24 @@ void main() {
         float beat = s == 4 ? 0.7 + 0.3 * cos(6.2831853 * rpClock * 1.3333333) : 1.0;
         vColor = mix(warm, tint, 0.5) * 1.6 * beat * (1.0 - bodyMasked());
     }
-    vColor = vColor * rpLight(gl_Position.w);
+    vColor = vColor * rpLight(gl_Position.w) * focusFade();
 }
 """
 
-        private const val EDGE_FS = """#version 300 es
+        // Show links (uFocusMode): in Space only the chosen body's own links are drawn; in Performance
+        // they are three times as bright and the rest at 0.15 (GraphPerfShaders perf_link_fragment)
+        private val EDGE_FS = """#version 300 es
 precision mediump float;
 in vec3 vColor;
+in highp float vTouch;
+uniform float uFocusMode;
 out vec4 fragColor;
-void main() { fragColor = vec4(vColor * 0.32, 1.0); }
+void main() {
+    vec3 c = vColor * 0.32;
+    if (uFocusMode > 0.5 && uFocusMode < 1.5 && vTouch <= 0.0) discard;
+    if (uFocusMode > 1.5) c = min(c * (vTouch > 0.0 ? ${MapMark.PERF_FOCUS} : ${MapMark.FADED}), vec3(1.0));
+    fragColor = vec4(c, 1.0);
+}
 """
 
         private val SUMMARY_VS = """#version 300 es
@@ -882,6 +1149,7 @@ layout(location = 4) in vec3 aColor;
 uniform mat4 uVP;
 uniform vec2 uViewport;
 uniform vec4 rpFade;
+uniform float uBundleFade;
 out vec3 vColor;
 out float vSide;
 """ + LIGHT + """void main() {
@@ -896,7 +1164,7 @@ out float vSide;
     vec2 offset = n * aCorner.y * max(aWidth, 1.0) * 0.5 / (uViewport * 0.5);
     gl_Position = vec4(p.xy + offset * p.w, p.z, p.w);
     // under a pixel, the quad stays a pixel wide and carries the coverage of its true width
-    vColor = aColor * min(aWidth, 1.0) * rpLight(p.w);
+    vColor = aColor * min(aWidth, 1.0) * rpLight(p.w) * uBundleFade;
     vSide = aCorner.y;
 }
 """

@@ -8,6 +8,7 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.view.Choreographer
 import android.view.Display
+import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.WindowManager
@@ -58,6 +59,7 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -88,7 +90,12 @@ import com.cramdown.sorta.map.NameText
 import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.LinkMemory
 import com.cramdown.sorta.map.LinkRecall
+import com.cramdown.sorta.map.CameraMove
+import com.cramdown.sorta.map.MapCameraEase
 import com.cramdown.sorta.map.MapCardCover
+import com.cramdown.sorta.map.MapTouch
+import com.cramdown.sorta.map.MapTouchKind
+import com.cramdown.sorta.map.MapTouchRules
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.NeuronLookPlan
@@ -211,14 +218,21 @@ val MapDrawnKey = SemanticsPropertyKey<MapDrawn>("MapDrawn")
 var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
 /**
- * The map's [onOpenNode] on its node, for tests, with the ids its body indices stand for
- * ([MapScene.ids]): a tap on body i is tap(i), as the map's own hit test hands it on. Robolectric
- * can't draw GL, so no body is on screen to hit, and MapPeekCardTest taps through this. A key of
- * its own, as [MapDrawnKey]: accessibility services do not read it.
+ * The map's onTap on its node, for tests, with the ids its body indices stand for ([MapScene.ids]):
+ * a tap on body i is tap(i), as the map's own hit test hands it on. Robolectric can't draw GL, so no
+ * body is on screen to hit, and MapPeekCardTest taps through this. A key of its own, as
+ * [MapDrawnKey]: accessibility services do not read it.
  */
 class MapTap(val ids: List<String>, val tap: (Int) -> Unit)
 val MapTapKey = SemanticsPropertyKey<MapTap>("MapTap")
 var SemanticsPropertyReceiver.mapTap by MapTapKey
+
+/**
+ * A move of the camera asked for when a body is chosen (S05g): [id]'s body eased towards the middle
+ * (Graph3DView.ease), or with [glide] brought there (a link chip, GraphDepthGlide). A new [serial]
+ * asks again for the same body.
+ */
+data class MapEase(val id: String, val glide: Boolean, val serial: Int)
 
 /**
  * The 3D map on screen. Frames follow Choreographer's vsync; the window asks for the
@@ -232,7 +246,16 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     description: String,
     continuous: Boolean = false,
     autoOrbit: Boolean = false,
-    onOpenNode: ((Int) -> Unit)? = null,
+    /**
+     * Touching the map (S05g; iOS's GraphTouchModel, decided while the finger is down): a still lift
+     * before the hold is [onTap] with the body under it (null for empty space); a second one within
+     * 0.30 s and 40 dp on a body is [onDoubleTap]; a finger still on a body for 0.55 s (scaled by the
+     * person's touch-and-hold delay) is [onHold] there, before it lifts. Two taps on empty space bring
+     * back the first view; a finger that moves turns the camera, two pan and zoom.
+     */
+    onTap: ((Int?) -> Unit)? = null,
+    onDoubleTap: ((Int) -> Unit)? = null,
+    onHold: ((Int, Offset) -> Unit)? = null,
     /** The speed readout at the top left (a debug tool: off unless asked for), and the zoom and recentre buttons at the bottom right. */
     showReadout: Boolean = false,
     showControls: Boolean = true,
@@ -268,6 +291,10 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
      */
     chosenId: String? = null,
     heldId: String? = null,
+    /** Show links round this body, null for every link (S05g): its own links only, the rest faded. */
+    linksId: String? = null,
+    /** The camera's move for a choice (S05g), null for none. */
+    ease: MapEase? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -340,6 +367,44 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
         if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
+    }
+    // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
+    val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
+    val linksShown = linksId != null && chosenIndex >= 0
+    val hostView = LocalView.current
+    val ticked = remember(scene) { intArrayOf(-1) }
+    LaunchedEffect(renderer, chosenIndex, linksShown) {
+        renderer.chosen = chosenIndex
+        renderer.linksShown = linksShown
+        loop.moved()
+        // a body chosen: iOS's light tick (syncChoice), Android's lightest, kept to the person's haptics setting
+        if (chosenIndex >= 0 && ticked[0] != chosenIndex) hostView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        ticked[0] = chosenIndex
+    }
+    // the camera's ease towards a chosen body, frame by frame, until done or a finger comes down
+    // (Graph3DView.ease): with animations off a tap moves nothing and a chip's glide lands at once
+    val touches = remember(scene) { intArrayOf(0) }
+    val easeLively = remember(scene) { android.animation.ValueAnimator.areAnimatorsEnabled() }
+    LaunchedEffect(renderer, ease) {
+        val ask = ease ?: return@LaunchedEffect
+        if (!ask.glide && !easeLively) return@LaunchedEffect
+        val index = scene.indexOf(ask.id) ?: return@LaunchedEffect
+        val body = renderer.bodyAt(index) ?: return@LaunchedEffect
+        val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
+        val move = synchronized(camera) {
+            if (ask.glide) MapCameraEase.glide(camera, body, w, h) else MapCameraEase.ease(camera, body, w, h)
+        } ?: return@LaunchedEffect
+        val seconds = if (!easeLively) 0f else if (ask.glide) MapCameraEase.GLIDE_SECONDS else MapCameraEase.EASE_SECONDS
+        val run = CameraMove(move, seconds)
+        val touched = touches[0]
+        var last = withFrameNanos { it }
+        while (!run.finished && touches[0] == touched) {
+            val now = if (seconds <= 0f) last else withFrameNanos { it }
+            val step = run.step((now - last) / 1e9f)
+            last = now
+            synchronized(camera) { camera.target = camera.target + step }
+            loop.moved()
+        }
     }
     // the first view fits the shape the map has (on its size, below) and what the chrome and the
     // first-run card leave of it, again when the chrome changes or the card comes or grows
@@ -476,10 +541,108 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
         }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
-        if (onOpenNode != null) mapTap = MapTap(scene.ids, onOpenNode)
+        val tapped = onTap
+        if (tapped != null) mapTap = MapTap(scene.ids) { tapped(it) }
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
+        val slop = LocalViewConfiguration.current.touchSlop
+        // iOS's hold times, scaled by the person's touch-and-hold delay where it is longer (the packet's question 1)
+        val holdScale = MapTouchRules.holdScale(LocalViewConfiguration.current.longPressTimeoutMillis)
+        val latestTap by rememberUpdatedState(onTap)
+        val latestDouble by rememberUpdatedState(onDoubleTap)
+        val latestHold by rememberUpdatedState(onHold)
+        // the last still lift: when, where and on what, for a double tap
+        val lastLift = remember(scene) { LastLift() }
+        // the map's touches (S05g), on the drawn map and, where GL can't draw it, on its note: there no body
+        // is placed, so every touch is on empty space
+        val gestures = Modifier.pointerInput(scene) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                loop.touched()
+                touches[0]++
+                var moved = 0f
+                var multi = false
+                var menu = false
+                var liftedAt = down.uptimeMillis
+                val reach = MapNameShow.PICK_DP.dp.toPx()
+                val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
+                val menuMillis = kotlin.math.ceil(MapTouchRules.HOLD_FOR_MENU * holdScale * 1000).toLong()
+                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
+                val press = MapNameShow.Press(slop)
+                if (pills) {
+                    press.down(hit)
+                    pressedName = press.pressed
+                }
+                try {
+                    var now = down.uptimeMillis
+                    while (true) {
+                        // a finger still on a body waits for the hold, at most; then its options open, before it lifts
+                        val waiting = hit != null && !menu && !multi && moved <= slop && latestHold != null
+                        val event = if (!waiting) awaitPointerEvent()
+                            else withTimeoutOrNull(max(1L, down.uptimeMillis + menuMillis - now)) { awaitPointerEvent() }
+                        if (event == null) {
+                            // held still on the body to the hold's end: a hold, never a tap from here
+                            menu = true
+                            if (MapTouchRules.judge(MapTouch(onBody = true, held = menuMillis / 1000.0, moved = moved, lifted = false), slop, holdScale) == MapTouchKind.MENU) {
+                                // iOS's light tick as the options open; Android gives a menu held open this one
+                                hostView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                latestHold?.invoke(checkNotNull(hit), down.position)
+                            }
+                            continue
+                        }
+                        now = event.changes.maxOfOrNull { it.uptimeMillis } ?: now
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) { liftedAt = now; break }
+                        loop.touched()
+                        press.fingers(pressed.size)
+                        if (pressed.size >= 2) {
+                            multi = true
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            synchronized(camera) {
+                                camera.zoom(zoom)
+                                camera.pan(pan.x / size.height, pan.y / size.height)
+                            }
+                            moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
+                        } else {
+                            val change = pressed.first()
+                            val delta = change.position - change.previousPosition
+                            moved += delta.getDistance()
+                            press.move(delta.getDistance())
+                            // a finger that moves turns the camera, on a body or not (S05g2 picks a body up)
+                            if ((moved > slop || multi) && !menu) synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
+                        }
+                        if (pills && pressedName != press.pressed) pressedName = press.pressed
+                        event.changes.forEach { if (it.positionChanged()) it.consume() }
+                    }
+                } finally {
+                    // lifted, or the gesture cancelled: the press is over either way
+                    press.up()
+                    if (pressedName != null) pressedName = null
+                }
+                if (multi || moved > slop || menu) { lastLift.clear(); return@awaitEachGesture }
+                // a still lift: a tap, a double tap, or nothing (an empty touch held past the pick-up time)
+                val paired = lastLift.at >= 0 && MapTouchRules.pairs((down.uptimeMillis - lastLift.at) / 1000.0,
+                    (down.position - lastLift.where).getDistance(), MapTouchRules.DOUBLE_TAP_REACH_DP.dp.toPx())
+                val touch = MapTouch(onBody = hit != null, held = (liftedAt - down.uptimeMillis) / 1000.0, moved = moved, lifted = true,
+                    taps = if (paired && lastLift.hit == hit) 2 else 1)
+                when (MapTouchRules.judge(touch, slop, holdScale)) {
+                    MapTouchKind.DOUBLE_TAP -> { lastLift.clear(); latestDouble?.invoke(checkNotNull(hit)) ?: latestTap?.invoke(hit) }
+                    MapTouchKind.TAP -> {
+                        latestTap?.invoke(hit)
+                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS)
+                        if (hit == null && paired && lastLift.hit == null) {
+                            lastLift.clear()
+                            synchronized(camera) { home.restore(camera) }
+                            loop.moved()
+                        } else lastLift.set(liftedAt, down.position, hit)
+                    }
+                    else -> lastLift.clear()
+                }
+            }
+        }
         if (!gles3) {
+            Box(Modifier.fillMaxSize().then(gestures))
             // the kit's secondary ink on the map's own night blue, as the map's other notes: its
             // callers keep it night (IdeasSpace's SortaTheme), so the ink is night's too
             Text("This device can’t draw the 3D map. Choose 2D in the theme menu.", Modifier.align(Alignment.Center).padding(WardSpace.xl.wardDp),
@@ -519,57 +682,8 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) loop.start()
             onDispose { lifecycle.removeObserver(observer); loop.stop() }
         }
-        val slop = LocalViewConfiguration.current.touchSlop
         Canvas(
-            Modifier.fillMaxSize().pointerInput(scene) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    loop.touched()
-                    var moved = 0f
-                    var multi = false
-                    // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
-                    val press = MapNameShow.Press(slop)
-                    if (pills) {
-                        press.down(MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, MapNameShow.PICK_DP.dp.toPx())?.index)
-                        pressedName = press.pressed
-                    }
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val pressed = event.changes.filter { it.pressed }
-                            if (pressed.isEmpty()) break
-                            loop.touched()
-                            press.fingers(pressed.size)
-                            if (pressed.size >= 2) {
-                                multi = true
-                                val zoom = event.calculateZoom()
-                                val pan = event.calculatePan()
-                                synchronized(camera) {
-                                    camera.zoom(zoom)
-                                    camera.pan(pan.x / size.height, pan.y / size.height)
-                                }
-                                moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
-                            } else {
-                                val change = pressed.first()
-                                val delta = change.position - change.previousPosition
-                                moved += delta.getDistance()
-                                press.move(delta.getDistance())
-                                if (moved > slop || multi) synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
-                            }
-                            if (pills && pressedName != press.pressed) pressedName = press.pressed
-                            event.changes.forEach { if (it.positionChanged()) it.consume() }
-                        }
-                    } finally {
-                        // lifted, or the gesture cancelled: the press is over either way
-                        press.up()
-                        if (pressedName != null) pressedName = null
-                    }
-                    if (!multi && moved <= slop && onOpenNode != null) {
-                        val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, MapNameShow.PICK_DP.dp.toPx())
-                        if (hit != null) onOpenNode(hit.index)
-                    }
-                }
-            }.pointerInput(scene) {
+            Modifier.fillMaxSize().then(gestures).pointerInput(scene) {
                 // a pointer with no button down (a mouse, a stylus) names the body under it (S05f)
                 if (!pills) return@pointerInput
                 awaitPointerEventScope {
@@ -760,4 +874,13 @@ private class FrameLoop(
             Choreographer.getInstance().postFrameCallback(this)
         } else running = false
     }
+}
+
+/** The last still lift on the map: when (uptime ms, −1 for none), where, and on which body; for a double tap. */
+private class LastLift {
+    var at = -1L; private set
+    var where = Offset.Zero; private set
+    var hit: Int? = null; private set
+    fun set(time: Long, position: Offset, body: Int?) { at = time; where = position; hit = body }
+    fun clear() { at = -1L; hit = null }
 }
