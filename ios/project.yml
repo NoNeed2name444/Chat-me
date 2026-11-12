@@ -1,0 +1,139 @@
+# Sorta for iPhone and iPad. `xcodegen generate` in ios/ makes Sorta.xcodeproj
+# and Sorta/Info.plist from this file; neither is committed. The settings start
+# from Stethoscore's (reference/stethoscore-aec2af1c/ios/project.yml).
+name: Sorta
+options:
+  bundleIdPrefix: com.cramdown
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Sorta:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sorta
+        excludes:
+          - Resources/Earth
+      # The Earth maps the Space theme's rocky planets wear (NASA imagery;
+      # where each comes from and its licence: the folder's SOURCES.md), as
+      # a folder, so they sit in Earth/ in the app (GraphEarth.swift), as
+      # Stethoscore has them (its project.yml:39-44)
+      - path: Sorta/Resources/Earth
+        type: folder
+        buildPhase: resources
+      # The icon and the alternate icons, for the builds the owner installs:
+      # tools/private/wire_art.py copies them in, and those builds name the
+      # icon on the xcodebuild line. Never committed, so other builds have no
+      # icon and nothing drawn in its place.
+      - path: Art
+        optional: true
+    info:
+      path: Sorta/Info.plist
+      properties:
+        CFBundleDisplayName: Sorta
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations:
+          - en
+        # The first frame is the page colour alone, light or dark with the
+        # phone (the Page colour set). The first screen shows no mark, so the
+        # launch screen shows none either (work/T0137/README.md, A4).
+        UILaunchScreen:
+          UIColorName: Page
+        # As Stethoscore had it (T0138): the phone turns on its side and opens
+        # as a book, but never upside down; the iPad turns every way.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        ITSAppUsesNonExemptEncryption: false
+        # The kit's type (WardFont): Nunito, with Arabic in Baloo Bhaijaan 2,
+        # both SIL OFL 1.1 (their OFL files are beside them in Sorta/Fonts)
+        UIAppFonts:
+          - Nunito[wght].ttf
+          - Nunito-Italic[wght].ttf
+          - BalooBhaijaan2[wght].ttf
+        # Stethoscore's library backup, which Import from Stethoscore… opens
+        # with the system's file picker (IdeasView, IdeaImportFlow): imported,
+        # since Stethoscore owns it, with the id, description and extension
+        # Stethoscore declares (reference/stethoscore-aec2af1c/ios/project.yml:
+        # 213-220). The description's words are in InfoPlist.xcstrings.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.cramdown.stethoscore.backup
+            UTTypeDescription: Stethoscore backup
+            UTTypeConformsTo:
+              - public.zip-archive
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - stethoscorebackup
+        # Sorta's own links: sorta://...
+        CFBundleURLTypes:
+          - CFBundleURLName: com.cramdown.sorta
+            CFBundleURLSchemes:
+              - sorta
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta
+        # XcodeGen names an icon, AppIcon, for every app, and the asset
+        # compiler stops when the catalog has none. These builds have none;
+        # the builds with the art name it on the xcodebuild line.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  # The look kit's SwiftUI checks (touch targets, fonts), run in the app.
+  # The Foundation-only suites in UnitTests/Suites belong to no target:
+  # tools/swift_suites.py builds them with swiftc.
+  SortaUnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UnitTests/SortaUnitTests
+    dependencies:
+      - target: Sorta
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta.unittests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Sorta.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sorta
+        BUNDLE_LOADER: $(TEST_HOST)
+  SortaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+      # the Ideas tests write their made-up Stethoscore backup with the
+      # app's own zip writer (IdeasUITestSupport)
+      - path: Sorta/Shared/MiniZip.swift
+    dependencies:
+      - target: Sorta
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Sorta
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta.uitests
+schemes:
+  Sorta:
+    build:
+      targets:
+        Sorta: all
+        SortaUnitTests: [test]
+        SortaUITests: [test]
+    test:
+      targets:
+        - SortaUnitTests
+        - SortaUITests
+    run:
+      config: Debug
