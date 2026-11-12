@@ -95,7 +95,7 @@ class MapLegendTest {
             assertTrue("$theme: the touch card's words", help.contains("Tap again or Open to read"))
             // S05g: Show links and All links as the card names them, the empty double tap, and no move yet (S05g2's)
             assertTrue("$theme: Show links and All links", help.contains("Show links") && help.contains("All links"))
-            assertTrue("$theme: two taps on empty space", help.contains("Tap it twice for the whole map."))
+            assertTrue("$theme: two taps on empty space", help.contains("Tap empty space to close the card, or twice for the whole map."))
             assertFalse("$theme: nothing moves a body yet", help.lowercase().contains("move"))
         }
         assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains("Fly in") && MapLegend.touchHelp(GraphTheme.NEURONS).contains("Recentre"))

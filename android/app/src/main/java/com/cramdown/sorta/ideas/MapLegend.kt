@@ -53,16 +53,16 @@ object MapLegend {
     fun touchHelp(theme: GraphTheme): String = when (theme) {
         GraphTheme.SPACE -> "Tap a body to preview its idea on a card. Tap again or Open to read it. " +
             "Show links on the card keeps only its links and dims the rest. All links brings everything back. " +
-            "Hold a body still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Hold a body still to see its options. Tap empty space to close the card, or twice for the whole map. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.NEURONS -> "Tap a cell, a part or an idea to preview it on a card. Tap again or Open to read an idea, or Open folder for a folder. " +
             "On a cell’s or part’s card, Fly in opens it on the map. Recentre closes it again. " +
             "Show links on an idea’s card keeps only its links and dims the rest. All links brings everything back. " +
-            "Hold a body still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Hold a body still to see its options. Tap empty space to close the card, or twice for the whole map. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.PERFORMANCE -> "Tap a point to preview its idea on a card. Tap again or Open to read it. " +
             "Show links on the card brightens its links and dims the others. All links brings everything back. " +
-            "Hold a point still to see its options. Tap empty space to close the card. Tap it twice for the whole map. " +
+            "Hold a point still to see its options. Tap empty space to close the card, or twice for the whole map. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
     }
 
