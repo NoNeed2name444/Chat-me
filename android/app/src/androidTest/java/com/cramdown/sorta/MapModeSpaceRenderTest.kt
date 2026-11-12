@@ -310,7 +310,8 @@ class MapModeSpaceRenderTest {
      * to it in the Universe and Neurons and still in Performance; Linked ideas hiding the unlinked;
      * Everything bringing all back, and the first view where it flew. In Neurons, first with every
      * cell closed: Garden hides each closed cell, as iOS's (a closed cell holds no idea,
-     * GraphNeurons.swift:430), yet no empty line, which counts the book's ideas; then Garden opened
+     * GraphNeurons.swift:430), and the empty line shows, as iOS counts each idea by the cell it is
+     * drawn in (Graph3DView.swift:861-862); then Garden opened
      * for the rest, and still open after Everything, which only frames the map again.
      */
     private fun requireFilter(theme: GraphTheme, dark: Boolean) {
@@ -328,7 +329,9 @@ class MapModeSpaceRenderTest {
             check(closedGarden.filtered && closedGarden.shown == 0 && closedGarden.hidden == closed.shown) {
                 "Garden, every cell closed, did not hide each closed cell as iOS's for $name: $closedGarden (before $closed)"
             }
-            check(!shown(MapPanelTags.FILTER_EMPTY)) { "The empty line counted the drawn ideas, not the book's, for $name" }
+            // iOS counts each note by the cell the plan draws it in (Graph3DView.swift:861-862), so no idea passes
+            try { compose.waitUntil(10_000) { shown(MapPanelTags.FILTER_EMPTY) } } catch (_: ComposeTimeoutException) {}
+            check(shown(MapPanelTags.FILTER_EMPTY)) { "Garden, its cell closed, showed no empty line as iOS's for $name" }
             chooseFilter(MapFilter.All)
             try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hidden == 0 } == true } } catch (_: ComposeTimeoutException) {}
             try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(home, it) } == true } } catch (_: ComposeTimeoutException) {}

@@ -454,7 +454,9 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                         IntArray(p.bodies.size) { p.bodies[it].parent },
                         IntArray(p.links.size * 2) { k -> p.links[k / 2].let { if (k % 2 == 0) it.a else it.b } })
                 }
-                return@builtOffMain BuiltMap(neurons, roles, null, bodies, stored = stored())
+                // the empty line counts each note by the cell the plan draws it in, as iOS's universe branch
+                // (Graph3DView.swift:861-862, galaxyOf from GraphThemeScene.swift:191): a note in a closed cell counts for no folder
+                return@builtOffMain BuiltMap(neurons, roles, null, bodies, stored = stored(plan?.let { MapFilterNotes.drawnIn(it) } ?: emptyMap()))
             }
             val out = HashMap<String, MutableList<String>>()
             for ((a, b) in edges) out.getOrPut(a) { ArrayList() }.add(b)

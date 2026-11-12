@@ -198,6 +198,31 @@ class MapFilterTest {
         assertEquals(3, stored.shown(MapFilter.All))
     }
 
+    @Test fun neuronsCountEachIdeaByTheCellItIsDrawnIn() {
+        // two cells, A and B, each with a page and two linked ideas (iOS shownCount's universe branch,
+        // Graph3DView.swift:861-862, reading galaxyOf, GraphThemeScene.swift:191)
+        fun id(n: Int) = "00000000-0000-4000-8000-" + String.format("%012X", n)
+        val folders = listOf(UniverseFolder(id(900), "A", null), UniverseFolder(id(901), "B", null))
+        val notes = ArrayList<UniverseNote>()
+        for (f in 0 until 2) for (k in 0 until 3) notes.add(UniverseNote(id(910 + 10 * f + k), "n$f$k", k == 0, id(900 + f), 80, (10 * f + k).toDouble()))
+        val edges = listOf(UniverseEdge(id(911), id(912)), UniverseEdge(id(921), id(922)))
+        val input = UniverseInput(notes, folders, edges, seedByName = true)
+        fun stored(plan: ThemePlan): MapFilterNotes {
+            val drawn = MapFilterNotes.drawnIn(plan)
+            return MapFilterNotes.of(notes.map { it.id }, { notes[it].isPage }, { drawn[notes[it].id.uppercase()] }, edges.map { it.a to it.b })
+        }
+        val closed = stored(GraphNeurons.plan(input))
+        assertEquals("every cell closed: no idea is drawn in Garden's cell, so the empty line shows, as iOS's", 0, closed.shown(MapFilter.Folder(id(900))))
+        assertEquals(0, closed.shown(MapFilter.Folder(id(901))))
+        assertEquals("kind and links do not need a cell", 2, closed.shown(MapFilter.Pages))
+        assertEquals(4, closed.shown(MapFilter.Linked))
+        assertEquals(6, closed.shown(MapFilter.All))
+        val openA = stored(GraphNeurons.plan(input.copy(open = listOf(id(900)))))
+        assertEquals("A open: its three notes are drawn in its cell", 3, openA.shown(MapFilter.Folder(id(900))))
+        assertEquals("matched without case", 3, openA.shown(MapFilter.Folder(id(900).lowercase())))
+        assertEquals("B, still closed, counts none", 0, openA.shown(MapFilter.Folder(id(901))))
+    }
+
     @Test fun everythingAfterAFilterReframesOnlyAndAFolderFlies() {
         assertEquals("the page's first filter moves nothing", FilterMove.NONE, MapFilter.move(null, MapFilter.All, universe = true))
         assertEquals(FilterMove.FLY, MapFilter.move(MapFilter.All, MapFilter.Folder("a"), universe = true))
@@ -237,16 +262,34 @@ class MapFilterTest {
             val scene = tree.order[bodies.nodes[j]]
             assertEquals("scene body $scene", pop.bloom(scene), bodies.data[j * SpaceBodies.STRIDE + 19], 0f)
         }
-        // each style's shader brightens its glows by 0.35 / 0.85 of a full bloom, once, and nothing else
-        assertEquals(0.35f / 0.85f, SpaceBodies.BLOOM_GAIN, 1e-7f)
+        // each style's shader brightens its glows to iOS's opacity, min(0.85 + 0.35 b, 1) over 0.85, once, and nothing else
+        val line = "    rp_col = rp_col * (min(0.85 + 0.35 * vMark.w, 1.0) / 0.85);\n"
+        assertEquals(line, SpaceBodies.BLOOM_LINE)
         for (style in SpaceStyle.entries) {
             val plain = SpaceShaders.fragment(style)
             val bloomed = SpaceBodies.bloomed(plain)
             assertEquals("$style: one line added", plain.lines().size + 1, bloomed.lines().size)
             val head = bloomed.indexOf(SpaceBodies.GLOW_HEAD)
-            assertTrue("$style: inside every glow's way out",
-                bloomed.startsWith("    rp_col = rp_col * (1.0 + 0.411765 * vMark.w);\n", head + SpaceBodies.GLOW_HEAD.length))
-            assertEquals(plain, bloomed.replace("    rp_col = rp_col * (1.0 + 0.411765 * vMark.w);\n", ""))
+            assertTrue("$style: inside every glow's way out", bloomed.startsWith(line, head + SpaceBodies.GLOW_HEAD.length))
+            assertEquals(plain, bloomed.replace(line, ""))
+        }
+        // and swells each glow by iOS's 1 + 0.6 b (GraphMotion.swift:2128), its quad with it
+        assertTrue(SpaceShaders.fragment(SpaceStyle.SUN).contains("float rpSwell() { return 1.0 + 0.6 * vMark.w; }"))
+        assertTrue("the quad swells", SpaceShaders.bodyVertex.contains("(uExtent * aCenter.w * (1.0 + 0.6 * aMark.w))"))
+        val swelled = mapOf(
+            SpaceStyle.BLACK_HOLE to listOf("rpPlane(c, r * 2.1 * rpSwell())"),
+            SpaceStyle.SUN to listOf("rpPlane(c, R * 4.0 * rpSwell())"),
+            SpaceStyle.ROCKY to listOf("halo(rpPlane(c, R * 1.5 * rpSwell())"),
+            SpaceStyle.GAS_GIANT to listOf("halo(rpPlane(c, R * 1.5 * rpSwell())"),
+            SpaceStyle.PULSAR to listOf("rpPlane(c, r * 2.5 * rpSwell())"),
+            SpaceStyle.COMET to listOf("rpPlane(c, r * 1.6 * rpSwell())"))
+        assertEquals(SpaceStyle.entries.toSet(), swelled.keys)
+        for ((style, glows) in swelled) {
+            val main = SpaceShaders.fragment(style).substringAfter("void main() {")
+            for (g in glows) assertTrue("$style swells $g", main.contains(g))
+            // every glow's plane in main swells; the black hole's shadow keeps the body's size
+            val planes = Regex("""rpPlane\(c, [^)]*\)""").findAll(main).map { it.value }.toList()
+            for (p in planes) assertTrue("$style: $p", p.endsWith(" * rpSwell()") || (style == SpaceStyle.BLACK_HOLE && p == "rpPlane(c, r * 2.1)"))
         }
     }
 

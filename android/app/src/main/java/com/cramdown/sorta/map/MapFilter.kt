@@ -90,6 +90,19 @@ class MapFilterNotes(val pages: BooleanArray, val roots: Array<String?>, val deg
             }
             return MapFilterNotes(BooleanArray(ids.size) { page(it) }, Array(ids.size) { root(it) }, degree)
         }
+
+        /**
+         * Each note the Neurons' [plan] draws, by upper-case id, to the cell it is drawn in (iOS galaxyOf,
+         * GraphThemeScene.swift:191, which shownCount reads where the map is a universe, Graph3DView.swift:861-862).
+         * A note inside a closed cell has no body, so it is in no cell and passes no folder filter.
+         */
+        fun drawnIn(plan: ThemePlan): Map<String, String> {
+            val out = HashMap<String, String>()
+            for (body in plan.bodies) {
+                if (body.kind == ThemeBodyKind.NOTE && body.region in plan.bodies.indices) out[body.id.uppercase()] = plan.bodies[body.region].id
+            }
+            return out
+        }
     }
 }
 

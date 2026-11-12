@@ -65,24 +65,24 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         const val KEEP = SpaceDepth.POINT_ENTER / SpaceDepth.POINT_LEAVE
 
         /**
-         * The bloom's gain on a body's glows (iOS shapeRing, GraphMotion.swift:2134-2135: a halo's
-         * opacity 0.85 at rest and 0.35 more at a full bloom, so 0.35 / 0.85 of its resting light).
+         * The bloom's line in a body's glows (iOS shapeRing, GraphMotion.swift:2134-2137: a halo's opacity
+         * min((0.85 + 0.15 m + 0.35 b) × glowGain, 1)). Space's bodies here do not move (m 0) and draw every
+         * glow at its full gain (glowGain 1), so a glow is min(0.85 + 0.35 b, 1) over its resting 0.85, as
+         * MapPop.glow; vMark.w is b.
          */
-        const val BLOOM_GAIN = 0.35f / 0.85f
+        const val BLOOM_LINE = "    rp_col = rp_col * (min(0.85 + 0.35 * vMark.w, 1.0) / 0.85);\n"
         /** Where every glow of a body's shader passes (SpaceShaders' rpFadedGlow), which the bloom brightens. */
         const val GLOW_HEAD = "vec3 rpFadedGlow(vec3 rp_col, float rp_dfF) {\n"
 
         /**
          * A body's fragment shader with the filter's bloom (S05i): each glow (halo, corona, ring,
-         * coma) brighter by [BLOOM_GAIN] × vMark.w as the body comes back, as iOS's halo blooms; the
-         * body itself is not. A shader without [GLOW_HEAD] exactly once is refused.
+         * coma) brighter by [BLOOM_LINE] as the body comes back, as iOS's halo blooms; the body itself
+         * is not. Each glow also swells (SpaceShaders' rpSwell). A shader without [GLOW_HEAD] exactly once is refused.
          */
         fun bloomed(fragment: String): String {
             val at = fragment.indexOf(GLOW_HEAD)
             require(at >= 0 && fragment.indexOf(GLOW_HEAD, at + 1) < 0) { "a body shader without one rpFadedGlow" }
-            val gain = String.format(java.util.Locale.ROOT, "%.6f", BLOOM_GAIN)
-            return fragment.substring(0, at + GLOW_HEAD.length) +
-                "    rp_col = rp_col * (1.0 + $gain * vMark.w);\n" + fragment.substring(at + GLOW_HEAD.length)
+            return fragment.substring(0, at + GLOW_HEAD.length) + BLOOM_LINE + fragment.substring(at + GLOW_HEAD.length)
         }
     }
 
