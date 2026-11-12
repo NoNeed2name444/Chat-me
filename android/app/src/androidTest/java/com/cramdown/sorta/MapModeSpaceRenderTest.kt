@@ -37,6 +37,7 @@ import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.map.MapNameShow
+import com.cramdown.sorta.map.MapTouchRules
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
@@ -54,6 +55,7 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -345,13 +347,20 @@ class MapModeSpaceRenderTest {
             check(!shown(MapPanelTags.PEEK_LINKS)) { "A cell's card offers Show links for $name" }
             compose.onNode(hasText(res.getString(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).assertExists()
         }
-        // a finger held still past the hold: the options, the finger still down
+        // a finger held still past the hold: the options, the finger still down. The hold's waits are the
+        // map's touch coroutine's timeouts, which run on this rule's test clock, not the wall clock; a
+        // wait polled on the wall clock moved that clock one frame a poll, so a slow emulator (the tablet
+        // at about 3 frames a second) ran out its seconds short of 0.55 s. The clock is moved past the
+        // hold itself (iOS's 0.55 s, scaled as the map scales it), then the options are waited for
+        val holdMillis = ceil(MapTouchRules.HOLD_FOR_MENU * MapTouchRules.holdScale(ViewConfiguration.getLongPressTimeout().toLong()) * 1000).toLong()
         val (_, at) = spot(name)
         compose.onNode(map).performTouchInput { down(at) }
+        compose.mainClock.advanceTimeBy(holdMillis)
         try { compose.waitUntil(5_000) { shown(MapPanelTags.MENU) } } catch (_: ComposeTimeoutException) {}
         val opened = shown(MapPanelTags.MENU)
+        val holding = mapDrawn()
         compose.onNode(map).performTouchInput { up() }
-        check(opened) { "A finger held still on a body opened no options for $name" }
+        check(opened) { "A finger held still on a body opened no options for $name: held at $at for $holdMillis ms of the test clock, the map then $holding" }
         ui.pressBack()
         compose.waitUntil(10_000) { !shown(MapPanelTags.MENU) }
         val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
@@ -413,8 +422,9 @@ class MapModeSpaceRenderTest {
      * and no options; with [carries], a neighbour pulled or a member carried (carried ≥ 1); [member], a
      * body inside it, chosen, its name showing, off its home in the world within 10 % of the held body's
      * own offset once the finger has been still a moment (MapDrawn.chosenOffset against heldOffset), not
-     * 1.85 times it. The hold and the moves go in one input, 300 ms apart by the events' own times. A
-     * still, [still], mid-drag. Let go: no options, the card
+     * 1.85 times it. Mid-drag the held body's name shows and no other name lies over it; [member]'s gives
+     * way while the cell is held, as on iOS. The hold and the moves go in one input, 300 ms apart by the
+     * events' own times. A still, [still], mid-drag. Let go: no options, the card
      * and the choice as they were, nothing off home within the frames iOS's spring needs ([requireHome]),
      * and with [homes] (Space, or Neurons
      * with animations off, where a home stays put) the body within 1 dp of where it was picked up.
@@ -449,6 +459,13 @@ class MapModeSpaceRenderTest {
             }
             check(same(before.pose, moved.pose)) { "The drag turned the camera for $still: ${before.pose}, then ${moved.pose}" }
             check(!shown(MapPanelTags.MENU)) { "The drag opened the options for $still" }
+            // the held body's name is up and no other name lies over it: a body held takes the chosen
+            // slot, so a chosen member's name gives way till the let-go (iOS's grab, GraphMotion.swift:1253, :2186)
+            val heldPill = checkNotNull(moved.names.firstOrNull { it.index == index }) { "Body $index shows no name while it is held for $still: ${moved.names}" }
+            fun crosses(a: List<Float>, b: List<Float>) = a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+            val over = moved.names.filter { it.index != index && crosses(it.box, heldPill.box) }
+            check(over.isEmpty()) { "A name lies over held body $index's (${heldPill.box}) for $still: $over" }
+            if (member != null) check(moved.names.none { it.index == member }) { "The chosen member $member kept its name while the cell was held for $still: ${moved.names}" }
             if (carries) check(moved.carried >= 1) { "Body $index pulled or carried nothing for $still: $moved" }
             // the carry in the world, each body's own offset from its home, so neither's depth on screen counts
             if (member != null) {

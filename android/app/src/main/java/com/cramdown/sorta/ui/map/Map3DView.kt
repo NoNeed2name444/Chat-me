@@ -514,11 +514,12 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
         }
     }
     val nameWanted: List<Int> = if (!pills) emptyList() else {
-        val asked = listOfNotNull(hoveredName, pressedName, heldName, chosenName)
+        // a body picked up takes the chosen body's slot till the let-go, as iOS's grab does (MapNameShow.wanted)
+        val asked = listOfNotNull(hoveredName, pressedName, heldName, grabbedName ?: chosenName)
         if (asked.isEmpty()) emptyList() else {
             val bodies = HashMap<Int, NameBody>()
             for (n in screenNodes) if (n.index in asked) bodies[n.index] = nameBody(n)
-            MapNameShow.wanted(hoveredName, pressedName, heldName, chosenName, bodies)
+            MapNameShow.wanted(hoveredName, pressedName, heldName, chosenName, bodies, grabbedName)
         }
     }
     // a name goes up at once and pops in, its style eases, frame by frame while either moves; then it

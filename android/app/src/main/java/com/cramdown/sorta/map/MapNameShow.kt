@@ -59,14 +59,19 @@ object MapNameShow {
 
     /**
      * The bodies that want a name, in iOS's order (hovered, pressed, held, chosen), each once: only
-     * a body on screen ([bodies]), and only in the crisp zone unless it is the chosen one.
+     * a body on screen ([bodies]), and only in the crisp zone unless it is the chosen one. While a
+     * body is picked up to move ([grabbed], S05g2) it takes the chosen slot, as iOS's grab sets
+     * `selected = i` (GraphMotion.swift:1253) and updateLabels then wants only `selected` (:2186):
+     * the chosen body's name gives way until the let-go, so it never lies over the held body's (a
+     * cell's member, chosen, drew its pill over the held cell's).
      */
-    fun wanted(hovered: Int?, pressed: Int?, held: Int?, chosen: Int?, bodies: Map<Int, NameBody>): List<Int> {
+    fun wanted(hovered: Int?, pressed: Int?, held: Int?, chosen: Int?, bodies: Map<Int, NameBody>, grabbed: Int? = null): List<Int> {
         val out = ArrayList<Int>(4)
-        for (i in listOf(hovered, pressed, held, chosen)) {
+        val marked = grabbed ?: chosen
+        for (i in listOf(hovered, pressed, held, marked)) {
             if (i == null || i in out) continue
             val body = bodies[i] ?: continue
-            if (!body.crisp && i != chosen) continue
+            if (!body.crisp && i != marked) continue
             out.add(i)
         }
         return out

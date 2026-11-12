@@ -65,6 +65,44 @@ class MapNameShowTest {
         // iOS's order: hovered, pressed, held, chosen
         assertEquals(listOf(3, 1, 0), MapNameShow.wanted(3, 1, null, 0, byIndex))
         assertEquals("a body not on screen has none", emptyList<Int>(), MapNameShow.wanted(null, null, 9, 8, byIndex))
+        aBodyPickedUpTakesTheChosenSlot()
+    }
+
+    /**
+     * S05g2 repair 3 (the critique's finding on mapmode-drag-cell-neurons-*): a cell picked up to move,
+     * a member inside it chosen. As on iOS, where grab sets `selected` to the held body
+     * (GraphMotion.swift:1253) and updateLabels wants `selected`'s name (:2186), the held body takes the
+     * chosen slot: the member's name gives way till the let-go, and no pill drawn lies over the held one.
+     * Part of [theHeldAndChosenBodies], so CI's count of this class stays as it is.
+     */
+    private fun aBodyPickedUpTakesTheChosenSlot() {
+        val density = 2.75f
+        val cell = NameBody(0, 350f, 650f, 120f)
+        val member = NameBody(1, 480f, 700f, 140f)
+        val near = mapOf(0 to cell, 1 to member)
+        val texts = mapOf(0 to NameText(1f, -40f, 380f, 11f), 1 to NameText(1f, -40f, 460f, 11f))
+        fun pills(names: List<Int>) = names.map { i -> MapNameShow.inside(MapNameShow.place(near.getValue(i), texts.getValue(i), density, 1f), 1080f, MapNameShow.EDGE_DP * density) }
+        fun overlaps(a: NamePill, b: NamePill) = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+        // the fixture is a real overlap: the two names, both up, cross
+        val both = pills(listOf(0, 1))
+        assertTrue("the fixture's two names overlap", overlaps(both[0], both[1]))
+
+        // held (the map's held slot is the body picked up) and grabbed: the cell's name alone
+        val shown = MapNameShow.wanted(null, null, 0, 1, near, grabbed = 0)
+        assertEquals(listOf(0), shown)
+        val drawn = pills(shown)
+        val held = drawn.single { it.index == 0 }
+        assertTrue("no other name lies over the held body's", drawn.none { it.index != 0 && overlaps(it, held) })
+        // pressed at first too, then past the slop: still the cell's alone
+        assertEquals(listOf(0), MapNameShow.wanted(null, 0, 0, 1, near, grabbed = 0))
+        // let go: the chosen member's name is back
+        assertEquals(listOf(1), MapNameShow.wanted(null, null, null, 1, near, grabbed = null))
+        // the held body keeps its name outside the crisp zone, as iOS's selected does
+        val faint = mapOf(0 to cell.copy(crisp = false), 1 to member)
+        assertEquals(listOf(0), MapNameShow.wanted(null, null, 0, 1, faint, grabbed = 0))
+        // picked up with nothing chosen, or the chosen body itself: one name
+        assertEquals(listOf(0), MapNameShow.wanted(null, null, 0, null, near, grabbed = 0))
+        assertEquals(listOf(1), MapNameShow.wanted(null, null, 1, 1, near, grabbed = 1))
     }
 
     @Test fun aHoveredBody() {
