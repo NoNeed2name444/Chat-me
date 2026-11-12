@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.LinkGrowth
+import com.cramdown.sorta.map.MapDrag
 import com.cramdown.sorta.map.MapFocus
 import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.NeuronBodyLook
@@ -72,6 +73,12 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
 
     /** The chosen body (its index, the scene's), or −1; set on the GL thread before [draw]. */
     var chosen = -1
+    /** The body held (S05g2), or −1: marked, popped and its links lit in the chosen body's place while held. */
+    var grabbed = -1
+    /** The spring run of a held body (S05g2): each body is drawn at its home plus its own offset; null keeps every body home. */
+    var drag: MapDrag? = null
+    /** The body marked: the one held, else the chosen one (focus = grabbed ?? selected, GraphMotion.swift:1840). */
+    private val marked get() = if (grabbed >= 0) grabbed else chosen
     /** The pop this frame: the chosen body's size, and its halo's brightness and size (MapPop). */
     var chosenScale = 1f
     var chosenGlow = 1f
@@ -145,8 +152,12 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         stripPosBuffer = floats(stripPosData.size); stripUvBuffer = floats(stripUvData.size)
     }
 
-    /** Where body [i] is at [time] seconds (labels and taps read this), and its size. */
-    fun position(i: Int, time: Double): Vec3 = plan.position(i, time)
+    /**
+     * Where body [i] is at [time] seconds (labels and taps read this): its home, the plan's place
+     * (ThemePlan.position, which sums the orbits up its parents), plus its own offset from a drag
+     * (MapDrag.placed), never its parents' offsets too; and its size.
+     */
+    fun position(i: Int, time: Double): Vec3 = plan.position(i, time).let { home -> drag?.placed(i, home) ?: home }
     fun size(i: Int): Float = look.bodies[i].size
     val bodyCount: Int get() = plan.bodies.size
     val linkCount: Int get() = plan.links.size
@@ -183,7 +194,7 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         drawSky(bokeh!!, bokehMesh!!, view, proj)
 
         val count = plan.bodies.size
-        val places = Array(count) { plan.position(it, time) }
+        val places = Array(count) { position(it, time) }
         val radius = FloatArray(count) { look.bodies[it].size * 0.8f }
 
         // the links' mouths in the whole cells' membranes
@@ -207,9 +218,9 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         fadedDrawn = opacity.count { it < 1f }
         hotDrawn = false
         for (b in look.bodies) drawBody(b, places[b.index], view, proj, clock, opening, fade,
-            if (b.index == chosen) chosenScale else 1f, opacity.getOrElse(b.index) { 1f })
+            if (b.index == marked) chosenScale else 1f, opacity.getOrElse(b.index) { 1f })
         for (b in look.bodies) {
-            val hot = b.index == chosen
+            val hot = b.index == marked
             if (b.standingHalo || hot) drawHalo(b, places[b.index], view, proj, clock, fade, hot, opacity.getOrElse(b.index) { 1f })
         }
         for (b in look.bodies) {
@@ -370,8 +381,8 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
             // Show links: only the chosen body's own (focusLinks)
             if (focus != null && !MapFocus.own(only, link.a, link.b)) continue
             val half = if (link.kind == 5) NeuronLookPlan.NEAR_BRIDGE else NeuronLookPlan.FAR_BRIDGE
-            // lit: the chosen body's links (the grabbed body's are S05g2's)
-            val lit = MapFocus.own(chosen, link.a, link.b)
+            // lit: the held body's links, else the chosen body's
+            val lit = MapFocus.own(marked, link.a, link.b)
             if (lit) litCount++
             bridge.fill(places[link.a], places[link.b], radius[link.a], radius[link.b], e, shown[e], lit, half, eye,
                 samples, stripPosData, stripUvData, e * perLink)

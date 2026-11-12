@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CreateNewFolder
@@ -460,7 +461,7 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
 /**
  * The first-run card (GraphUniverseHint, GraphLegend.swift:372-418): [title] (the theme's cardTitle
  * while its [steps] are unseen, else "Touching the map"); how to touch the map while [touch] is
- * unseen, in Android's own lines ("Hold for options": hold to move is S05g2's); then the theme's
+ * unseen, in Android's own lines (the hold's is iOS's, "Hold to move or for options"); then the theme's
  * steps, each with a plus in the secondary ink. Full list opens the theme's legend; either button
  * puts it away for this theme, steps and touch lines both.
  */
@@ -469,22 +470,27 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
                              title: String? = null, touch: Boolean = true, steps: List<String> = emptyList()) {
     WardCardFace(modifier.widthIn(max = MapPanel.HINT_WIDTH.dp).testTag(MapPanelTags.HINT), lift = WardLift.high) {
         Text(title ?: stringResource(R.string.map_touch_title), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
-        if (touch) Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-            // iOS's hand.tap, doc.text and a hand held still
-            listOf(Icons.Outlined.TouchApp to R.string.map_touch_tap, Icons.Outlined.Description to R.string.map_touch_again,
-                Icons.Outlined.PanTool to R.string.map_touch_hold).forEach { (icon, words) ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-                    Icon(icon, null, tint = wardColor(WardToken.ink), modifier = Modifier.size(wardGlyph(17.0)))
-                    Text(stringResource(words), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
+        // the lines between the title and the buttons, spaced as the card spaces them, scroll where the card
+        // would outgrow the room (a folded phone at the largest text): the buttons stay whole and in view
+        if (touch || steps.isNotEmpty()) Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(WardScale.m.dp)) {
+            if (touch) Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                // iOS's hand.tap, doc.text and a hand held still
+                listOf(Icons.Outlined.TouchApp to R.string.map_touch_tap, Icons.Outlined.Description to R.string.map_touch_again,
+                    Icons.Outlined.PanTool to R.string.map_touch_hold).forEach { (icon, words) ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                        Icon(icon, null, tint = wardColor(WardToken.ink), modifier = Modifier.size(wardGlyph(17.0)))
+                        Text(stringResource(words), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.ink))
+                    }
                 }
             }
-        }
-        // iOS's plus.circle, the Sort screen's stand-in for it (S05f)
-        if (steps.isNotEmpty()) Column(Modifier.testTag(MapPanelTags.HINT_STEPS), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-            steps.forEach { step ->
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-                    Icon(Icons.Rounded.AddCircleOutline, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
-                    Text(step, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
+            // iOS's plus.circle, the Sort screen's stand-in for it (S05f)
+            if (steps.isNotEmpty()) Column(Modifier.testTag(MapPanelTags.HINT_STEPS), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                steps.forEach { step ->
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                        Icon(Icons.Rounded.AddCircleOutline, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
+                        Text(step, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
+                    }
                 }
             }
         }

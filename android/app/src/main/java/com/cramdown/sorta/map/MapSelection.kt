@@ -12,7 +12,7 @@ import kotlin.math.min
 
 /** The thresholds a touch is judged by (GraphTouchRules, GraphTouchModel.swift:27-41). */
 object MapTouchRules {
-    /** Held this long before moving: a pick-up (S05g2's drag), not a turn. */
+    /** Held this long before moving: a pick-up (hold to move, S05g2), not a turn. */
     const val HOLD_TO_DRAG = 0.25
     /** Held still this long on a body: its options. */
     const val HOLD_FOR_MENU = 0.55
@@ -34,9 +34,10 @@ object MapTouchRules {
     /**
      * What [touch] is so far (judge, :73-84). [slop] is how far a finger may wander and still be a tap
      * or a hold, in the same units as [MapTouch.moved] (Android's own touch slop); [scale] lengthens
-     * the hold times ([holdScale]).
+     * the hold times ([holdScale]). [drags]: a body held can be moved (Space and the Neurons); in
+     * Performance a hold is options only (GraphPerfMapView.swift:11), so a held move turns the camera.
      */
-    fun judge(touch: MapTouch, slop: Float, scale: Double = 1.0): MapTouchKind {
+    fun judge(touch: MapTouch, slop: Float, scale: Double = 1.0, drags: Boolean = true): MapTouchKind {
         val drag = HOLD_TO_DRAG * scale
         val menu = HOLD_FOR_MENU * scale
         // two fingers slide and zoom the camera, never a tap or a hold (S05f's MapTouch: multi was MOVE)
@@ -44,7 +45,7 @@ object MapTouchRules {
         val still = touch.moved <= slop
         if (!still) {
             // moved before it was held long enough: the camera's
-            if (touch.held < drag || !touch.onBody) return MapTouchKind.ORBIT
+            if (touch.held < drag || !touch.onBody || !drags) return MapTouchKind.ORBIT
             return MapTouchKind.DRAG
         }
         if (touch.onBody && touch.held >= menu) return MapTouchKind.MENU
@@ -53,12 +54,30 @@ object MapTouchRules {
         return if (touch.taps >= 2 && touch.onBody) MapTouchKind.DOUBLE_TAP else MapTouchKind.TAP
     }
 
+    /**
+     * Whether a finger on a body, [held] seconds since its down and [moved] along its path so far, is
+     * picked up by now: still within [slop] at the pick-up time, stretched by [scale] (the long press's
+     * minimumPressDuration and allowableMovement, Graph3DView.swift:1681-1691). Read against the
+     * events' own times, so a move that comes late still finds the body picked up first (S05g2).
+     */
+    fun picksUp(held: Double, moved: Float, slop: Float, scale: Double = 1.0): Boolean =
+        moved <= slop && held >= HOLD_TO_DRAG * scale
+
+    /**
+     * Whether a finger on a body is still held still, for its options' wait: before the pick-up, its
+     * path from the down within [slop]; once picked up, [fromPickUp] (the farthest it has gone from
+     * where the body was picked up) within [slop], whatever it wandered before (holdMoving,
+     * Graph3DView.swift:2584-2591). Null [fromPickUp]: nothing picked up.
+     */
+    fun heldStill(moved: Float, slop: Float, fromPickUp: Float? = null): Boolean =
+        if (fromPickUp != null) fromPickUp <= slop else moved <= slop
+
     /** Whether a second tap, [gap] seconds and [distance] after the first, makes a double tap; [reach] in the same units as [distance] (pairs, :88-90). */
     fun pairs(gap: Double, distance: Float, reach: Float = DOUBLE_TAP_REACH_DP): Boolean =
         gap >= 0 && gap <= DOUBLE_TAP_GAP && distance <= reach
 }
 
-/** What a touch turned out to be (GraphTouchKind). [DRAG] is S05g2's: until it lands a moving hold turns the camera. */
+/** What a touch turned out to be (GraphTouchKind). [DRAG]: a body picked up and moved (S05g2), in Space and the Neurons. */
 enum class MapTouchKind { PENDING, TAP, DOUBLE_TAP, ORBIT, DRAG, MENU, NOTHING }
 
 /** One touch as the map's hand sees it (GraphTouch): on a body or not, held and moved so far (seconds, pixels), lifted, taps in a row. */

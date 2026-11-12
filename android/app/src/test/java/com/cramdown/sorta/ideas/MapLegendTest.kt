@@ -60,8 +60,9 @@ class MapLegendTest {
 
     @Test fun noneAboutWorkStillToCome() {
         val all = everyLine.joinToString("\n").lowercase()
-        // S05g brought Show links and the empty double tap (theTouchHelpIsTheHint); the rest waits
-        for (later in listOf("moon", "cell states", "hold to move", "move it", "folder lines", "thin grey lines", "hub with", "tour",
+        // S05g brought Show links and the empty double tap, S05g2 the move (theTouchHelpIsTheHint); the
+        // rest waits, a moved star's planets (S05h) among it
+        for (later in listOf("moon", "cell states", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
             "breathing", "orbits")) {
             assertFalse("\"$later\" waits for later work", all.contains(later))
         }
@@ -93,11 +94,23 @@ class MapLegendTest {
             assertFalse("$theme: the stale words are gone", help.contains("no card") || help.contains("no hold"))
             assertFalse("$theme: one sentence a clause, no semicolons", help.contains(";"))
             assertTrue("$theme: the touch card's words", help.contains("Tap again or Open to read"))
-            // S05g: Show links and All links as the card names them, the empty double tap, and no move yet (S05g2's)
+            // S05g: Show links and All links as the card names them, the empty double tap
             assertTrue("$theme: Show links and All links", help.contains("Show links") && help.contains("All links"))
             assertTrue("$theme: two taps on empty space", help.contains("Tap empty space to close the card, or twice for the whole map."))
-            assertFalse("$theme: nothing moves a body yet", help.lowercase().contains("move"))
         }
+        // S05g2: a body held, then dragged, moves and springs back, in Space and Neurons (GraphTheme.swift:99, :102),
+        // before the still hold's options; Performance's hold is options only (:105)
+        val move = "Hold a body, then drag to move it. "
+        val back = "Let go and it springs back. "
+        val still = "Hold a body still to see its options."
+        assertTrue(MapLegend.touchHelp(GraphTheme.SPACE).contains(move + back + still))
+        assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains(move + "Move a cell and everything inside it follows. " + back + still))
+        assertFalse("a Space body carries nothing yet", MapLegend.touchHelp(GraphTheme.SPACE).contains("inside it"))
+        for (theme in GraphTheme.entries) assertEquals("$theme: one move sentence", if (theme == GraphTheme.PERFORMANCE) 0 else 1,
+            Regex("drag to move it").findAll(theme.hint).count())
+        val perf = MapLegend.touchHelp(GraphTheme.PERFORMANCE)
+        assertFalse("Performance moves nothing", perf.lowercase().contains("move") || perf.contains("springs back"))
+        assertTrue(perf.contains("Hold a point still to see its options."))
         assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains("Fly in") && MapLegend.touchHelp(GraphTheme.NEURONS).contains("Recentre"))
     }
 

@@ -34,11 +34,13 @@ import kotlin.math.sqrt
  * - pulsar: light.x its nebula's turn, A its beam, A.w 2 + how edge-on its nebula is, B its spin axis;
  * - comet: A its ion tail, B its dust tail (SpaceOptics.cometTails).
  * A fifth vec4 (S05g), the mark: x its fade under Show links (1, or [MapMark.FADED] outside
- * [focus]), y 1 for the [chosen] body; z and w spare.
+ * [focus]), y 1 for the marked body; z and w spare.
  *
- * The chosen body (S05g): its links' beams are lit (beam float 9, as iOS's lit bit), its radius
- * is scaled by [chosenScale] (the pop), and under Show links ([focus] set) only its own beams are
- * built, the links gone since the last scene shrinking away, unlit, as before.
+ * The marked body, the one held ([grabbed], S05g2) or else the chosen one (S05g): its links' beams
+ * are lit (beam float 9, as iOS's lit bit) and its radius is scaled by [chosenScale] (the pop).
+ * Under Show links ([focus] set) only the chosen body's own beams are built, the links gone since
+ * the last scene shrinking away, unlit, as before. A held body and what it pulls are read at their
+ * homes plus their own offsets ([drag]).
  */
 class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 96) {
     companion object {
@@ -80,6 +82,15 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     /** The chosen body, a chunk-order node, or −1 (S05g). */
     var chosen: Int = -1
+    /** The body held (S05g2), a chunk-order node, or −1: marked, popped and its beams lit in the chosen body's place while held. */
+    var grabbed: Int = -1
+    /** The spring run of a held body (S05g2), by chunk-order node: each body is read at its home plus its own offset; null keeps every body home. */
+    var drag: MapDrag? = null
+    /** The body marked: the one held, else the chosen one (focus = grabbed ?? selected, GraphMotion.swift:1840). */
+    private val marked get() = if (grabbed >= 0) grabbed else chosen
+
+    /** Node [i]'s place along [axis]: its home (Octree.positions) plus its own offset from a drag. */
+    private fun at(i: Int, axis: Int): Float = tree.positions[3 * i + axis] + (drag?.offset(i, axis) ?: 0f)
     /** Its radius's scale this frame (MapPop.scale). */
     var chosenScale: Float = 1f
     /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
@@ -112,7 +123,6 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val frustum = Frustum(viewProj)
         val limit = min(maxBodies, capacity)
         heapSize = 0
-        val p = tree.positions
         for (k in 0 until plan.detailLeaves.size) {
             val leaf = plan.detailLeaves[k]
             if (plan.leafState[leaf * 4 + 3] < OPEN) continue
@@ -124,7 +134,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             for (i in tree.start[cell] until tree.end[cell]) {
                 val style = tree.groups[i].toInt()
                 if (style !in 0..5 || !enabled[style]) continue
-                val x = p[3 * i]; val y = p[3 * i + 1]; val z = p[3 * i + 2]
+                val x = at(i, 0); val y = at(i, 1); val z = at(i, 2)
                 val w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15]
                 if (w <= 1e-3f) continue
                 if (band.gone(w)) continue
@@ -209,8 +219,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     // ---- what each body's shader needs ----
 
     private fun fill(j: Int, node: Int, depth: Float, eye: Vec3, right: Vec3, up: Vec3, focal: Float, time: Float) {
-        val p = tree.positions
-        val c = Vec3(p[3 * node], p[3 * node + 1], p[3 * node + 2])
+        val c = Vec3(at(node, 0), at(node, 1), at(node, 2))
         val style = SpaceStyle.of(tree.groups[node].toInt())
         val seed = SpaceOptics.seed(tree.order[node])
         val toEye = SpaceOptics.unit(eye - c, Vec3(0f, 0f, 1f))
@@ -247,7 +256,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             }
         }
         val o = j * STRIDE
-        val chosenHere = node == chosen
+        val chosenHere = node == marked
         data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) nodeRadius * chosenScale else nodeRadius
         data[o + 4] = light.x; data[o + 5] = light.y; data[o + 6] = light.z; data[o + 7] = seed
         data[o + 8] = a.x; data[o + 9] = a.y; data[o + 10] = a.z; data[o + 11] = codeA
@@ -265,11 +274,10 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     /** The four suns nearest [c] (not [self]), as SpaceOptics.light takes them. */
     private fun nearestSuns(c: Vec3, self: Int): List<FloatArray> {
-        val p = tree.positions
         val best = IntArray(4) { -1 }; val dist = FloatArray(4) { Float.MAX_VALUE }
         fun consider(i: Int) {
             if (i == self) return
-            val dx = p[3 * i] - c.x; val dy = p[3 * i + 1] - c.y; val dz = p[3 * i + 2] - c.z
+            val dx = at(i, 0) - c.x; val dy = at(i, 1) - c.y; val dz = at(i, 2) - c.z
             val d = dx * dx + dy * dy + dz * dz
             if (d < 1e-8f || d >= dist[3]) return
             var k = 3
@@ -278,7 +286,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         }
         if (sunNodes.isNotEmpty()) sunNodes.forEach(::consider)
         else for (k in 0 until heapSize) if (tree.groups[heapNode[k]].toInt() == SpaceStyle.SUN.code) consider(heapNode[k])
-        return best.filter { it >= 0 }.map { floatArrayOf(p[3 * it], p[3 * it + 1], p[3 * it + 2], 1f) }
+        return best.filter { it >= 0 }.map { floatArrayOf(at(it, 0), at(it, 1), at(it, 2), 1f) }
     }
 
     // ---- beams ----
@@ -287,8 +295,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val leaf = tree.leafOfNode[node]
         val s = leaf * 4
         val t = plan.leafState[s + 3].coerceIn(0f, 1f)
-        val p = tree.positions
-        for (a in 0 until 3) out[a] = plan.leafState[s + a] + (p[3 * node + a] - plan.leafState[s + a]) * t
+        for (a in 0 until 3) out[a] = plan.leafState[s + a] + (at(node, a) - plan.leafState[s + a]) * t
     }
 
     private val pa = FloatArray(3)
@@ -349,8 +356,9 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         beams[o] = ends[0]; beams[o + 1] = ends[1]; beams[o + 2] = ends[2]; beams[o + 3] = sa.toFloat()
         beams[o + 4] = ends[3]; beams[o + 5] = ends[4]; beams[o + 6] = ends[5]; beams[o + 7] = sb.toFloat()
         beams[o + 8] = linkSeed(tree.order[aEnd], tree.order[bEnd])
-        // lit: the chosen body's links (iOS's lit bit; the grabbed body's are S05g2's)
-        val lit = !ghost && chosen >= 0 && (u == chosen || v == chosen)
+        // lit: the held body's links, else the chosen body's (iOS's lit bit)
+        val mark = marked
+        val lit = !ghost && mark >= 0 && (u == mark || v == mark)
         beams[o + 9] = if (lit) 1f else 0f
         if (lit) litCount++
         beams[o + 10] = grow

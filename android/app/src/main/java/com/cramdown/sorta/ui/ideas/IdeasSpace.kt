@@ -261,10 +261,12 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 MapEmptyHint(theme, add = { addingFolder = true })
             }
             // the first-run card, bottom-leading, clear of the round tools (Graph3DView.swift:302-318),
-            // while its steps or its touch lines are unseen (hintShown, :497-499)
+            // while its steps or its touch lines are unseen (hintShown, :497-499); kept below the chrome at the
+            // top, as the no-folder hint is, so where it is too tall its lines scroll there (MapTouchCard)
             if (panelsShown && theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && peek == null && !tuning) Box(Modifier.align(Alignment.BottomStart)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
+                    top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()) + WardSpace.m.wardDp,
                     bottom = hidden + WardSpace.l.wardDp)) {
                 // its height as drawn: the first view is framed above it (NotesMap's card)
                 // put away, its height is let go: the next theme's card is measured afresh (S05d)
@@ -392,7 +394,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 val degree = IntArray(graph.nodeCount)
                 for (k in graph.edges.indices) degree[graph.edges[k]]++
                 val styles = GraphStyleChoice.codes(book, graph.ids, degree, main, folderRaw)
-                BuiltMap(MapScene.of(graph, theme = MapTheme.SPACE, styles = styles),
+                // the Universe, Space's default main look, or one single style (S05g2: a held body pulls its neighbours only then)
+                BuiltMap(MapScene.of(graph, theme = MapTheme.SPACE, styles = styles, universe = spaceStyle(main) == null),
                     graph.ids.indices.associate { graph.ids[it].uppercase() to MapPeek.spaceRole(SpaceStyle.of(styles[it].toInt())) }, styles)
             }
         }

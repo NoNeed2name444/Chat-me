@@ -13,6 +13,8 @@ import com.cramdown.sorta.map.LinkGrowth
 import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.LodSelector
 import com.cramdown.sorta.map.MapChoiceMotion
+import com.cramdown.sorta.map.MapDrag
+import com.cramdown.sorta.map.MapDragPath
 import com.cramdown.sorta.map.MapFocus
 import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.MapPalette
@@ -124,7 +126,28 @@ data class MapDrawn(
     val focus: Boolean = false,
     val focusLinks: Int = 0,
     val faded: Int = 0,
+    /**
+     * A body held (S05g2): its scene index, −1 for none; its centre on screen (x, y in the view's
+     * pixels, whole; empty when none is held); the bodies off home; and those of them other than the
+     * one held (pulled by its links, or carried inside it); the held body's own offset from its home
+     * and the chosen body's, in the world (x, y, z; empty when that body is at home or there is none),
+     * so a carry is read whatever each body's depth. No words.
+     */
+    val grabbed: Int = -1,
+    val dragged: List<Float> = emptyList(),
+    val moving: Int = 0,
+    val carried: Int = 0,
+    val heldOffset: List<Float> = emptyList(),
+    val chosenOffset: List<Float> = emptyList(),
 ) {
+    /** This record with the held body as the latest frame drew it; the same record when nothing changed. */
+    fun dragging(grabbedNow: Int, draggedNow: List<Float>, movingNow: Int, carriedNow: Int,
+                 heldOffsetNow: List<Float> = emptyList(), chosenOffsetNow: List<Float> = emptyList()): MapDrawn =
+        if (grabbed == grabbedNow && dragged == draggedNow && moving == movingNow && carried == carriedNow &&
+            heldOffset == heldOffsetNow && chosenOffset == chosenOffsetNow) this
+        else copy(grabbed = grabbedNow, dragged = draggedNow, moving = movingNow, carried = carriedNow,
+            heldOffset = heldOffsetNow, chosenOffset = chosenOffsetNow)
+
     /** This record with the chosen body's marks as the latest frame drew them; the same record when nothing changed. */
     fun marking(chosenNow: Int, markedNow: Boolean, litNow: Int, focusNow: Boolean, focusLinksNow: Int, fadedNow: Int): MapDrawn =
         if (chosen == chosenNow && marked == markedNow && lit == litNow && focus == focusNow && focusLinks == focusLinksNow && faded == fadedNow) this
@@ -254,6 +277,12 @@ class GlMapRenderer(
     links: IntArray = IntArray(0),
     ids: List<String> = emptyList(),
     recall: LinkRecall = LinkRecall.EVERYTHING,
+    /**
+     * Space's main look is the Universe (MapScene.universe, S05g2): a held body springs to its own
+     * home with no link pulling (the orbit path); else, under one single style, its links pull its
+     * neighbours (the link path).
+     */
+    universe: Boolean = true,
 ) : GLSurfaceView.Renderer {
     private val linkGrowth = LinkGrowth.of(ids, links, recall, lively)
     private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null)
@@ -273,6 +302,31 @@ class GlMapRenderer(
     private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius).also {
         if (lively && linkGrowth.links == tree.edgeCount) it.growth = SpaceLinkGrowth(tree, links, linkGrowth)
     } else null
+    /**
+     * Hold to move (S05g2): the spring run of a held body and what it pulls or carries, in Space by
+     * chunk-order node (homes Octree.positions), in the Neurons by body (homes the plan's places at
+     * the run's orbit clock); none in Performance.
+     */
+    private val drag: MapDrag? = when {
+        neuronGl != null && neurons != null -> MapDrag(neurons.plan.bodies.size, MapDragPath.ORBITS, nodeRadius,
+            { i, t -> neurons.plan.position(i, t) }, parents = parents, lively = lively)
+        space -> {
+            val chunkLinks = if (universe) IntArray(0) else IntArray(links.size) { chunkOf.getOrElse(links[it]) { -1 } }
+            MapDrag(tree.nodeCount, if (universe) MapDragPath.ORBITS else MapDragPath.LINKS, nodeRadius,
+                { k, _ -> Vec3(tree.positions[3 * k], tree.positions[3 * k + 1], tree.positions[3 * k + 2]) },
+                links = chunkLinks, lively = lively)
+        }
+        else -> null
+    }.also { d -> bodies?.drag = d; neuronGl?.drag = d }
+    /** The held body's offsets for the far layer's points and chunk links, a texel a chunk-order node (Space). */
+    private var offsetTexture = 0
+    private var offsetTexels = IntArray(0)
+    // the offsets' floats as the texture holds them, made at the first move: the rows a frame touches go
+    // up from here in one call, as the focus mask's do
+    private var offsetData = FloatArray(0)
+    /** The held body this frame: the scene's index and, in Space, its chunk-order node; −1 for none. */
+    private var grabbedScene = -1
+    private var grabbedChunk = -1
     /** A strip's samples: 40 at the High tier, 20 at Smooth (iOS GraphicsQuality). */
     private val samples = if (tier == GraphicsTier.HIGH) 40 else 20
     private val spaceGl: SpaceGl? = if (space) SpaceGl(assets, samples) else null
@@ -366,12 +420,44 @@ class GlMapRenderer(
     fun bodyAt(index: Int): Vec3? {
         if (neuronGl != null) {
             if (index !in 0 until neuronGl.bodyCount) return null
-            return neuronGl.position(index, if (neuronLively) (System.nanoTime() - startNanos) / 1e9 else 0.0)
+            return neuronGl.position(index, neuronTime())
         }
         val k = chunkOf.getOrElse(index) { -1 }
         if (k < 0) return null
-        return Vec3(tree.positions[3 * k], tree.positions[3 * k + 1], tree.positions[3 * k + 2])
+        return Vec3(nodeAt(k, 0), nodeAt(k, 1), nodeAt(k, 2))
     }
+
+    /** Chunk-order node [k]'s place along [axis]: its home plus its own offset from a drag (S05g2). */
+    private fun nodeAt(k: Int, axis: Int): Float = tree.positions[3 * k + axis] + (drag?.offset(k, axis) ?: 0f)
+
+    /** The Neurons' time: the spring run's orbit clock, which eases to a stop while a body is held (0 with animations off). */
+    private fun neuronTime(): Double = drag?.orbitTime ?: if (neuronLively) (System.nanoTime() - startNanos) / 1e9 else 0.0
+
+    /** Whether a held body can be moved here: Space and the Neurons, not Performance (S05g2). */
+    val drags: Boolean get() = drag != null
+
+    /** The body held, the scene's index, −1 for none. */
+    val grabbed: Int get() {
+        val d = drag ?: return -1
+        val g = d.grabbed
+        if (g < 0) return -1
+        return if (neuronGl != null) g else tree.order[g]
+    }
+
+    /** Picks body [index] (the scene's) up where it is (MapDrag.grab); false where it cannot be. */
+    fun grab(index: Int): Boolean {
+        val d = drag ?: return false
+        val k = if (neuronGl != null) index.takeIf { it in 0 until d.count } ?: -1 else chunkOf.getOrElse(index) { -1 }
+        if (k < 0) return false
+        d.grab(k)
+        return true
+    }
+
+    /** Where the finger wants the held body, in the world (MapDrag.drag). */
+    fun dragTo(target: Vec3) { drag?.drag(target) }
+
+    /** Lets the held body go (MapDrag.release): with the finger's speed, or at rest when [still]. */
+    fun release(still: Boolean = false) { drag?.release(still) }
 
     init { require(tree.leafCount < 65_536) { "chunk ids are 16-bit" } }
 
@@ -388,6 +474,7 @@ class GlMapRenderer(
         uploadLeafTexture()
         uploadMask()
         uploadFocusMask()
+        uploadOffsets()
         val ids = IntArray(4)
         GLES30.glGenBuffers(4, ids, 0)
         edgeIbo = ids[0]; summaryVbo = ids[1]; bundleVbo = ids[2]; cornerVbo = ids[3]
@@ -455,6 +542,7 @@ class GlMapRenderer(
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
         }
+        drag?.step(dt)
         stepChoice(dt)
         // the depth fade follows what the camera looks at: its orbit target
         val focusDepth = SpaceDepth.depth(target, eye, forward)
@@ -484,27 +572,29 @@ class GlMapRenderer(
             val right = Vec3(view[0], view[4], view[8]); val up = Vec3(view[1], view[5], view[9])
             b.update(plan, viewProj, eye, right, up, focal, SpaceLod.maxBodies(budget.detail), clock, band).also { applyMask(b) }
         } ?: 0
-        // the chosen body's orbit ring, where its node is placed this frame (Space)
+        // the marked body's orbit ring (the held body, else the chosen one), where its node is placed this frame (Space)
         var ring: FloatArray? = null
         var ringDepth = 0f
-        if (space && chosenChunk >= 0) {
-            val leaf = tree.leafOfNode[chosenChunk]
+        val markChunk = if (grabbedChunk >= 0) grabbedChunk else chosenChunk
+        if (space && markChunk >= 0) {
+            val leaf = tree.leafOfNode[markChunk]
             val t = plan.leafState[leaf * 4 + 3]
             if (t > 0f) {
                 val s = leaf * 4
-                val p = Vec3(plan.leafState[s] + (tree.positions[3 * chosenChunk] - plan.leafState[s]) * t,
-                    plan.leafState[s + 1] + (tree.positions[3 * chosenChunk + 1] - plan.leafState[s + 1]) * t,
-                    plan.leafState[s + 2] + (tree.positions[3 * chosenChunk + 2] - plan.leafState[s + 2]) * t)
+                val p = Vec3(plan.leafState[s] + (nodeAt(markChunk, 0) - plan.leafState[s]) * t,
+                    plan.leafState[s + 1] + (nodeAt(markChunk, 1) - plan.leafState[s + 1]) * t,
+                    plan.leafState[s + 2] + (nodeAt(markChunk, 2) - plan.leafState[s + 2]) * t)
                 ringDepth = (p - eye).dot(forward)
                 if (ringDepth > 0f && !band.gone(ringDepth)) ring = MapMark.orbitModel(p.x, p.y, p.z, MapMark.orbitSize(nodeRadius, orbitGrow, pop.scale))
             }
         }
         animating = bodyCount > 0 || (bodies?.beamCount ?: 0) > 0 || moved > 1e-5f || plan.detailLeaves.size.let { n -> (0 until n).any { plan.leafState[plan.detailLeaves[it] * 4 + 3] < 1f } } || cache.uploadedThisFrame > 0
-            || pop.moving || (chosenChunk >= 0 && orbitGrow < 1f) || (ring != null && lively)
+            || pop.moving || (markChunk >= 0 && orbitGrow < 1f) || (ring != null && lively) || drag?.busy == true
 
         if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         uploadLeafState(plan)
+        writeOffsets()
         val focusOn = focusChunks != null && chosenChunk >= 0
         // Show links: Space draws no bundle (none carries the chosen body's link); Performance draws them at 0.15
         if (!(space && focusOn)) drawBundles(plan, if (focusOn) MapMark.FADED else 1f)
@@ -545,6 +635,8 @@ class GlMapRenderer(
         val faded = if (space && focusOn) fadedPoints(plan) + plan.fadedSummaries else 0
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
+        record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
+            grabbedChunk, chosenChunk)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -563,8 +655,14 @@ class GlMapRenderer(
         val show = linksShown
         val cued = now.cues
         val m = motion ?: MapChoiceMotion(lively, lively && theme != MapTheme.PLAIN, cued).also { motion = it }
-        m.step(wanted, cued, dt)
+        // a held body is marked and popped in the chosen body's place, once per pick-up (grab, GraphMotion.swift:1246-1259)
+        val held = drag?.grabbed ?: -1
+        grabbedChunk = if (neuronGl == null) held else -1
+        grabbedScene = if (held < 0) -1 else if (neuronGl != null) held else tree.order[held]
+        m.step(if (grabbedScene >= 0) grabbedScene else wanted, cued + (drag?.grabs ?: 0), dt)
         if (wanted != focusedChosen || show != focusedShown) refocus(wanted, show)
+        bodies?.grabbed = grabbedChunk
+        neuronGl?.grabbed = grabbedScene
         bodies?.chosenScale = pop.scale
         neuronGl?.let { it.chosenScale = pop.scale; it.chosenGlow = pop.glow; it.chosenSwell = pop.swell }
     }
@@ -641,17 +739,17 @@ class GlMapRenderer(
         clock = (seconds % SpaceOptics.CLOCK_PERIOD).toFloat()
         val moved = lastEye?.let { (eye - it).length() } ?: 0f
         lastEye = eye
-        animating = neuronLively || moved > 1e-5f || pop.moving
+        animating = neuronLively || moved > 1e-5f || pop.moving || drag?.busy == true
+        val time = neuronTime()
         val deep = NeuronPalette.deep
         GLES30.glClearColor(deep.x, deep.y, deep.z, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
-        gl.draw(view, proj, eye, clock, if (neuronLively) seconds else 0.0, bandUniform)
+        gl.draw(view, proj, eye, clock, time, bandUniform)
         GLES30.glEnable(GLES30.GL_BLEND)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
         val count = gl.bodyCount
         onScreenNodes?.let { callback ->
             val out = ArrayList<ScreenNode>(count)
-            val time = if (neuronLively) seconds else 0.0
             for (i in 0 until count) {
                 val p = gl.position(i, time)
                 Mat4.project(viewProj, p.x, p.y, p.z, clip)
@@ -675,6 +773,7 @@ class GlMapRenderer(
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
         val focusOn = gl.focus != null
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
+        record = dragRecord(if (grabbedScene >= 0) gl.position(grabbedScene, time) else null, grabbedScene, record.chosen)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -750,6 +849,74 @@ class GlMapRenderer(
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1024, maskHeight, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.wrap(focusMask))
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+    }
+
+    /**
+     * The record's held body (S05g2): which it is, its centre on screen at [at] (whole pixels), and
+     * the bodies off home.
+     */
+    private fun dragRecord(at: Vec3?, held: Int, chosen: Int): MapDrawn {
+        val d = drag ?: return record
+        // a body's own offset in the drag's numbering (chunks in Space, bodies in the Neurons); empty at home
+        fun own(i: Int): List<Float> {
+            if (i !in 0 until d.count) return emptyList()
+            val o = d.offsetOf(i)
+            return if (o.x == 0f && o.y == 0f && o.z == 0f) emptyList() else listOf(o.x, o.y, o.z)
+        }
+        var spot = emptyList<Float>()
+        if (at != null) {
+            Mat4.project(viewProj, at.x, at.y, at.z, clip)
+            if (clip[3] > 1e-4f) spot = listOf(
+                Math.round((clip[0] / clip[3] * 0.5f + 0.5f) * width).toFloat(),
+                Math.round((1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height).toFloat())
+        }
+        return record.dragging(grabbedScene, spot, d.moving, d.carried, own(held), own(chosen))
+    }
+
+    /** The far layer's offsets (S05g2): a float texel a chunk-order node in the masks' layout, all zero, then those off home now. */
+    private fun uploadOffsets() {
+        if (!space || drag == null) return
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0); offsetTexture = ids[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, offsetTexture)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA32F, 1024, maskHeight, 0, GLES30.GL_RGBA, GLES30.GL_FLOAT, floats(1024 * maskHeight * 4))
+        // a new context starts with every texel at zero: the bodies off home are written again
+        offsetTexels = IntArray(0)
+        java.util.Arrays.fill(offsetData, 0f)
+        writeOffsets()
+    }
+
+    /**
+     * Writes the floats of the bodies off home this frame and zeroes those that came home since the
+     * last, then sends the rows they touch up in one call: the work follows the bodies off home,
+     * never every node (S05g2).
+     */
+    private fun writeOffsets() {
+        val d = drag ?: return
+        if (offsetTexture == 0) return
+        val now = d.movingBodies()
+        if (now.isEmpty() && offsetTexels.isEmpty()) return
+        if (offsetData.isEmpty()) offsetData = FloatArray(1024 * maskHeight * 4)
+        val data = offsetData
+        var low = Int.MAX_VALUE; var high = -1
+        fun texel(node: Int, x: Float, y: Float, z: Float) {
+            val k = 4 * node
+            if (k + 3 >= data.size) return
+            data[k] = x; data[k + 1] = y; data[k + 2] = z; data[k + 3] = 0f
+            val row = node / 1024
+            if (row < low) low = row
+            if (row > high) high = row
+        }
+        for (node in offsetTexels) if (java.util.Arrays.binarySearch(now, node) < 0) texel(node, 0f, 0f, 0f)
+        for (node in now) texel(node, d.offset(node, 0), d.offset(node, 1), d.offset(node, 2))
+        offsetTexels = now
+        if (high < 0) return
+        val rows = high - low + 1
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, offsetTexture)
+        GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, low, 1024, rows, GLES30.GL_RGBA, GLES30.GL_FLOAT,
+            FloatBuffer.wrap(data, low * 1024 * 4, rows * 1024 * 4))
     }
 
     /** Clears the old neighbourhood's texels and writes the new one's, a texel each (Space, Show links). */
@@ -838,6 +1005,11 @@ class GlMapRenderer(
         GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uFocusMask"), 2)
+        // a held body and what it pulls (S05g2): their offsets from home, read only while any is off home
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE3)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, offsetTexture)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uOffsets"), 3)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMoved"), if (offsetTexture != 0 && offsetTexels.isNotEmpty()) 1f else 0f)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocus"), if (space && focusChunks != null && chosenChunk >= 0) 1f else 0f)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uChosen"), if (theme == MapTheme.PLAIN) chosenChunk else -1)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uDensity"), density)
@@ -928,9 +1100,9 @@ class GlMapRenderer(
             val t = plan.leafState[leaf * 4 + 3]
             if (t <= 0f) continue
             val s = leaf * 4
-            val x = plan.leafState[s] + (tree.positions[3 * k] - plan.leafState[s]) * t
-            val y = plan.leafState[s + 1] + (tree.positions[3 * k + 1] - plan.leafState[s + 1]) * t
-            val z = plan.leafState[s + 2] + (tree.positions[3 * k + 2] - plan.leafState[s + 2]) * t
+            val x = plan.leafState[s] + (nodeAt(k, 0) - plan.leafState[s]) * t
+            val y = plan.leafState[s + 1] + (nodeAt(k, 1) - plan.leafState[s + 1]) * t
+            val z = plan.leafState[s + 2] + (nodeAt(k, 2) - plan.leafState[s + 2]) * t
             Mat4.project(viewProj, x, y, z, clip)
             if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
             val sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width
@@ -1008,6 +1180,9 @@ uniform int uFocusNode;
 uniform float uFocus;
 uniform mediump sampler2D uFocusMask;
 uniform float uDensity;
+// hold to move (S05g2): each node's offset from home in world units, read while any is off home
+uniform highp sampler2D uOffsets;
+uniform float uMoved;
 """ + LIGHT + """// Space theme: 1 while this node is drawn as its body (its point hides)
 float bodyMasked() {
     if (uSpace < 0.5) return 0.0;
@@ -1019,7 +1194,11 @@ float focusFade() {
     return texelFetch(uFocusMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r > 0.5 ? 1.0 : ${MapMark.FADED};
 }
 vec4 leafState() { int l = int(aLeaf); return texelFetch(uLeafState, ivec2(l % 1024, l / 1024), 0); }
-vec3 placed(vec4 st) { return mix(st.xyz, uCenter + aPos * uHalf, st.w); }
+vec3 offsetOf() {
+    if (uMoved < 0.5) return vec3(0.0);
+    return texelFetch(uOffsets, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).xyz;
+}
+vec3 placed(vec4 st) { return mix(st.xyz, uCenter + aPos * uHalf + offsetOf(), st.w); }
 """
 
         private val NODE_VS = NODE_HEADER + """

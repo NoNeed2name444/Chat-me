@@ -154,6 +154,27 @@ class OrbitCamera(
     /** Pixels per world unit at depth 1: half the viewport height over tan(fov / 2). */
     fun focalPixels(viewportHeight: Float) = viewportHeight / 2f / tan(fovY / 2)
 
+    /** How far [p] is in front of the eye, along where it looks (the depth a held body keeps, S05g2). */
+    fun depthOf(p: Vec3): Float = (p - eye()).dot(forward())
+
+    /** Where [p] is drawn in a [width] x [height] view (pixels, y down); null behind the eye. */
+    fun project(p: Vec3, width: Float, height: Float): Pair<Float, Float>? {
+        val rel = p - eye()
+        val depth = rel.dot(forward())
+        if (depth <= 1e-6f) return null
+        val focal = focalPixels(height)
+        return Pair(width / 2 + rel.dot(right()) / depth * focal, height / 2 - rel.dot(up()) / depth * focal)
+    }
+
+    /**
+     * The point under screen point ([x], [y]) at [depth] in front of the eye, in a [width] x [height]
+     * view: on the plane at that depth that faces the camera (iOS's fingerPoint, Graph3DView.swift:2627-2632).
+     */
+    fun unproject(x: Float, y: Float, depth: Float, width: Float, height: Float): Vec3 {
+        val focal = focalPixels(height)
+        return eye() + forward() * depth + right() * ((x - width / 2) / focal * depth) - up() * ((y - height / 2) / focal * depth)
+    }
+
     /**
      * The first view of a ball of [radius] round [centre], from this camera's yaw and pitch, fitted
      * to the part of a [width] x [height] view (pixels) the chrome leaves ([insets]), as iOS's

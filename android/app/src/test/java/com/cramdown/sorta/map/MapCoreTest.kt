@@ -32,6 +32,49 @@ class MapMathTest {
         assertEquals(0f, out[1] / out[3], 1e-4f)
     }
 
+    @Test fun theFingerIsUnprojectedOntoThePlaneAtTheBodysDepthFacingTheCamera() {
+        // S05g2 (iOS's fingerPoint): a finger anywhere lands at the pick-up depth, on the plane square to the view
+        val camera = OrbitCamera(target = Vec3(1f, -2f, 0.5f), distance = 12f, yaw = 0.7f, pitch = 0.4f)
+        val w = 1080f; val h = 2200f
+        val depth = 9.5f
+        val forward = camera.forward()
+        val centre = camera.eye() + forward * depth
+        for ((x, y) in listOf(0f to 0f, w / 2 to h / 2, 100f to 1900f, 1000f to 300f, 540f to 10f)) {
+            val p = camera.unproject(x, y, depth, w, h)
+            assertEquals("at the depth", depth, camera.depthOf(p), 1e-3f)
+            assertEquals("on the plane facing the camera", 0f, (p - centre).dot(forward), 1e-3f)
+            val back = checkNotNull(camera.project(p, w, h))
+            assertEquals(x, back.first, 0.05f); assertEquals(y, back.second, 0.05f)
+            // the projection matches the GL's own (Mat4.project with the camera's view and projection)
+            val clip = FloatArray(4)
+            Mat4.project(Mat4.multiply(camera.projection(w / h), camera.view()), p.x, p.y, p.z, clip)
+            assertEquals(x, (clip[0] / clip[3] * 0.5f + 0.5f) * w, 0.05f)
+            assertEquals(y, (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * h, 0.05f)
+        }
+        // the middle of the view is the point straight ahead
+        assertEquals(0f, (camera.unproject(w / 2, h / 2, depth, w, h) - centre).length(), 1e-4f)
+    }
+
+    @Test fun aBodyGrabbedWithAnOffsetKeepsItAndItsDepthThroughAMove() {
+        val camera = OrbitCamera(target = Vec3.ZERO, distance = 10f, yaw = -0.3f, pitch = 0.25f)
+        val w = 800f; val h = 1200f
+        val body = Vec3(0.8f, 0.4f, -1.1f)
+        val finger = 420f to 640f
+        // at pick-up: the depth read once, and the offset from the finger's point to the body
+        val depth = camera.depthOf(body)
+        val offset = body - camera.unproject(finger.first, finger.second, depth, w, h)
+        assertTrue("the finger is not on the centre exactly", offset.length() > 1e-3f)
+        // the finger moves 160 px right and 90 px down: the body moves with it, offset and depth kept
+        val moved = camera.unproject(finger.first + 160f, finger.second + 90f, depth, w, h) + offset
+        assertEquals(depth, camera.depthOf(moved), 1e-3f)
+        val start = checkNotNull(camera.project(body, w, h)); val end = checkNotNull(camera.project(moved, w, h))
+        assertEquals(160f, end.first - start.first, 0.05f)
+        assertEquals(90f, end.second - start.second, 0.05f)
+        assertEquals(offset.length(), (moved - camera.unproject(finger.first + 160f, finger.second + 90f, depth, w, h)).length(), 1e-4f)
+        // behind the eye there is no screen point
+        assertEquals(null, camera.project(camera.eye() - camera.forward(), w, h))
+    }
+
     @Test fun theHomeViewFitsTheMapOnTheNarrowAxis() {
         val c = OrbitCamera()
         val d = c.fitDistance(10f, aspect = 0.75f, margin = 1f)

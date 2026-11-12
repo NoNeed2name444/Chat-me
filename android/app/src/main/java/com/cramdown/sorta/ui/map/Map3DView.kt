@@ -127,7 +127,13 @@ import kotlin.math.max
 class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>, val ids: List<String>, val viewRadius: Float = tree.radius[0], val theme: MapTheme = MapTheme.PLAIN,
                /** [MapTheme.NEURONS]: the cells and links NeuronGl draws; the tree then only holds their places, by body. */
                val neurons: NeuronScene? = null,
-               val links: IntArray = IntArray(0), val linkHalf: Float = 0f) {
+               val links: IntArray = IntArray(0), val linkHalf: Float = 0f,
+               /**
+                * [MapTheme.SPACE]: its main look is the Universe (S05g2; iOS's isUniverse, Graph3DView.swift:879-881),
+                * so a held body springs home with no link pulling; false under one single style, where its links
+                * pull its neighbours.
+                */
+               val universe: Boolean = true) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -172,8 +178,12 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             return max(d[(d.size * 0.95f).toInt().coerceAtMost(d.size - 1)], 1e-3f)
         }
 
-        /** [styles], in Space, is each node's SpaceStyle code (the Look menu's choice); by default its links decide. */
-        fun of(graph: MapGraph, leafCapacity: Int = 4096, theme: MapTheme = MapTheme.PLAIN, styles: ByteArray? = null): MapScene {
+        /**
+         * [styles], in Space, is each node's SpaceStyle code (the Look menu's choice); by default its links
+         * decide. [universe]: Space's main look is the Universe ([MapScene.universe]).
+         */
+        fun of(graph: MapGraph, leafCapacity: Int = 4096, theme: MapTheme = MapTheme.PLAIN, styles: ByteArray? = null,
+               universe: Boolean = true): MapScene {
             // Space: a note's style follows its links (SpaceStyle.forLinks) unless one is given
             val tree = if (theme == MapTheme.SPACE) {
                 val codes = styles?.takeIf { it.size == graph.nodeCount } ?: SpaceStyle.assign(graph.nodeCount, graph.edges)
@@ -189,7 +199,7 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 weight += tree.count[cell]
             }
             val radius = if (weight == 0) 0.35f else (spacing / weight * 0.3).toFloat().coerceIn(0.01f, 0.45f)
-            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), theme, links = graph.edges)
+            return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), theme, links = graph.edges, universe = universe)
         }
     }
 }
@@ -252,7 +262,9 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
      * before the hold is [onTap] with the body under it (null for empty space); a second one within
      * 0.30 s and 40 dp on a body is [onDoubleTap]; a finger still on a body for 0.55 s (scaled by the
      * person's touch-and-hold delay) is [onHold] there, before it lifts. Two taps on empty space bring
-     * back the first view; a finger that moves turns the camera, two pan and zoom.
+     * back the first view; a finger that moves turns the camera, two pan and zoom. In Space and the
+     * Neurons a finger still on a body for 0.25 s (scaled the same way) picks it up (S05g2): moved, the
+     * body follows it and springs home when let go, and the page hears nothing of it.
      */
     onTap: ((Int?) -> Unit)? = null,
     onDoubleTap: ((Int) -> Unit)? = null,
@@ -350,6 +362,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
+            universe = scene.universe,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
@@ -454,7 +467,10 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     var nameClock by remember(scene) { mutableLongStateOf(0L) }
     val board = remember(scene) { MapNameShow.Board() }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
-    val heldName = remember(scene, heldId) { scene.indexOf(heldId) }
+    // the held slot: the body whose options are open, else the one a finger holds to move (S05g2), which
+    // the page never learns of (GraphMotion's wantLabel(grabbed), :2183); the options take it back
+    var grabbedName by remember(scene) { mutableStateOf<Int?>(null) }
+    val heldName = remember(scene, heldId) { scene.indexOf(heldId) } ?: grabbedName
     // each Space body's look by its index, for its size and its light (the tree keeps them by node)
     val spaceStyles = remember(scene) {
         if (scene.theme != MapTheme.SPACE) null
@@ -575,6 +591,45 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                 val reach = MapNameShow.PICK_DP.dp.toPx()
                 val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
                 val menuMillis = kotlin.math.ceil(MapTouchRules.HOLD_FOR_MENU * holdScale * 1000).toLong()
+                // hold to move (S05g2): in Space and the Neurons a finger still on a body to the pick-up
+                // time picks it up (held, Graph3DView.swift:2553-2610); not in Performance
+                val dragMillis = kotlin.math.ceil(MapTouchRules.HOLD_TO_DRAG * holdScale * 1000).toLong()
+                val canPick = hit != null && renderer.drags
+                var picked = false
+                var pickTried = false
+                var dragging = false
+                var pickedAt = Offset.Zero
+                // the farthest the finger has gone from where the body was picked up: past the slop, it moves it
+                var farthest = 0f
+                var finger = down.position
+                var depth = 0f
+                var grabOffset = Vec3.ZERO
+                // still on the body to the pick-up: it is picked up where it is, with a click, its depth and its
+                // offset from the finger kept (Graph3DView.swift:2558-2581)
+                fun pickUp() {
+                    pickTried = true
+                    val i = checkNotNull(hit)
+                    val at = renderer.bodyAt(i) ?: return
+                    if (!renderer.grab(i)) return
+                    picked = true
+                    pickedAt = finger
+                    farthest = 0f
+                    val w = size.width.toFloat(); val h = size.height.toFloat()
+                    synchronized(camera) {
+                        depth = camera.depthOf(at)
+                        grabOffset = at - camera.unproject(finger.x, finger.y, depth, w, h)
+                    }
+                    grabbedName = i
+                    hostView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    loop.moved()
+                }
+                fun letGo(still: Boolean) {
+                    if (!picked) return
+                    picked = false; dragging = false; farthest = 0f
+                    renderer.release(still)
+                    grabbedName = null
+                    loop.moved()
+                }
                 // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
                 val press = MapNameShow.Press(slop)
                 if (pills) {
@@ -584,12 +639,29 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                 try {
                     var now = down.uptimeMillis
                     while (true) {
-                        // a finger still on a body waits for the hold, at most; then its options open, before it lifts
-                        val waiting = hit != null && !menu && !multi && moved <= slop && latestHold != null
-                        val event = if (!waiting) awaitPointerEvent()
-                            else withTimeoutOrNull(max(1L, down.uptimeMillis + menuMillis - now)) { awaitPointerEvent() }
+                        // a finger still on a body waits for the pick-up and the hold, at most; then its options
+                        // open, before it lifts. A body moved by the finger drops the options' wait
+                        // once picked up, still until the finger goes past the slop from where it was picked up,
+                        // whatever it wandered before (holdMoving, Graph3DView.swift:2584-2591)
+                        val still = hit != null && !menu && !multi && MapTouchRules.heldStill(moved, slop, if (picked) farthest else null)
+                        val pickWait = still && canPick && !picked && !pickTried
+                        val menuWait = still && !dragging && latestHold != null
+                        val deadline = when {
+                            pickWait -> down.uptimeMillis + dragMillis
+                            menuWait -> down.uptimeMillis + menuMillis
+                            else -> -1L
+                        }
+                        val event = if (deadline < 0) awaitPointerEvent()
+                            else withTimeoutOrNull(max(1L, deadline - now)) { awaitPointerEvent() }
+                        if (event == null && pickWait) {
+                            now = deadline
+                            pickUp()
+                            continue
+                        }
                         if (event == null) {
-                            // held still on the body to the hold's end: a hold, never a tap from here
+                            // held still on the body to the hold's end: a hold, never a tap from here; a body
+                            // picked up is put back where it is, at rest (holdStill, :2616-2623)
+                            letGo(still = true)
                             menu = true
                             if (MapTouchRules.judge(MapTouch(onBody = true, held = menuMillis / 1000.0, moved = moved, lifted = false), slop, holdScale) == MapTouchKind.MENU) {
                                 // iOS's light tick as the options open; Android gives a menu held open this one
@@ -599,11 +671,18 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                             continue
                         }
                         now = event.changes.maxOfOrNull { it.uptimeMillis } ?: now
+                        // an event that comes at or past the pick-up time, the finger still till then, picks the body
+                        // up first, as iOS's recogniser begins at 0.25 s whatever follows: by the events' own times,
+                        // so a late frame never turns a hold that moved into a turn of the camera
+                        if (pickWait && MapTouchRules.picksUp((now - down.uptimeMillis) / 1000.0, moved, slop, holdScale)) pickUp()
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.isEmpty()) { liftedAt = now; break }
                         loop.touched()
                         press.fingers(pressed.size)
                         if (pressed.size >= 2) {
+                            // a second finger lets a held body go as a lift does; the fingers then pan and zoom
+                            // (Android's own rule)
+                            letGo(still = false)
                             multi = true
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
@@ -617,20 +696,37 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                             val delta = change.position - change.previousPosition
                             moved += delta.getDistance()
                             press.move(delta.getDistance())
-                            // a finger that moves turns the camera, on a body or not (S05g2 picks a body up)
-                            if ((moved > slop || multi) && !menu) synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
+                            finger = change.position
+                            if (picked) {
+                                // a body picked up follows the finger once it has moved past the slop from where it
+                                // was picked up, keeping its offset, on the plane at its depth facing the camera;
+                                // the camera stays (Graph3DView.swift:2584-2593)
+                                farthest = max(farthest, (finger - pickedAt).getDistance())
+                                if (!dragging && !MapTouchRules.heldStill(moved, slop, farthest)) dragging = true
+                                if (dragging) {
+                                    val w = size.width.toFloat(); val h = size.height.toFloat()
+                                    val to = synchronized(camera) { camera.unproject(finger.x, finger.y, depth, w, h) } + grabOffset
+                                    renderer.dragTo(to)
+                                    loop.moved()
+                                }
+                            } else if ((moved > slop || multi) && !menu) {
+                                // a finger that moves before the pick-up turns the camera, on a body or not
+                                synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
+                            }
                         }
                         if (pills && pressedName != press.pressed) pressedName = press.pressed
                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
                 } finally {
-                    // lifted, or the gesture cancelled: the press is over either way
+                    // lifted, or the gesture cancelled: the press is over either way, and a body held is let
+                    // go, with the finger's speed if it moved (release, GraphMotion.swift:1269-1283)
                     press.up()
                     if (pressedName != null) pressedName = null
+                    letGo(still = !dragging)
                 }
                 val held = (liftedAt - down.uptimeMillis) / 1000.0
                 val lift = MapTouchRules.judge(MapTouch(onBody = hit != null, held = held, moved = moved, lifted = true,
-                    fingers = if (multi) 2 else 1), slop, holdScale)
+                    fingers = if (multi) 2 else 1), slop, holdScale, renderer.drags)
                 if (menu || lift == MapTouchKind.ORBIT || lift == MapTouchKind.DRAG) { lastLift.clear(); return@awaitEachGesture }
                 // a still lift: a tap, a double tap, or nothing (an empty touch held past the pick-up time)
                 val paired = lastLift.at >= 0 && MapTouchRules.pairs((down.uptimeMillis - lastLift.at) / 1000.0,

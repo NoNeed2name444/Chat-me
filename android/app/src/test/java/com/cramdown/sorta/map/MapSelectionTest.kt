@@ -54,6 +54,50 @@ class MapSelectionTest {
         assertEquals("just before it", MapTouchKind.ORBIT, judge(true, 0.2499, 11f, lifted = false))
     }
 
+    @Test fun thePickUpsEdgeScalesWithTheTouchAndHoldDelay() {
+        // S05g2: iOS's T1 cases at the pick-up's edge (GraphTouchTests.swift:29-37), and stretched with a longer delay
+        for (scale in listOf(1.0, MapTouchRules.holdScale(600), MapTouchRules.holdScale(1500))) {
+            val edge = MapTouchRules.HOLD_TO_DRAG * scale
+            assertEquals("at the pick-up, ×$scale", MapTouchKind.DRAG, judge(true, edge, slop + 1f, lifted = false, scale = scale))
+            assertEquals("just before it, ×$scale", MapTouchKind.ORBIT, judge(true, edge - 0.0001, slop + 1f, lifted = false, scale = scale))
+            assertEquals("moved and lifted after it, ×$scale", MapTouchKind.DRAG, judge(true, edge + 0.3, 25f, scale = scale))
+            assertEquals("past it on empty space: the camera, ×$scale", MapTouchKind.ORBIT, judge(false, edge + 0.3, 30f, lifted = false, scale = scale))
+            assertEquals("still past it: deciding, ×$scale", MapTouchKind.PENDING, judge(true, edge + 0.01, 2f, lifted = false, scale = scale))
+            assertEquals("lifted still past it: a slow tap, ×$scale", MapTouchKind.TAP, judge(true, edge + 0.01, 2f, scale = scale))
+            // the pick-up itself, by the events' own times: at its edge, still, and not a moment before or once moved
+            assertTrue("picked up at the edge, ×$scale", MapTouchRules.picksUp(edge, slop, slop, scale))
+            assertTrue("picked up by a move that comes late, ×$scale", MapTouchRules.picksUp(edge + 0.3, 2f, slop, scale))
+            assertFalse("not just before it, ×$scale", MapTouchRules.picksUp(edge - 0.0001, 0f, slop, scale))
+            assertFalse("not once moved past the slop, ×$scale", MapTouchRules.picksUp(edge + 0.3, slop + 1f, slop, scale))
+        }
+    }
+
+    @Test fun onceHeldUpStillnessIsMeasuredFromThePickUp() {
+        // before the pick-up: the path from the down
+        assertTrue(MapTouchRules.heldStill(slop, slop))
+        assertFalse(MapTouchRules.heldStill(slop + 1f, slop))
+        // picked up: how far from where it was picked up, not the path before (holdMoving, Graph3DView.swift:2584-2591)
+        assertTrue("a path past the slop before the pick-up keeps the options' wait", MapTouchRules.heldStill(3 * slop, slop, fromPickUp = 2f))
+        assertTrue(MapTouchRules.heldStill(3 * slop, slop, fromPickUp = slop))
+        assertFalse("moved past the slop from the pick-up: a move", MapTouchRules.heldStill(0f, slop, fromPickUp = slop + 1f))
+    }
+
+    @Test fun performanceNeverPicksABodyUp() {
+        // a hold there is options only (GraphPerfMapView.swift:11): moved after the pick-up, it turns the camera
+        fun perf(held: Double, moved: Float, lifted: Boolean = false, scale: Double = 1.0) =
+            MapTouchRules.judge(MapTouch(true, held, moved, lifted), slop, scale, drags = false)
+        assertEquals(MapTouchKind.ORBIT, perf(0.3, 25f))
+        assertEquals(MapTouchKind.ORBIT, perf(MapTouchRules.HOLD_TO_DRAG, 11f))
+        assertEquals(MapTouchKind.ORBIT, perf(2.0, 80f, lifted = true))
+        assertEquals(MapTouchKind.ORBIT, perf(0.25 * 2.5, 25f, scale = 2.5))
+        for (held in listOf(0.0, 0.1, 0.25, 0.3, 0.6, 1.0, 3.0)) for (moved in listOf(0f, 5f, 11f, 40f)) for (lifted in listOf(true, false))
+            assertTrue("held $held moved $moved", perf(held, moved, lifted) != MapTouchKind.DRAG)
+        // its options and taps stay as they are
+        assertEquals(MapTouchKind.MENU, perf(0.6, 3f))
+        assertEquals(MapTouchKind.TAP, perf(0.08, 2f, lifted = true))
+        assertEquals(MapTouchKind.TAP, perf(0.4, 2f, lifted = true))
+    }
+
     @Test fun heldStillOnABodyGivesItsOptions() {
         assertEquals(MapTouchKind.MENU, judge(true, 0.6, 3f, lifted = false))
         assertEquals("exactly at 0.55 s", MapTouchKind.MENU, judge(true, MapTouchRules.HOLD_FOR_MENU, 3f, lifted = false))

@@ -65,7 +65,7 @@ class MapTouchCardTest {
             assertTrue("$t: its steps", shown(MapPanelTags.HINT_STEPS))
             for (step in t.cardSteps) assertEquals("$t: \"$step\"", 1, count(step, MapPanelTags.HINT_STEPS))
             assertTrue("$t: the touch lines", shown(MapPanelTags.TOUCH_HINT))
-            for (line in listOf("Tap to preview", "Tap again or Open to read", "Hold for options")) assertEquals("$t: $line", 1, count(line, MapPanelTags.TOUCH_HINT))
+            for (line in listOf("Tap to preview", "Tap again or Open to read", "Hold to move or for options")) assertEquals("$t: $line", 1, count(line, MapPanelTags.TOUCH_HINT))
             assertEquals(0, count("Touching the map"))
         }
         steps = false

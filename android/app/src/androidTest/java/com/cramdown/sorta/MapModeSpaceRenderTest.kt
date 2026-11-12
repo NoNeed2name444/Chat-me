@@ -55,6 +55,7 @@ import java.io.File
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * Map mode's Space on the emulator (S05b A6), by day and by night: Sorta itself (MainActivity) on a
@@ -93,6 +94,16 @@ import kotlin.math.max
  * cell, whose idea bridges out of its folder, is chosen with its bridges lit
  * (mapmode-chosen-bridges-neurons-...), and that idea, flown into, has Show links
  * (mapmode-links-bridges-neurons-...).
+ *
+ * S05g2 A3: hold to move. In Space and Neurons a finger held 300 ms on the chosen body picks it up,
+ * the camera still, and moved 8 slops in steps the body follows it, its offset kept; let go, no
+ * options open, the card and the choice stay, and every body is home again within 30 s (requireDrag;
+ * stills mapmode-drag-<space|neurons>-<light|dark>-<device>.png). Under Look's Suns the chosen sun
+ * pulls its neighbours (mapmode-drag-sun-space-...), and in Neurons the open cell carries the idea
+ * chosen inside it, once, not 1.85 times (mapmode-drag-cell-neurons-...). In every look a move made
+ * with its down, before the pick-up, turns the camera and moves no body; in Performance a hold that
+ * moves still turns it. requireNames' press: a quick move takes the name away, a held one keeps it
+ * on the body it carries.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -236,10 +247,11 @@ class MapModeSpaceRenderTest {
     }
 
     /**
-     * S05f A3: no name at rest; with [press], a finger held on a body (the map's spot, the biggest
-     * crisp body clear of the chrome) shows its name, one pill above it, gone once the finger moves
-     * past the slop, a turn and not a tap, so no card; then a tap on a body chooses it, its card comes
-     * up and its name stays, one pill above it, still there a second later.
+     * S05f A3: no name at rest; with [press], a finger on a body (the map's spot, the biggest crisp
+     * body clear of the chrome) that moves past the slop at once turns the camera and takes the name
+     * away, no card; one held there shows its name, one pill above it, and held past the pick-up then
+     * moved it carries the body, its name kept on it, and no card comes (S05g2); then a tap on a body
+     * chooses it, its card comes up and its name stays, one pill above it, still there a second later.
      */
     private fun requireNames(look: String, dark: Boolean, press: Boolean): Pair<Int, List<Float>> {
         val name = "mapmode-named-$look-${if (dark) "dark" else "light"}-$device"
@@ -247,18 +259,37 @@ class MapModeSpaceRenderTest {
         check(mapDrawn()?.names?.isEmpty() == true) { "A name shows at rest for $name: ${mapDrawn()?.names}" }
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
         if (press) {
-            val (index, at) = spot(name)
-            compose.onNode(map).performTouchInput { down(at) }
-            try { compose.waitUntil(5_000) { mapDrawn()?.names?.isNotEmpty() == true } } catch (_: ComposeTimeoutException) {}
-            requireOnePill(index, "a finger held on a body for $name")
             val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
-            compose.onNode(map).performTouchInput { moveBy(Offset(slop * 3f, 0f)) }
+            // moved past the slop with its down, before the pick-up: a turn, the name gone, no body moved
+            val (_, quick) = spot(name)
+            compose.onNode(map).performTouchInput { down(quick); moveBy(Offset(slop * 3f, 0f)) }
             try { compose.waitUntil(5_000) { mapDrawn()?.names?.isEmpty() == true } } catch (_: ComposeTimeoutException) {}
-            check(mapDrawn()?.names?.isEmpty() == true) { "The name stayed after the finger moved on for $name: ${mapDrawn()?.names}" }
+            val turning = mapDrawn()
             compose.onNode(map).performTouchInput { up() }
+            check(turning?.names?.isEmpty() == true) { "The name stayed after the finger moved on for $name: ${turning?.names}" }
+            check(turning?.grabbed == -1 && turning.moving == 0) { "A quick move picked a body up for $name: $turning" }
             compose.waitForIdle()
             check(!shown(MapPanelTags.PEEK)) { "A turn brought up a card for $name" }
             SystemClock.sleep(500) // the turn's last frame, so the spot is where the body now is
+            // held: its name; past the pick-up and moved, the body goes with the finger and keeps its name (S05g2)
+            val (index, at) = spot(name)
+            var carried: MapDrawn? = null
+            try {
+                // the hold and the move in one go, 300 ms apart by the events' own times: past the pick-up, short of the options
+                compose.onNode(map).performTouchInput { down(at); advanceEventTime(300); repeat(3) { moveBy(Offset(slop.toFloat(), 0f)) } }
+                try { compose.waitUntil(5_000) { mapDrawn()?.let { it.names.isNotEmpty() && (it.dragged.getOrNull(0) ?: 0f) > at.x + slop } == true } } catch (_: ComposeTimeoutException) {}
+                carried = mapDrawn()
+                requireOnePill(index, "a finger held on a body, then moved, for $name")
+            } finally {
+                compose.onNode(map).performTouchInput { up() }
+            }
+            check(carried?.grabbed == index) { "A finger held on a body past the pick-up did not pick it up for $name: $carried" }
+            compose.waitForIdle()
+            check(!shown(MapPanelTags.PEEK)) { "A move brought up a card for $name" }
+            try { compose.waitUntil(30_000) { mapDrawn()?.let { it.grabbed == -1 && it.moving == 0 && it.names.isEmpty() } == true } } catch (_: ComposeTimeoutException) {}
+            val home = mapDrawn()
+            check(home?.grabbed == -1 && home.moving == 0) { "The carried body did not come home within 30 s for $name: $home" }
+            check(home.names.isEmpty()) { "A name stayed after the carried body was let go for $name: ${home.names}" }
         }
         val (index, at) = spot(name)
         val before = checkNotNull(mapDrawn()).pose
@@ -278,7 +309,10 @@ class MapModeSpaceRenderTest {
      * towards it while animations run, and stayed put with them off; a still,
      * mapmode-chosen-<look>-<light|dark>-<device>.png. On an idea's card, Show links
      * (requireShowLinks); a Neurons cell's card is a folder's, Fly in and no Show links. A finger
-     * held still past 0.55 s opens its options with the finger still down; one held and moved before then turns the camera and opens nothing. A tap on
+     * held still past 0.55 s opens its options with the finger still down. Held and moved before then,
+     * it picks the body up in Space and Neurons (requireDrag) and turns the camera in Performance,
+     * opening nothing; moved with its down, before the pick-up, it turns the camera in every look and
+     * moves no body (S05g2). A tap on
      * empty space lets it go, and the second of a double tap brings back the first view, [home]: in
      * Space the pose Recentre gave right after Got it, before any choice (the first view framed
      * without the card, S05d item 2); in Neurons the one framed above its card; in Performance the
@@ -319,17 +353,37 @@ class MapModeSpaceRenderTest {
         check(opened) { "A finger held still on a body opened no options for $name" }
         ui.pressBack()
         compose.waitUntil(10_000) { !shown(MapPanelTags.MENU) }
-        // held, then moved before the options: the camera turns, nothing opens
-        val (_, from) = spot(name)
-        val still = checkNotNull(mapDrawn()).pose
         val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop
-        compose.onNode(map).performTouchInput { down(from) }
-        SystemClock.sleep(300) // past the pick-up time, short of the options'
-        compose.onNode(map).performTouchInput { moveBy(Offset(slop * 4f, 0f)); moveBy(Offset(slop * 4f, 0f)); up() }
+        val menuClosed = checkNotNull(mapDrawn())
+        check(menuClosed.grabbed == -1 && menuClosed.moving == 0) { "A body held still to its options was not put back for $name: $menuClosed" }
+        if (look == "performance") {
+            // held, then moved before the options: Performance's hold is options only, so the camera turns, nothing opens
+            val (_, from) = spot(name)
+            val still = checkNotNull(mapDrawn()).pose
+            // past the pick-up time, short of the options', by the events' own times
+            compose.onNode(map).performTouchInput { down(from); advanceEventTime(300); moveBy(Offset(slop * 4f, 0f)); moveBy(Offset(slop * 4f, 0f)); up() }
+            compose.waitForIdle()
+            SystemClock.sleep(500)
+            check(!shown(MapPanelTags.MENU)) { "A hold that moved opened the options for $name" }
+            val after = checkNotNull(mapDrawn())
+            check(!same(still, after.pose)) { "A hold that moved did not turn the camera for $name" }
+            check(after.grabbed == -1 && after.moving == 0) { "A hold that moved picked a point up in Performance for $name: $after" }
+        } else {
+            // held, then moved before the options: the body chosen now (the hold chose the one held) is picked up and moved (S05g2)
+            val held = checkNotNull(mapDrawn()).chosen
+            check(held >= 0) { "No body chosen to pick up for $name: ${mapDrawn()}" }
+            requireDrag(held, "mapmode-drag-$look-$mode-$device", homes = look == "space" || !ValueAnimator.areAnimatorsEnabled())
+        }
+        // moved with its down, under the pick-up time: the camera turns in every look, and no body moves
+        val (_, quick) = spot(name)
+        val unturned = checkNotNull(mapDrawn()).pose
+        compose.onNode(map).performTouchInput { down(quick); moveBy(Offset(slop * 4f, 0f)); moveBy(Offset(slop * 4f, 0f)); up() }
         compose.waitForIdle()
         SystemClock.sleep(500)
-        check(!shown(MapPanelTags.MENU)) { "A hold that moved opened the options for $name" }
-        check(!same(still, checkNotNull(mapDrawn()).pose)) { "A hold that moved did not turn the camera for $name" }
+        check(!shown(MapPanelTags.MENU)) { "A quick move opened the options for $name" }
+        val quickly = checkNotNull(mapDrawn())
+        check(!same(unturned, quickly.pose)) { "A quick move did not turn the camera for $name" }
+        check(quickly.grabbed == -1 && quickly.moving == 0) { "A quick move moved a body for $name: $quickly" }
         // empty space: a tap lets it go, two bring back the first view, the one Recentre frames: the
         // first-run card's cover while it is up, the view without it once it is put away (S05d item 2)
         val turned = checkNotNull(mapDrawn()).pose
@@ -349,6 +403,84 @@ class MapModeSpaceRenderTest {
         check(same(doubled, recentred)) { "A double tap on empty space did not bring back Recentre's first view for $name: $doubled, Recentre $recentred" }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
+    }
+
+    /**
+     * S05g2 A3, hold to move on body [index], where its name shows it (it is chosen) or at [at]: a finger
+     * held 300 ms picks it up (MapDrawn.grabbed) and the camera stays; moved 8 slops in steps, the body
+     * follows to within 2 dp of the finger's move (MapDrawn.dragged), its offset kept, the camera still
+     * and no options; with [carries], a neighbour pulled or a member carried (carried ≥ 1); [member], a
+     * body inside it, chosen, its name showing, off its home in the world within 10 % of the held body's
+     * own offset once the finger has been still a moment (MapDrawn.chosenOffset against heldOffset), not
+     * 1.85 times it. The hold and the moves go in one input, 300 ms apart by the events' own times. A
+     * still, [still], mid-drag. Let go: no options, the card
+     * and the choice as they were, nothing off home within 30 s, and with [homes] (Space, or Neurons
+     * with animations off, where a home stays put) the body within 1 dp of where it was picked up.
+     */
+    private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true) {
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop.toFloat()
+        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.grabbed == -1 && it.moving == 0 } == true && (at != null || named(index) != null) } } catch (_: ComposeTimeoutException) {}
+        val from = at ?: checkNotNull(named(index)) { "Body $index shows no name to find it by for $still: ${mapDrawn()}" }
+        val memberFrom = member?.let { m -> checkNotNull(named(m)) { "The member $m shows no name to find it by for $still: ${mapDrawn()}" } }
+        val before = checkNotNull(mapDrawn())
+        val card = shown(MapPanelTags.PEEK)
+        val width = checkNotNull(mapNode()).boundsInRoot.width
+        val way = if (from.x > width / 2) -1f else 1f
+        val steps = 8
+        val tolerance = 2f * density
+        try {
+            // the hold and the moves in one go, 300 ms apart by the events' own times: past the pick-up, short of
+            // the options. Not picked up, the moves would turn the camera, which the pose check below catches
+            compose.onNode(map).performTouchInput { down(from); advanceEventTime(300); repeat(steps) { moveBy(Offset(way * slop, 0f)) } }
+            val start = from // the body is drawn where its name is found, and keeps its offset from the finger
+            val want = Offset(start.x + way * slop * steps, start.y)
+            fun near(d: List<Float>) = d.size == 2 && abs(d[0] - want.x) <= tolerance && abs(d[1] - want.y) <= tolerance
+            try { compose.waitUntil(10_000) { mapDrawn()?.dragged?.let(::near) == true } } catch (_: ComposeTimeoutException) {}
+            SystemClock.sleep(1_500) // the finger still: what it pulls or carries settles
+            val moved = checkNotNull(mapDrawn())
+            check(moved.grabbed == index) { "A finger held 300 ms on body $index did not pick it up for $still: $moved" }
+            check(near(moved.dragged)) {
+                "Body $index did not follow the finger to within 2 dp for $still: from $start, wanted $want, drawn ${moved.dragged}"
+            }
+            check(same(before.pose, moved.pose)) { "The drag turned the camera for $still: ${before.pose}, then ${moved.pose}" }
+            check(!shown(MapPanelTags.MENU)) { "The drag opened the options for $still" }
+            if (carries) check(moved.carried >= 1) { "Body $index pulled or carried nothing for $still: $moved" }
+            // the carry in the world, each body's own offset from its home, so neither's depth on screen counts
+            if (member != null) {
+                check(moved.chosen == member) { "The member $member is not the chosen body mid-drag for $still: $moved" }
+                val cell = moved.heldOffset; val inside = moved.chosenOffset
+                check(cell.size == 3 && inside.size == 3) { "No offsets for the cell ($cell) or the member ($inside) mid-drag for $still" }
+                val gap = sqrt(cell.indices.sumOf { ((inside[it] - cell[it]) * (inside[it] - cell[it])).toDouble() })
+                val own = sqrt(cell.sumOf { (it * it).toDouble() })
+                check(own > 0.0 && gap <= 0.1 * own) {
+                    "The member $member is off home by $inside while the cell is by $cell (within 10 % wanted) for $still"
+                }
+            }
+            shot(still)
+        } finally {
+            compose.onNode(map).performTouchInput { up() }
+        }
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        check(!shown(MapPanelTags.MENU)) { "The let-go opened the options for $still" }
+        check(shown(MapPanelTags.PEEK) == card) { "The let-go changed the card (up before: $card) for $still" }
+        check(mapDrawn()?.chosen == before.chosen) { "The drag changed the choice for $still: ${before.chosen}, now ${mapDrawn()?.chosen}" }
+        // nothing is kept: home again, with animations off as on CI critically damped, within 30 s
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.grabbed == -1 && it.moving == 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val home = checkNotNull(mapDrawn())
+        check(home.grabbed == -1 && home.moving == 0 && home.carried == 0) { "Bodies are still off home 30 s after the let-go for $still: $home" }
+        check(same(before.pose, home.pose)) { "The let-go moved the camera for $still" }
+        if (homes) {
+            val back = if (at != null && member == null) null else named(index)
+            if (back != null) check((back - from).getDistance() <= density) { "Body $index came back to $back, not within 1 dp of $from, for $still" }
+            if (member != null && memberFrom != null) {
+                val again = checkNotNull(named(member)) { "The member $member shows no name after the let-go for $still" }
+                check((again - memberFrom).getDistance() <= density) { "The member $member came back to $again, not within 1 dp of $memberFrom, for $still" }
+            }
+        }
     }
 
     /**
@@ -411,6 +543,20 @@ class MapModeSpaceRenderTest {
         val chosen = checkNotNull(mapDrawn())
         check(shown(MapPanelTags.PEEK) && chosen.chosen == index) { "The idea ${idea.title} ($index) inside the open cell is not chosen for $name: $chosen" }
         requireShowLinks("neurons", dark, index, chosen)
+        // S05g2 A3: the open cell, moved, carries what is inside it, the idea chosen there among it. The cell
+        // is chosen first, to find where it is drawn by its name, then the idea, whose name shows where it is
+        val cellIndex = open.ids.indexOfFirst { it.equals(cellId, ignoreCase = true) }
+        check(cellIndex >= 0) { "The open cell ($cellId) is not on the map for $name" }
+        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
+        compose.runOnIdle { open.tap(cellIndex) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == cellIndex && named(cellIndex) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        val cellAt = checkNotNull(named(cellIndex)) { "The open cell ($cellIndex) shows no name to find it by for $name: ${mapDrawn()}" }
+        compose.runOnIdle { open.tap(index) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == index && named(index) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000)
+        requireDrag(cellIndex, "mapmode-drag-cell-neurons-${if (dark) "dark" else "light"}-$device", carries = true, member = index,
+            at = cellAt, homes = !ValueAnimator.areAnimatorsEnabled())
         compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
         compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
         compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
@@ -476,6 +622,8 @@ class MapModeSpaceRenderTest {
             check(same(before, eased)) { "The camera moved with animations off for the chosen sun for $name: $before, then $eased" }
         }
         shot(name)
+        // S05g2 A3: under one single style the sun's links pull its neighbours as it moves
+        requireDrag(index, "mapmode-drag-sun-space-${if (dark) "dark" else "light"}-$device", carries = true, homes = true)
         compose.onNode(map).performTouchInput { click(emptySpot(name)) }
         compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
         chooseSpaceStyle("Universe", name)

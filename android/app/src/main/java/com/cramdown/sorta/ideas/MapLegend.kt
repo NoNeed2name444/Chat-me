@@ -43,21 +43,24 @@ object MapLegend {
      * How to touch Android's map, under the legend's rows and read by TalkBack after the map's own
      * label (GraphTheme.hint): a tap previews a body on its card, a second tap or Open reads it (a
      * folder's card says Open folder); Show links on an idea's card keeps its own links (Space,
-     * Neurons) or brightens them (Performance) and All links brings the rest back (S05g); a body
-     * held still opens its options while the finger is down; a tap on empty space closes the card
-     * and two bring back the whole map; in Neurons, Fly in on a cell's or part's card opens it and
-     * Recentre closes it; one finger turns, two slide, a pinch zooms. One idea a sentence, in the
-     * card's words (map_touch_again, map_peek_show_links, map_peek_all_links). No move: hold to
-     * move is S05g2's.
+     * Neurons) or brightens them (Performance) and All links brings the rest back (S05g); in Space
+     * and Neurons a body held, then dragged, moves and springs back when let go, a cell carrying
+     * what is inside it (S05g2, after iOS's GraphTheme.swift:99 and :102 and GraphLegend.swift:310);
+     * a body held still opens its options while the finger is down; a tap on empty space closes the
+     * card and two bring back the whole map; in Neurons, Fly in on a cell's or part's card opens it
+     * and Recentre closes it; one finger turns, two slide, a pinch zooms. One idea a sentence, in the
+     * card's words (map_touch_again, map_peek_show_links, map_peek_all_links).
      */
     fun touchHelp(theme: GraphTheme): String = when (theme) {
         GraphTheme.SPACE -> "Tap a body to preview its idea on a card. Tap again or Open to read it. " +
             "Show links on the card keeps only that idea’s links and dims the rest. All links brings everything back. " +
+            "Hold a body, then drag to move it. Let go and it springs back. " +
             "Hold a body still to see its options. Tap empty space to close the card, or twice for the whole map. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.NEURONS -> "Tap a cell, a part or an idea to preview it on a card. Tap again or Open to read an idea, or Open folder for a folder. " +
             "On a cell’s or part’s card, Fly in opens it on the map. Recentre closes it again. " +
             "Show links on an idea’s card keeps only that idea’s links and dims the rest. All links brings everything back. " +
+            "Hold a body, then drag to move it. Move a cell and everything inside it follows. Let go and it springs back. " +
             "Hold a body still to see its options. Tap empty space to close the card, or twice for the whole map. " +
             "Drag to turn, two fingers to slide, pinch to zoom."
         GraphTheme.PERFORMANCE -> "Tap a point to preview its idea on a card. Tap again or Open to read it. " +

@@ -272,11 +272,11 @@
     <string name="map_link_shorter">Shorter</string>
     <string name="map_link_longer">Longer</string>
     <string name="map_link_done">Done</string>
-    <!-- The first-run card (iOS GraphUniverseHint): Android's own touch lines, since a body can't be held to move -->
+    <!-- The first-run card (iOS GraphUniverseHint): Android's own touch lines; the hold line is iOS's (coachLines) -->
     <string name="map_touch_title">Touching the map</string>
     <string name="map_touch_tap">Tap to preview</string>
     <string name="map_touch_again">Tap again or Open to read</string>
-    <string name="map_touch_hold">Hold for options</string>
+    <string name="map_touch_hold">Hold to move or for options</string>
     <string name="map_touch_full_list">Full list</string>
     <string name="map_touch_got_it">Got it</string>
     <!-- The hint over a map with no folders yet (iOS GraphEmptyHint), by theme -->

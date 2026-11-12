@@ -62,6 +62,37 @@ class MapDrawnTest {
         assertEquals(8, straight.after(4, 3_000, 8, 40, true).links)
     }
 
+    @Test fun theHeldBodyIsHandedOnWhenItChanges() {
+        // S05g2: nothing held at first, and the record says so
+        val start = MapDrawn(build = 3)
+        assertEquals(-1, start.grabbed); assertTrue(start.dragged.isEmpty()); assertEquals(0, start.moving); assertEquals(0, start.carried)
+        assertSame("nothing held, nothing moving: the same record", start, start.dragging(-1, emptyList(), 0, 0))
+        // body 7 picked up at (420, 980), nothing else off home yet
+        val held = start.dragging(7, listOf(420f, 980f), 1, 0)
+        assertEquals(7, held.grabbed); assertEquals(listOf(420f, 980f), held.dragged); assertEquals(1, held.moving); assertEquals(0, held.carried)
+        assertEquals("the rest kept", 3, held.build)
+        assertSame(held, held.dragging(7, listOf(420f, 980f), 1, 0))
+        // moved: its spot follows, and a neighbour is pulled
+        val moved = held.dragging(7, listOf(500f, 940f), 2, 1)
+        assertEquals(listOf(500f, 940f), moved.dragged); assertEquals(2, moved.moving); assertEquals(1, moved.carried)
+        // let go: none held, both still off home until they spring back
+        val free = moved.dragging(-1, emptyList(), 2, 2)
+        assertEquals(-1, free.grabbed); assertTrue(free.dragged.isEmpty()); assertEquals(2, free.carried)
+        val home = free.dragging(-1, emptyList(), 0, 0)
+        assertEquals(0, home.moving)
+        assertEquals("frames still count the same way", home.frames, home.after(4, 100).frames - 1)
+        // the marks and the held body are separate records: one never clears the other
+        val both = home.marking(5, true, 2, false, 0, 0).dragging(7, listOf(1f, 2f), 1, 0)
+        assertEquals(5, both.chosen); assertEquals(7, both.grabbed)
+        assertEquals(5, both.dragging(-1, emptyList(), 0, 0).chosen)
+        // the held body's own offset and the chosen one's, in the world: a carry read whatever the depth
+        val carrying = both.dragging(7, listOf(1f, 2f), 2, 1, listOf(0.5f, 0f, -0.25f), listOf(0.45f, 0f, -0.2f))
+        assertEquals(listOf(0.5f, 0f, -0.25f), carrying.heldOffset); assertEquals(listOf(0.45f, 0f, -0.2f), carrying.chosenOffset)
+        assertSame(carrying, carrying.dragging(7, listOf(1f, 2f), 2, 1, listOf(0.5f, 0f, -0.25f), listOf(0.45f, 0f, -0.2f)))
+        val homeAgain = carrying.dragging(-1, emptyList(), 0, 0)
+        assertTrue("home, no offsets", homeAgain.heldOffset.isEmpty() && homeAgain.chosenOffset.isEmpty())
+    }
+
     @Test fun anIdleMapStopsAfterAQuietSecondWithThreeFramesFinished() {
         val second = 1_000_000_000L
         // a phone: three frames inside the first 50 ms, so the quiet second decides
