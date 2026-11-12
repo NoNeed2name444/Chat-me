@@ -18,10 +18,13 @@ import androidx.compose.ui.test.performTouchInput
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.MapLook
+import com.cramdown.sorta.ui.map.MapDrawnKey
 import com.cramdown.sorta.ui.map.MapTap
 import com.cramdown.sorta.ui.map.MapTapKey
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +49,8 @@ import java.time.Duration
 // body's index in the scene. From there it is the app's own path: IdeasSpace's NotesMap makes the
 // MapBody, MapSelection decides at the clock's time (SystemClock.uptimeMillis, which these tests move
 // on where a second tap must come after the double tap's gap), and the card is the one the screen
-// shows. What this can't do: a hit test on drawn bodies, and a hold on a body (the map hears a hold
+// shows. A rename, then Show links, builds the map again with the idea still chosen: the map's
+// MapChoiceCue (on MapTapKey too) counts no new tick, pop or ease for it, and the camera stays. What this can't do: a hit test on drawn bodies, and a hold on a body (the map hears a hold
 // only with a body hit); the empty tap is a real touch, judged by Map3DView's own gesture, which
 // stands under the no-GL words too.
 @RunWith(RobolectricTestRunner::class)
@@ -196,4 +200,46 @@ class MapPeekCardTest {
         run.until { !shown(NAME_SHEET_TAG) }
         run.until { stored().firstOrNull { it.id == gate.id }?.title == "Oil the gate latch" }
     }
+
+    @Test fun aRebuildWithTheSameChoiceNeitherTicksEasesNorPops() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        // the Select: one tick (and the pop the renderer is cued for with it) and one ease
+        run.until { tapper()?.cue?.let { it.ticks == 1 && it.eases == 1 } == true }
+        val first = checkNotNull(tapper())
+        val cue = checkNotNull(first.cue)
+        // renamed through its options: the store changes and the map is built again, the idea still chosen
+        option(words.rename)
+        run.until { shown(NAME_SHEET_TAG) }
+        val field = run.field(s(R.string.map_rename_idea_field))
+        field.performTextClearance()
+        field.performTextInput("Oil the gate latch")
+        compose.onNode(hasText(s(R.string.name_rename)) and hasAnyAncestor(hasTestTag(NAME_SHEET_TAG))).performClick()
+        cardFor("Oil the gate latch")
+        // the map is built again with the new title at its next composition (here Show links'), the idea still chosen
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).performClick()
+        run.until { tapper()?.let { it.build != first.build } == true }
+        cardFor("Oil the gate latch")
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.allLinks))
+        val rebuilt = checkNotNull(tapper())
+        assertSame("one cue for the map, kept over its scenes", cue, rebuilt.cue)
+        val pose = drawnPose()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("no tick and no pop for the same choice", 1, cue.ticks)
+        assertEquals("no ease for the same choice", 1, cue.eases)
+        assertEquals("the camera stays", pose, drawnPose())
+        // a new choice still cues: empty space lets it go, a tap chooses it again
+        ShadowSystemClock.advanceBy(Duration.ofMillis(400))
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        run.until { !shown(MapPanelTags.PEEK) }
+        ShadowSystemClock.advanceBy(Duration.ofMillis(400))
+        tapBody(gate.id)
+        cardFor("Oil the gate latch")
+        run.until { cue.ticks == 2 && cue.eases == 2 }
+    }
+
+    private fun drawnPose(): List<Float> =
+        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
 }

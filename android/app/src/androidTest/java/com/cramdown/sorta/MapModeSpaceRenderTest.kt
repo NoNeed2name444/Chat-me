@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.view.ViewConfiguration
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -20,10 +21,14 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.uiautomator.UiDevice
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
@@ -38,6 +43,8 @@ import com.cramdown.sorta.ui.ideas.MapPanelTags
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
+import com.cramdown.sorta.ui.map.MapTapKey
+import com.cramdown.sorta.ui.ward.WardSpace
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -72,10 +79,13 @@ import kotlin.math.max
  * each, mapmode-named-<space|neurons>-<light|dark>-<device>.png.
  *
  * S05g: the first run's card shows Space's steps (mapmode-card-steps-<light|dark>-<device>.png); in
- * Space and Neurons the body requireNames chose is marked and Show links fades the rest (stills
- * mapmode-chosen-<look>-... and mapmode-links-<look>-...), a hold opens the options with the finger
- * down, and a double tap on empty space brings back the first view (requireChoice). Performance is
- * not reached here: the map reports no spot there (it shows no names), so no body can be tapped.
+ * Space and Neurons the body requireNames chose is marked and Show links fades the rest, and in
+ * Performance, chosen after Neurons, a point tapped at the map's spot is marked and Show links brings
+ * out its own links, fading no point (stills mapmode-chosen-<look>-... and mapmode-links-<look>-...);
+ * in each a hold opens the options with the finger down, and a double tap on empty space brings back
+ * the first view, Recentre's (requireChoice). Each legend, scrolled to its end, ends its touch help
+ * the sheet's foot above its bottom, which is above the navigation bar (requireLegendFoot, a still
+ * mapmode-legend-foot-<theme>-...).
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -154,7 +164,7 @@ class MapModeSpaceRenderTest {
         // S05f: Space's names, at rest, under a finger and for a chosen body
         val (spaceChosen, spaceBefore) = requireNames("space", dark, press = true)
         // S05g A3: the chosen body's mark, Show links, the hold and the empty double tap
-        requireChoice("space", dark, spaceChosen, spaceBefore, home = pose)
+        requireChoice("space", dark, spaceChosen, spaceBefore, home = null)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -176,6 +186,30 @@ class MapModeSpaceRenderTest {
         // S05f: Neuron's names, at rest and for a chosen body
         val (neuronsChosen, neuronsBefore) = requireNames("neurons", dark, press = false)
         requireChoice("neurons", dark, neuronsChosen, neuronsBefore, home = neuronsHome)
+        // S05g A3: Performance, chosen after Neurons, shows no first-run card; a tap on a point
+        // chooses it, and the same marks, Show links, hold and double tap as the other looks
+        compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.PERFORMANCE.identifier)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasTestTag(MapLook.PERFORMANCE.identifier)).performClick()
+        compose.waitUntil(30_000) {
+            mapNode()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith(GraphTheme.PERFORMANCE.mapLabel) } == true
+        }
+        // its scene is built off the main thread too: it is Performance's once the camera looks down at Space's angle again
+        compose.waitUntil(30_000) { mapDrawn()?.pose?.getOrNull(5)?.let { abs(it - pose[5]) <= 1e-3f } == true }
+        // Performance draws points, no Space bodies, so its frames count without them
+        try { compose.waitUntil(60_000) { mapDrawn()?.let { it.frames >= MapDrawn.ENOUGH && it.box.size == 4 } == true } } catch (_: ComposeTimeoutException) {}
+        val performance = "mapmode-chosen-performance-${if (dark) "dark" else "light"}-$device"
+        val drawnPerformance = mapDrawn()
+        check(drawnPerformance != null && drawnPerformance.frames >= MapDrawn.ENOUGH && drawnPerformance.box.size == 4) {
+            "Map mode's Performance has not finished ${MapDrawn.ENOUGH} frames with its points (waited up to a minute) for $performance: $drawnPerformance"
+        }
+        check(!shown(MapPanelTags.HINT)) { "Performance shows a first-run card for $performance" }
+        val performanceHome = drawnPerformance.pose
+        val (performanceChosen, at) = spot(performance)
+        compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(at) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK)) { "A tap on a point brought up no card for $performance" }
+        requireChoice("performance", dark, performanceChosen, performanceHome, home = performanceHome)
     }
 
     /**
@@ -223,9 +257,12 @@ class MapModeSpaceRenderTest {
      * neighbourhood, keeps its lit links and reads All links: a still, mapmode-links-<look>-....
      * All links brings everything back. A finger held still past 0.55 s opens its options with the
      * finger still down; one held and moved before then turns the camera and opens nothing. A tap on
-     * empty space lets it go, and the second of a double tap brings back the first view, [home].
+     * empty space lets it go, and the second of a double tap brings back the first view: the one
+     * Recentre frames, and [home] where it is known (the first-run card still up, as in Neurons;
+     * after Space's Got it the first view is framed without the card, S05d item 2, which no pose
+     * taken before it shows).
      */
-    private fun requireChoice(look: String, dark: Boolean, index: Int, before: List<Float>, home: List<Float>) {
+    private fun requireChoice(look: String, dark: Boolean, index: Int, before: List<Float>, home: List<Float>?) {
         val mode = if (dark) "dark" else "light"
         val name = "mapmode-chosen-$look-$mode-$device"
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
@@ -246,7 +283,14 @@ class MapModeSpaceRenderTest {
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_show_links))).performClick()
         try { compose.waitUntil(10_000) { mapDrawn()?.focus == true } } catch (_: ComposeTimeoutException) {}
         val focused = checkNotNull(mapDrawn())
-        check(focused.focus && focused.chosen == index && focused.faded > 0) { "Show links faded nothing for $name: $focused" }
+        if (look == "performance") {
+            // Performance steps the other links back and fades no point (GraphPerfShaders): its own links drawn, nothing counted faded
+            val id = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)).ids[index]
+            val linked = notes.any { n -> (n.id == id && n.links.isNotEmpty()) || id in n.links }
+            check(focused.focus && focused.chosen == index && focused.faded == 0 && (!linked || focused.focusLinks > 0)) {
+                "Show links did not bring out the chosen point's own links (linked: $linked) or faded a point for $name: $focused"
+            }
+        } else check(focused.focus && focused.chosen == index && focused.faded > 0) { "Show links faded nothing for $name: $focused" }
         check(focused.lit == chosen.lit && focused.focusLinks >= focused.lit) { "Show links lost the chosen body's lit links for $name: $chosen, then $focused" }
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_all_links)))
         shot("mapmode-links-$look-$mode-$device")
@@ -275,12 +319,23 @@ class MapModeSpaceRenderTest {
         SystemClock.sleep(500)
         check(!shown(MapPanelTags.MENU)) { "A hold that moved opened the options for $name" }
         check(!same(still, checkNotNull(mapDrawn()).pose)) { "A hold that moved did not turn the camera for $name" }
-        // empty space: a tap lets it go, two bring back the first view
+        // empty space: a tap lets it go, two bring back the first view, the one Recentre frames: the
+        // first-run card's cover while it is up, the view without it once it is put away (S05d item 2)
+        val turned = checkNotNull(mapDrawn()).pose
         val empty = emptySpot(name)
         compose.onNode(map).performTouchInput { doubleClick(empty) }
-        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && same(home, checkNotNull(mapDrawn()).pose) } } catch (_: ComposeTimeoutException) {}
+        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && !same(turned, checkNotNull(mapDrawn()).pose) } } catch (_: ComposeTimeoutException) {}
         check(!shown(MapPanelTags.PEEK)) { "A tap on empty space left the card up for $name" }
-        check(same(home, checkNotNull(mapDrawn()).pose)) { "A double tap on empty space did not bring back the first view for $name: $home, now ${mapDrawn()?.pose}" }
+        SystemClock.sleep(500)
+        compose.waitForIdle()
+        val doubled = checkNotNull(mapDrawn()).pose
+        check(!same(turned, doubled)) { "A double tap on empty space left the turned camera where it was for $name: $turned" }
+        if (home != null) check(same(home, doubled)) { "A double tap on empty space did not bring back the first view for $name: $home, now $doubled" }
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        val recentred = checkNotNull(mapDrawn()).pose
+        check(same(doubled, recentred)) { "A double tap on empty space did not bring back Recentre's first view for $name: $doubled, Recentre $recentred" }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
     }
@@ -319,9 +374,45 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(10_000) { shown(sheet) }
         SystemClock.sleep(1_000) // the sheet comes to rest
         shot("mapmode-legend-${theme.rawValue}-${if (dark) "dark" else "light"}-$device")
+        requireLegendFoot(theme, dark)
         ui.pressBack()
         compose.waitUntil(10_000) { !shown(sheet) }
         compose.waitForIdle()
+    }
+
+    /**
+     * S05g A2: the legend opened full and scrolled to its end, its last line (the touch help) ends
+     * the sheet's foot (xl) above the sheet's bottom, and that bottom is above the navigation bar's
+     * top: on a phone the bar, on a tablet the sheet's foot over the taskbar. The sheet keeps its
+     * content above the bar itself (Material3 pads it by safeDrawing's bottom), so the legend adds
+     * only the foot. A still, mapmode-legend-foot-<theme>-<light|dark>-<device>.png.
+     */
+    private fun requireLegendFoot(theme: GraphTheme, dark: Boolean) {
+        val name = "mapmode-legend-foot-${theme.rawValue}-${if (dark) "dark" else "light"}-$device"
+        val legend = compose.onNode(hasTestTag(MapPanelTags.legend(theme)))
+        // a phone's sheet opens at half height: a swipe up takes it full, then the column to its end
+        legend.performTouchInput { swipeUp() }
+        SystemClock.sleep(800)
+        if (SemanticsActions.ScrollBy in legend.fetchSemanticsNode().config) legend.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        compose.waitForIdle()
+        SystemClock.sleep(800)
+        val touch = compose.onNode(hasTestTag(MapPanelTags.LEGEND_TOUCH)).fetchSemanticsNode()
+        val sheet = legend.fetchSemanticsNode()
+        val lastLine = touch.positionOnScreen.y + touch.size.height
+        val foot = sheet.positionOnScreen.y + sheet.size.height
+        var barTop = Float.NaN
+        var bar = 0
+        checkNotNull(scenario).onActivity { activity ->
+            val decor = activity.window.decorView
+            val at = IntArray(2).also { decor.getLocationOnScreen(it) }
+            bar = ViewCompat.getRootWindowInsets(decor)?.getInsets(WindowInsetsCompat.Type.navigationBars())?.bottom ?: 0
+            barTop = (at[1] + decor.height - bar).toFloat()
+        }
+        val xl = WardSpace.xl.toFloat() * instrumentation.targetContext.resources.displayMetrics.density
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: the last line ends at $lastLine, the sheet's content at $foot, the navigation bar ($bar px) starts at $barTop")
+        shot(name)
+        check(lastLine + xl <= foot + 1f) { "The legend's last line does not end the foot ($xl px) above the sheet's bottom for $name: it ends at $lastLine, the sheet at $foot" }
+        check(foot <= barTop + 1f) { "The legend's sheet runs under the navigation bar for $name: its content ends at $foot, the bar starts at $barTop" }
     }
 
     /** The map's spot: a body's index and its centre, in the map's own pixels. */

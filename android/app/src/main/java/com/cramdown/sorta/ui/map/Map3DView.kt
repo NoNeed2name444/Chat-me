@@ -91,6 +91,7 @@ import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.LinkMemory
 import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.CameraMove
+import com.cramdown.sorta.map.MapChoiceCue
 import com.cramdown.sorta.map.MapCameraEase
 import com.cramdown.sorta.map.MapCardCover
 import com.cramdown.sorta.map.MapTouch
@@ -223,7 +224,7 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
  * body is on screen to hit, and MapPeekCardTest taps through this. A key of its own, as
  * [MapDrawnKey]: accessibility services do not read it.
  */
-class MapTap(val ids: List<String>, val tap: (Int) -> Unit)
+class MapTap(val ids: List<String>, val tap: (Int) -> Unit, val build: Int = 0, val cue: MapChoiceCue? = null)
 val MapTapKey = SemanticsPropertyKey<MapTap>("MapTap")
 var SemanticsPropertyReceiver.mapTap by MapTapKey
 
@@ -332,6 +333,9 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     val framedCover = remember(home) { floatArrayOf(0f) }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    // the choice's tick, pop and ease, once per Select: kept over every scene this map shows, so a
+    // map built again with the same choice replays none of them (S05g)
+    val cue = remember { MapChoiceCue(ease?.serial ?: 0) }
     val renderer = remember(scene) {
         val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
         // only the links new since the scene on screen grow in; every link when there is none (LinkMemory)
@@ -346,7 +350,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
-        )
+        ).also { it.cues = cue.ticks }
     }
     val gles3 = remember(context) { supportsGles3(context) }
     val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
@@ -372,20 +376,25 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
     val linksShown = linksId != null && chosenIndex >= 0
     val hostView = LocalView.current
-    val ticked = remember(scene) { intArrayOf(-1) }
-    LaunchedEffect(renderer, chosenIndex, linksShown) {
+    val serial = ease?.serial ?: 0
+    LaunchedEffect(renderer, chosenIndex, linksShown, serial) {
         renderer.chosen = chosenIndex
         renderer.linksShown = linksShown
+        // a body chosen by a Select: iOS's light tick (syncChoice), Android's lightest, kept to the
+        // person's haptics setting, and the pop; a scene built again with the choice kept does neither
+        if (cue.tick(serial, chosenIndex >= 0)) {
+            renderer.cues = cue.ticks
+            hostView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        }
         loop.moved()
-        // a body chosen: iOS's light tick (syncChoice), Android's lightest, kept to the person's haptics setting
-        if (chosenIndex >= 0 && ticked[0] != chosenIndex) hostView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-        ticked[0] = chosenIndex
     }
     // the camera's ease towards a chosen body, frame by frame, until done or a finger comes down
     // (Graph3DView.ease): with animations off a tap moves nothing and a chip's glide lands at once
     val touches = remember(scene) { intArrayOf(0) }
     val easeLively = remember(scene) { android.animation.ValueAnimator.areAnimatorsEnabled() }
     LaunchedEffect(renderer, ease) {
+        // once per Select: a scene built again leaves the camera where it is
+        if (!cue.ease(ease?.serial ?: 0)) return@LaunchedEffect
         val ask = ease ?: return@LaunchedEffect
         if (!ask.glide && !easeLively) return@LaunchedEffect
         val index = scene.indexOf(ask.id) ?: return@LaunchedEffect
@@ -520,10 +529,10 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                 viewSize.width.toFloat(), MapNameShow.EDGE_DP * density.density) to look
         }
     }
-    // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card. Only
-    // the tests read it, so it is found where the semantics are, in one pass with no lists made
+    // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card, in
+    // every theme (Performance's too, S05g). Only the tests read it, so it is found where the
+    // semantics are, in one pass with no lists made
     fun spot(): List<Float> {
-        if (!pills) return emptyList()
         val margin = with(density) { 48.dp.toPx() }
         val right = viewSize.width - margin
         val high = insets.top + margin
@@ -542,7 +551,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
         }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
         val tapped = onTap
-        if (tapped != null) mapTap = MapTap(scene.ids) { tapped(it) }
+        if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it) }, scene.build, cue)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
         val slop = LocalViewConfiguration.current.touchSlop

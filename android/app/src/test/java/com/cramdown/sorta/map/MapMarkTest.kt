@@ -138,7 +138,7 @@ class MapMarkTest {
         pop.kick()
         assertEquals(3.2f, pop.velocity, 0f)
         assertEquals(0.45f, pop.bloom, 0f)
-        assertEquals("iOS's glow 0.85 + 0.35 × bloom, over its resting 0.85", (0.85f + 0.35f * 0.45f) / 0.85f, pop.glow, eps)
+        assertEquals("iOS's glow min(0.85 + 0.35 × bloom, 1), over its resting 0.85", 1f / 0.85f, pop.glow, eps)
         assertEquals("and its swell 1 + 0.6 × bloom", 1.27f, pop.swell, eps)
         var peak = 1f; var low = 1f; var t = 0f
         while (t < 1.2f) { pop.step(1f / 60); t += 1f / 60; peak = maxOf(peak, pop.scale); low = minOf(low, pop.scale) }
@@ -156,6 +156,69 @@ class MapMarkTest {
         repeat(6) { a.step(1f / 60) }
         repeat(12) { b.step(1f / 120) }
         assertEquals(a.scale, b.scale, 2e-3f)
+    }
+
+    @Test fun theGlowIsCappedAtOneAsIOSs() {
+        // GraphMotion.swift:2091-2092: min(base × glowGain, 1), base 0.85 + 0.35 × bloom at rest of motion
+        val pop = MapPop(lively = true)
+        pop.kick()
+        assertEquals("the full bloom (0.85 + 0.1575) reaches the cap", 1f / 0.85f, pop.glow, eps)
+        while (pop.bloom > 0.15f / 0.35f * 0.999f) pop.step(1f / 240)
+        // under the cap's bloom (0.15 / 0.35) the glow follows the bloom again
+        repeat(24) { pop.step(1f / 240) }
+        assertEquals((0.85f + 0.35f * pop.bloom) / 0.85f, pop.glow, eps)
+        assertTrue("under the cap now: ${pop.glow}", pop.glow < 1f / 0.85f)
+        repeat(2_400) { pop.step(1f / 240) }
+        assertEquals("1 at rest", 1f, pop.glow, eps)
+    }
+
+    // ---- once per Select (MapChoiceCue, MapChoiceMotion) ----
+
+    @Test fun aChoiceTicksAndEasesOncePerSelectNotPerRebuild() {
+        // a map first shown with Select 3 already made: nothing replays
+        val cue = MapChoiceCue(3)
+        assertFalse("no tick for the Select it was shown with", cue.tick(3, chosen = true))
+        assertFalse("no ease for it", cue.ease(3))
+        // a new Select: one tick, one ease
+        assertTrue(cue.tick(4, chosen = true)); assertTrue(cue.ease(4))
+        // the scene built again with the same choice (a rename): the effects run again with the same serial
+        assertFalse("a rebuild does not tick", cue.tick(4, chosen = true))
+        assertFalse("a rebuild does not ease", cue.ease(4))
+        assertEquals(1, cue.ticks); assertEquals(1, cue.eases)
+        // a Select of a body the scene does not hold yet: no tick, and none later for the same Select
+        assertFalse(cue.tick(5, chosen = false))
+        assertFalse(cue.tick(5, chosen = true))
+        // no choice (another look: no ease), then a new Select ticks and eases
+        assertFalse(cue.ease(0))
+        assertTrue(cue.tick(6, chosen = true)); assertTrue(cue.ease(6))
+        assertEquals(2, cue.ticks); assertEquals(2, cue.eases)
+    }
+
+    @Test fun aRendererBuiltAgainDrawsTheSameChoiceAtRest() {
+        // the renderer that drew the Select: kicked once, the ring grown in from 0
+        val drawn = MapChoiceMotion(lively = true, pops = true, cues = 0)
+        drawn.step(chosen = 2, cues = 1, dt = 1f / 60)
+        assertEquals(1, drawn.kicks)
+        assertTrue("it pops", drawn.pop.moving)
+        assertTrue("the ring closes in", drawn.orbitGrow < 1f)
+        // the next scene's renderer, the same choice and the cues it was made with: at rest at once
+        val rebuilt = MapChoiceMotion(lively = true, pops = true, cues = 1)
+        repeat(10) { rebuilt.step(chosen = 5, cues = 1, dt = 1f / 60) }
+        assertEquals("no pop on a rebuild", 0, rebuilt.kicks)
+        assertFalse(rebuilt.pop.moving)
+        assertEquals("the ring whole", 1f, rebuilt.orbitGrow, 0f)
+        assertEquals(1f, rebuilt.pop.scale, 0f)
+        // a new cue there kicks it; the choice cleared puts it at rest
+        rebuilt.step(chosen = 5, cues = 2, dt = 1f / 60)
+        assertEquals(1, rebuilt.kicks)
+        assertTrue(rebuilt.pop.moving)
+        rebuilt.step(chosen = -1, cues = 2, dt = 0f)
+        assertFalse(rebuilt.pop.moving)
+        assertEquals(1f, rebuilt.orbitGrow, 0f)
+        // with animations off a cue counts but nothing moves and the ring is whole at once
+        val still = MapChoiceMotion(lively = false, pops = false, cues = 0)
+        still.step(chosen = 1, cues = 1, dt = 1f / 60)
+        assertEquals(1, still.kicks); assertFalse(still.pop.moving); assertEquals(1f, still.orbitGrow, 0f)
     }
 
     @Test fun withAnimationsOffThereIsNoPop() {

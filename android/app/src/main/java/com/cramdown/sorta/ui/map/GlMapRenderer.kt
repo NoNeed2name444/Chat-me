@@ -12,6 +12,7 @@ import com.cramdown.sorta.map.GuardBand
 import com.cramdown.sorta.map.LinkGrowth
 import com.cramdown.sorta.map.LinkRecall
 import com.cramdown.sorta.map.LodSelector
+import com.cramdown.sorta.map.MapChoiceMotion
 import com.cramdown.sorta.map.MapFocus
 import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.MapPalette
@@ -99,8 +100,8 @@ data class MapDrawn(
     val straight: Boolean = false,
     /**
      * Added by Map3DView too (S05f): the names on show in Space and Neurons, and [spot], a body a test
-     * can put a finger on: the biggest crisp body clear of the chrome, as its index, centre x and y in
-     * the view's pixels (empty when none is). No words.
+     * can put a finger on, in every theme (Performance's since S05g): the biggest crisp body clear of
+     * the chrome, as its index, centre x and y in the view's pixels (empty when none is). No words.
      */
     val names: List<MapDrawnName> = emptyList(),
     val spot: List<Float> = emptyList(),
@@ -332,9 +333,15 @@ class GlMapRenderer(
     @Volatile var chosen: Int = -1
     /** Show links: only the chosen body's links, the rest faded (focusLinks). */
     @Volatile var linksShown: Boolean = false
-    private val pop = MapPop(lively && theme != MapTheme.PLAIN)
-    private var orbitGrow = 1f
-    private var poppedFor = -1
+    /**
+     * How many choices the page has cued (MapChoiceCue.tick): a new count pops the chosen body and
+     * grows its ring in. Set before [chosen] is read by a frame, a new renderer takes it as seen.
+     */
+    @Volatile var cues: Int = 0
+    private var motion: MapChoiceMotion? = null
+    private val pop get() = motion?.pop ?: restingPop
+    private val restingPop = MapPop(false)
+    private val orbitGrow get() = motion?.orbitGrow ?: 1f
     private var focusedChosen = -1
     private var focusedShown = false
     /** The chosen node in chunk order this frame, −1 for none; and the neighbourhood, chunk order, sorted, under Show links. */
@@ -541,21 +548,17 @@ class GlMapRenderer(
     private fun markedChosen(): Int = focusedChosen
 
     /**
-     * Each frame: a new choice kicks the pop and grows the orbit ring in from 1.35 (at once with
-     * animations off), and a new choice or Show links works out the neighbourhood again; then the
-     * pop and the ring step [dt] seconds.
+     * Each frame: a new cue kicks the pop and grows the orbit ring in from 1.35 (at once with
+     * animations off), a new choice or Show links works out the neighbourhood again, and the pop and
+     * the ring step [dt] seconds (MapChoiceMotion). A scene built again keeps the choice at rest.
      */
     private fun stepChoice(dt: Float) {
         val wanted = chosen.takeIf { it in 0 until sceneCount } ?: -1
         val show = linksShown
-        if (wanted != poppedFor) {
-            poppedFor = wanted
-            pop.reset()
-            if (wanted >= 0) { pop.kick(); orbitGrow = MapMark.orbitStart(lively) }
-        }
+        val cued = cues
+        val m = motion ?: MapChoiceMotion(lively, lively && theme != MapTheme.PLAIN, cued).also { motion = it }
+        m.step(wanted, cued, dt)
         if (wanted != focusedChosen || show != focusedShown) refocus(wanted, show)
-        pop.step(dt)
-        orbitGrow = MapMark.orbitGrow(orbitGrow, dt)
         bodies?.chosenScale = pop.scale
         neuronGl?.let { it.chosenScale = pop.scale; it.chosenGlow = pop.glow; it.chosenSwell = pop.swell }
     }
@@ -745,25 +748,27 @@ class GlMapRenderer(
 
     /** Clears the old neighbourhood's texels and writes the new one's, a texel each (Space, Show links). */
     private fun writeFocusMask(near: IntArray) {
-        if (focusTexture == 0) {
-            // no context yet: the bytes are kept and uploaded with the texture
-            for (node in focusTexels) if (node in focusMask.indices) focusMask[node] = 0
-            for (node in near) if (node in focusMask.indices) focusMask[node] = -1
-            focusTexels = near
-            return
-        }
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        // the bytes first, and the rows they touch; then those rows go up in one call, so a body with
+        // thousands of links costs one upload, not one a link
+        var low = Int.MAX_VALUE; var high = -1
         fun texel(node: Int, value: Byte) {
             if (node !in focusMask.indices) return
             focusMask[node] = value
-            maskTexel.clear(); maskTexel.put(value).flip()
-            GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, node % 1024, node / 1024, 1, 1, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, maskTexel)
+            val row = node / 1024
+            if (row < low) low = row
+            if (row > high) high = row
         }
         for (node in focusTexels) texel(node, 0)
         for (node in near) texel(node, -1)
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
         focusTexels = near
+        // no context yet: the bytes are kept and uploaded with the texture
+        if (focusTexture == 0 || high < 0) return
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, focusTexture)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        val rows = high - low + 1
+        GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, 0, 0, low, 1024, rows, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE,
+            ByteBuffer.wrap(focusMask, low * 1024, rows * 1024))
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
     }
 
     /** Hides the points of the nodes that became bodies and shows the ones that stopped, a texel each. */
@@ -1057,10 +1062,9 @@ void main() {
     float shade = mix(1.0, 0.45 + 0.55 * z + 0.35 * pow(max(0.0, dot(normalize(vec3(c, z)), normalize(vec3(-0.4, 0.5, 0.8)))), 12.0), smoothstep(3.0, 10.0, vSize));
     float halo = glow * 0.55 * exp(-r2 * 5.0);
     vec3 col = vColor * (core * shade * 0.9 + halo);
-    // the chosen point's white band, over its core's radius (perf_body_fragment)
+    // the chosen point's white band, over the whole disc's radius, as perf_body_fragment places it
     if (vRing > 0.5) {
-        float rc = r / coreR;
-        col = mix(col, vec3(1.0), smoothstep(0.66, 0.74, rc) * (1.0 - smoothstep(0.86, 0.94, rc)));
+        col = mix(col, vec3(1.0), smoothstep(0.66, 0.74, r) * (1.0 - smoothstep(0.86, 0.94, r)));
     }
     fragColor = vec4(col, 1.0);
 }

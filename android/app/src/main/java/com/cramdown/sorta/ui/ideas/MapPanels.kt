@@ -101,6 +101,9 @@ object MapPanelTags {
     /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
     const val TOP_STRIP = "mapTopStrip"
 
+    /** The legend's touch help, its last line (S05g). */
+    const val LEGEND_TOUCH = "legendTouch"
+
     /** A theme's legend sheet, iOS's identifiers (GraphLegendSheet): universeLegend, neuronsLegend, performanceLegend. */
     fun legend(theme: GraphTheme): String = if (theme == GraphTheme.SPACE) "universeLegend" else theme.rawValue + "Legend"
 }

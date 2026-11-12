@@ -296,10 +296,10 @@ class MapPop(private val lively: Boolean) {
     fun reset() { scale = 1f; velocity = 0f; bloom = 0f }
 
     /**
-     * The mark's brightness with the bloom: iOS's glow opacity 0.85 + 0.35 × bloom over its resting
-     * 0.85 (GraphMotion.swift:2136), so 1 at rest.
+     * The mark's brightness with the bloom: iOS's glow opacity 0.85 + 0.35 × bloom, capped at 1, over
+     * its resting 0.85 (GraphMotion.swift:2091-2092), so 1 at rest and never over 1 / 0.85.
      */
-    val glow: Float get() = (0.85f + 0.35f * bloom) / 0.85f
+    val glow: Float get() = min(0.85f + 0.35f * bloom, 1f) / 0.85f
 
     /** The mark's size with the bloom: iOS's 1 + 0.6 × bloom (GraphMotion.swift:2128). */
     val swell: Float get() = 1f + 0.6f * bloom
@@ -311,6 +311,63 @@ class MapPop(private val lively: Boolean) {
         const val OMEGA = 15f
         const val ZETA = 0.42f
         const val RATE = 240f
+    }
+}
+
+/**
+ * A choice's cues (S05g): the tick, the pop and the camera's ease each run once per Select, as iOS's
+ * run on its .select effect only (Graph3DView.swift:530-546), known by the Select's serial
+ * (MapEase.serial). The map keeps one for as long as it is on screen, whatever scene it shows, and
+ * starts it at the serial it is first shown with: a map built again (an idea renamed or edited, a
+ * new Link length) or shown again keeps the choice and replays none of them.
+ */
+class MapChoiceCue(start: Int) {
+    private var tickedAt = start
+    private var easedAt = start
+    /** How many ticks, pops and eases it has let run: the tests' count. */
+    var ticks = 0; private set
+    var eases = 0; private set
+
+    /** Whether a choice with Select [serial] ticks and pops now: a serial not seen before, with a body [chosen]. */
+    fun tick(serial: Int, chosen: Boolean): Boolean {
+        val fresh = serial != tickedAt
+        tickedAt = serial
+        return (fresh && chosen).also { if (it) ticks++ }
+    }
+
+    /** Whether the camera eases for Select [serial] now (0 for none): a serial not seen before. */
+    fun ease(serial: Int): Boolean {
+        val fresh = serial != easedAt
+        easedAt = serial
+        return (fresh && serial != 0).also { if (it) eases++ }
+    }
+}
+
+/**
+ * The chosen body's motion in the renderer (S05g): [pop] kicked and the orbit ring grown in from
+ * [MapMark.ORBIT_FROM] once per cue ([MapChoiceCue.tick], counted in [cues]), not whenever the body's
+ * index changes, so a scene built again draws the same choice at rest. A new renderer takes the
+ * count it is made with as seen. [lively]: animations run, so the ring grows in (else it is whole
+ * at once); [pops]: the pop runs (not in the plain theme).
+ */
+class MapChoiceMotion(private val lively: Boolean, pops: Boolean, cues: Int) {
+    val pop = MapPop(pops)
+    var orbitGrow = 1f; private set
+    /** How many cues have kicked it. */
+    var kicks = 0; private set
+    private var seen = cues
+    private var chosenBefore = -1
+
+    /** One frame [dt] seconds on: body [chosen] (−1 for none), the page having asked [cues] cues so far. */
+    fun step(chosen: Int, cues: Int, dt: Float) {
+        if (chosen < 0) {
+            if (chosenBefore >= 0) { pop.reset(); orbitGrow = 1f }
+        } else if (cues != seen) {
+            pop.reset(); pop.kick(); orbitGrow = MapMark.orbitStart(lively); kicks++
+        }
+        seen = cues; chosenBefore = chosen
+        pop.step(dt)
+        orbitGrow = MapMark.orbitGrow(orbitGrow, dt)
     }
 }
 

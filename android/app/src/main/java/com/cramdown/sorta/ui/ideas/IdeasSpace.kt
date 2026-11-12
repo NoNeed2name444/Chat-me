@@ -157,6 +157,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     val selection = remember(theme) { MapSelection() }
     var linksId by remember(theme) { mutableStateOf<String?>(null) }
     var ease by remember(theme) { mutableStateOf<MapEase?>(null) }
+    // each Select's serial, never reused, so the map tells a new choice from one it has already cued (MapChoiceCue)
+    var selects by remember { mutableIntStateOf(0) }
     var tuning by remember { mutableStateOf(false) }
     // the first-run card's height as last drawn, in pixels, kept while it steps aside for a peek
     // card or the Link length bar (S05d)
@@ -189,7 +191,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 chosen = body?.takeIf { it.id.equals(effect.id, ignoreCase = true) }
                     ?: MapBody(effect.id, ThemeBodyKind.NOTE, roles[effect.id.uppercase()] ?: "")
                 held = null
-                ease = MapEase(effect.id, effect.glide, (ease?.serial ?: 0) + 1)
+                selects++
+                ease = MapEase(effect.id, effect.glide, selects)
             }
             MapSelectionEffect.Clear -> { chosen = null; held = null }
             is MapSelectionEffect.Open -> (chosen?.takeIf { it.id.equals(effect.id, ignoreCase = true) } ?: body)?.let { openBody(it) }
@@ -589,11 +592,10 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
             .padding(horizontal = (WardSpace.gutter - WardSpace.s).wardDp)) {
             if (content.rungs.isNotEmpty()) LegendLadder(content)
             content.rows.forEach { LegendRowTile(it) }
-            Text(content.touch, Modifier.padding(horizontal = WardSpace.s.wardDp).padding(top = WardSpace.s.wardDp),
+            Text(content.touch, Modifier.padding(horizontal = WardSpace.s.wardDp).padding(top = WardSpace.s.wardDp).testTag(MapPanelTags.LEGEND_TOUCH),
                 style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
-            // the last line clears the navigation bar on a phone and the sheet's foot on a tablet (S05g):
-            // the app's own inset, as IdeasView reads it, then the sheet's own foot
-            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+            // the last line clears the sheet's foot (S05g): the sheet itself keeps its content above the
+            // navigation bar (Material3's ModalBottomSheet pads it by safeDrawing's bottom), so only the foot's room is added here
             Spacer(Modifier.height(WardSpace.xl.wardDp))
         }
     }
