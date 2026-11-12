@@ -39,6 +39,8 @@ object MapTouchRules {
     fun judge(touch: MapTouch, slop: Float, scale: Double = 1.0): MapTouchKind {
         val drag = HOLD_TO_DRAG * scale
         val menu = HOLD_FOR_MENU * scale
+        // two fingers slide and zoom the camera, never a tap or a hold (S05f's MapTouch: multi was MOVE)
+        if (touch.fingers >= 2) return MapTouchKind.ORBIT
         val still = touch.moved <= slop
         if (!still) {
             // moved before it was held long enough: the camera's
@@ -60,7 +62,7 @@ object MapTouchRules {
 enum class MapTouchKind { PENDING, TAP, DOUBLE_TAP, ORBIT, DRAG, MENU, NOTHING }
 
 /** One touch as the map's hand sees it (GraphTouch): on a body or not, held and moved so far (seconds, pixels), lifted, taps in a row. */
-data class MapTouch(val onBody: Boolean, val held: Double, val moved: Float, val lifted: Boolean, val taps: Int = 1)
+data class MapTouch(val onBody: Boolean, val held: Double, val moved: Float, val lifted: Boolean, val taps: Int = 1, val fingers: Int = 1)
 
 /** What happens to the map and the card (GraphSelectionEffect). Ids as the map's bodies carry them. */
 sealed class MapSelectionEffect {

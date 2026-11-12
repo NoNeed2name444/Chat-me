@@ -628,11 +628,14 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                     press.up()
                     if (pressedName != null) pressedName = null
                 }
-                if (multi || moved > slop || menu) { lastLift.clear(); return@awaitEachGesture }
+                val held = (liftedAt - down.uptimeMillis) / 1000.0
+                val lift = MapTouchRules.judge(MapTouch(onBody = hit != null, held = held, moved = moved, lifted = true,
+                    fingers = if (multi) 2 else 1), slop, holdScale)
+                if (menu || lift == MapTouchKind.ORBIT || lift == MapTouchKind.DRAG) { lastLift.clear(); return@awaitEachGesture }
                 // a still lift: a tap, a double tap, or nothing (an empty touch held past the pick-up time)
                 val paired = lastLift.at >= 0 && MapTouchRules.pairs((down.uptimeMillis - lastLift.at) / 1000.0,
                     (down.position - lastLift.where).getDistance(), MapTouchRules.DOUBLE_TAP_REACH_DP.dp.toPx())
-                val touch = MapTouch(onBody = hit != null, held = (liftedAt - down.uptimeMillis) / 1000.0, moved = moved, lifted = true,
+                val touch = MapTouch(onBody = hit != null, held = held, moved = moved, lifted = true,
                     taps = if (paired && lastLift.hit == hit) 2 else 1)
                 when (MapTouchRules.judge(touch, slop, holdScale)) {
                     MapTouchKind.DOUBLE_TAP -> { lastLift.clear(); latestDouble?.invoke(checkNotNull(hit)) ?: latestTap?.invoke(hit) }

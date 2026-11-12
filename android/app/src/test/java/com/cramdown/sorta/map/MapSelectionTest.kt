@@ -105,6 +105,9 @@ class MapSelectionTest {
         assertEquals(MapTouchKind.MENU, MapTouchRules.judge(MapTouch(true, 0.55, 3f, lifted = false), 8f))
         assertEquals(MapTouchKind.ORBIT, MapTouchRules.judge(MapTouch(false, 0.9, 9f, lifted = false), 8f))
         assertEquals(MapTouchKind.DRAG, MapTouchRules.judge(MapTouch(true, 0.9, 9f, lifted = false), 8f))
+        // MapTouch.judge(100, 0, 8, multi = true, 400) was MOVE: two fingers are the camera's, even still and lifted
+        assertEquals(MapTouchKind.ORBIT, MapTouchRules.judge(MapTouch(true, 0.1, 0f, lifted = true, fingers = 2), 8f))
+        assertEquals(MapTouchKind.ORBIT, MapTouchRules.judge(MapTouch(true, 0.6, 0f, lifted = false, fingers = 2), 8f))
     }
 
     // T2: the selection

@@ -231,6 +231,10 @@ jobs:
           test "$(find renders -name 'mapmode-links-space-*.png' | wc -l)" -eq "$mode_tests"
           test "$(find renders -name 'mapmode-links-neurons-*.png' | wc -l)" -eq "$mode_tests"
           test "$(find renders -name 'mapmode-links-performance-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A6, repair 3: a chosen sun in Space, and a cell's bridges chosen and shown in Neurons
+          test "$(find renders -name 'mapmode-chosen-sun-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
           # S05g A2: each legend scrolled to its end, its last line above the sheet's foot and the bar
           test "$(find renders -name 'mapmode-legend-foot-space-*.png' | wc -l)" -eq "$mode_tests"
           test "$(find renders -name 'mapmode-legend-foot-neurons-*.png' | wc -l)" -eq "$mode_tests"
