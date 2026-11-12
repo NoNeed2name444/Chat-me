@@ -196,10 +196,33 @@ class MapDrag(
     }
 
     /**
-     * One frame [frameDt] seconds on (:1617-1667). The orbit clock moves by the frame itself; the
-     * springs by it clamped to [MIN_DT]-[MAX_DT], split into pieces of at most [MAX_SUBSTEP].
+     * One frame [frameDt] seconds on (:1617-1667), as iOS's steps of at most [MAX_DT] each until the
+     * frame is caught up, to [CATCH_UP] at most. iOS steps once a frame, clamped to [MIN_DT]-[MAX_DT],
+     * so its springs lose time on frames longer than 50 ms; here a slow device's springs keep the
+     * clock's pace, and a body let go is home in the same seconds at 4 frames a second as at 60
+     * (S05g2 repair 2: an emulated tablet at about 3 frames a second left one off home past 30 s).
      */
     @Synchronized fun step(frameDt: Float) {
+        var left = min(max(frameDt, 0f), CATCH_UP)
+        var most = 0
+        var first = true
+        while (true) {
+            val chunk = min(left, MAX_DT)
+            stepOnce(chunk, first)
+            most = max(most, worked)
+            first = false
+            left -= chunk
+            if (left < MIN_DT || (grabbed < 0 && activeCount == 0)) break
+        }
+        // the clock keeps the whole frame, the springs' rest or not
+        if (left > 0f) advanceClock(left)
+        worked = most
+    }
+
+    // one of iOS's steps: the orbit clock moves by [frameDt] itself; the springs by it clamped to
+    // [MIN_DT]-[MAX_DT], split into pieces of at most [MAX_SUBSTEP]. The finger's speed is taken on a
+    // frame's [first] step only: the later ones catch the springs up, the finger where it was
+    private fun stepOnce(frameDt: Float, first: Boolean) {
         advanceClock(frameDt)
         val g = grabbed
         if (g < 0 && activeCount == 0) { worked = 0; return }
@@ -208,10 +231,12 @@ class MapDrag(
         if (g >= 0) {
             val t = target ?: placed(g, home(g, orbitTime))
             goal = t - home(g, orbitTime)
-            // the finger's speed, smoothed over about the last 50 ms
-            val instant = (goal - offsetOf(g)) * (1f / dt)
-            val blend = 1f - exp(-dt / SMOOTH)
-            dragVelocity = dragVelocity + (instant - dragVelocity) * blend
+            if (first) {
+                // the finger's speed, smoothed over about the last 50 ms
+                val instant = (goal - offsetOf(g)) * (1f / dt)
+                val blend = 1f - exp(-dt / SMOOTH)
+                dragVelocity = dragVelocity + (instant - dragVelocity) * blend
+            }
             if (path == MapDragPath.LINKS) setOffset(g, goal)
             velocity[3 * g] = dragVelocity.x; velocity[3 * g + 1] = dragVelocity.y; velocity[3 * g + 2] = dragVelocity.z
         }
@@ -225,7 +250,7 @@ class MapDrag(
         settle(g)
     }
 
-    /** How many pieces a frame of [frameDt] seconds is split into. */
+    /** How many pieces one of iOS's steps of [frameDt] seconds is split into (a frame past [MAX_DT] takes several steps). */
     fun piecesFor(frameDt: Float): Int = max(1, ceil(frameDt.coerceIn(MIN_DT, MAX_DT) / MAX_SUBSTEP - 1e-4f).toInt())
 
     // the orbit clock eases to a stop while a body is held and back after (advanceOrbits, :1750-1765);
@@ -369,6 +394,8 @@ class MapDrag(
         const val MAX_SUBSTEP = 1f / 120f
         const val MIN_DT = 0.001f
         const val MAX_DT = 0.05f
+        /** The longest frame caught up (Android's own): the renderer's own cap on a frame's time (GlMapRenderer). */
+        const val CATCH_UP = 0.25f
         /** The finger's speed is smoothed over this long (:1624). */
         const val SMOOTH = 0.05f
         /**

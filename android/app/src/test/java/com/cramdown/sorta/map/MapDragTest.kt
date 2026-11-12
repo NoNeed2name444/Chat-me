@@ -118,16 +118,46 @@ class MapDragTest {
         assertEquals(4, drag.piecesFor(1f / 30f))
         assertEquals("0.05 s at most: 6 pieces", 6, drag.piecesFor(0.2f))
         assertEquals(6, drag.piecesFor(0.05f))
-        // a long frame moves the springs as far as a 0.05 s one, and a frame of nothing as far as 1 ms
-        fun after(dt: Float): Float {
+        // a long frame moves the springs as far as iOS's 0.05 s steps that make it up (S05g2 repair 2), to
+        // 0.25 s at most; a frame of nothing as far as 1 ms
+        fun after(vararg dts: Float): Float {
             val d = run()
             d.grab(0); d.drag(Vec3(1f, 0f, 0f)); d.step(frame); d.release(still = true)
-            d.step(dt)
+            for (dt in dts) d.step(dt)
             return d.offset(0, 0)
         }
-        assertEquals(after(0.05f), after(0.2f), 0f)
+        assertEquals(after(0.05f, 0.05f, 0.05f, 0.05f), after(0.2f), 0f)
+        assertEquals(after(0.25f), after(1f), 0f)
+        assertTrue(after(0.2f) < after(0.05f))
         assertEquals(after(0.001f), after(0f), 0f)
         assertTrue(after(0.05f) < after(0.001f))
+    }
+
+    @Test fun onASlowDeviceALetGoComesHomeOnTheClockAndAsksForFramesTillThen() {
+        // S05g2 repair 2, CI's tablet: animations off, a note radius of 0.3, a body let go 10 radii off home,
+        // and frames 0.25 s apart (the renderer's cap; the emulated tablet drew about 3 a second). The
+        // springs keep the clock's pace: home and at rest within 8 s, where the old 0.05 s a frame had it
+        // still off home at 30 s; busy (the renderer's frames asked for) every frame until then, never after
+        for (path in MapDragPath.entries) {
+            val drag = MapDrag(1, path, 0.3f, line(1), lively = false)
+            drag.grab(0)
+            drag.drag(drag.homeOf(0) + Vec3(3f, 0f, 0f))
+            drag.step(frame)
+            drag.release(still = true)
+            var frames = 0
+            while (drag.moving > 0 && frames < 120) {
+                assertTrue("$path: off home and not asking for frames after ${frames * 0.25f} s", drag.busy)
+                drag.step(0.25f); frames++
+            }
+            assertTrue("$path: still off home after ${frames * 0.25f} s: ${drag.offsetOf(0)}", frames * 0.25f <= 8f)
+            assertTrue("$path: no faster than the springs allow: ${frames * 0.25f} s", frames * 0.25f >= 4f)
+            repeat(20) {
+                drag.step(0.25f)
+                assertFalse("$path: at rest, frames still asked for", drag.busy)
+                assertEquals(0, drag.moving)
+                assertEquals(0f, drag.offsetOf(0).length(), 0f)
+            }
+        }
     }
 
     @Test fun onTheLinkPathADraggedBodyPullsItsNeighbourAndBothComeHome() {
