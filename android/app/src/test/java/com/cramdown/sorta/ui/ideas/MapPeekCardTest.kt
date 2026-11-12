@@ -257,6 +257,28 @@ class MapPeekCardTest {
         cardFor(garden.name)
     }
 
+    @Test fun aNeuronCellsCardFliesInAndAnIdeaInsideHasShowLinks() {
+        // a cell's card is a folder's, as iOS's (GraphTouchModel content): Open folder and Fly in, no
+        // Show links; flown into, the cell's ideas are on the map, and an idea with a link has Show links
+        val shed = IdeasFixture.shed
+        IdeasSettings(run.context).setLook(MapLook.NEURON)
+        IdeaStore(run.store).replaceIdeas(listOf(gate, shed), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true }
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a cell's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        run.until { tapper()?.ids?.any { it.equals(shed.id, ignoreCase = true) } == true }
+        tapBody(shed.id)
+        cardFor(shed.title)
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks)).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.allLinks))
+    }
+
     private fun drawnPose(): List<Float> =
         checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
 }
