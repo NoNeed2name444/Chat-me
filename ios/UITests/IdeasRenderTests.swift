@@ -1,0 +1,142 @@
+import XCTest
+
+/// The Ideas screens rendered for real (S05, A6 and A7), each kept as a
+/// named screenshot: the empty state, the import's message, To sort with
+/// ideas, the folder chooser, an open folder, the editor and, on the
+/// iPhone, a draft typed in the well. CI runs it by
+/// day and by night on the iPhone and the iPad (tools/run_ui_tests.sh, the
+/// ideas set), setting the simulator's appearance from outside, as for
+/// LaunchTests. The ideas are the made-up export's and a few typed ones;
+/// none is medical.
+final class IdeasRenderTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
+    func testScreensRender() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64()])
+        walk(app, prefix: "ideas")
+    }
+
+    /// The largest Dynamic Type size (AX5) on a phone: To sort and the
+    /// editor, with every control inside the window, none under 44 points
+    /// and none touching another. CI runs it on the iPhone only.
+    func testLargestTextSize() throws {
+        let store = IdeasStoreName()
+        let largest = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        var app = launchIdeas(store, ["-SortaImportFile", try MadeUpExport.base64()] + largest)
+        let window = app.windows.firstMatch.frame
+        keepShot("ideas-ax5-1-empty")
+        assertInside(app.descendants(matching: .any)["capture"], window, "the capture well")
+        assertInside(app.sortIt, window, "Sort it")
+        XCTAssertLessThan(app.capture.frame.maxY, app.sortIt.frame.minY + 1, "the well stacks: Sort it under the field")
+        let well = app.descendants(matching: .any)["capture"].frame
+        XCTAssertEqual(app.sortIt.frame.width, well.width, accuracy: 1,
+                       "Sort it is full width under the field: \(app.sortIt.frame) in \(well)")
+
+        importExport(app)
+        let long = "Oil the gate before winter, and the shed's hinges too"
+        app.captureIdea(long)
+        XCTAssertTrue(app.ideaRow(long).waitForExistence(timeout: 10))
+        // capture keeps the caret, and its keyboard covers To sort: the
+        // same store reopened has no caret anywhere, so the rows show
+        // the store writes off the main thread: let it land
+        sleep(2)
+        app.terminate()
+        app = launchIdeas(store, largest)
+        XCTAssertTrue(app.ideaRow(long).waitForExistence(timeout: 10), "the idea is kept")
+        XCTAssertEqual(app.keyboards.count, 0, "no keyboard covers To sort")
+        sleep(1)
+        keepShot("ideas-ax5-2-to-sort")
+        let choose = app.chooseFolder(for: long)
+        assertInside(choose, window, "Choose folder")
+        XCTAssertTrue(choose.isHittable, "Choose folder is on show, not covered")
+        XCTAssertLessThanOrEqual(choose.frame.maxY, window.maxY + 0.5, "Choose folder isn't cut at the bottom: \(choose.frame)")
+        let row = app.ideaRow(long)
+        XCTAssertLessThanOrEqual(row.frame.maxY, choose.frame.minY + 1, "the row stacks: Choose folder under the words")
+
+        row.tap()
+        XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10), "the editor opened")
+        sleep(1)
+        keepShot("ideas-ax5-3-editor")
+        for id in ["editor-done", "editor-more", "editor-folder", "editor-link"] {
+            assertInside(app.buttons[id], window, id)
+        }
+        // the chip, Write / Read and Link to an idea… stack in the page,
+        // apart: none covers or touches the next
+        let chip = app.buttons["editor-folder"].frame
+        let mode = app.descendants(matching: .any)["noteMarkdownToggle"].frame
+        let link = app.buttons["editor-link"].frame
+        XCTAssertLessThan(chip.maxY, mode.minY, "the folder chip stands clear of Write / Read: \(chip) \(mode)")
+        XCTAssertLessThan(mode.maxY, link.minY, "Write / Read stands clear of Link to an idea: \(mode) \(link)")
+
+        // a long draft: the well keeps its whole height, so the field stops
+        // at two lines and scrolls, and Sort it stays above the keyboard
+        // (the separate checks of 33785fd and 0583088)
+        app.buttons["editor-done"].tap()
+        XCTAssertTrue(app.capture.waitForExistence(timeout: 10), "back on the Sort screen")
+        app.capture.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard is up")
+        app.clearSlideToTypeIntro(refocus: app.capture)
+        app.capture.typeText(String(repeating: "Oil the gate and the shed's hinges. ", count: 4))
+        let keyboard = app.keyboards.firstMatch.frame
+        sleep(1)
+        keepShot("ideas-ax5-4-long-draft")
+        assertInside(app.sortIt, window, "Sort it, with a long draft")
+        XCTAssertTrue(app.sortIt.isHittable, "Sort it is on show with a long draft")
+        XCTAssertLessThanOrEqual(app.sortIt.frame.maxY, keyboard.minY + 0.5,
+                                 "Sort it stays above the keyboard: \(app.sortIt.frame), keyboard \(keyboard)")
+    }
+
+    // MARK: the walk
+
+    private func walk(_ app: XCUIApplication, prefix: String) {
+        sleep(1)
+        keepShot("\(prefix)-1-empty")
+
+        importExport(app, keep: "\(prefix)-2-import-message")
+        app.captureIdea("Oil the gate")
+        app.captureIdea("Ask about the allotment waiting list")
+        XCTAssertTrue(app.ideaRow("Ask about the allotment waiting list").waitForExistence(timeout: 10))
+        // the keyboard away: its Done ends editing
+        app.keyboards.buttons["Done"].firstMatch.tapIfThere()
+        sleep(1)
+        keepShot("\(prefix)-3-to-sort")
+        if app.windows.firstMatch.frame.width >= 700 {
+            // a broad window: the map beside the Sort screen, with no switch (S05b checklist 9)
+            XCTAssertTrue(app.descendants(matching: .any)[MapText.lookChip].waitForExistence(timeout: 10),
+                          "two panes: the map beside the Sort screen")
+            XCTAssertFalse(app.descendants(matching: .any)["mode-sort"].exists, "two panes: no switch")
+            XCTAssertFalse(app.descendants(matching: .any)["map-list-chip"].exists, "two panes: no list chip")
+        }
+
+        app.openChooser(for: "Oil the gate")
+        sleep(1)
+        keepShot("\(prefix)-4-chooser")
+        app.buttons["chooser-cancel"].tap()
+
+        app.folderRow("Garden").tap()
+        XCTAssertTrue(app.upRow.waitForExistence(timeout: 10), "Garden opened")
+        sleep(1)
+        keepShot("\(prefix)-5-folder")
+        app.upRow.tap()
+
+        app.ideaRow("A bell for the bike").tap()
+        XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10), "the editor opened")
+        sleep(1)
+        keepShot("\(prefix)-6-editor")
+        app.buttons["editor-done"].tap()
+
+        if app.windows.firstMatch.frame.width < 700 {
+            // a draft typed and not yet sorted, so Sort it shows its coral
+            // fill, not only its off face (S05's next step, item 2)
+            XCTAssertTrue(app.capture.waitForExistence(timeout: 10), "back on the Sort screen")
+            XCTAssertFalse(app.sortIt.isEnabled, "Sort it is off with the well empty")
+            app.typeDraft("Fix the gate latch")
+            XCTAssertTrue(app.sortIt.isEnabled, "Sort it is on with a draft")
+            sleep(1)
+            keepShot("\(prefix)-7-draft")
+        }
+    }
+}

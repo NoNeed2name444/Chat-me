@@ -1,0 +1,299 @@
+# Sorta's iOS app, on every copy pushed to Chat-me's sorta branch
+# (tools/mirror_chatme.py): the project generated, built for the simulator,
+# the app's Info.plist checked, and the launch, gallery and unit tests run on
+# an iPhone and an iPad; the Ideas screens' tests and renders run in a job
+# of their own (ideas), as the maps' do (maps). The Foundation-only Swift suites (the look kit's, the
+# maps' and the store's recovery) run on Linux (tools/swift_suites.py); the two
+# that need Apple's Compression, zip and backup (S04,
+# tools/swift_suites_mac_only.txt), run on the build job's Mac, as
+# Stethoscore ran them (its swift-tests.yml:127). Chat-me is public, so its
+# standard runners cost nothing; no secret is used. A second run of the same
+# copy is a re-run of this one.
+name: iOS
+on:
+  push:
+    branches: [sorta, sorta-b, sorta-e]
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    # the swift:6.1 image built the seven Ward suites in a few minutes; the
+    # 26 map suites (S03) come with them, so about twice a guess of 20
+    timeout-minutes: 45
+    # 6.4.1, as Stethoscore's suites ran on 6.4: on 6.1, three map suites
+    # (graphchunks, graphperf, graphtour) stop with "unable to type-check
+    # this expression in reasonable time"; on 6.4.1 all 33 pass
+    container: swift:6.4.1-noble
+    # the container's default shell is sh, which has no pipefail
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Python
+        run: apt-get update -q && apt-get install -yq python3 > /dev/null
+      - name: The Swift suites
+        # optimised, with Stethoscore's flags (its swift-tests.yml:83):
+        # graphperf and graphchunks run at full size and to their real time
+        # bounds only when optimised (a debug build shrinks their maps and
+        # widens the bounds 25 times), and anatomy's 5,000 notes in 2 s of
+        # CPU is set for it (debug, run 40886660340 took 2.03 s). Locally
+        # they run debug, with their asserts, as Stethoscore's preflight did
+        run: |
+          set -o pipefail
+          python3 tools/swift_suites.py --platform linux --release -j 4 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The Universe dump
+        # S05h: iOS's planner on the inputs Android's UniversePlanTest reads, held
+        # to the dump Android commits (numbers within 1e-5, the planner's hash);
+        # with none committed it fails, asking for the uploaded one
+        run: |
+          set -o pipefail
+          mkdir -p build/universe
+          swiftc -O -parse-as-library tools/universe_dump.swift ios/Sorta/Maps/GraphUniverse.swift ios/Sorta/Maps/GraphTilt.swift ios/Sorta/Maps/GraphTheme.swift -o build/universe/dump
+          build/universe/dump android/app/src/test/resources/universe/inputs ios-dump.json
+          python3 tools/universe_dump_check.py ios-dump.json android/app/src/test/resources/universe/ios-dump.json ios/Sorta/Maps/GraphUniverse.swift | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: universe-dump
+          path: ios-dump.json
+          if-no-files-found: warn
+          retention-days: 7
+  build:
+    runs-on: macos-latest
+    # each simulator now runs five tests, not two; about twice the 16 minutes
+    # step 1's runs took, plus the gallery and unit tests
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # What the runner offers for the iPhone Duo, Xcode 27.1 and a foldable
+      # simulator: the owner's check of 22 Oct
+      - name: What this runner has
+        run: |
+          {
+            echo '### This runner'
+            echo '```'
+            echo "image $ImageOS $ImageVersion"
+            sw_vers
+            xcodebuild -version
+            ls -d /Applications/Xcode*.app
+            xcrun simctl list runtimes | grep -i ios
+            xcrun simctl list devicetypes | grep -iE 'duo|fold' || echo "no foldable iPhone among the device types"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      # the suites that need Apple frameworks (zip and backup), before the
+      # simulators, so slow ones can't use up the job's time; they need only
+      # the checkout. Stethoscore gave its Mac job 20 minutes for more of
+      # them, so this step, two suites optimised, gets the same
+      - name: The macOS-only Swift suites
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          python3 tools/swift_suites.py --platform mac --release -j 3 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Pick the simulators
+        id: sim
+        run: |
+          python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+          python3 tools/pick_sim.py ipad >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          { echo '### Compile errors and warnings'; echo '```'; grep -E "error:|warning:" ../build.log | sed -E 's#^.*/ios/##' | sort -u | head -60 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The app's Info.plist
+        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
+      # each simulator runs once the build has passed, whatever the other did;
+      # in run 40718963474 the iPhone's step took 7 to 8 minutes and the iPad's
+      # 9, most of it the simulator's first boot, so each may take twice that
+      - name: Launch tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 30
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone
+      - name: Launch tests on an iPad
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 30
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.ipad_udid }}
+        run: bash ../tools/run_ui_tests.sh ipad
+      # the screenshots the tests kept, where they can be looked at without Xcode
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for bundle in results/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            name=$(basename "$bundle" .xcresult)
+            mkdir -p "shots/$name"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
+          done
+          ls -R shots 2>/dev/null || echo "no screenshots"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-ios
+          path: |
+            build.log
+            results/
+            shots/
+            ios/build/swift-suites/out/
+          if-no-files-found: ignore
+          retention-days: 7
+  # The Ideas screens (S05) and Map mode (S05b): their behaviour tests on an
+  # iPhone, and their renders by day and by night on the iPhone and the iPad,
+  # with the largest text size on the iPhone, beside the build job
+  # (tools/run_ui_tests.sh, the ideas set). On copy 1211aaf (S05) the iPhone's
+  # step took 13 minutes for 15 behaviour tests and 3 render runs, and the
+  # iPad's 3 for 2; S05b adds 8 Map mode tests and 3 render runs on the
+  # iPhone and 2 render runs on the iPad, inside limits of 40 and 35. On
+  # a7054fe the iPad's simulator took 178 s to boot and its warm-up launch
+  # 475 s (605a19c: 87 and 277), and its step, about 19 minutes on 605a19c,
+  # passed 25: so 35, and the job 105. S05d's keyboard warm-up and S05f's
+  # legends brought the iPhone's step to about 36 minutes on copy ca4797f
+  # (boot 104 s), and on copy 93ca857 (boot 145 s) it met its limit of 40 in
+  # the last test, every test before it passed: so 60, and the job 125.
+  ideas:
+    runs-on: macos-latest
+    timeout-minutes: 125
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Pick the simulators
+        id: sim
+        run: |
+          python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+          python3 tools/pick_sim.py ipad >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The Ideas tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 60
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone ideas
+      - name: The Ideas renders on an iPad
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 35
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.ipad_udid }}
+        run: bash ../tools/run_ui_tests.sh ipad ideas
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for bundle in results/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            name=$(basename "$bundle" .xcresult)
+            mkdir -p "shots/$name"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
+          done
+          ls -R shots 2>/dev/null | head -200 || echo "no screenshots"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-ios-ideas
+          path: |
+            build.log
+            results/
+            shots/
+          if-no-files-found: ignore
+          retention-days: 7
+  # The maps' own tests (GraphPreviewUITests: each theme at rest, flown in,
+  # touched, its legend and look menu, bodies dying, and the depth fade, with
+  # testDepthGlide), one at a time on an iPhone, beside the build job. Their
+  # normal time is set by the first green run; until then, the limit is
+  # about twice a guess of an hour for 30 tests and the build.
+  maps:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Tools
+        run: brew list xcodegen >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate the project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Pick the simulator
+        id: sim
+        run: python3 tools/pick_sim.py iphone >> "$GITHUB_OUTPUT"
+      - name: Build for testing
+        id: build
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Sorta.xcodeproj -scheme Sorta -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            -skipMacroValidation -skipPackagePluginValidation \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
+          grep -q "TEST BUILD SUCCEEDED" ../build.log
+      - name: The maps' tests on an iPhone
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 100
+        working-directory: ios
+        env:
+          UDID: ${{ steps.sim.outputs.iphone_udid }}
+        run: bash ../tools/run_ui_tests.sh iphone maps
+      - name: The screenshots
+        if: ${{ always() }}
+        run: |
+          for bundle in results/*.xcresult; do
+            [ -d "$bundle" ] || continue
+            name=$(basename "$bundle" .xcresult)
+            mkdir -p "shots/$name"
+            xcrun xcresulttool export attachments --path "$bundle" --output-path "shots/$name" || true
+          done
+          ls -R shots 2>/dev/null | head -200 || echo "no screenshots"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-ios-maps
+          path: |
+            build.log
+            results/
+            shots/
+          if-no-files-found: ignore
+          retention-days: 7
