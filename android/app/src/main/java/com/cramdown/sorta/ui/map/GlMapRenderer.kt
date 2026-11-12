@@ -131,7 +131,10 @@ data class MapDrawn(
      * pixels, whole; empty when none is held); the bodies off home; and those of them other than the
      * one held (pulled by its links, or carried inside it); the held body's own offset from its home
      * and the chosen body's, in the world (x, y, z; empty when that body is at home or there is none),
-     * so a carry is read whatever each body's depth. No words.
+     * so a carry is read whatever each body's depth. Since the last let-go: the frames drawn until every
+     * body was home ([letGoFrames], not capped as [frames] is), the most iOS's spring gives it
+     * ([restFrames], MapDrag.framesToRest), and the latest frame's interval while a body moved
+     * ([frameMs]), so a slow device is judged by its frames. No words.
      */
     val grabbed: Int = -1,
     val dragged: List<Float> = emptyList(),
@@ -139,14 +142,20 @@ data class MapDrawn(
     val carried: Int = 0,
     val heldOffset: List<Float> = emptyList(),
     val chosenOffset: List<Float> = emptyList(),
+    val letGoFrames: Int = 0,
+    val restFrames: Int = 0,
+    val frameMs: Float = 0f,
 ) {
     /** This record with the held body as the latest frame drew it; the same record when nothing changed. */
     fun dragging(grabbedNow: Int, draggedNow: List<Float>, movingNow: Int, carriedNow: Int,
-                 heldOffsetNow: List<Float> = emptyList(), chosenOffsetNow: List<Float> = emptyList()): MapDrawn =
+                 heldOffsetNow: List<Float> = emptyList(), chosenOffsetNow: List<Float> = emptyList(),
+                 letGoFramesNow: Int = letGoFrames, restFramesNow: Int = restFrames, frameMsNow: Float = frameMs): MapDrawn =
         if (grabbed == grabbedNow && dragged == draggedNow && moving == movingNow && carried == carriedNow &&
-            heldOffset == heldOffsetNow && chosenOffset == chosenOffsetNow) this
+            heldOffset == heldOffsetNow && chosenOffset == chosenOffsetNow && letGoFrames == letGoFramesNow &&
+            restFrames == restFramesNow && frameMs == frameMsNow) this
         else copy(grabbed = grabbedNow, dragged = draggedNow, moving = movingNow, carried = carriedNow,
-            heldOffset = heldOffsetNow, chosenOffset = chosenOffsetNow)
+            heldOffset = heldOffsetNow, chosenOffset = chosenOffsetNow, letGoFrames = letGoFramesNow,
+            restFrames = restFramesNow, frameMs = frameMsNow)
 
     /** This record with the chosen body's marks as the latest frame drew them; the same record when nothing changed. */
     fun marking(chosenNow: Int, markedNow: Boolean, litNow: Int, focusNow: Boolean, focusLinksNow: Int, fadedNow: Int): MapDrawn =
@@ -324,6 +333,8 @@ class GlMapRenderer(
     // the offsets' floats as the texture holds them, made at the first move: the rows a frame touches go
     // up from here in one call, as the focus mask's do
     private var offsetData = FloatArray(0)
+    // the latest frame's interval, ms (MapDrawn.frameMs)
+    private var frameIntervalMs = 0f
     /** The held body this frame: the scene's index and, in Space, its chunk-order node; −1 for none. */
     private var grabbedScene = -1
     private var grabbedChunk = -1
@@ -532,6 +543,7 @@ class GlMapRenderer(
         val intervalMs = if (lastVsync == 0L) 1000.0 / displayHz() else (vsync - lastVsync).coerceAtLeast(0L) / 1e6
         val dt = (intervalMs / 1000.0).toFloat().coerceIn(0f, 0.25f)
         lastVsync = vsync
+        frameIntervalMs = intervalMs.toFloat()
         frame++
         budget.refreshHz = displayHz()
 
@@ -870,7 +882,9 @@ class GlMapRenderer(
                 Math.round((clip[0] / clip[3] * 0.5f + 0.5f) * width).toFloat(),
                 Math.round((1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height).toFloat())
         }
-        return record.dragging(grabbedScene, spot, d.moving, d.carried, own(held), own(chosen))
+        // the frame's interval only while something moves, so a still map's record stays the same
+        val ms = if (d.busy) Math.round(frameIntervalMs * 10).toFloat() / 10 else record.frameMs
+        return record.dragging(grabbedScene, spot, d.moving, d.carried, own(held), own(chosen), d.letGoFrames, d.restFrames, ms)
     }
 
     /** The far layer's offsets (S05g2): a float texel a chunk-order node in the masks' layout, all zero, then those off home now. */

@@ -1,10 +1,12 @@
 package com.cramdown.sorta.map
 
+import com.cramdown.sorta.ui.map.FrameQuiet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
 
@@ -118,46 +120,62 @@ class MapDragTest {
         assertEquals(4, drag.piecesFor(1f / 30f))
         assertEquals("0.05 s at most: 6 pieces", 6, drag.piecesFor(0.2f))
         assertEquals(6, drag.piecesFor(0.05f))
-        // a long frame moves the springs as far as iOS's 0.05 s steps that make it up (S05g2 repair 2), to
-        // 0.25 s at most; a frame of nothing as far as 1 ms
-        fun after(vararg dts: Float): Float {
+        // a long frame moves the springs as far as a 0.05 s one, and a frame of nothing as far as 1 ms
+        fun after(dt: Float): Float {
             val d = run()
             d.grab(0); d.drag(Vec3(1f, 0f, 0f)); d.step(frame); d.release(still = true)
-            for (dt in dts) d.step(dt)
+            d.step(dt)
             return d.offset(0, 0)
         }
-        assertEquals(after(0.05f, 0.05f, 0.05f, 0.05f), after(0.2f), 0f)
-        assertEquals(after(0.25f), after(1f), 0f)
-        assertTrue(after(0.2f) < after(0.05f))
+        assertEquals(after(0.05f), after(0.2f), 0f)
         assertEquals(after(0.001f), after(0f), 0f)
         assertTrue(after(0.05f) < after(0.001f))
     }
 
-    @Test fun onASlowDeviceALetGoComesHomeOnTheClockAndAsksForFramesTillThen() {
-        // S05g2 repair 2, CI's tablet: animations off, a note radius of 0.3, a body let go 10 radii off home,
-        // and frames 0.25 s apart (the renderer's cap; the emulated tablet drew about 3 a second). The
-        // springs keep the clock's pace: home and at rest within 8 s, where the old 0.05 s a frame had it
-        // still off home at 30 s; busy (the renderer's frames asked for) every frame until then, never after
+    @Test fun onASlowDeviceALetGoComesHomeInIOSsFramesAndAsksForFramesTillThen() {
+        // S05g2 repair 2b, CI's tablet: animations off, a note radius of 0.3, a body let go still 10 radii off
+        // home, frames 0.25 s apart, each stepped as iOS steps it, 0.05 s (GraphMotion.swift:1617). Critically
+        // damped, ω = √6: x(t) = 10 (1 + ωt) e^(−ωt) radii, under the rest's 1e-3 at ωt ≈ 11.77, t ≈ 4.81 s,
+        // 97 frames of 0.05 s; the speed there, 10 ω² t e^(−ωt) ≈ 0.002 radii a second, is under its 1e-2.
+        // The 1/120 s pieces add a frame or two: at rest within 100 frames, not before 95
+        assertEquals(97, ceil(4.81 / 0.05).toInt())
         for (path in MapDragPath.entries) {
             val drag = MapDrag(1, path, 0.3f, line(1), lively = false)
             drag.grab(0)
             drag.drag(drag.homeOf(0) + Vec3(3f, 0f, 0f))
             drag.step(frame)
             drag.release(still = true)
+            assertEquals("$path: the bound published at the let-go", MapDrag.framesToRest(10f, lively = false) * 2, drag.restFrames)
+            // the frame loop as Map3DView runs it: a frame while the renderer is animating (busy) or not yet quiet
+            var clock = 0L
+            var lastActive = 0L
+            var finishedAtActive = 0
+            var finished = 0
             var frames = 0
-            while (drag.moving > 0 && frames < 120) {
-                assertTrue("$path: off home and not asking for frames after ${frames * 0.25f} s", drag.busy)
-                drag.step(0.25f); frames++
+            while (drag.moving > 0) {
+                if (drag.busy) { lastActive = clock; finishedAtActive = finished }
+                assertFalse("$path: frames stopped while off home, after $frames frames",
+                    FrameQuiet.settled(clock - lastActive, finished - finishedAtActive))
+                drag.step(0.25f); finished++; frames++; clock += 250_000_000L
+                assertEquals("$path: frames since the let-go", frames, drag.letGoFrames)
+                assertTrue("$path: still off home after $frames frames: ${drag.offsetOf(0)}", frames <= 100)
             }
-            assertTrue("$path: still off home after ${frames * 0.25f} s: ${drag.offsetOf(0)}", frames * 0.25f <= 8f)
-            assertTrue("$path: no faster than the springs allow: ${frames * 0.25f} s", frames * 0.25f >= 4f)
+            assertTrue("$path: at rest in $frames frames, fewer than iOS's spring allows", frames >= 95)
+            assertTrue("$path: within the published bound", frames <= drag.restFrames)
+            // home: no longer busy, so the loop goes quiet after its second and three frames, and nothing moves again
             repeat(20) {
-                drag.step(0.25f)
+                drag.step(0.25f); finished++; clock += 250_000_000L
                 assertFalse("$path: at rest, frames still asked for", drag.busy)
                 assertEquals(0, drag.moving)
                 assertEquals(0f, drag.offsetOf(0).length(), 0f)
+                assertEquals("$path: the count stops at rest", frames, drag.letGoFrames)
             }
+            assertTrue("$path: the loop goes quiet", FrameQuiet.settled(clock - lastActive, finished - finishedAtActive))
         }
+        // the bound from iOS's spring, one body: 97 frames from 10 radii, more with animations on (less damped)
+        assertTrue(MapDrag.framesToRest(10f, lively = false) in 95..100)
+        assertTrue(MapDrag.framesToRest(10f, lively = true) > MapDrag.framesToRest(10f, lively = false))
+        assertEquals(0, MapDrag.framesToRest(0f, lively = false))
     }
 
     @Test fun onTheLinkPathADraggedBodyPullsItsNeighbourAndBothComeHome() {

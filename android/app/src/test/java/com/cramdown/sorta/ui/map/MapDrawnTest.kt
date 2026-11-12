@@ -91,6 +91,12 @@ class MapDrawnTest {
         assertSame(carrying, carrying.dragging(7, listOf(1f, 2f), 2, 1, listOf(0.5f, 0f, -0.25f), listOf(0.45f, 0f, -0.2f)))
         val homeAgain = carrying.dragging(-1, emptyList(), 0, 0)
         assertTrue("home, no offsets", homeAgain.heldOffset.isEmpty() && homeAgain.chosenOffset.isEmpty())
+        // the let-go judged by frames: counted past ENOUGH, its bound and the frame's interval kept
+        val settling = homeAgain.dragging(-1, emptyList(), 1, 0, letGoFramesNow = 140, restFramesNow = 196, frameMsNow = 333.3f)
+        assertEquals(140, settling.letGoFrames); assertEquals(196, settling.restFrames); assertEquals(333.3f, settling.frameMs, 0f)
+        assertTrue("not capped as frames is", settling.letGoFrames > MapDrawn.ENOUGH)
+        assertSame(settling, settling.dragging(-1, emptyList(), 1, 0, letGoFramesNow = 140, restFramesNow = 196, frameMsNow = 333.3f))
+        assertEquals("left out, they are kept", 140, settling.dragging(-1, emptyList(), 0, 0).letGoFrames)
     }
 
     @Test fun anIdleMapStopsAfterAQuietSecondWithThreeFramesFinished() {

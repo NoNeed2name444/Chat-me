@@ -97,7 +97,8 @@ import kotlin.math.sqrt
  *
  * S05g2 A3: hold to move. In Space and Neurons a finger held 300 ms on the chosen body picks it up,
  * the camera still, and moved 8 slops in steps the body follows it, its offset kept; let go, no
- * options open, the card and the choice stay, and every body is home again within 30 s (requireDrag;
+ * options open, the card and the choice stay, and every body is home again within the frames iOS's spring
+ * needs (MapDrawn.restFrames, so a slow emulator is judged by its frames, not the clock; requireDrag;
  * stills mapmode-drag-<space|neurons>-<light|dark>-<device>.png). Under Look's Suns the chosen sun
  * pulls its neighbours (mapmode-drag-sun-space-...), and in Neurons the open cell carries the idea
  * chosen inside it, once, not 1.85 times (mapmode-drag-cell-neurons-...). In every look a move made
@@ -286,9 +287,9 @@ class MapModeSpaceRenderTest {
             check(carried?.grabbed == index) { "A finger held on a body past the pick-up did not pick it up for $name: $carried" }
             compose.waitForIdle()
             check(!shown(MapPanelTags.PEEK)) { "A move brought up a card for $name" }
-            try { compose.waitUntil(30_000) { mapDrawn()?.let { it.grabbed == -1 && it.moving == 0 && it.names.isEmpty() } == true } } catch (_: ComposeTimeoutException) {}
-            val home = mapDrawn()
-            check(home?.grabbed == -1 && home.moving == 0) { "The carried body did not come home within 30 s for $name: $home" }
+            requireHome(name)
+            try { compose.waitUntil(5_000) { mapDrawn()?.names?.isEmpty() == true } } catch (_: ComposeTimeoutException) {}
+            val home = checkNotNull(mapDrawn())
             check(home.names.isEmpty()) { "A name stayed after the carried body was let go for $name: ${home.names}" }
         }
         val (index, at) = spot(name)
@@ -414,7 +415,8 @@ class MapModeSpaceRenderTest {
      * own offset once the finger has been still a moment (MapDrawn.chosenOffset against heldOffset), not
      * 1.85 times it. The hold and the moves go in one input, 300 ms apart by the events' own times. A
      * still, [still], mid-drag. Let go: no options, the card
-     * and the choice as they were, nothing off home within 30 s, and with [homes] (Space, or Neurons
+     * and the choice as they were, nothing off home within the frames iOS's spring needs ([requireHome]),
+     * and with [homes] (Space, or Neurons
      * with animations off, where a home stays put) the body within 1 dp of where it was picked up.
      */
     private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true) {
@@ -468,10 +470,9 @@ class MapModeSpaceRenderTest {
         check(!shown(MapPanelTags.MENU)) { "The let-go opened the options for $still" }
         check(shown(MapPanelTags.PEEK) == card) { "The let-go changed the card (up before: $card) for $still" }
         check(mapDrawn()?.chosen == before.chosen) { "The drag changed the choice for $still: ${before.chosen}, now ${mapDrawn()?.chosen}" }
-        // nothing is kept: home again, with animations off as on CI critically damped, within 30 s
-        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.grabbed == -1 && it.moving == 0 } == true } } catch (_: ComposeTimeoutException) {}
-        val home = checkNotNull(mapDrawn())
-        check(home.grabbed == -1 && home.moving == 0 && home.carried == 0) { "Bodies are still off home 30 s after the let-go for $still: $home" }
+        // nothing is kept: home again, with animations off as on CI critically damped
+        val home = requireHome(still)
+        check(home.carried == 0) { "A pulled or carried body is still off home for $still: $home" }
         check(same(before.pose, home.pose)) { "The let-go moved the camera for $still" }
         if (homes) {
             val back = if (at != null && member == null) null else named(index)
@@ -481,6 +482,25 @@ class MapModeSpaceRenderTest {
                 check((again - memberFrom).getDistance() <= density) { "The member $member came back to $again, not within 1 dp of $memberFrom, for $still" }
             }
         }
+    }
+
+    /**
+     * S05g2 A3: after a let-go, every body home and none held, within the frames iOS's spring gives the
+     * let-go (MapDrawn.restFrames, MapDrag.framesToRest: 0.05 s a frame, so a slow emulator gets as many
+     * frames as a phone, not as many seconds); 180 s of the clock at most, against a hang. A red names the
+     * frames counted since the let-go and the latest frame's interval, the frame rate read off directly.
+     */
+    private fun requireHome(name: String): MapDrawn {
+        try {
+            compose.waitUntil(180_000) { mapDrawn()?.let { (it.grabbed == -1 && it.moving == 0) || it.letGoFrames > it.restFrames } == true }
+        } catch (_: ComposeTimeoutException) {}
+        val home = checkNotNull(mapDrawn())
+        check(home.restFrames > 0) { "No let-go was counted for $name: $home" }
+        check(home.grabbed == -1 && home.moving == 0) {
+            "Bodies are still off home ${home.letGoFrames} frames after the let-go, where iOS's spring needs ${home.restFrames} at most " +
+                "(the latest frame ${home.frameMs} ms after the one before) for $name: $home"
+        }
+        return home
     }
 
     /**
