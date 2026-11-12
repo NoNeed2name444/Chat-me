@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
@@ -34,15 +35,23 @@ import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.GraphTheme
+import com.cramdown.sorta.ideas.IdeaBook
+import com.cramdown.sorta.ideas.MapLegend
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.map.MapNameShow
 import com.cramdown.sorta.map.MapTouchRules
+import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.SpaceStyle
+import com.cramdown.sorta.map.UniversePlan
+import com.cramdown.sorta.map.UniverseRole
+import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
+import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.MapPanelTags
 import com.cramdown.sorta.ui.ideas.SortaMode
+import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
 import com.cramdown.sorta.ui.map.MapTapKey
@@ -107,6 +116,14 @@ import kotlin.math.sqrt
  * with its down, before the pick-up, turns the camera and moves no body; in Performance a hold that
  * moves still turns it. requireNames' press: a quick move takes the name away, a held one keeps it
  * on the body it carries.
+ *
+ * S05h A3: Space's default look is iOS's Universe, so every check above from the first view to
+ * requireSun's Suns runs on it. requireUniverse then checks the Universe itself: its bodies by role as
+ * UniversePlan gives them for the fixture, no moon link drawn and arched and far links both drawn
+ * (mapmode-universe-...); Fly in on the Garden black hole, its system inside the window, and Recentre
+ * back to the first view (mapmode-fly-space-...); the black hole moved, carrying at least its planets,
+ * a planet chosen inside it within 10 % of its move (mapmode-drag-star-space-...). Space's legend,
+ * opened at its top, shows the ladder, and its Moon row is there (mapmode-legend-top-space-...).
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -195,6 +212,8 @@ class MapModeSpaceRenderTest {
         requireChoice("space", dark, spaceChosen, spaceBefore, home = spaceHome)
         // S05g A6: a chosen sun, its mark and its links' plasma
         requireSun(dark)
+        // S05h A3: the Universe at rest, Fly in and a moved black hole
+        requireUniverse(dark)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -428,8 +447,10 @@ class MapModeSpaceRenderTest {
      * and the choice as they were, nothing off home within the frames iOS's spring needs ([requireHome]),
      * and with [homes] (Space, or Neurons
      * with animations off, where a home stays put) the body within 1 dp of where it was picked up.
+     * [carriedAtLeast]: how many bodies [carries] wants moved with it (S05h: a black hole's planets).
      */
-    private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true) {
+    private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true,
+                            carriedAtLeast: Int = 1) {
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
         val density = instrumentation.targetContext.resources.displayMetrics.density
         val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop.toFloat()
@@ -466,7 +487,7 @@ class MapModeSpaceRenderTest {
             val over = moved.names.filter { it.index != index && crosses(it.box, heldPill.box) }
             check(over.isEmpty()) { "A name lies over held body $index's (${heldPill.box}) for $still: $over" }
             if (member != null) check(moved.names.none { it.index == member }) { "The chosen member $member kept its name while the cell was held for $still: ${moved.names}" }
-            if (carries) check(moved.carried >= 1) { "Body $index pulled or carried nothing for $still: $moved" }
+            if (carries) check(moved.carried >= carriedAtLeast) { "Body $index pulled or carried ${moved.carried}, not $carriedAtLeast or more, for $still: $moved" }
             // the carry in the world, each body's own offset from its home, so neither's depth on screen counts
             if (member != null) {
                 check(moved.chosen == member) { "The member $member is not the chosen body mid-drag for $still: $moved" }
@@ -667,6 +688,121 @@ class MapModeSpaceRenderTest {
     }
 
     /**
+     * S05h A3: the Universe, Space's default look, read from MapDrawn with animations off. At rest its
+     * bodies by role are UniversePlan's for the fixture (as IdeasSpace builds it: every note, folder and
+     * link, the standard Link length), no moon's link to its planet is drawn (near and far links at most
+     * the plan's links of other kinds) and arched and far links are both drawn: a still,
+     * mapmode-universe-<light|dark>-<device>.png. The fixture's Garden folder is a black hole (no folder
+     * here has a subfolder, so it has no star; iOS's sample flies into its Inguinal star): chosen, then
+     * Fly in on its card, it is flown in to, every body of its system drawn inside the map below the top
+     * strip (mapmode-fly-space-...), and Recentre brings back the first view, nothing flown in to. Then,
+     * with a planet inside it chosen, the black hole held 300 ms and moved 8 slops carries at least its
+     * planets, the planet off home within 10 % of the black hole's move (requireDrag's member;
+     * mapmode-drag-star-space-...). A tap on empty space lets it go, the map as Neurons finds it.
+     */
+    private fun requireUniverse(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-universe-$mode-$device"
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val book = IdeaBook(notes, folders)
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && (mapDrawn()?.roles?.size ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
+        val rest = checkNotNull(mapDrawn())
+        val home = rest.pose
+        val roles = UniverseRole.values().map { r -> plan.bodies.count { it.role == r } }
+        check(rest.roles == roles) { "The map's bodies by role (${rest.roles}) are not UniversePlan's ($roles, in ${UniverseRole.values().toList()}) for $name: $rest" }
+        val drawable = plan.links.count { it.kind != 3 }
+        check(rest.nearLinks + rest.farLinks <= drawable) {
+            "More links drawn (${rest.nearLinks} near, ${rest.farLinks} far) than the plan has other than a moon's to its planet ($drawable) for $name: $rest"
+        }
+        check(rest.archedLinks > 0 && rest.farLinks > 0) { "No arched or no far link drawn for $name: $rest" }
+        check(home.size == 6) { "No camera pose for $name: $rest" }
+        shot(name)
+        // Fly in on the Garden black hole, chosen as the map's hit test hands it on
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        val g = tap.ids.indexOfFirst { it.equals(garden.id, ignoreCase = true) }
+        check(g >= 0 && plan.bodies.getOrNull(g)?.id.equals(garden.id, ignoreCase = true) && plan.bodies[g].role == UniverseRole.GALAXY) {
+            "The Garden folder is not the plan's black hole $g on the map for $name: ${tap.ids}"
+        }
+        val planets = plan.bodies.indices.filter { plan.bodies[it].parent == g }
+        check(planets.isNotEmpty()) { "The Garden black hole has no planets in the plan for $name" }
+        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
+        compose.runOnIdle { tap.tap(g) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == g) { "The Garden black hole ($g) is not chosen with its card for $name: ${mapDrawn()}" }
+        val fly = "mapmode-fly-space-$mode-$device"
+        val flyIn = instrumentation.targetContext.resources.getString(R.string.map_peek_fly_in)
+        compose.onNode(hasText(flyIn) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.flown == g } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_500) // the flight's 0.8 s, or at once with animations off
+        val flown = checkNotNull(mapDrawn())
+        check(flown.flown == g) { "Fly in on the Garden black hole ($g) did not fly in to it for $fly: $flown" }
+        val pose = flown.pose
+        check(pose.size == 6 && !same(home, pose)) { "Fly in did not move the camera for $fly: $home, then $pose" }
+        val bounds = checkNotNull(mapNode()).boundsInRoot
+        val stripBottom = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot.bottom - bounds.top
+        val camera = OrbitCamera(Vec3(pose[0], pose[1], pose[2]), pose[3], pose[4], pose[5])
+        val centre = plan.bodies[g].home
+        val outside = plan.systems[g].mapNotNull { p ->
+            val at = camera.project(centre + p, bounds.width, bounds.height)
+            if (at == null || at.first !in 0f..bounds.width || at.second !in stripBottom..bounds.height) (p to at) else null
+        }
+        check(plan.systems[g].isNotEmpty() && outside.isEmpty()) {
+            "Bodies of the Garden black hole's system are drawn outside the map (${bounds.width}x${bounds.height}, the strip's bottom $stripBottom) for $fly: $outside"
+        }
+        shot(fly)
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.flown == -1 && same(home, it.pose) } == true } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(500)
+        val back = checkNotNull(mapDrawn())
+        check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
+        // the black hole moved, a planet inside it chosen: found by their names, as Neurons' cell and its idea are
+        val drag = "mapmode-drag-star-space-$mode-$device"
+        compose.runOnIdle { tap.tap(g) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        val holeAt = checkNotNull(named(g)) { "The Garden black hole ($g) shows no name to find it by for $drag: ${mapDrawn()}" }
+        val planet = planets.maxBy { i -> named(i)?.let { (it - holeAt).getDistance() } ?: 0f }
+        compose.runOnIdle { tap.tap(planet) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == planet && named(planet) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000)
+        check(mapDrawn()?.chosen == planet) { "The planet $planet inside the Garden black hole is not chosen for $drag: ${mapDrawn()}" }
+        requireDrag(g, drag, carries = true, member = planet, at = holeAt, homes = !ValueAnimator.areAnimatorsEnabled(), carriedAtLeast = planets.size)
+        compose.onNode(map).performTouchInput { click(emptySpot(drag)) }
+        compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+    }
+
+    /**
+     * S05h A3: Space's legend at its top, as it opens: the ladder, one item, drawn whole on the screen
+     * inside the sheet (mapmode-legend-top-space-<light|dark>-<device>.png); its Moon row is there and,
+     * scrolled to, inside the sheet too.
+     */
+    private fun requireLegendTop(dark: Boolean) {
+        val name = "mapmode-legend-top-space-${if (dark) "dark" else "light"}-$device"
+        val content = MapLegend.of(GraphTheme.SPACE)
+        val sheet = compose.onNode(hasTestTag(MapPanelTags.legend(GraphTheme.SPACE))).fetchSemanticsNode().boundsInRoot
+        val ladders = compose.onAllNodes(hasContentDescription(content.ladderLabel)).fetchSemanticsNodes()
+        check(content.ladderLabel.isNotEmpty() && ladders.size == 1) { "Space's legend shows ${ladders.size} ladders, not one, for $name" }
+        val ladder = ladders.single().boundsInRoot
+        val screen = instrumentation.targetContext.resources.displayMetrics
+        check(ladder.top >= sheet.top && ladder.bottom <= minOf(sheet.bottom, screen.heightPixels.toFloat()) && ladder.left >= 0f && ladder.right <= screen.widthPixels) {
+            "Space's ladder ($ladder) is not whole on the screen inside its sheet ($sheet) at the legend's top for $name"
+        }
+        shot(name)
+        val moon = checkNotNull(content.rows.firstOrNull { it.name == "Moon" }) { "Space's legend has no Moon row for $name" }
+        val row = hasContentDescription(MapLegend.spoken(moon))
+        check(compose.onAllNodes(row).fetchSemanticsNodes().size == 1) { "Space's legend shows no Moon row, one item, for $name" }
+        compose.onNode(row).performScrollTo()
+        compose.waitForIdle()
+        val at = compose.onNode(row).fetchSemanticsNode().boundsInRoot
+        val now = compose.onNode(hasTestTag(MapPanelTags.legend(GraphTheme.SPACE))).fetchSemanticsNode().boundsInRoot
+        check(at.top >= now.top - 1f && at.bottom <= now.bottom + 1f) { "Space's Moon row ($at) is not inside its sheet ($now), scrolled to, for $name" }
+    }
+
+    /**
      * Look's main style set to [label] in Space's Look menu, as a person would; the map builds its
      * scene again (a new MapDrawn.build) and draws it.
      */
@@ -773,6 +909,7 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(10_000) { shown(sheet) }
         SystemClock.sleep(1_000) // the sheet comes to rest
         shot("mapmode-legend-${theme.rawValue}-${if (dark) "dark" else "light"}-$device")
+        if (theme == GraphTheme.SPACE) requireLegendTop(dark)
         requireLegendFoot(theme, dark)
         ui.pressBack()
         // a phone's sheet, taken full by requireLegendFoot's swipe, steps back to its half height at the

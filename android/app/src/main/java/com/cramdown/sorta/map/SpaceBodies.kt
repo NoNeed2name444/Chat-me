@@ -49,9 +49,11 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
          * Per beam: the A (sending) end trimmed (x, y, z) and its style, the B end trimmed and its
          * style, seed (0...15), lit, how far it has grown (eased, 0...1), then what bends it near
          * each end (iOS GraphRibbonWriter.path): the A body's centre and axis, the B body's centre and
-         * axis (a black hole's disk axis, a gas giant's spin axis; zero for the other styles).
+         * axis (a black hole's disk axis, a gas giant's spin axis; zero for the other styles); then
+         * (S05h) the link's Universe kind (0 same folder, 1 same galaxy, 2 far; 0 outside the Universe),
+         * its bow (UniverseBeams.bow) and the chunk-order node it bows from (−1 the origin).
          */
-        const val BEAM_STRIDE = 23
+        const val BEAM_STRIDE = 26
         /** The light when there is no sun, a world direction towards it (iOS rpKey). */
         val KEY: Vec3 = Vec3(-0.4f, 0.5f, 0.8f).normalized()
         /** A chunk counts as open into its nodes from this openness. */
@@ -89,8 +91,28 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     /** The body marked: the one held, else the chosen one (focus = grabbed ?? selected, GraphMotion.swift:1840). */
     private val marked get() = if (grabbed >= 0) grabbed else chosen
 
-    /** Node [i]'s place along [axis]: its home (Octree.positions) plus its own offset from a drag. */
-    private fun at(i: Int, axis: Int): Float = tree.positions[3 * i + axis] + (drag?.offset(i, axis) ?: 0f)
+    /**
+     * The Universe (S05h): each node's live home this frame, chunk order, three floats each (the
+     * plan's place at the orbit clock), set by the renderer; null keeps Octree.positions.
+     */
+    var homes: FloatArray? = null
+    /** The Universe: each node's own radius, chunk order (UniverseBeams.radius); null draws every body at [nodeRadius]. */
+    var radii: FloatArray? = null
+    /** The Universe: each node's look within its style ([UniverseLooks]), chunk order; null for none. */
+    var looks: FloatArray? = null
+    /** The Universe: each link's kind and centre by node pair (UniverseBeams.key, .pack); null outside it. */
+    var linkKinds: Map<Long, Long>? = null
+    /** The centre each beam bows from, this frame (three floats a beam; the origin for −1). */
+    val beamCentres = FloatArray(SpaceLod.MAX_BEAMS * 3)
+    /** Beams built this frame by kind (S05h): straight (kind 0, and every link outside the Universe), arched (1) and far (2). */
+    var nearBeams = 0; private set
+    var archedBeams = 0; private set
+    var farBeams = 0; private set
+
+    /** Node [i]'s place along [axis]: its home (Octree.positions, or its live home in the Universe) plus its own offset from a drag. */
+    private fun at(i: Int, axis: Int): Float = (homes ?: tree.positions)[3 * i + axis] + (drag?.offset(i, axis) ?: 0f)
+    /** Node [i]'s own radius. */
+    private fun radiusOf(i: Int): Float = radii?.getOrNull(i) ?: nodeRadius
     /** Its radius's scale this frame (MapPop.scale). */
     var chosenScale: Float = 1f
     /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
@@ -257,13 +279,14 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         }
         val o = j * STRIDE
         val chosenHere = node == marked
-        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) nodeRadius * chosenScale else nodeRadius
+        val own = radiusOf(node)
+        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) own * chosenScale else own
         data[o + 4] = light.x; data[o + 5] = light.y; data[o + 6] = light.z; data[o + 7] = seed
         data[o + 8] = a.x; data[o + 9] = a.y; data[o + 10] = a.z; data[o + 11] = codeA
-        data[o + 12] = b.x; data[o + 13] = b.y; data[o + 14] = b.z; data[o + 15] = SpaceLod.pixels(nodeRadius, focal, depth)
+        data[o + 12] = b.x; data[o + 13] = b.y; data[o + 14] = b.z; data[o + 15] = SpaceLod.pixels(own, focal, depth)
         val fade = fadeOf(node)
         if (fade < 1f) fadedCount++
-        data[o + 16] = fade; data[o + 17] = if (chosenHere) 1f else 0f; data[o + 18] = 0f; data[o + 19] = 0f
+        data[o + 16] = fade; data[o + 17] = if (chosenHere) 1f else 0f; data[o + 18] = looks?.getOrNull(node) ?: 0f; data[o + 19] = 0f
     }
 
     /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]. */
@@ -305,6 +328,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     private fun buildBeams(plan: FramePlan) {
         beamCount = 0
         litCount = 0
+        nearBeams = 0; archedBeams = 0; farBeams = 0
         val only = if (focus != null) chosen else -1
         seen.clear(); leafSeen.clear()
         val edges = tree.leafEdges
@@ -344,13 +368,19 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
      * at most 0.45 of the length, so a short link is kept (iOS GraphRibbonWriter.path).
      */
     private fun addBeam(plan: FramePlan, u: Int, v: Int, grow: Float, ghost: Boolean = false) {
+        // the Universe's kind: a moon's link to its own planet is never drawn (GraphMotion.swift:1827)
+        val packed = linkKinds?.get(UniverseBeams.key(u, v))
+        val kind = packed?.let { UniverseBeams.kindOf(it) } ?: 0
+        if (!UniverseBeams.drawn(kind)) return
+        val centre = packed?.let { UniverseBeams.centreOf(it) } ?: -1
         val su = tree.groups[u].toInt(); val sv = tree.groups[v].toInt()
         val aEnd = if (sv > su) v else u
         val bEnd = if (aEnd == u) v else u
         val sa = tree.groups[aEnd].toInt(); val sb = tree.groups[bEnd].toInt()
         placed(plan, aEnd, pa); placed(plan, bEnd, pb)
-        val trimA = SpaceStyle.of(sa).linkRadius * nodeRadius * 0.85f
-        val trimB = SpaceStyle.of(sb).linkRadius * nodeRadius * 0.85f
+        // in the Universe iOS's trims by style, times each body's own radius (GraphUniverseScene.swift:207)
+        val trimA = if (radii != null) UniverseBeams.trim(sa) * radiusOf(aEnd) else SpaceStyle.of(sa).linkRadius * nodeRadius * 0.85f
+        val trimB = if (radii != null) UniverseBeams.trim(sb) * radiusOf(bEnd) else SpaceStyle.of(sb).linkRadius * nodeRadius * 0.85f
         LinkStrips.trimmed(pa, 0, pb, 0, trimA, trimB, ends)
         val o = beamCount * BEAM_STRIDE
         beams[o] = ends[0]; beams[o + 1] = ends[1]; beams[o + 2] = ends[2]; beams[o + 3] = sa.toFloat()
@@ -366,6 +396,13 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         axis(aEnd, beams, o + 14)
         beams[o + 17] = pb[0]; beams[o + 18] = pb[1]; beams[o + 19] = pb[2]
         axis(bEnd, beams, o + 20)
+        beams[o + 23] = kind.toFloat()
+        beams[o + 24] = UniverseBeams.bow(kind)
+        beams[o + 25] = centre.toFloat()
+        val c = beamCount * 3
+        if (centre in 0 until tree.nodeCount) for (a in 0 until 3) beamCentres[c + a] = at(centre, a)
+        else { beamCentres[c] = 0f; beamCentres[c + 1] = 0f; beamCentres[c + 2] = 0f }
+        when (kind) { 1 -> archedBeams++; 2 -> farBeams++; else -> nearBeams++ }
         beamCount++
     }
 
@@ -383,5 +420,76 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     fun linkSeed(a: Int, b: Int): Float {
         val v = sin(a * 12.9898f + b * 78.233f) * 43758.5453f
         return floor(abs(v - floor(v)) * 16f).coerceIn(0f, 15f)
+    }
+}
+
+/**
+ * The Universe's links as beams (S05h), iOS's GraphUniverseScene.swift:195-207 and addRibbon
+ * (GraphMotion.swift:1878-1905): a link inside a folder straight, one between folders of a galaxy
+ * arched 0.10 of its length away from the galaxy's core, one between galaxies or to a comet arched
+ * 0.15 from the origin and drawn apart at 0.55 of the brightness (0.825 bold); a moon's link to its own
+ * planet not at all. Fine beams, 0.07 each side, starting inside each body by its style's trim.
+ */
+object UniverseBeams {
+    /** Each style's trim, times the body's own radius: black hole, sun, gas giant, rocky, pulsar, comet. */
+    val TRIMS = floatArrayOf(1.0f, 0.72f, 0.72f, 1.0f, 1.0f, 0.75f)
+    /** The beams' half width, near and far, in the plan's units. */
+    const val HALF_WIDTH = 0.07f
+    const val FAR_ENERGY = 0.55f
+    const val FAR_ENERGY_BOLD = 0.825f
+
+    fun trim(code: Int): Float = TRIMS.getOrElse(code) { 1f }
+    fun bow(kind: Int): Float = when (kind) { 1 -> 0.10f; 2 -> 0.15f; else -> 0f }
+    fun drawn(kind: Int): Boolean = kind != 3
+    fun far(kind: Int): Boolean = kind == 2
+    fun farEnergy(bold: Boolean): Float = if (bold) FAR_ENERGY_BOLD else FAR_ENERGY
+
+    /** A pair of chunk-order nodes, either way round. */
+    fun key(u: Int, v: Int): Long = Octree.pairKey(min(u, v), max(u, v))
+    fun pack(kind: Int, centre: Int): Long = kind.toLong() or ((centre + 1).toLong() shl 8)
+    fun kindOf(packed: Long): Int = (packed and 0xFF).toInt()
+    fun centreOf(packed: Long): Int = (packed shr 8).toInt() - 1
+
+    /** A body's drawn radius: a star's and an unringed planet's sphere × 1.2 (GraphUniverseScene.swift:100-105), else its sphere. */
+    fun radius(body: UniverseBody): Float {
+        val grown = body.role == UniverseRole.STAR || body.role == UniverseRole.HOME ||
+            ((body.role == UniverseRole.GAS_GIANT || body.role == UniverseRole.ROCKY) && !body.ringed)
+        return if (grown) body.sphere * 1.2f else body.sphere
+    }
+}
+
+/**
+ * A Universe body's look within its style (S05h; iOS's dress, GraphUniverseScene.swift:265-305, and
+ * GraphNodeFactory.swift:365-372), the shaders' vMark.z: a star's tier colour, a dark (empty) star
+ * with no corona, an empty galaxy's black hole with no disk, a gas giant with no ring unless ringed.
+ * The moon's own look and a resting comet with no tail are named but not yet drawn apart.
+ */
+object UniverseLooks {
+    const val PLAIN = 0f
+    const val TIER_1 = 1f
+    const val TIER_2 = 2f
+    const val TIER_3 = 3f
+    const val DARK_STAR = 4f
+    const val EMPTY_GALAXY = 5f
+    const val MOON = 6f
+    const val RESTING_COMET = 7f
+    const val UNRINGED = 8f
+
+    /** A sun's colour by tier: 1 white, 2 (1.0, 0.74, 0.50), 3 (1.0, 0.52, 0.36); a dark star (0.42, 0.20, 0.14). */
+    fun sunTint(look: Float): Vec3 = when (look) {
+        TIER_2 -> Vec3(1.0f, 0.74f, 0.50f)
+        TIER_3 -> Vec3(1.0f, 0.52f, 0.36f)
+        DARK_STAR -> Vec3(0.42f, 0.20f, 0.14f)
+        else -> Vec3(1f, 1f, 1f)
+    }
+
+    fun of(body: UniverseBody): Float = when (body.role) {
+        UniverseRole.HOME -> if (body.empty) DARK_STAR else TIER_1
+        UniverseRole.STAR -> if (body.empty) DARK_STAR else when (body.tier.coerceIn(1, 3)) { 1 -> TIER_1; 2 -> TIER_2; else -> TIER_3 }
+        UniverseRole.GALAXY -> if (body.empty) EMPTY_GALAXY else PLAIN
+        UniverseRole.GAS_GIANT -> if (body.ringed) PLAIN else UNRINGED
+        UniverseRole.MOON -> MOON
+        UniverseRole.OORT -> RESTING_COMET
+        else -> PLAIN
     }
 }

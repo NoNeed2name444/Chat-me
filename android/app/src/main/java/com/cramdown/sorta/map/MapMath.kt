@@ -340,6 +340,83 @@ object MapCardCover {
 /** A first view ([OrbitCamera.fitWindow]): how far back the camera stands, and what it looks at. */
 data class MapFit(val distance: Float, val target: Vec3)
 
+/**
+ * Fly in to a Universe folder's system (S05h; iOS's fly(to:), Graph3DView.swift:2363-2420, the
+ * untilted branch): the camera centres on where the folder rests (its home, `:2381`), stands back far
+ * enough that every point of its `systems`, padded by [PAD], fits within [FILL] of the window the
+ * chrome leaves (GraphFraming.distance, GraphFraming.swift:250-268), and keeps its turn (yaw and
+ * pitch). It flies there over [SECONDS], easing in and out, and at once with animations off.
+ */
+object MapFly {
+    const val PAD = 0.25f
+    const val FILL = 0.88f
+    const val SECONDS = 0.8f
+
+    /** The window (GraphTilt.window, GraphTilt.swift:192-204): width over height, height share, and its middle's offset right and up, in view heights. */
+    data class Window(val aspect: Float, val share: Float, val across: Float, val up: Float) {
+        companion object {
+            fun of(width: Float, height: Float, insets: MapInsets): Window {
+                val wide = max(width, 1f)
+                val tall = max(height, 1f)
+                val seenWidth = max(wide - insets.left - insets.right, wide / 3)
+                val seenHeight = max(tall - insets.top - insets.bottom, tall / 3)
+                return Window(seenWidth / seenHeight, seenHeight / tall, (insets.left - insets.right) / 2 / tall, (insets.bottom - insets.top) / 2 / tall)
+            }
+        }
+    }
+
+    /**
+     * Where the camera stands to frame [points] round [centre] in a [width] x [height] view: its
+     * distance and its target, with [camera]'s yaw and pitch kept. Null for no points or no view.
+     */
+    fun fit(camera: OrbitCamera, centre: Vec3, points: List<Vec3>, width: Float, height: Float, insets: MapInsets = MapInsets.NONE): MapFit? {
+        if (points.isEmpty() || width <= 1f || height <= 1f) return null
+        val window = Window.of(width, height, insets)
+        val right = camera.right(); val up = camera.up(); val back = camera.forward() * -1f
+        val tanFull = tan(camera.fovY / 2)
+        val tanUp = tanFull * FILL * window.share
+        val tanSide = tanUp * max(window.aspect, 0.1f)
+        val leanX = window.across * 2 * tanFull
+        val leanY = window.up * 2 * tanFull
+        var need = 1f
+        for (p in points) {
+            val rel = p - centre
+            val z = rel.dot(back)
+            val x = rel.dot(right) + leanX * z
+            val y = rel.dot(up) + leanY * z
+            val here = z + PAD + max((abs(x) + PAD) / tanSide, (abs(y) + PAD) / tanUp)
+            need = max(need, here)
+        }
+        // GraphFraming.cameraHome: the camera off the centre so the centre shows in the window's middle
+        val reach = 2 * need * tanFull
+        val target = centre - (right * window.across + up * window.up) * reach
+        return MapFit(need, target)
+    }
+
+    /** How long the flight takes: [SECONDS], or 0 with animations off (Graph3DView.swift:2401, :2415). */
+    fun seconds(lively: Boolean): Float = if (lively) SECONDS else 0f
+}
+
+/**
+ * One flight under way (Fly in): the camera's target and distance from where they were to [to], on
+ * [MapCameraEase.eased] over [seconds]; at once with [seconds] 0.
+ */
+class CameraFlight(private val fromTarget: Vec3, private val fromDistance: Float, val to: MapFit, val seconds: Float) {
+    private var elapsed = 0f
+    val finished: Boolean get() = seconds <= 0f || elapsed >= seconds
+
+    /** How far along it is, 0 to 1, eased. */
+    val progress: Float get() = if (finished) 1f else MapCameraEase.eased(elapsed / seconds)
+
+    /** Moves on by [dt] seconds and sets [camera]'s target and distance. */
+    fun step(camera: OrbitCamera, dt: Float) {
+        elapsed += max(dt, 0f)
+        val k = progress
+        camera.target = fromTarget + (to.target - fromTarget) * k
+        camera.distance = fromDistance + (to.distance - fromDistance) * k
+    }
+}
+
 /** A name's box on screen: its centre and size, in pixels. */
 data class LabelBox(val x: Float, val y: Float, val width: Float, val height: Float)
 

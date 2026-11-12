@@ -61,9 +61,15 @@ data class UniverseInput(
     val stretch: Double get() = max(spacing, 1.0)
 }
 
-/** How a body moves relative to its parent (iOS GraphOrbit: the cases Neurons uses). */
+/** How a body moves relative to its parent (iOS GraphOrbit, GraphUniverse.swift:128-142). */
 sealed class GraphOrbit {
     data class Fixed(val p: Vec3) : GraphOrbit()
+    /** A circle of [radius] in the plane of [u] and [v], at angle phase + rate · t. */
+    data class Circle(val radius: Float, val u: Vec3, val v: Vec3, val phase: Float, val rate: Float) : GraphOrbit()
+    /** An ellipse with its focus at the origin: periapsis along [u], mean anomaly phase + rate · t. */
+    data class Kepler(val a: Float, val e: Float, val u: Vec3, val v: Vec3, val phase: Float, val rate: Float) : GraphOrbit()
+    /** The Oort cloud: an ellipse of semi-axes [x] and [y] at height [z]. */
+    data class Ring(val x: Float, val y: Float, val z: Float, val phase: Float, val rate: Float) : GraphOrbit()
     data class Drift(val base: Vec3, val amp: Float, val phase: Float, val rate: Float) : GraphOrbit()
 }
 
@@ -85,9 +91,36 @@ object GraphUniverse {
 
     fun level(words: Int): Int = levels.count { words >= it }
 
+    /** Where an orbit puts its body, relative to its parent, at [time] (GraphUniverse.swift:254-281). */
     fun offset(orbit: GraphOrbit, time: Double): Vec3 = when (orbit) {
         is GraphOrbit.Fixed -> orbit.p
+        is GraphOrbit.Circle -> {
+            val angle = orbit.phase + ((orbit.rate.toDouble() * time) % (2 * PI)).toFloat()
+            orbit.u * (cos(angle) * orbit.radius) + orbit.v * (sin(angle) * orbit.radius)
+        }
+        is GraphOrbit.Kepler -> {
+            val m = orbit.phase + ((orbit.rate.toDouble() * time) % (2 * PI)).toFloat()
+            val big = eccentric(m, orbit.e)
+            val x = orbit.a * (cos(big) - orbit.e)
+            val y = orbit.a * sqrt(1 - orbit.e * orbit.e) * sin(big)
+            orbit.u * x + orbit.v * y
+        }
+        is GraphOrbit.Ring -> {
+            val angle = orbit.phase + ((orbit.rate.toDouble() * time) % (2 * PI)).toFloat()
+            Vec3(orbit.x * cos(angle), orbit.y * sin(angle), orbit.z)
+        }
         is GraphOrbit.Drift -> orbit.base + wobble(orbit.amp, orbit.phase, orbit.rate, time)
+    }
+
+    /** Kepler's equation, four Newton steps (GraphUniverse.swift:301-310). */
+    fun eccentric(m: Float, e: Float): Float {
+        var big = m + e * sin(m)
+        repeat(4) {
+            val f = big - e * sin(big) - m
+            val slope = 1 - e * cos(big)
+            big -= f / slope
+        }
+        return big
     }
 
     /** Three slow sines at unrelated rates, each argument wrapped first. */
@@ -182,6 +215,8 @@ class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
     var noteHome = IntArray(0)
     var nbr: List<List<Int>> = emptyList()
     var edgePairs: List<Pair<Int, Int>> = emptyList()
+    /** Each container's place in a depth-first outline, mod 3 (GraphUniverse.swift:685-696). */
+    var palette = IntArray(0)
 
     init {
         val seenNotes = HashSet<String>()
@@ -247,6 +282,18 @@ class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
             if (h < 0) continue
             var cur = h
             while (cur >= 0) { count[cur] += 1; cur = parent[cur] }
+        }
+        palette = IntArray(cCount)
+        if (hasFolders) {
+            val roots = (0 until cCount).filter { parent[it] < 0 }.sortedWith { a, b -> if (lessC(a, b)) -1 else if (lessC(b, a)) 1 else 0 }
+            var order = 0
+            val stack = ArrayList(roots.reversed())
+            while (stack.isNotEmpty()) {
+                val c = stack.removeAt(stack.size - 1)
+                palette[c] = order % 3
+                order += 1
+                for (k in kids[c].reversed()) stack.add(k)
+            }
         }
     }
 
@@ -392,6 +439,8 @@ data class GraphTiltFit(val distance: Float, val shiftX: Float, val shiftY: Floa
 object GraphTilt {
     const val FIELD_OF_VIEW = 55f
     const val NEURONS_DEGREES = 35f
+    /** Space's default pitch (GraphTilt.swift:119): its galaxies' lift is judged at it. */
+    const val SPACE_DEGREES = 45f
     const val REACH_LOW = 0.15f
     const val REACH_HIGH = 1.0f
     const val CRISP_SHARE = 0.20f
@@ -495,10 +544,9 @@ object GraphTilt {
         return max(hx - lx, hy - ly) * 0.5f
     }
 
-    /** The amplitude for the Neurons theme's top clusters. */
-    fun amplitude(clusters: List<Cluster>): Float {
-        val tilt = neuronsAngle
-        if (clusters.isEmpty()) return 0f
+    /** The amplitude for a theme's top clusters at its pitch [tilt] (the Neurons' by default; GraphTilt.swift:331-341). */
+    fun amplitude(clusters: List<Cluster>, tilt: Float = neuronsAngle): Float {
+        if (!(tilt > 0f) || clusters.isEmpty()) return 0f
         val h = half(clusters)
         for (share in amplitudes) if (legible(clusters, tilt, share * h)) return share * h
         return 0f

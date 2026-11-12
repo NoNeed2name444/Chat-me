@@ -474,4 +474,31 @@ class SpaceStyleTest {
             assertTrue("each link once", ends.add("${min(ax, bx)}:${max(ax, bx)}"))
         }
     }
+
+    // S05h: a Universe body's look within its style (UniverseLooks), and the shaders that read it (vMark.z)
+    @Test fun universeLooksAndTheShadersThatReadThem() {
+        fun body(role: UniverseRole, tier: Int = 0, empty: Boolean = false, ringed: Boolean = false) =
+            UniverseBody("id", role, -1, -1, 0.3f, tier, empty, ringed, 0, -1, 0, 0, -1, GraphOrbit.Fixed(Vec3.ZERO), Vec3.ZERO, "t", "t")
+        assertEquals(UniverseLooks.TIER_1, UniverseLooks.of(body(UniverseRole.HOME, 1)))
+        assertEquals(UniverseLooks.TIER_1, UniverseLooks.of(body(UniverseRole.STAR, 1)))
+        assertEquals(UniverseLooks.TIER_2, UniverseLooks.of(body(UniverseRole.STAR, 2)))
+        assertEquals(UniverseLooks.TIER_3, UniverseLooks.of(body(UniverseRole.STAR, 3)))
+        assertEquals(UniverseLooks.DARK_STAR, UniverseLooks.of(body(UniverseRole.STAR, 2, empty = true)))
+        assertEquals(UniverseLooks.EMPTY_GALAXY, UniverseLooks.of(body(UniverseRole.GALAXY, empty = true)))
+        assertEquals(UniverseLooks.PLAIN, UniverseLooks.of(body(UniverseRole.GALAXY)))
+        assertEquals(UniverseLooks.UNRINGED, UniverseLooks.of(body(UniverseRole.GAS_GIANT)))
+        assertEquals(UniverseLooks.PLAIN, UniverseLooks.of(body(UniverseRole.GAS_GIANT, ringed = true)))
+        assertEquals(UniverseLooks.MOON, UniverseLooks.of(body(UniverseRole.MOON)))
+        assertEquals(UniverseLooks.RESTING_COMET, UniverseLooks.of(body(UniverseRole.OORT)))
+        // iOS's tier colours (GraphNodeFactory.swift:365-372)
+        assertEquals(Vec3(1.0f, 0.74f, 0.50f), UniverseLooks.sunTint(UniverseLooks.TIER_2))
+        assertEquals(Vec3(1.0f, 0.52f, 0.36f), UniverseLooks.sunTint(UniverseLooks.TIER_3))
+        assertEquals(Vec3(0.42f, 0.20f, 0.14f), UniverseLooks.sunTint(UniverseLooks.DARK_STAR))
+        val sun = SpaceShaders.fragment(SpaceStyle.SUN)
+        assertTrue("the sun takes its tier's colour", sun.contains("vec3(1.0, 0.74, 0.50)") && sun.contains("vec3(1.0, 0.52, 0.36)") && sun.contains("vec3(0.42, 0.20, 0.14)"))
+        assertTrue("a dark star has no corona", sun.contains("!(rp_look > 3.5 && rp_look < 4.5)"))
+        assertTrue("an empty galaxy has no disk", SpaceShaders.fragment(SpaceStyle.BLACK_HOLE).contains("abs(vMark.z - 5.0) < 0.5 ? 0.0 : 1.0"))
+        assertTrue("a giant's ring only when ringed", SpaceShaders.fragment(SpaceStyle.GAS_GIANT).contains("rpRingedNow = abs(vMark.z - 8.0) < 0.5 ? 0.0 : rpRingedSet();")
+            && SpaceShaders.gasBody.contains("#define rpRinged rpRingedNow"))
+    }
 }

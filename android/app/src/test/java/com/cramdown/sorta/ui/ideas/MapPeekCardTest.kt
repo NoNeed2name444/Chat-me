@@ -1,5 +1,7 @@
 package com.cramdown.sorta.ui.ideas
 
+import com.cramdown.sorta.map.SpaceStyle
+import com.cramdown.sorta.ideas.rawValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -277,6 +279,35 @@ class MapPeekCardTest {
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks)).performClick()
         compose.waitForIdle()
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.allLinks))
+    }
+
+    @Test fun aUniverseFoldersCardFliesInAndOneSingleStyleHasNoFolders() {
+        // S05h: under Space's default look the Garden folder is a black hole on the map, its card a
+        // folder's with Open folder and Fly in (GraphMapPanels.swift:155-157); Fly in keeps the card
+        launchOnSpace()
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a black hole's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_OPEN)).assert(hasText(words.openFolder))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        compose.waitForIdle()
+        cardFor(garden.name)
+        // an idea's card on the Universe: Show links, never Fly in
+        tapBody(gate.id)
+        cardFor(gate.title)
+        assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test fun underOneSingleStyleNoCardFliesIn() {
+        // Look › Bodies › one style: today's Space, one body per idea and no folder bodies, so no card has Fly in
+        IdeasSettings(run.context).setNodeStyle(SpaceStyle.SUN.rawValue)
+        launchOnSpace()
+        assertFalse("no folder on the map", checkNotNull(tapper()).ids.any { it.equals(garden.id, ignoreCase = true) })
+        tapBody(gate.id)
+        cardFor(gate.title)
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        assertFalse("no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
     private fun drawnPose(): List<Float> =

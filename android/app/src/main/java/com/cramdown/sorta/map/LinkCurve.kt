@@ -197,6 +197,22 @@ object LinkCurve {
         return unit(cross(dir, helper), Vec3(0f, 0f, 1f))
     }
 
+    /**
+     * Which way a link from [pa] to [pb] arches (S05h, iOS GraphRibbonWriter.archDirection,
+     * GraphRibbons.swift:527-537): away from [centre], square to the link along [dir]; with the
+     * centre on the line, the side square to [dir] and z, and with [dir] along z any square direction.
+     */
+    fun archDirection(pa: Vec3, pb: Vec3, centre: Vec3, dir: Vec3): Vec3 {
+        val middle = (pa + pb) * 0.5f
+        var w = middle - centre
+        w -= dir * dot(w, dir)
+        val size = length(w)
+        if (size > 0.0001f) return w * (1f / size)
+        val side = cross(dir, Vec3(0f, 0f, 1f))
+        val sideSize = length(side)
+        return if (sideSize > 0.0001f) side * (1f / sideSize) else perpendicular(dir)
+    }
+
     /** [v] turned by [angle] radians about the unit [axis] (Rodrigues). */
     fun rotate(v: Vec3, axis: Vec3, angle: Float): Vec3 {
         val c = cos(angle); val s = sin(angle)

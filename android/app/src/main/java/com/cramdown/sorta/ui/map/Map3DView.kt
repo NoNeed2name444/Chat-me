@@ -107,6 +107,11 @@ import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Vec3
+import com.cramdown.sorta.map.UniverseBeams
+import com.cramdown.sorta.map.UniversePlan
+import com.cramdown.sorta.map.UniverseRole
+import com.cramdown.sorta.map.MapFly
+import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.grouped
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
@@ -133,7 +138,14 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 * so a held body springs home with no link pulling; false under one single style, where its links
                 * pull its neighbours.
                 */
-               val universe: Boolean = true) {
+               val universe: Boolean = true,
+               /**
+                * Space's Universe (S05h): the plan its bodies come from, one node a body (folders, the home and
+                * notes), the tree holding their homes; null under one single style and in the other themes.
+                */
+               val universePlan: UniversePlan? = null,
+               /** Each Universe galaxy's tone, by its body index, for its names' rims (S05h). */
+               val galaxyTones: Map<Int, LabelRgb> = emptyMap()) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -163,6 +175,44 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             // the bridges' half width: the wider of a tract's and a fibre's (NeuronGl.drawBridges)
             return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene,
                 edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE))
+        }
+
+        /**
+         * Space's Universe (S05h; iOS's GraphUniverseScene): node i is the plan's body i at its home, its
+         * group the body's style (a galaxy a black hole, a star and the home suns, a gas giant, a rocky
+         * planet and a moon rocky, a pulsar, a comet and a resting comet comets). A moon's link to its own
+         * planet (kind 3) is left out, as iOS never draws it (GraphMotion.swift:1827). [ids] and
+         * [titles] by body, its labels the names shown.
+         */
+        fun universe(plan: UniversePlan, tones: Map<Int, LabelRgb> = emptyMap(), leafCapacity: Int = 4096): MapScene {
+            val bodies = plan.bodies
+            val positions = FloatArray(bodies.size * 3)
+            for ((i, body) in bodies.withIndex()) {
+                positions[3 * i] = body.home.x; positions[3 * i + 1] = body.home.y; positions[3 * i + 2] = body.home.z
+            }
+            val codes = ByteArray(bodies.size) { universeStyle(bodies[it].role).code.toByte() }
+            val drawn = plan.links.filter { UniverseBeams.drawn(it.kind) }
+            val edges = IntArray(drawn.size * 2)
+            for ((k, link) in drawn.withIndex()) { edges[2 * k] = link.a; edges[2 * k + 1] = link.b }
+            val graph = MapGraph(positions, codes, edges, bodies.map { it.label }, bodies.map { it.id })
+            val tree = Octree.build(graph, leafCapacity, palette = SpacePalette.rgb)
+            val sizes = bodies.map { it.sphere }.sorted()
+            val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
+            // the first view holds the plan's envelope, every place a body can reach (GraphUniverse.swift:1475-1480)
+            val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
+            val reach = plan.envelope.maxOfOrNull { (it - centre).length() } ?: 0f
+            return MapScene(tree, radius, graph.titles, graph.ids, if (reach > 1e-3f) reach else viewRadius(tree), MapTheme.SPACE,
+                links = edges, linkHalf = UniverseBeams.HALF_WIDTH, universe = true, universePlan = plan, galaxyTones = tones)
+        }
+
+        /** A Universe body's Space style (S05h): what it is drawn as. */
+        fun universeStyle(role: UniverseRole): SpaceStyle = when (role) {
+            UniverseRole.GALAXY -> SpaceStyle.BLACK_HOLE
+            UniverseRole.STAR, UniverseRole.HOME -> SpaceStyle.SUN
+            UniverseRole.GAS_GIANT -> SpaceStyle.GAS_GIANT
+            UniverseRole.ROCKY, UniverseRole.MOON -> SpaceStyle.ROCKY
+            UniverseRole.PULSAR -> SpaceStyle.PULSAR
+            UniverseRole.COMET, UniverseRole.OORT -> SpaceStyle.COMET
         }
 
         fun viewRadius(tree: Octree): Float {
@@ -245,6 +295,9 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
  */
 data class MapEase(val id: String, val glide: Boolean, val serial: Int)
 
+/** Fly in to the Universe folder [id] (S05h): each new [serial] flies again. */
+data class MapFlyTo(val id: String, val serial: Int)
+
 /**
  * The 3D map on screen. Frames follow Choreographer's vsync; the window asks for the
  * display's highest refresh mode and the surface for its highest frame rate, so the map
@@ -308,6 +361,8 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     linksId: String? = null,
     /** The camera's move for a choice (S05g), null for none. */
     ease: MapEase? = null,
+    /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
+    flyTo: MapFlyTo? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -362,7 +417,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
-            universe = scene.universe,
+            universe = scene.universe, universePlan = scene.universePlan,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
@@ -383,7 +438,13 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     val shownBuild by rememberUpdatedState(scene.build)
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
+        if (recenter != 0) { renderer.leaveFlight(); loop.touched(); synchronized(camera) { home.restore(camera) } }
+    }
+    // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
+    LaunchedEffect(renderer, flyTo) {
+        val wanted = flyTo ?: return@LaunchedEffect
+        val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
     }
     // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
@@ -465,8 +526,16 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     var pressedName by remember(scene) { mutableStateOf<Int?>(null) }
     var hoveredName by remember(scene) { mutableStateOf<Int?>(null) }
     var nameClock by remember(scene) { mutableLongStateOf(0L) }
-    val board = remember(scene) { MapNameShow.Board() }
+    // in the Universe a name's rim takes its galaxy's tone (S05h, GraphUniverseScene.swift:111)
+    val board = remember(scene) {
+        val plan = scene.universePlan
+        if (plan == null || scene.galaxyTones.isEmpty()) MapNameShow.Board()
+        else MapNameShow.Board { i -> plan.bodies.getOrNull(i)?.galaxy?.let { scene.galaxyTones[it] } }
+    }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
+    // a body pressed or hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752)
+    LaunchedEffect(renderer, pressedName) { renderer.press(pressedName ?: -1) }
+    LaunchedEffect(renderer, hoveredName) { renderer.hover(hoveredName ?: -1) }
     // the held slot: the body whose options are open, else the one a finger holds to move (S05g2), which
     // the page never learns of (GraphMotion's wantLabel(grabbed), :2183); the options take it back
     var grabbedName by remember(scene) { mutableStateOf<Int?>(null) }

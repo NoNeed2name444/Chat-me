@@ -35,7 +35,7 @@ import java.io.File
 // as while the readout shows. Each is read back as MapModeRenderTest's are: the window's size and no
 // pixel the logo's coral. Its title and Done are there, Done a 48 dp target, the ladder and every row
 // one item for TalkBack each, as MapLegend.spoken reads it, and none wider than the window; its touch
-// help the map's hint, naming Show links (S05g).
+// help the map's hint, naming Show links (S05g); the ladder drawn whole (S05h: Space's five rungs).
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class MapLegendRenderTest {
@@ -82,7 +82,15 @@ class MapLegendRenderTest {
         }
         val ladder = compose.onAllNodes(hasContentDescription(content.ladderLabel)).fetchSemanticsNodes()
         if (content.rungs.isEmpty()) c.check("$name: no ladder", content.ladderLabel.isEmpty())
-        else c.check("$name: the ladder, one item", ladder.size == 1, "${ladder.size}")
+        else {
+            c.check("$name: the ladder, one item", ladder.size == 1, "${ladder.size}")
+            // S05h: drawn whole: inside the window's width, and tall enough for its biggest rung and a caption
+            ladder.firstOrNull()?.boundsInWindow?.let {
+                c.check("$name: the ladder inside the window's width", it.left >= 0f && it.right <= width + 0.5f, "$it of $width")
+                val biggest = content.rungs.maxOf { r -> r.size }
+                c.check("$name: the ladder holds its ${content.rungs.size} rungs whole", it.height >= biggest * density, "${it.height / density} dp")
+            }
+        }
         for (row in content.rows) {
             val nodes = compose.onAllNodes(hasContentDescription(MapLegend.spoken(row))).fetchSemanticsNodes()
             c.check("$name: the ${row.name} row, one item", nodes.size == 1, "${nodes.size}")

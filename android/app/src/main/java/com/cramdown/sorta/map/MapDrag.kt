@@ -43,11 +43,25 @@ class MapDrag(
     parents: IntArray? = null,
     links: IntArray = IntArray(0),
     lively: Boolean = true,
+    /**
+     * Each body's place in a parents-first order (S05h: the Universe's chunk-order nodes, by their plan
+     * index, every planet after its star); null keeps index order, as iOS's (:1782).
+     */
+    private val rank: IntArray? = null,
 ) {
     @Volatile var lively: Boolean = lively
 
-    // a parent at or after its child is no parent here, as iOS's `hasParent` (:1783)
-    private val parentOf: IntArray? = parents?.let { p -> IntArray(count) { i -> p.getOrElse(i) { -1 }.takeIf { it in 0 until i } ?: -1 } }
+    // a parent at or after its child is no parent here, as iOS's `hasParent` (:1783); with a [rank], after in it
+    private val parentOf: IntArray? = parents?.let { p ->
+        IntArray(count) { i ->
+            val q = p.getOrElse(i) { -1 }
+            val r = rank
+            val before = if (r != null) q in 0 until count && r[q] < r[i] else q in 0 until i
+            if (before) q else -1
+        }
+    }
+    // the bodies in rank order (rank's inverse), for the parents-first sort
+    private val byRank: IntArray? = rank?.let { r -> IntArray(count).also { inv -> for (i in 0 until count) inv[r[i]] = i } }
     // each body's children (orbit path) or neighbours with their rest lengths (link path), as CSR
     private val childStart: IntArray
     private val childList: IntArray
@@ -246,11 +260,17 @@ class MapDrag(
     /** How many pieces a frame of [frameDt] seconds is split into. */
     fun piecesFor(frameDt: Float): Int = max(1, ceil(frameDt.coerceIn(MIN_DT, MAX_DT) / MAX_SUBSTEP - 1e-4f).toInt())
 
-    // the orbit clock eases to a stop while a body is held and back after (advanceOrbits, :1750-1765);
-    // still, the plan's own picture, time 0
+    /** A body under a finger that has not moved yet (iOS pressedNote), −1 for none (S05h): the orbit clock eases to a stop. */
+    @Volatile var pressed: Int = -1
+    /** A body under a pointer with no button down (iOS hovered), −1 for none (S05h): the same. */
+    @Volatile var hovered: Int = -1
+
+    // the orbit clock eases to a stop within about 0.3 s while a body is pressed, hovered or held,
+    // so it never slides from under the finger, and back over about 1.5 s after (advanceOrbits,
+    // :1750-1765); still, the plan's own picture, time 0
     private fun advanceClock(dt: Float) {
         if (!lively) { orbitTime = 0.0; return }
-        val busy = grabbed >= 0
+        val busy = grabbed >= 0 || pressed >= 0 || hovered >= 0
         val tau = if (busy) TAU_BUSY else TAU_FREE
         val goal = if (busy) 0f else 1f
         orbitRate += (goal - orbitRate) * (1f - exp(-dt / tau))
@@ -285,7 +305,12 @@ class MapDrag(
                 for (e in linkStart[i] until linkStart[i + 1]) { val j = linkOther[e]; activate(j); pulled[j] = true }
             }
         }
-        active.sort(0, activeCount)
+        val r = rank; val inv = byRank
+        if (r != null && inv != null) {
+            for (a in 0 until activeCount) active[a] = r[active[a]]
+            active.sort(0, activeCount)
+            for (a in 0 until activeCount) active[a] = inv[active[a]]
+        } else active.sort(0, activeCount)
     }
 
     // one semi-implicit Euler piece on the link path (integrate, :1703-1741): forces first, the held body skipped
@@ -340,7 +365,7 @@ class MapDrag(
                 continue
             }
             val p = parents?.get(i) ?: -1
-            val hasParent = p in 0 until i
+            val hasParent = p >= 0
             for (x in 0 until 3) {
                 val carry = if (hasParent) moved[3 * p + x] * keep else 0f
                 offset[o + x] += carry
