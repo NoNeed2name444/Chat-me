@@ -1,0 +1,8 @@
+# made by `xcodegen generate` and the builds
+Sorta.xcodeproj/
+Sorta/Info.plist
+build/
+*.xcresult
+# the icon and the alternate icons, copied in for the builds the owner
+# installs only (tools/private/wire_art.py)
+Art/

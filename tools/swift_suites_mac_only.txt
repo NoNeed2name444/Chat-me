@@ -1,0 +1,8 @@
+# Suites that need Apple frameworks Linux lacks; they run on macOS CI, in the
+# iOS workflow's build job (ci/public/ios.yml), with tools/swift_suites.py
+# --platform mac. Stethoscore's list is reference/stethoscore-aec2af1c/tools/
+# swift_suites_mac_only.txt.
+# zip: Compression
+zip
+# backup: Compression, and NoteStore's Combine
+backup
