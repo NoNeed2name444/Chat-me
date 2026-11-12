@@ -1,0 +1,314 @@
+# Sorta's Android app, on every copy pushed to Chat-me's sorta branch
+# (tools/mirror_chatme.py): the debug APK built and checked, and the unit
+# tests run. The SDK steps are Stethoscore's
+# (reference/stethoscore-aec2af1c/.github/workflows/android.yml). Chat-me is
+# public, so its standard runners cost nothing; no secret is used. A second
+# run of the same copy is a re-run of this one.
+name: Android
+on:
+  push:
+    branches: [sorta, sorta-b, sorta-c]
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # step 1's runs took 2 to 3 minutes; the look kit's 104 tests and eight
+    # gallery renders take about 8 here, so about twice that
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '15859902'
+          packages: 'platform-tools'
+      - name: The command-line tools that know Android 17
+        run: |
+          # setup-android@v4 names the folder by the tools' own version
+          # (22.0), not by the build number, so follow the sdkmanager it put
+          # first on the PATH
+          tools="$(dirname "$(dirname "$(command -v sdkmanager)")")"
+          echo "sdkmanager from $tools"
+          if [ "$tools" != "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            mv "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/preinstalled-backup"
+            ln -s "$tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - name: Install the Android 17 SDK
+        run: sdkmanager --channel=3 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.7.1'
+      - name: Build the APK and run the unit tests
+        working-directory: android
+        run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+      - name: The APK
+        run: python3 tools/check_apk.py "$ANDROID_HOME/build-tools/37.0.0/aapt2" android/app/build/outputs/apk/debug/app-debug.apk
+      - name: The tests that ran
+        if: ${{ always() }}
+        run: |
+          set -o pipefail
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=4 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=4 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=9 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=8 --expect LinkMemoryTest=8 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDeathTest=13 --expect MapDragTest=18 --expect MapDrawnTest=10 --expect MapFitTest=4 --expect MapLegendRenderTest=4 --expect MapLegendTest=7 --expect MapLinkFocusTest=6 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=6 --expect MapModeRenderTest=9 --expect MapModeTest=10 --expect MapNameShowTest=12 --expect MapNamesTest=7 --expect MapPanelsTouchTargetTest=5 --expect MapPeekCardTest=13 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapTouchCardTest=3 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceDepthTest=15 --expect SpaceBodiesOwnSizeTest=2 --expect SpaceStyleTest=23 --expect SpaceTrailsTest=11 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sorta-android-apks
+          path: android/app/build/outputs/apk/
+          retention-days: 3
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-android
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+            android/app/build/outputs/roborazzi/
+          if-no-files-found: ignore
+          retention-days: 7
+  # The maps' renders on an emulator (MapRenderTest), a phone and a tablet:
+  # GL draws only on a real surface, which the unit tests' Robolectric has
+  # not. The emulator steps are Stethoscore's screenshots job
+  # (reference/stethoscore-aec2af1c/.github/workflows/android.yml and
+  # android/scripts/capture-screenshots.sh). Its first green run (Chat-me
+  # run 40855930084) took 4.1 minutes on the phone and 5.0 on the tablet,
+  # so it has about twice that. Map mode's Space (MapModeSpaceRenderTest), two
+  # stills more on each device, takes it to about 6.5, so 13. The phone's run
+  # also takes To sort with the three-button navigation bar
+  # (SortNavBarRenderTest), two stills, and Map mode with it
+  # (MapModeNavBarRenderTest, S05b A6), two more: about 7.5, so 15.
+  # S05g2's let-goes settle on iOS's clamped step, one 0.05 s step a frame,
+  # about 100 frames each; the tablet's SwiftShader draws about 3 frames a
+  # second, so its Space test took 5.5 minutes on its own (run 43234510513)
+  # and the job runs about 16 to 17: so 35.
+  # S05h: one limit per device, about twice the measured green times (phone
+  # 13.3 and 14.1 min, tablet 14.3 and 15.8): 30 for the phone, 35 for the
+  # tablet. The Universe's steps and its lively test are measured on top.
+  # S05h2 adds two lively tests (deaths and sparks) and a death check in
+  # Map mode's Space; the limits stand until a green run measures them.
+  renders:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.device == 'tablet' && 35 || 30 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, tablet]
+    name: renders (${{ matrix.device }})
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '15859902'
+          packages: 'platform-tools'
+      - name: The command-line tools that know Android 17
+        run: |
+          tools="$(dirname "$(dirname "$(command -v sdkmanager)")")"
+          echo "sdkmanager from $tools"
+          if [ "$tools" != "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            mv "$ANDROID_HOME/cmdline-tools/latest" "$ANDROID_HOME/cmdline-tools/preinstalled-backup"
+            ln -s "$tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - uses: actions/download-artifact@v8
+        with:
+          name: sorta-android-apks
+          path: android/built-apks
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Choose the device profile
+        id: profile
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          mkdir -p android/test-results
+          avdmanager list device -c > android/test-results/device-ids.txt
+          case "$DEVICE" in
+            phone) candidates='pixel_6' ;;
+            tablet) candidates='pixel_tablet medium_tablet' ;;
+          esac
+          profile=''
+          for c in $candidates; do
+            if grep -qxF "$c" android/test-results/device-ids.txt; then profile=$c; break; fi
+          done
+          [ -n "$profile" ] || { echo "::error::no profile for $DEVICE among: $candidates"; exit 1; }
+          echo "$DEVICE -> $profile" | tee android/test-results/profile.txt
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+      - name: The render script
+        run: |
+          # the emulator runner runs each line of its script on its own, so
+          # the steps go in one script
+          cat > "$RUNNER_TEMP/renders.sh" <<'SCRIPT'
+          set -euo pipefail
+          device="$1"
+          mkdir -p renders test-results
+          trap 'adb logcat -d > test-results/logcat.txt 2>&1 || true' EXIT
+          adb wait-for-device
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 2
+          done
+          [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]
+          # system crash and not-responding dialogs stay off the screen; the
+          # test checks for them too
+          adb shell settings put global hide_error_dialogs 1
+          adb shell settings put secure anr_show_background 0
+          sleep 20
+          adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null || true
+          adb shell getprop ro.build.version.sdk | tee test-results/android-sdk.txt
+          adb shell settings put system font_scale 1.0
+          adb install -r -t built-apks/debug/app-debug.apk
+          adb install -r -t built-apks/androidTest/debug/app-debug-androidTest.apk
+          source=app/src/androidTest/java/com/cramdown/sorta/MapRenderTest.kt
+          tests=$(grep -c '@Test' "$source")
+          echo "expecting OK ($tests tests) and $tests renders" | tee test-results/expected.txt
+          [ "$tests" -gt 0 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation.txt
+          echo "the renders took $((SECONDS - started)) seconds" | tee test-results/time.txt
+          # Map mode's Space, Sorta itself on made-up ideas, by day and by night (S05b, A6)
+          mode_source=app/src/androidTest/java/com/cramdown/sorta/MapModeSpaceRenderTest.kt
+          mode_tests=$(grep -c '@Test' "$mode_source")
+          # each a Space still and, after its first-run card's Got it, a Neurons one (S05d, A6),
+          # and Space's links drawn Straight between them (S05e, A6), and each look with a chosen
+          # body's name on show (S05f, A3)
+          echo "expecting OK ($mode_tests tests) and $mode_tests renders each of Map mode's Space, Space with Straight lines, Neurons and each with a body named" | tee -a test-results/expected.txt
+          [ "$mode_tests" -gt 0 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeSpaceRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode.txt
+          echo "Map mode's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # S05h A3: Space's Universe with animations on, the test turning them on for itself;
+          # S05h2 A3: its deaths and sparks, by day and by night, a still each of a death, plasma and dust
+          lively_source=app/src/androidTest/java/com/cramdown/sorta/MapSpaceLivelyTest.kt
+          lively_tests=$(grep -c '@Test' "$lively_source")
+          orbit_tests=$(grep -c '@Test fun orbiting' "$lively_source")
+          spark_tests=$(grep -c '@Test fun deathsAndSparks' "$lively_source")
+          echo "expecting OK ($lively_tests tests), $orbit_tests renders of the Universe orbiting and $spark_tests each of a death, plasma and dust" | tee -a test-results/expected.txt
+          [ "$orbit_tests" -eq 2 ]
+          [ "$spark_tests" -eq 2 ]
+          [ "$lively_tests" -eq 4 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapSpaceLivelyTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-lively.txt
+          echo "The lively Universe took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # whatever happened, animations are off again for what follows
+          adb shell settings put global animator_duration_scale 0
+          # the phone also renders To sort with Android's three-button
+          # navigation bar, by day and by night (S05, A6); the test checks
+          # the bar is the tappable three-button one
+          sort_tests=0
+          if [ "$device" = phone ]; then
+            adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton
+            for attempt in $(seq 1 15); do
+              if [ "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 0 ]; then break; fi
+              sleep 2
+            done
+            adb shell settings get secure navigation_mode | tr -d '\r' | tee test-results/navigation-mode.txt
+            sort_source=app/src/androidTest/java/com/cramdown/sorta/SortNavBarRenderTest.kt
+            sort_tests=$(grep -c '@Test' "$sort_source")
+            echo "expecting OK ($sort_tests tests) and $sort_tests renders of To sort" | tee -a test-results/expected.txt
+            started=$SECONDS
+            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SortNavBarRenderTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sort.txt
+            echo "To sort's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+            # Map mode with the same bar, by day and by night (S05b, A6)
+            map_bar_source=app/src/androidTest/java/com/cramdown/sorta/MapModeNavBarRenderTest.kt
+            map_bar_tests=$(grep -c '@Test' "$map_bar_source")
+            echo "expecting OK ($map_bar_tests tests) and $map_bar_tests renders of Map mode with the bar" | tee -a test-results/expected.txt
+            started=$SECONDS
+            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeNavBarRenderTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode-navbar.txt
+            echo "Map mode's renders with the bar took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          fi
+          # pulled first, so a failed run still uploads what it took
+          adb pull /sdcard/Download/sorta-renders/. renders/ || true
+          grep -qF "OK ($tests tests)" test-results/instrumentation.txt
+          test "$(find renders -name 'map-*.png' | wc -l)" -eq "$tests"
+          grep -qF "OK ($mode_tests tests)" test-results/instrumentation-mapmode.txt
+          test "$(find renders -name 'mapmode-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-straight-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-named-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-named-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A3: the first run's steps, a chosen body and Show links in Space, Neurons and Performance
+          test "$(find renders -name 'mapmode-card-steps-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-performance-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A6, repair 3: a chosen sun in Space, and a cell's bridges chosen and shown in Neurons
+          test "$(find renders -name 'mapmode-chosen-sun-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g2 A3: a body held, then moved, in Space and Neurons; a sun pulling its neighbours; an open cell carrying its idea
+          test "$(find renders -name 'mapmode-drag-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-sun-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-cell-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A2: each legend scrolled to its end, its last line above the sheet's foot and the bar
+          test "$(find renders -name 'mapmode-legend-foot-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-foot-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-foot-performance-*.png' | wc -l)" -eq "$mode_tests"
+          # S05h A3: the Universe at rest, Fly in, a moved black hole, the legend's top; and orbiting
+          test "$(find renders -name 'mapmode-universe-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-fly-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-star-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-top-space-*.png' | wc -l)" -eq "$mode_tests"
+          grep -qF "OK ($lively_tests tests)" test-results/instrumentation-lively.txt
+          test "$(find renders -name 'mapmode-lively-universe-*.png' | wc -l)" -eq "$orbit_tests"
+          test "$(find renders -name 'mapmode-lively-death-*.png' | wc -l)" -eq "$spark_tests"
+          test "$(find renders -name 'mapmode-lively-plasma-*.png' | wc -l)" -eq "$spark_tests"
+          test "$(find renders -name 'mapmode-lively-dust-*.png' | wc -l)" -eq "$spark_tests"
+          if [ "$device" = phone ]; then
+            # 0 is the three-button bar
+            [ "$(cat test-results/navigation-mode.txt)" = 0 ]
+            [ "$sort_tests" -gt 0 ]
+            grep -qF "OK ($sort_tests tests)" test-results/instrumentation-sort.txt
+            test "$(find renders -name 'sort-navbar-*.png' | wc -l)" -eq "$sort_tests"
+            [ "$map_bar_tests" -gt 0 ]
+            grep -qF "OK ($map_bar_tests tests)" test-results/instrumentation-mapmode-navbar.txt
+            test "$(find renders -name 'navbar-map-*.png' | wc -l)" -eq "$map_bar_tests"
+          fi
+          SCRIPT
+      - name: The renders
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: '37.0'
+          target: google_apis
+          arch: x86_64
+          profile: ${{ steps.profile.outputs.profile }}
+          disable-animations: true
+          ram-size: 4096M
+          disk-size: 8G
+          cores: 2
+          emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -no-snapshot
+          working-directory: android
+          script: bash "$RUNNER_TEMP/renders.sh" ${{ matrix.device }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: sorta-android-renders-${{ matrix.device }}
+          path: |
+            android/renders/
+            android/test-results/
+          retention-days: 7

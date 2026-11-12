@@ -1,0 +1,1446 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld percent" : {
+      "comment" : "Spoken value of a score bar, such as 80 percent",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld percent"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "comment" : "The states gallery: spoken name of the round plus button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "comment" : "The states gallery: sample quiet button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "comment" : "The states gallery: sample destructive button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "Disabled" : {
+      "comment" : "The states gallery: heading of the column of controls that are turned off",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disabled"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "comment" : "The states gallery: sample compact button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "Grid" : {
+      "comment" : "The states gallery: spoken name of the grid segment",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grid"
+          }
+        }
+      }
+    },
+    "Held" : {
+      "comment" : "The states gallery: heading of the column of controls drawn as pressed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Held"
+          }
+        }
+      }
+    },
+    "Ideas" : {
+      "comment" : "The states gallery's sample tile, named after Sorta's ideas",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas"
+          }
+        }
+      }
+    },
+    "List" : {
+      "comment" : "The states gallery: spoken name of the list segment",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "List"
+          }
+        }
+      }
+    },
+    "Pinned" : {
+      "comment" : "The states gallery: sample chip button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pinned"
+          }
+        }
+      }
+    },
+    "Reminders" : {
+      "comment" : "The states gallery: spoken name of the sample switch",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reminders"
+          }
+        }
+      }
+    },
+    "Rest" : {
+      "comment" : "The states gallery: heading of the column of controls at rest",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "comment" : "The states gallery: sample main button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "Score" : {
+      "comment" : "Spoken name of a score bar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Score"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "comment" : "The states gallery: sample secondary button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip"
+          }
+        }
+      }
+    },
+    "States · %@" : {
+      "comment" : "The states gallery's heading; %@ is the sample tile's name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "States · %@"
+          }
+        }
+      }
+    },
+    "Time's up" : {
+      "comment" : "A timer that has reached zero",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Time's up"
+          }
+        }
+      }
+    },
+    "capture.placeholder" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key capture.placeholder",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's on your mind?"
+          }
+        }
+      }
+    },
+    "capture.sort" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key capture.sort",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort it"
+          }
+        }
+      }
+    },
+    "capture.sort.hint" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key capture.sort.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves your idea and lets you choose its folder."
+          }
+        }
+      }
+    },
+    "chooser.cancel" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key chooser.cancel",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "chooser.folder.spoken %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key chooser.folder.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "inside %@"
+          }
+        }
+      }
+    },
+    "chooser.newFolder.hint" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key chooser.newFolder.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Makes a folder and moves your idea into it."
+          }
+        }
+      }
+    },
+    "chooser.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key chooser.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose folder"
+          }
+        }
+      }
+    },
+    "chooser.toSort.spoken" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key chooser.toSort.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To sort, no folder"
+          }
+        }
+      }
+    },
+    "editor.body" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.body",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        }
+      }
+    },
+    "editor.chip.hint" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.chip.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the folder chooser."
+          }
+        }
+      }
+    },
+    "editor.chip.spoken %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.chip.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder, %@"
+          }
+        }
+      }
+    },
+    "editor.delete" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.delete",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete idea"
+          }
+        }
+      }
+    },
+    "editor.delete.body" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.delete.body",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other ideas lose their links to it too."
+          }
+        }
+      }
+    },
+    "editor.delete.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.delete.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this idea?"
+          }
+        }
+      }
+    },
+    "editor.done" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "editor.hint" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To link an idea, type [[ and its title, like [[Holiday plans]]. For a heading type #, for a list -, and **bold** or *italic*; tap Read to see them."
+          }
+        }
+      }
+    },
+    "editor.how.hand" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.how.hand",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked"
+          }
+        }
+      }
+    },
+    "editor.how.text.in" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.how.text.in",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentions this idea"
+          }
+        }
+      }
+    },
+    "editor.how.text.out" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.how.text.out",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mentioned in the text"
+          }
+        }
+      }
+    },
+    "editor.linkTo" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.linkTo",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link to an idea…"
+          }
+        }
+      }
+    },
+    "editor.linked" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.linked",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked ideas"
+          }
+        }
+      }
+    },
+    "editor.linkedHere" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.linkedHere",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas that link here"
+          }
+        }
+      }
+    },
+    "editor.missing" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.missing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No idea with this title yet. Tap to make it."
+          }
+        }
+      }
+    },
+    "editor.missingIdea" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.missingIdea",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Missing idea"
+          }
+        }
+      }
+    },
+    "editor.read" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.read",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read"
+          }
+        }
+      }
+    },
+    "editor.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Title"
+          }
+        }
+      }
+    },
+    "editor.unlink" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.unlink",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlink"
+          }
+        }
+      }
+    },
+    "editor.write" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.write",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write"
+          }
+        }
+      }
+    },
+    "empty.line1" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key empty.line1",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type an idea and tap Sort it to choose its folder."
+          }
+        }
+      }
+    },
+    "empty.line2" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key empty.line2",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas without a folder stay here to sort later."
+          }
+        }
+      }
+    },
+    "folder.default" : {
+      "comment" : "A folder read from a file with no name (NoteStore)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled folder"
+          }
+        }
+      }
+    },
+    "folder.empty" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folder.empty",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas yet. Type one above to add it to this folder."
+          }
+        }
+      }
+    },
+    "folder.title.spoken %@ %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folder.title.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "folderDelete.body %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderDelete.body",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its ideas and folders move to %@, so nothing in it is lost."
+          }
+        }
+      }
+    },
+    "folderDelete.title %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderDelete.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete “%@”?"
+          }
+        }
+      }
+    },
+    "folderRow.menu.delete" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderRow.menu.delete",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete folder"
+          }
+        }
+      }
+    },
+    "folderRow.menu.newInside" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderRow.menu.newInside",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New folder inside"
+          }
+        }
+      }
+    },
+    "folderRow.menu.rename" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderRow.menu.rename",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename folder"
+          }
+        }
+      }
+    },
+    "folderRow.spoken %@ %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key folderRow.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "idea.untitled" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key idea.untitled",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled"
+          }
+        }
+      }
+    },
+    "ideas.count %lld" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key ideas.count",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld idea"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ideas"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.done.body %@ %@ %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.done.body",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added %1$@, %2$@ and %3$@."
+          }
+        }
+      }
+    },
+    "import.done.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.done.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas imported"
+          }
+        }
+      }
+    },
+    "import.folders %lld" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.folders",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld folder"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld folders"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.ideas %lld" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.ideas",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld idea"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ideas"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.links %lld" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.links",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld link"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld links"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.nothing.body" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.nothing.body",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You already have every idea in this file."
+          }
+        }
+      }
+    },
+    "import.nothing.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.nothing.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing new to add"
+          }
+        }
+      }
+    },
+    "import.ok" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.ok",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "import.placed %lld" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.placed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld idea keeps its place on the 2D map."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ideas keep their place on the 2D map."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "import.refused.newer" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.refused.newer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This backup is from a newer version of Stethoscore. Check for a Sorta update, then try again."
+          }
+        }
+      }
+    },
+    "import.refused.notBackup" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.refused.notBackup",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file isn't a Stethoscore backup. Choose another file."
+          }
+        }
+      }
+    },
+    "import.refused.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.refused.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't import this file"
+          }
+        }
+      }
+    },
+    "import.refused.unreadable.ios" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key import.refused.unreadable.ios",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This backup didn't open. It may be damaged, so try another copy."
+          }
+        }
+      }
+    },
+    "look.2d" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2D"
+          }
+        }
+      }
+    },
+    "look.chip.hint" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.chip.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes how the map looks."
+          }
+        }
+      }
+    },
+    "look.chip.spoken %@" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.chip.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Theme, %@"
+          }
+        }
+      }
+    },
+    "look.neuron" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.neuron",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neuron"
+          }
+        }
+      }
+    },
+    "look.performance" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.performance",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Performance"
+          }
+        }
+      }
+    },
+    "look.space" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key look.space",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Space"
+          }
+        }
+      }
+    },
+    "map.empty.line" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.empty.line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add ideas in Sort, and they appear here."
+          }
+        }
+      }
+    },
+    "map.empty.title" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.empty.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas yet"
+          }
+        }
+      }
+    },
+    "map.list.hint" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key map.list.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the list."
+          }
+        }
+      }
+    },
+    "mode.map" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.map",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Map"
+          }
+        }
+      }
+    },
+    "mode.map.spoken" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.map.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Map of ideas"
+          }
+        }
+      }
+    },
+    "mode.sort" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.sort",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort"
+          }
+        }
+      }
+    },
+    "mode.sort.spoken" : {
+      "comment" : "Map mode (S05b), a draft for ux-writing; key mode.sort.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort ideas"
+          }
+        }
+      }
+    },
+    "more.import" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key more.import",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import from Stethoscore…"
+          }
+        }
+      }
+    },
+    "more.newFolder" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key more.newFolder",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New folder"
+          }
+        }
+      }
+    },
+    "name.create" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key name.create",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create"
+          }
+        }
+      }
+    },
+    "name.field" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key name.field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder name"
+          }
+        }
+      }
+    },
+    "name.rename" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key name.rename",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename"
+          }
+        }
+      }
+    },
+    "picker.none %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key picker.none",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas match “%@”."
+          }
+        }
+      }
+    },
+    "picker.search" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key picker.search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find an idea"
+          }
+        }
+      }
+    },
+    "picker.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key picker.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link to an idea"
+          }
+        }
+      }
+    },
+    "row.chooseFolder" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key row.chooseFolder",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose folder"
+          }
+        }
+      }
+    },
+    "row.chooseFolder.spoken %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key row.chooseFolder.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose folder for %@"
+          }
+        }
+      }
+    },
+    "row.hint" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key row.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens the idea."
+          }
+        }
+      }
+    },
+    "row.swipe.trail" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key row.swipe.trail",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "sort.allSorted" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.allSorted",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All sorted."
+          }
+        }
+      }
+    },
+    "sort.folders" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.folders",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folders"
+          }
+        }
+      }
+    },
+    "sort.more" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.more",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More"
+          }
+        }
+      }
+    },
+    "sort.title" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To sort"
+          }
+        }
+      }
+    },
+    "sort.title.spoken %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.title.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To sort, %@"
+          }
+        }
+      }
+    },
+    "store.notice.close" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key store.notice.close",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "store.partlyUnreadable" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key store.partlyUnreadable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some saved ideas didn't open. A copy of them is kept safe on this device."
+          }
+        }
+      }
+    },
+    "store.unreadable" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key store.unreadable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your saved ideas didn't open. A copy is kept safe on this device, and new ideas still save."
+          }
+        }
+      }
+    },
+    "switcher.hide" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.hide",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide modes"
+          }
+        }
+      }
+    },
+    "switcher.hint" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows every mode. Double-tap and hold to choose a mode."
+          }
+        }
+      }
+    },
+    "switcher.list.done" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.list.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "switcher.list.title" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.list.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modes"
+          }
+        }
+      }
+    },
+    "switcher.show %@" : {
+      "comment" : "The mode switch (FloatingSwitcher, S05b), a draft for ux-writing; key switcher.show",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show modes. Now showing %@"
+          }
+        }
+      }
+    },
+    "undo.action" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key undo.action",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo"
+          }
+        }
+      }
+    },
+    "undo.deleted" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key undo.deleted",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idea deleted."
+          }
+        }
+      }
+    },
+    "undo.moved %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key undo.moved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moved to %@."
+          }
+        }
+      }
+    },
+    "undo.toSort" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key undo.toSort",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back in To sort."
+          }
+        }
+      }
+    },
+    "upRow.spoken %@" : {
+      "comment" : "Ideas screens (S05), from the ux-writing pass; key upRow.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to %@"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
