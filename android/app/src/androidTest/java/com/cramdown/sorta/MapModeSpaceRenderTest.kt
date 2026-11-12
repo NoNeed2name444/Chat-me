@@ -874,7 +874,9 @@ class MapModeSpaceRenderTest {
         check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
         // the black hole moved, a planet inside it chosen: found by their names, as Neurons' cell and its idea are
         val drag = "mapmode-drag-star-space-$mode-$device"
-        compose.runOnIdle { tap.tap(g) }
+        // still chosen after Fly in and Recentre: a second tap on the chosen body would open its folder,
+        // which on a phone takes the map's place (MapSelection, as iOS)
+        if (mapDrawn()?.chosen != g) compose.runOnIdle { tap.tap(g) }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
         SystemClock.sleep(1_000) // the ease's 0.45 s, done
         val holeAt = checkNotNull(named(g)) { "The Garden black hole ($g) shows no name to find it by for $drag: ${mapDrawn()}" }
