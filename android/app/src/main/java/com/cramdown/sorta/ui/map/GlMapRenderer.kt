@@ -811,10 +811,12 @@ class GlMapRenderer(
         }
         drag?.step(dt)
         val orbiting = refreshLive()
-        // the deaths' clock (S05h2): the first step at most 1/30 s; the test clock holds it in a debuggable app
+        // the deaths' clock (S05h2): it begins on the first frame after one of this scene was handed to the
+        // screen (one that drew its bodies, or ENOUGH frames: an empty scene draws none), and is counted
+        // then (repair 2); the first step at most 1/30 s; the test clock holds it in a debuggable app
         death?.let { stage ->
-            if (!stage.finished) stage.step(dt.toDouble(), if (testHooks) MapDeath.testHold else null)
-            stage.tally()?.let { totals.died += it[0]; totals.dyingLinks += it[1] }
+            val shown = record.bodyFrames > 0 || record.frames >= MapDrawn.ENOUGH
+            stage.frame(dt.toDouble(), shown, if (testHooks) MapDeath.testHold else null)?.let { totals.died += it[0]; totals.dyingLinks += it[1] }
         }
         stepChoice(dt)
         flight?.let { f -> synchronized(camera) { f.step(camera, dt) }; if (f.finished) flight = null }

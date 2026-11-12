@@ -320,6 +320,11 @@ class MapDeathStage(val dying: List<MapDeparture>, val plans: List<DeathPlan>, v
     /** Seconds since it began. */
     var elapsed = 0.0; private set
     var finished = false; private set
+    /**
+     * Whether its clock has begun (S05h2 repair 2): on the first frame after the new scene was handed
+     * to the screen ([frame]'s shown). Until then it is posed at its start and not counted.
+     */
+    var started = false; private set
     private var stepped = false
     private var tallied = false
 
@@ -372,6 +377,30 @@ class MapDeathStage(val dying: List<MapDeparture>, val plans: List<DeathPlan>, v
         if (finished) return
         elapsed = if (hold != null) hold else elapsed + max(dt, 0.0).coerceAtMost(if (stepped) MapDeath.MAX_STEP else MapDeath.FIRST_STEP)
         stepped = true
+        started = true
+        pose()
+        if (elapsed > longest + 0.1) finished = true
+    }
+
+    /**
+     * One renderer frame [dt] seconds on (S05h2 repair 2). A new scene's first frames come on a new GL
+     * context, and a software GL takes seconds to hand them to the screen (CI's emulator: the second
+     * frame 1.4 s after the first on the phone, over 2 s on the tablet). So until [shown], a frame of
+     * this scene already on the screen, the death is drawn at its start (whole, its links whole) and
+     * neither stepped nor counted, as iOS's copy plays on the scene's own clock, which moves only as
+     * SceneKit draws the new scene (GraphDeathScene.swift:246-260, an SCNAction; the links stepped by frames,
+     * GraphMotion.swift:1597-1600). From the first shown frame on it steps ([step], the first step at
+     * most [MapDeath.FIRST_STEP]); that frame returns the totals to add ([tally]), once.
+     */
+    fun frame(dt: Double, shown: Boolean, hold: Double? = null): IntArray? {
+        if (finished) return null
+        if (!started && !shown) { pose(); return null }
+        step(dt, hold)
+        return tally()
+    }
+
+    /** Each slot's size and opacity, each link's reach and the set's opacity at [elapsed]. */
+    private fun pose() {
         for (k in dying.indices) {
             size[k] = MapDeath.scale(plans[k], elapsed)
             opacity[k] = MapDeath.opacity(plans[k], elapsed)
@@ -385,7 +414,6 @@ class MapDeathStage(val dying: List<MapDeparture>, val plans: List<DeathPlan>, v
             reach[j] = if (r > 0.001f) r else 0f
         }
         setOpacity = if (lively) 1f else (1 - min(elapsed / max(longest, 0.01), 1.0)).toFloat()
-        if (elapsed > longest + 0.1) finished = true
     }
 
     /** Slot [k]'s radius for its links' ends: radius × max(scale, 0.05) (GraphDeathScene.swift:183). */

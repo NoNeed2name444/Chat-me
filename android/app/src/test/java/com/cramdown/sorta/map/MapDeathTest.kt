@@ -199,6 +199,45 @@ class MapDeathTest {
         assertTrue(stage.finished)
     }
 
+    /**
+     * Repair 2, CI's tablet with animations off: a new scene's first frame (its bodies not yet drawn)
+     * and then a second 2.5 s later. The death is posed at its start and not counted until a frame of
+     * the scene was on the screen; then it starts at 1/30 s, is counted once, and at 10 frames a
+     * second no body is dying within 0.5 s of the count.
+     */
+    @Test fun aDeathBeginsAndIsCountedOnlyOnceItsSceneIsOnTheScreen() {
+        val plans = MapDeath.plans(listOf(DeathInput(DeathKind.ROCKY, 0.3f, 0)), still = true, smooth = false)
+        val stage = MapDeathStage(listOf(departure("rock", 1, DeathKind.ROCKY, 0.3f, "live")), plans, lively = false)
+        stage.resolve { if (it == "live") 3 else -1 }
+        var died = 0; var links = 0
+        fun count(t: IntArray?) { t?.let { died += it[0]; links += it[1] } }
+        count(stage.frame(1.0 / 60, shown = false))
+        count(stage.frame(2.5, shown = false))
+        assertEquals("not begun", 0.0, stage.elapsed, 0.0)
+        assertTrue(!stage.started)
+        assertEquals("not counted", 0, died)
+        assertEquals("drawn at its start", 1, stage.aliveCount())
+        assertEquals(1f, stage.size[0].across, 0f); assertEquals(1f, stage.opacity[0], 0f)
+        assertEquals("its link whole", 1f, stage.reach[0], 0f)
+        assertEquals(1f, stage.setOpacity, 0f)
+        // the first frame after its scene was shown, however long, begins it
+        count(stage.frame(1.4, shown = true))
+        assertTrue(stage.started)
+        assertEquals(1.0 / 30, stage.elapsed, 1e-12)
+        assertEquals("counted", 1, died); assertEquals(1, links)
+        var t = 0.0
+        while (stage.aliveCount() > 0 && t < 2.0) { count(stage.frame(0.1, shown = true)); t += 0.1 }
+        assertTrue("gone ${t}s after the count", t <= 0.5)
+        repeat(3) { count(stage.frame(0.1, shown = true)) }
+        assertTrue(stage.finished)
+        assertEquals("counted once", 1, died); assertEquals(1, links)
+        // begun, a frame not shown (a new GL context) still steps it
+        val again = MapDeathStage(listOf(departure("b", 1, DeathKind.PLAIN, 0.1f)), listOf(MapDeath.fade(0.8)), lively = true)
+        again.resolve { -1 }
+        again.frame(0.1, shown = true); again.frame(0.1, shown = false)
+        assertEquals(1.0 / 30 + 0.1, again.elapsed, 1e-12)
+    }
+
     @Test fun theTestClockIsOffByDefault() {
         assertNull(MapDeath.testHold)
         assertNull(SpaceTrails.testFrozen)

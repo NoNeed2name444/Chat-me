@@ -73,7 +73,7 @@ import kotlin.math.ceil
  * (MapDrawn.orbitSteps, never capped; each step at most 0.25 s). The frames drawn over the 3 s
  * (the clock's steps) are logged, a first look at A7's frame budget.
  *
- * S05h2 A3: deathsAndSparksBy<Day|Night>, on the same fixture: sparks from the home star dragged fast
+ * S05h2 A3: deathsAndSparksBy<Day|Night>, on the fixture and a folder inside Garden, a star: sparks from the star dragged fast
  * under the Universe and from an idea under Look › Comets, each frozen for a still
  * (mapmode-lively-plasma-... and mapmode-lively-dust-...), and the most linked idea deleted with the
  * death's clock held half way through its links drawing back (mapmode-lively-death-...), then gone
@@ -109,10 +109,12 @@ class MapSpaceLivelyTest {
     @Test fun deathsAndSparksByNight() = deathsAndSparks(dark = true)
 
     /**
-     * Sorta on the fixture with animations on, its map open on Space's Universe and drawn; the plan
-     * IdeasSpace builds for the fixture, and the map's first full record.
+     * Sorta on a fixture ([notes] and [folders], the companion's by default) with animations on, its map
+     * open on Space's Universe and drawn; the plan IdeasSpace builds for the fixture, and the map's
+     * first full record.
      */
-    private fun open(dark: Boolean, name: String): Pair<UniversePlan, MapDrawn> {
+    private fun open(dark: Boolean, name: String, notes: List<Note> = Companion.notes,
+                     folders: List<NoteFolder> = Companion.folders): Pair<UniversePlan, MapDrawn> {
         ui.executeShellCommand("cmd uimode night ${if (dark) "yes" else "no"}")
         SystemClock.sleep(1_000) // the system takes the new mode
         val context = instrumentation.targetContext
@@ -204,8 +206,9 @@ class MapSpaceLivelyTest {
     }
 
     /**
-     * S05h2 A3 and A7, animations on, by renderer steps as orbit's hold is judged. Plasma: the plan's
-     * home star (the fixture has no other star: its folders are black holes), chosen and dragged fast to
+     * S05h2 A3 and A7, animations on, by renderer steps as orbit's hold is judged, on the fixture with a
+     * star ([starFolders], [starNotes]). Plasma: its star (a folder inside a folder; a top folder is a
+     * black hole, which throws none, GraphStyleAnimator.swift:199-202), chosen and dragged fast to
      * and fro under the Universe, throws sparks (MapDrawn.sparks above 0); frozen by
      * SpaceTrails.testFrozen for a still, mapmode-lively-plasma-<light|dark>-<device>.png. A death:
      * the fixture's idea with the most links the map draws (kinds 0-2), deleted from its card's
@@ -219,18 +222,21 @@ class MapSpaceLivelyTest {
     private fun deathsAndSparks(dark: Boolean) {
         val mode = if (dark) "dark" else "light"
         val death = "mapmode-lively-death-$mode-$device"
-        val (plan, start) = open(dark, death)
+        val notes = starNotes
+        val (plan, start) = open(dark, death, starNotes, starFolders)
         // A7: the orbit at rest, the reference the fling and the death are logged against
         val t0 = SystemClock.uptimeMillis()
         settle(2_000)
         val rest = rate(start, checkNotNull(drawn()), t0)
-        // plasma: the home star dragged fast under the Universe
+        // plasma: the star dragged fast under the Universe
         val plasma = "mapmode-lively-plasma-$mode-$device"
-        val home = plan.bodies.indexOfFirst { it.role == UniverseRole.HOME }
-        check(home >= 0) { "The fixture's plan has no home star to drag for $plasma: ${plan.bodies.map { it.role }}" }
+        val star = plan.bodies.indexOfFirst { it.role == UniverseRole.STAR }
+        check(star >= 0 && plan.bodies[star].id.equals(seeds.id, ignoreCase = true)) {
+            "The fixture's folder ${seeds.name} is not a star to drag for $plasma: ${plan.bodies.map { it.id to it.role }}"
+        }
         val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map hands on no hit test for $plasma" }
-        check(tap.ids.getOrNull(home).equals(plan.bodies[home].id, ignoreCase = true)) { "The home star $home is not the plan's on the map for $plasma: ${tap.ids}" }
-        val flung = throwSparks(tap, home, plasma)
+        check(tap.ids.getOrNull(star).equals(plan.bodies[star].id, ignoreCase = true)) { "The star $star is not the plan's on the map for $plasma: ${tap.ids}" }
+        val flung = throwSparks(tap, star, plasma)
         // a death, the clock held half way through its links drawing back
         fun linksOf(i: Int) = plan.links.count { it.kind != 3 && (it.a == i || it.b == i) }
         val ideas = notes.mapNotNull { n -> tap.ids.indexOfFirst { it.equals(n.id, ignoreCase = true) }.takeIf { it >= 0 } }
@@ -453,5 +459,11 @@ class MapSpaceLivelyTest {
             Note(id = id(17), title = "Order more coffee beans", folderId = kitchen.id, links = listOf(id(16)), createdAt = T + 3 * 3_600_000L),
             Note(id = id(18), title = "Plan the weekend walk", createdAt = T + 2 * 3_600_000L),
         )
+
+        // deathsAndSparks' fixture (S05h2 repair 2): the same, and a folder inside Garden, which the
+        // Universe plans as a star (UniversePlan: a folder below the top), with one idea, unlinked
+        val seeds = NoteFolder(id = id(203), name = "Seeds", parentId = garden.id, createdAt = T + 2)
+        val starFolders = folders + seeds
+        val starNotes = notes + Note(id = id(19), title = "Sort the seed packets", folderId = seeds.id, createdAt = T + 3_600_000L)
     }
 }
