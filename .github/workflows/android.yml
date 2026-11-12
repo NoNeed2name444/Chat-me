@@ -84,10 +84,14 @@ jobs:
   # also takes To sort with the three-button navigation bar
   # (SortNavBarRenderTest), two stills, and Map mode with it
   # (MapModeNavBarRenderTest, S05b A6), two more: about 7.5, so 15.
+  # S05g2's let-goes settle on iOS's clamped step, one 0.05 s step a frame,
+  # about 100 frames each; the tablet's SwiftShader draws about 3 frames a
+  # second, so its Space test took 5.5 minutes on its own (run 43234510513)
+  # and the job runs about 16 to 17: so 35.
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:

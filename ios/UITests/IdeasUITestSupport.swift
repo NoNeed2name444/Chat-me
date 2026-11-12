@@ -38,6 +38,12 @@ enum IdeasText {
     static func movedTo(_ folder: String) -> String { "Moved to \(folder)." }
 }
 
+/// How many times this test has had to take the caret back
+/// (`takeCaretBack`); `launchIdeas` starts it at 0 for each test.
+enum CaretRetaps {
+    static var count = 0
+}
+
 /// One test's store: a name of its own, so the app opens a new file in its
 /// temporary folder (`-SortaStore`, IdeasDesk.storeURL); the same name
 /// again reopens that file.
@@ -52,6 +58,7 @@ extension XCTestCase {
     func launchIdeas(_ store: IdeasStoreName, _ more: [String] = [],
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
+        CaretRetaps.count = 0
         app.keepTraceOffConsole()
         app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + more
         app.launch()
@@ -170,6 +177,7 @@ extension XCUIApplication {
     /// still have the caret, empty, before a key is typed.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
         typeDraft(text, file: file, line: line)
+        takeCaretBack(capture, file: file, line: line)
         capture.typeText("\n")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
                                       timeout: 10),
@@ -276,12 +284,37 @@ extension XCUIApplication {
                        .completed, "the name field has the caret")
         var typed = ""
         for key in name {
+            takeCaretBack(nameField)
             nameField.typeText(String(key))
             typed.append(key)
             let landed = NSPredicate(format: "value == %@", typed)
             let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: landed, object: nameField)], timeout: 15)
             XCTAssertEqual(result, .completed,
                            "key \(typed.count) of \"\(name)\" is in the field: it holds \(nameField.value as? String ?? "nil")")
+        }
+    }
+
+    /// The first keyboard of a set can go down by itself while its field
+    /// holds the caret, the words kept: in Chat-me run 43184411544 it went
+    /// after the name sheet's "G" (attempt 1) and as "Plant bulbs" landed in
+    /// capture (attempt 2), with nothing over the field in any frame of the
+    /// recordings and no app code that lets go of the caret there (S05g's
+    /// result, note 9). A person taps the field again; so does this, at its
+    /// trailing end, and the field must then have the caret. It may happen
+    /// once in a test: a second time fails, so a field that keeps losing
+    /// the caret is still caught. The tap is logged as its own activity.
+    func takeCaretBack(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        if keyboards.firstMatch.exists { _ = keyboards.firstMatch.settledFrame }
+        guard !(field.value(forKey: "hasKeyboardFocus") as? Bool ?? false) else { return }
+        CaretRetaps.count += 1
+        XCTAssertLessThanOrEqual(CaretRetaps.count, 1,
+                                 "the keyboard went down with the caret more than once in this test", file: file, line: line)
+        XCTContext.runActivity(named: "the keyboard went down with the caret; tap the field again") { _ in
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+            let focused = NSPredicate(format: "hasKeyboardFocus == true")
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: field)], timeout: 10),
+                           .completed, "the field has the caret again", file: file, line: line)
+            if keyboards.firstMatch.waitForExistence(timeout: 10) { _ = keyboards.firstMatch.settledFrame }
         }
     }
 
@@ -325,6 +358,7 @@ extension XCUIElement {
         typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2))
         var typed = ""
         for key in text {
+            XCUIApplication().takeCaretBack(self)
             typeText(String(key))
             typed.append(key)
             let landed = NSPredicate(format: "value == %@", typed)
