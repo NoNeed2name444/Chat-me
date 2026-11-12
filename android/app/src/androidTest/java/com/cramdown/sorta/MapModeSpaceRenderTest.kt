@@ -37,6 +37,7 @@ import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.map.MapNameShow
+import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
 import com.cramdown.sorta.ui.ideas.MapPanelTags
@@ -86,6 +87,12 @@ import kotlin.math.max
  * the first view, Recentre's (requireChoice). Each look's legend, scrolled to its end, ends its touch help
  * the sheet's foot above its bottom, which is above the navigation bar (requireLegendFoot, a still
  * mapmode-legend-foot-<theme>-...).
+ *
+ * S05g A6: in Space, with Look's Suns, the idea with the most links, a sun by the map's own styles, is
+ * chosen with a tap, marked and its links lit (mapmode-chosen-sun-space-...); in Neurons the Garden
+ * cell, whose idea bridges out of its folder, is chosen with its bridges lit
+ * (mapmode-chosen-bridges-neurons-...), and that idea, flown into, has Show links
+ * (mapmode-links-bridges-neurons-...).
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -172,6 +179,8 @@ class MapModeSpaceRenderTest {
         val (spaceChosen, spaceBefore) = requireNames("space", dark, press = true)
         // S05g A3: the chosen body's mark, Show links, the hold and the empty double tap
         requireChoice("space", dark, spaceChosen, spaceBefore, home = spaceHome)
+        // S05g A6: a chosen sun, its mark and its links' plasma
+        requireSun(dark)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -195,6 +204,8 @@ class MapModeSpaceRenderTest {
         requireChoice("neurons", dark, neuronsChosen, neuronsBefore, home = neuronsHome)
         // S05g A3: Neurons' Show links, on an idea inside the chosen cell, flown into
         requireNeuronLinks(dark, neuronsChosen)
+        // S05g A6: a chosen cell with bridges, its lit bridges, and Show links on its idea that bridges out
+        requireNeuronBridges(dark)
         // S05g A3: Performance, chosen after Neurons, shows no first-run card; a tap on a point
         // chooses it, and the same marks, Show links, hold and double tap as the other looks
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
@@ -345,18 +356,13 @@ class MapModeSpaceRenderTest {
      * outside its neighbourhood (Performance fades no point, its own links drawn) and keeps its lit
      * links, the button reads All links, a still mapmode-links-<look>-...; All links brings everything back.
      */
-    private fun requireShowLinks(look: String, dark: Boolean, index: Int, chosen: MapDrawn) {
+    private fun requireShowLinks(look: String, dark: Boolean, index: Int, chosen: MapDrawn,
+                                 still: String = "mapmode-links-$look-${if (dark) "dark" else "light"}-$device") {
         val mode = if (dark) "dark" else "light"
         val name = "mapmode-chosen-$look-$mode-$device"
         val res = instrumentation.targetContext.resources
-        // measurement copy only (S05g A7): three seconds chosen, then three with Show links on
-        android.util.Log.i("SortaBudget", "mark chosen $name")
-        SystemClock.sleep(3_000)
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_show_links))).performClick()
         try { compose.waitUntil(10_000) { mapDrawn()?.focus == true } } catch (_: ComposeTimeoutException) {}
-        android.util.Log.i("SortaBudget", "mark links $name")
-        SystemClock.sleep(3_000)
-        android.util.Log.i("SortaBudget", "mark end $name")
         val focused = checkNotNull(mapDrawn())
         if (look == "performance") {
             // Performance steps the other links back and fades no point (GraphPerfShaders): its own links drawn, nothing counted faded
@@ -368,7 +374,7 @@ class MapModeSpaceRenderTest {
         } else check(focused.focus && focused.chosen == index && focused.faded > 0) { "Show links faded nothing for $name: $focused" }
         check(focused.lit == chosen.lit && focused.focusLinks >= focused.lit) { "Show links lost the chosen body's lit links for $name: $chosen, then $focused" }
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_all_links)))
-        shot("mapmode-links-$look-$mode-$device")
+        shot(still)
         // All links
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).performClick()
         try { compose.waitUntil(10_000) { mapDrawn()?.focus == false } } catch (_: ComposeTimeoutException) {}
@@ -405,6 +411,139 @@ class MapModeSpaceRenderTest {
         val chosen = checkNotNull(mapDrawn())
         check(shown(MapPanelTags.PEEK) && chosen.chosen == index) { "The idea ${idea.title} ($index) inside the open cell is not chosen for $name: $chosen" }
         requireShowLinks("neurons", dark, index, chosen)
+        compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
+        compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitUntil(30_000) { ideaAt() < 0 }
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) } } catch (_: ComposeTimeoutException) {}
+    }
+
+    /**
+     * S05g A6 in Space: a chosen sun and its links' plasma. The fixture has no body with the five
+     * links a sun takes by itself (SpaceStyle.forLinks), so Look's Suns, chosen as a person would,
+     * makes the bodies suns; Recentre frames the new scene. The idea with the most links is handed
+     * in as the map's hit test hands it on (MapTapKey), only to find where it is drawn and to read
+     * its style off the map: its card's kind is the map's own (MapPeek.spaceRole of the scene's
+     * styles), a Star. A tap on empty space lets it go, and a tap on that spot chooses it: marked,
+     * its links lit, nothing faded, the camera put as requireChoice requires with animations off;
+     * a still, mapmode-chosen-sun-space-<light|dark>-<device>.png. A tap on empty space lets it go
+     * and Universe is chosen again, the map as Neurons finds it.
+     */
+    private fun requireSun(dark: Boolean) {
+        val name = "mapmode-chosen-sun-space-${if (dark) "dark" else "light"}-$device"
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val star = instrumentation.targetContext.resources.getString(R.string.map_role_star)
+        chooseSpaceStyle(SpaceStyle.SUN.label, name)
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        fun links(id: String) = notes.sumOf { n -> (if (n.id.equals(id, ignoreCase = true)) n.links.size else 0) + n.links.count { it.equals(id, ignoreCase = true) } }
+        val index = tap.ids.indices.maxBy { links(tap.ids[it]) }
+        check(links(tap.ids[index]) > 0) { "No idea with a link on the map for $name: ${tap.ids}" }
+        fun kind() = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull()
+            ?.config?.getOrNull(SemanticsProperties.ContentDescription).orEmpty().joinToString(" ")
+        compose.runOnIdle { tap.tap(index) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.let { it.chosen == index && it.names.any { n -> n.index == index } } == true } } catch (_: ComposeTimeoutException) {}
+        check(", $star · " in kind()) { "The body with the most links ($index) is not a sun by the map's styles for $name: its card reads \"${kind()}\"" }
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done: the body is where it stays
+        val drawnAt = checkNotNull(mapDrawn()).names.firstOrNull { it.index == index }
+        checkNotNull(drawnAt) { "The chosen sun ($index) shows no name to find it by for $name: ${mapDrawn()}" }
+        val at = Offset(drawnAt.body[0], drawnAt.body[1])
+        val bounds = checkNotNull(mapNode()).boundsInRoot
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        check(at.x in 0f..bounds.width && at.y in (strip.bottom - bounds.top)..bounds.height) {
+            "The sun ($index) is drawn off the map or under the top strip for $name: $at in ${bounds.width}x${bounds.height}, the strip's bottom ${strip.bottom - bounds.top}"
+        }
+        val empty = emptySpot(name)
+        compose.onNode(map).performTouchInput { click(empty) }
+        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
+        check(!shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == -1) { "A tap on empty space did not let the sun go for $name: ${mapDrawn()}" }
+        SystemClock.sleep(500) // past a double tap's pairing
+        // the tap
+        val before = checkNotNull(mapDrawn()).pose
+        compose.onNode(map).performTouchInput { click(at) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.let { it.chosen == index && it.marked && it.lit > 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val chosen = checkNotNull(mapDrawn())
+        check(shown(MapPanelTags.PEEK) && chosen.chosen == index && chosen.marked) { "A tap on the sun ($index) at $at did not choose and mark it for $name: $chosen" }
+        check(chosen.lit > 0) { "The chosen sun's links are not lit for $name: $chosen" }
+        check(!chosen.focus && chosen.faded == 0) { "Something fades with no Show links for $name: $chosen" }
+        check(", $star · " in kind()) { "The tapped body's card is not a sun's for $name: \"${kind()}\"" }
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        // with animations off the camera stays put; with them on it has eased to the sun already, at the hand-in
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            val eased = checkNotNull(mapDrawn()).pose
+            check(same(before, eased)) { "The camera moved with animations off for the chosen sun for $name: $before, then $eased" }
+        }
+        shot(name)
+        compose.onNode(map).performTouchInput { click(emptySpot(name)) }
+        compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        chooseSpaceStyle("Universe", name)
+    }
+
+    /**
+     * Look's main style set to [label] in Space's Look menu, as a person would; the map builds its
+     * scene again (a new MapDrawn.build) and draws it.
+     */
+    private fun chooseSpaceStyle(label: String, name: String) {
+        val built = checkNotNull(mapDrawn()).build
+        val look = hasContentDescription("Look") and hasClickAction() and
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, GraphTheme.SPACE.title)
+        compose.onNode(look).performClick()
+        val item = hasText(label) and hasClickAction()
+        compose.waitUntil(10_000) { compose.onAllNodes(item).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(item).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodes(item).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(30_000) { mapDrawn()?.build?.let { it != built } == true }
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
+        val drawn = mapDrawn()
+        check(framed(drawn) && drawn?.box?.size == 4) { "Space did not draw its scene again with $label for $name: $drawn" }
+    }
+
+    /**
+     * S05g A6 in Neurons: a cell with bridges, Garden ('Paint the shed green' links to 'Buy brushes',
+     * out of its folder), found by its folder's id among the map's (MapTapKey) and handed in as the
+     * map's hit test hands it on. It is marked and its bridges lit; a still,
+     * mapmode-chosen-bridges-neurons-<light|dark>-<device>.png. Its card is a folder's (Fly in, no
+     * Show links, as requireChoice requires), so Fly in opens it and the idea that bridges out,
+     * chosen, has Show links (requireShowLinks: faded > 0, its lit links kept), a still
+     * mapmode-links-bridges-neurons-<light|dark>-<device>.png. A tap on empty space lets it go and
+     * Recentre closes the cell, the map as Performance finds it.
+     */
+    private fun requireNeuronBridges(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-chosen-bridges-neurons-$mode-$device"
+        val res = instrumentation.targetContext.resources
+        val garden = folders.first { it.name == "Garden" }
+        val idea = checkNotNull(notes.firstOrNull { n ->
+            n.folderId == garden.id && n.links.any { l -> notes.any { it.id == l && it.folderId != garden.id } }
+        }) { "No idea in Garden links out of it for $name" }
+        fun cellAt(): Int = mapNode()?.config?.getOrNull(MapTapKey)?.ids?.indexOfFirst { it.equals(garden.id, ignoreCase = true) } ?: -1
+        compose.waitUntil(30_000) { cellAt() >= 0 }
+        val cell = cellAt()
+        val closed = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        compose.runOnIdle { closed.tap(cell) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.let { it.chosen == cell && it.marked && it.lit > 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val chosen = checkNotNull(mapDrawn())
+        check(shown(MapPanelTags.PEEK) && chosen.chosen == cell && chosen.marked) { "The Garden cell ($cell) is not chosen and marked for $name: $chosen" }
+        check(chosen.lit > 0) { "The Garden cell's bridges are not lit for $name: $chosen" }
+        check(!chosen.focus && chosen.faded == 0) { "Something fades with no Show links for $name: $chosen" }
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        shot(name)
+        check(!shown(MapPanelTags.PEEK_LINKS)) { "A cell's card offers Show links for $name" }
+        compose.onNode(hasText(res.getString(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
+        fun ideaAt(): Int = mapNode()?.config?.getOrNull(MapTapKey)?.ids?.indexOfFirst { it.equals(idea.id, ignoreCase = true) } ?: -1
+        compose.waitUntil(30_000) { ideaAt() >= 0 }
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) } } catch (_: ComposeTimeoutException) {}
+        val index = ideaAt()
+        val open = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        compose.runOnIdle { open.tap(index) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.let { it.chosen == index && it.marked && it.lit > 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val chosenIdea = checkNotNull(mapDrawn())
+        check(shown(MapPanelTags.PEEK) && chosenIdea.chosen == index && chosenIdea.marked && chosenIdea.lit > 0) {
+            "The idea ${idea.title} ($index) inside Garden is not chosen, marked and lit for $name: $chosenIdea"
+        }
+        requireShowLinks("neurons", dark, index, chosenIdea, still = "mapmode-links-bridges-neurons-$mode-$device")
         compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
         compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
         compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
