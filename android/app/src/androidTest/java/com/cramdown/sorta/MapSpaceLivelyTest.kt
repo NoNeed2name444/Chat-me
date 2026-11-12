@@ -62,9 +62,10 @@ import java.util.UUID
  * thread) inside waitUntil, which moves Compose's frames on, and taps on the map go through the map's
  * hit test (MapTapKey) or UiAutomation. Over 3 s the orbit clock rises above 0 (MapDrawn.orbitSeconds)
  * and a chosen planet's place on the screen changes; a still, mapmode-lively-universe-<light|dark>-<device>.png.
- * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s of the
- * orbit clock's own steps (0.5 s and three frames, each frame's step at most 0.25 s). The
- * frames drawn over the 3 s are logged, a first look at A7's frame budget.
+ * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s:
+ * judged once 0.5 s has passed and the orbit clock has stepped three times since the finger came down
+ * (MapDrawn.orbitSteps, never capped; each step at most 0.25 s). The frames drawn over the 3 s
+ * (the clock's steps) are logged, a first look at A7's frame budget.
  */
 @RunWith(AndroidJUnit4::class)
 class MapSpaceLivelyTest {
@@ -125,8 +126,9 @@ class MapSpaceLivelyTest {
         settle(3_000)
         val later = checkNotNull(drawn())
         val seconds = (SystemClock.uptimeMillis() - t0) / 1000f
-        android.util.Log.i("MapSpaceLivelyTest", "$name: ${later.frames - start.frames} frames in $seconds s " +
-            "(${"%.1f".format((later.frames - start.frames) / seconds)} a second), the orbit clock ${start.orbitSeconds} s then ${later.orbitSeconds} s")
+        val steps = later.orbitSteps - start.orbitSteps
+        android.util.Log.i("MapSpaceLivelyTest", "$name: $steps frames in $seconds s " +
+            "(${"%.1f".format(steps / seconds)} a second), the orbit clock ${start.orbitSeconds} s then ${later.orbitSeconds} s")
         check(later.orbitSeconds > 0 && later.orbitSeconds > start.orbitSeconds) {
             "The orbit clock did not rise over 3 s for $name: ${start.orbitSeconds} s, then ${later.orbitSeconds} s; $later"
         }
@@ -152,21 +154,24 @@ class MapSpaceLivelyTest {
         val at = checkNotNull(named(planet)) { "The chosen planet $planet shows no name to put a finger on for $name" }
         val origin = checkNotNull(mapNode()).positionOnScreen
         val x = origin.x + at.x; val y = origin.y + at.y
+        val s0 = checkNotNull(drawn()).orbitSteps
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, down, x, y)
         try {
-            // judged by the renderer's own steps, not the clock alone: each frame steps the orbit clock by its
-            // interval, at most 0.25 s (GlMapRenderer's dt), so 0.5 s of steps is 0.5 s on a quick device and
-            // at least two steps past the frame that took the press on a slow one (as S05g2's let-go is judged
-            // by frames). 10 s at most, against a hang
-            val f0 = before.frames
-            fun stepped(d: MapDrawn) = SystemClock.uptimeMillis() - down >= 500 && d.frames - f0 >= 3
-            try { compose.waitUntil(10_000) { drawn()?.let { it.orbitRate < 0.05f || stepped(it) } == true } } catch (_: ComposeTimeoutException) {}
+            // iOS's rule (GraphMotion.swift:1750-1757, MapDrag.advanceClock): while a body is pressed the rate
+            // eases to 0 with tau 0.1 s, each frame stepping the clock by its interval (at most 0.25 s,
+            // GlMapRenderer's dt), so after 0.3 s of steps it is under 0.05. Judged once 0.5 s has passed and
+            // the clock has stepped at least three times since the finger came down (MapDrawn.orbitSteps, never
+            // capped): on a quick device the 0.5 s decides; on a slow one, whose long frames each step the clock
+            // up to 0.25 s, at least two steps with the press taken even where it reaches the renderer a frame
+            // late. Not under 0.05 by then fails. 10 s at most, against a hang
+            fun judged(d: MapDrawn) = SystemClock.uptimeMillis() - down >= 500 && d.orbitSteps - s0 >= 3
+            try { compose.waitUntil(10_000) { drawn()?.let { it.orbitRate < 0.05f || judged(it) } == true } } catch (_: ComposeTimeoutException) {}
             val held = checkNotNull(drawn())
             val took = SystemClock.uptimeMillis() - down
             check(held.orbitRate < 0.05f) {
-                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate} after $took ms and ${held.frames - f0} frames, " +
-                    "not below 0.05 within 0.5 s of the orbit clock's steps for $name: $held"
+                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate} after $took ms and " +
+                    "${held.orbitSteps - s0} steps of the orbit clock, not below 0.05 within 0.5 s for $name: $held"
             }
         } finally {
             touch(MotionEvent.ACTION_UP, down, x, y)

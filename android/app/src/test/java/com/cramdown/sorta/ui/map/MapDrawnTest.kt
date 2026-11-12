@@ -144,4 +144,18 @@ class MapDrawnTest {
         assertSame(held, held.dragging(3, listOf(10f, 20f), 3, 2, listOf(0.5f, 0f, 0f), memberOffsetsNow = members))
         assertEquals(emptyList<Float>(), held.dragging(-1, emptyList(), 0, 0, memberOffsetsNow = emptyList()).memberOffsets)
     }
+
+    // S05h: the orbit clock's steps, counted past ENOUGH as frames is not, so a held finger's ease is judged by them
+    @Test fun theOrbitClocksStepsAreNeverCapped() {
+        var d = MapDrawn()
+        assertEquals(0, d.orbitSteps)
+        repeat(1_000) { d = d.after(5, 16L * (it + 1)).stepped() }
+        assertEquals(1_000, d.orbitSteps)
+        assertEquals("frames still stop at ENOUGH", MapDrawn.ENOUGH, d.frames)
+        assertEquals("a step is a new record", 1_001, d.stepped().orbitSteps)
+        // without a step (a still map) the record stays the same
+        val still = d.after(5, 20_000)
+        assertSame(d, still)
+        assertEquals(d.copy(orbitSteps = 0), d.stepped().copy(orbitSteps = 0))
+    }
 }

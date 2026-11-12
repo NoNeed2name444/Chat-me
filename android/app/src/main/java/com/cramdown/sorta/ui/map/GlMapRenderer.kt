@@ -170,7 +170,17 @@ data class MapDrawn(
      * its own offset from home (x, y, z), four floats each; empty when nothing is held.
      */
     val memberOffsets: List<Float> = emptyList(),
+    /**
+     * Frames that stepped the Universe's lively orbit clock (S05h), never capped as [frames] is, so a
+     * test can count the clock's own steps past a press (each steps it by the frame's interval, at most
+     * 0.25 s). It moves only while the orbits turn, when the map changes every frame anyway; a still
+     * map's record stays the same.
+     */
+    val orbitSteps: Int = 0,
 ) {
+    /** This record after one more step of the lively orbit clock ([orbitSteps]). */
+    fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
+
     /** This record with the Universe as the latest frame drew it; the same record when nothing changed. */
     fun universe(rolesNow: List<Int>, nearNow: Int, archedNow: Int, farNow: Int, secondsNow: Int, rateNow: Float): MapDrawn =
         if (roles == rolesNow && nearLinks == nearNow && archedLinks == archedNow && farLinks == farNow &&
@@ -786,6 +796,7 @@ class GlMapRenderer(
         if (uplan != null && bodies != null) {
             record = record.flying(flown)
             val d = drag
+            if (lively && d != null) record = record.stepped()
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }
