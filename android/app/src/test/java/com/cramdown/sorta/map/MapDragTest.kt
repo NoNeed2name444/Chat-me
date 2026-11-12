@@ -285,58 +285,6 @@ class MapDragTest {
         assertEquals(0.0, still.orbitTime, 0.0)
     }
 
-    @Test fun aPressedOrHoveredBodyStopsTheOrbitClockToo() {
-        // S05h: iOS's busy is pressedNote, hovered or grabbed (advanceOrbits, GraphMotion.swift:1752)
-        for (how in listOf("pressed", "hovered")) {
-            val drag = run()
-            repeat(60) { drag.step(frame) }
-            if (how == "pressed") drag.pressed = 0 else drag.hovered = 0
-            repeat(18) { drag.step(frame) }
-            assertTrue("$how: within 5 % of 0 by 0.3 s, ${drag.orbitRate}", drag.orbitRate < 0.05f)
-            if (how == "pressed") drag.pressed = -1 else drag.hovered = -1
-            repeat(150) { drag.step(frame) }
-            assertTrue("$how: within 5 % of 1 by 2.5 s after, ${drag.orbitRate}", drag.orbitRate > 0.95f)
-        }
-        val still = run(lively = false)
-        still.pressed = 0
-        still.hovered = 0
-        repeat(60) { still.step(frame) }
-        still.pressed = -1
-        still.hovered = -1
-        repeat(60) { still.step(frame) }
-        assertEquals("animations off: the clock stays at 0", 0.0, still.orbitTime, 0.0)
-    }
-
-    @Test fun aHeldStarCarriesItsPlanetsAndMoons() {
-        // a star (0), its planet (1) and the planet's moon (2): held at d, each settles at d within
-        // 2 %, never above 1.05 d (S05h A2)
-        for (lively in listOf(true, false)) {
-            val drag = run(3, lively = lively, parents = intArrayOf(-1, 0, 1))
-            val d = 3f
-            drag.grab(0)
-            drag.drag(drag.homeOf(0) + Vec3(d, 0f, 0f))
-            var most = 0f
-            repeat((4f / frame).toInt()) {
-                drag.step(frame)
-                most = max(most, max(drag.offset(1, 0), drag.offset(2, 0)))
-            }
-            for (i in 1..2) assertEquals("lively $lively: body $i settles at d", d, drag.offset(i, 0), d * 0.02f)
-            assertTrue("lively $lively: never above 1.05 d, $most", most <= 1.05f * d)
-        }
-        // the same family out of index order (the Universe's chunk order): the moon 0, the star 1 and the
-        // planet 2, ranked star, planet, moon, carry as above; without the rank the moon carries nothing
-        for (ranked in listOf(true, false)) {
-            val drag = MapDrag(3, MapDragPath.ORBITS, 1f, line(3), intArrayOf(2, -1, 1), rank = if (ranked) intArrayOf(2, 0, 1) else null)
-            val d = 3f
-            drag.grab(1)
-            drag.drag(drag.homeOf(1) + Vec3(d, 0f, 0f))
-            repeat((4f / frame).toInt()) { drag.step(frame) }
-            assertEquals("ranked $ranked: the planet follows", d, drag.offset(2, 0), d * 0.02f)
-            if (ranked) assertEquals("the moon follows its planet", d, drag.offset(0, 0), d * 0.02f)
-            else assertEquals("unranked, a parent after its child carries nothing", 0f, drag.offset(0, 0), 0f)
-        }
-    }
-
     @Test fun atRestItDoesNoWork() {
         val drag = run(1000, MapDragPath.LINKS, links = IntArray(998) { it / 2 + it % 2 })
         repeat(120) { drag.step(frame) }

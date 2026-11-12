@@ -98,21 +98,7 @@ class MapPeekTest {
         assertEquals(2, folder.notes)
         assertEquals(1, folder.subfolders)
         assertTrue("Neurons flies in to a cell", folder.flyIn)
-        // S05h: under the Universe a black hole's, a star's and the home's cards fly in (GraphMapPanels.swift:155-157)
-        assertTrue("a black hole flies in", mapPeekInput(book, MapBody(garden.id, ThemeBodyKind.FOLDER, "galaxy"), GraphTheme.SPACE, words)!!.flyIn)
-        assertTrue("a star flies in", mapPeekInput(book, MapBody(garden.id, ThemeBodyKind.FOLDER, "star"), GraphTheme.SPACE, words)!!.flyIn)
-        assertTrue("the home flies in", mapPeekInput(book, MapBody("HOME", ThemeBodyKind.HOME, "home"), GraphTheme.SPACE, words)!!.flyIn)
-        // a folder or home with no Universe role (none under one single style) does not, nor does an idea, whatever its look
-        assertFalse("no Universe role, no Fly in", mapPeekInput(book, MapBody(garden.id, ThemeBodyKind.FOLDER), GraphTheme.SPACE, words)!!.flyIn)
-        for (role in listOf("galaxy", "star", "gasGiant", "rocky", "moon", "pulsar", "comet", "oort")) {
-            val idea = mapPeekInput(book, MapBody(gate.id, ThemeBodyKind.NOTE, role), GraphTheme.SPACE, words)!!
-            assertFalse("an idea drawn as $role has no Fly in", idea.flyIn)
-            assertFalse(MapPeek.content(idea, words).secondary.contains(words.flyIn))
-        }
-        assertFalse("Performance never flies in", MapPeek.fliesIn("performance", "galaxy"))
-        // the Universe's own role words (GraphTouchModel.swift:276-277)
-        assertEquals("Moon · Idea", MapPeek.content(mapPeekInput(book, MapBody(gate.id, ThemeBodyKind.NOTE, "moon"), GraphTheme.SPACE, words)!!, words).kind)
-        assertEquals("Oort comet · Idea", MapPeek.content(mapPeekInput(book, MapBody(gate.id, ThemeBodyKind.NOTE, "oort"), GraphTheme.SPACE, words)!!, words).kind)
+        assertFalse("Space can't fly in", mapPeekInput(book, MapBody(garden.id, ThemeBodyKind.FOLDER), GraphTheme.SPACE, words)!!.flyIn)
         val home = mapPeekInput(book, MapBody("HOME", ThemeBodyKind.HOME), GraphTheme.NEURONS, words)!!
         assertEquals("To sort", home.title)
         assertEquals(1, home.notes)

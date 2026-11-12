@@ -7,7 +7,6 @@ import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.EarthMaps
 import com.cramdown.sorta.map.LinkStrips
-import com.cramdown.sorta.map.UniverseBeams
 import com.cramdown.sorta.map.SpaceBodies
 import com.cramdown.sorta.map.SpaceShaders
 import com.cramdown.sorta.map.SpaceStyle
@@ -115,38 +114,29 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
         linksDrawn = 0
         ringDrawn = false
         if (bodies.beamCount > 0 && linkProgram != 0) {
-            // the Universe (S05h): fine beams (UniverseBeams.HALF_WIDTH, in note radii here), the near
-            // set at full brightness, then the far set at 0.55 (0.825 bold) in a draw of its own
-            val universe = bodies.linkKinds != null
-            val half = if (universe) UniverseBeams.HALF_WIDTH / max(bodies.nodeRadius, 1e-6f) else 0.18f
-            val energy = if (contrast) 1.5f else 1f
-            for (set in if (universe) intArrayOf(0, 1) else intArrayOf(-1)) {
-                if (set == 1 && bodies.farBeams == 0) continue
-                strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight, bodies.beamCentres, set)
-                if (strips.count == 0) continue
-                val floatsUsed = strips.vertices * LinkStrips.STRIDE
-                stripBuffer = ensure(stripBuffer, floatsUsed)
-                stripBuffer.put(strips.data, 0, floatsUsed).flip()
-                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, beamVbo)
-                GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, floatsUsed * 4, stripBuffer, GLES30.GL_STREAM_DRAW)
-                val p = linkProgram
-                GLES30.glUseProgram(p)
-                GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
-                GLES30.glUniform3fv(loc(p, "uEye"), 1, eye, 0)
-                GLES30.glUniform1f(loc(p, "uUnit"), bodies.nodeRadius)
-                GLES30.glUniform1f(loc(p, "uHalf"), half)
-                GLES30.glUniform1f(loc(p, "uFocal"), focal)
-                GLES30.glUniform1f(loc(p, "rpClock"), clock)
-                GLES30.glUniform1f(loc(p, "rpMotion"), if (lively) 1f else 0f)
-                GLES30.glUniform1f(loc(p, "rpEnergy"), if (set == 1) UniverseBeams.farEnergy(contrast) else energy)
-                GLES30.glUniform1f(loc(p, "rpSolid"), if (contrast) 1f else 0f)
-                GLES30.glUniform1f(loc(p, "rpReach"), 0.75f)
-                GLES30.glUniform4fv(loc(p, "rpFade"), 1, fade, 0)
-                GLES30.glBindVertexArray(beamVao)
-                val perLink = strips.perLink
-                for (k in 0 until strips.count) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, k * perLink, perLink)
-                linksDrawn += strips.count
-            }
+            strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight)
+            val floatsUsed = strips.vertices * LinkStrips.STRIDE
+            stripBuffer = ensure(stripBuffer, floatsUsed)
+            stripBuffer.put(strips.data, 0, floatsUsed).flip()
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, beamVbo)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, floatsUsed * 4, stripBuffer, GLES30.GL_STREAM_DRAW)
+            val p = linkProgram
+            GLES30.glUseProgram(p)
+            GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
+            GLES30.glUniform3fv(loc(p, "uEye"), 1, eye, 0)
+            GLES30.glUniform1f(loc(p, "uUnit"), bodies.nodeRadius)
+            GLES30.glUniform1f(loc(p, "uHalf"), 0.18f)
+            GLES30.glUniform1f(loc(p, "uFocal"), focal)
+            GLES30.glUniform1f(loc(p, "rpClock"), clock)
+            GLES30.glUniform1f(loc(p, "rpMotion"), if (lively) 1f else 0f)
+            GLES30.glUniform1f(loc(p, "rpEnergy"), if (contrast) 1.5f else 1f)
+            GLES30.glUniform1f(loc(p, "rpSolid"), if (contrast) 1f else 0f)
+            GLES30.glUniform1f(loc(p, "rpReach"), 0.75f)
+            GLES30.glUniform4fv(loc(p, "rpFade"), 1, fade, 0)
+            GLES30.glBindVertexArray(beamVao)
+            val perLink = strips.perLink
+            for (k in 0 until strips.count) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, k * perLink, perLink)
+            linksDrawn = strips.count
         }
         // the ring's far half, which the bodies then cover
         if (ring != null) drawRing(ring, viewProj, clock, lively, fade, ringDepth, ringGlow, 1f)

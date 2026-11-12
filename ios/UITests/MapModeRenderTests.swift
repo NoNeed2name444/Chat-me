@@ -17,6 +17,7 @@ final class MapModeRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     func testMapRenders() throws {

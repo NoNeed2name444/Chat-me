@@ -39,9 +39,21 @@ enum IdeasText {
 }
 
 /// How many times this test has had to take the caret back
-/// (`takeCaretBack`); `launchIdeas` starts it at 0 for each test.
-enum CaretRetaps {
-    static var count = 0
+/// (`takeCaretBack`). It counts per test, not per launch: three tests
+/// relaunch partway (IdeasBehaviourTests' relaunch check, IdeasRenderTests'
+/// largest text size and MapModeTests' relaunch on Sort), and a count
+/// started again at each launch let each of them re-tap twice and pass. So
+/// every class that calls `launchIdeas` calls `reset()` in its `setUp`.
+/// `row` counts the same way for a tap on an idea's row made again
+/// (`openEditor`).
+enum Retaps {
+    static var caret = 0
+    static var row = 0
+
+    static func reset() {
+        caret = 0
+        row = 0
+    }
 }
 
 /// One test's store: a name of its own, so the app opens a new file in its
@@ -58,7 +70,6 @@ extension XCTestCase {
     func launchIdeas(_ store: IdeasStoreName, _ more: [String] = [],
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
-        CaretRetaps.count = 0
         app.keepTraceOffConsole()
         app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + more
         app.launch()
@@ -306,8 +317,8 @@ extension XCUIApplication {
     func takeCaretBack(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         if keyboards.firstMatch.exists { _ = keyboards.firstMatch.settledFrame }
         guard !(field.value(forKey: "hasKeyboardFocus") as? Bool ?? false) else { return }
-        CaretRetaps.count += 1
-        XCTAssertLessThanOrEqual(CaretRetaps.count, 1,
+        Retaps.caret += 1
+        XCTAssertLessThanOrEqual(Retaps.caret, 1,
                                  "the keyboard went down with the caret more than once in this test", file: file, line: line)
         XCTContext.runActivity(named: "the keyboard went down with the caret; tap the field again") { _ in
             field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
@@ -316,6 +327,30 @@ extension XCUIApplication {
                            .completed, "the field has the caret again", file: file, line: line)
             if keyboards.firstMatch.waitForExistence(timeout: 10) { _ = keyboards.firstMatch.settledFrame }
         }
+    }
+
+    /// Taps an idea's row and requires its editor (`editor-done`) within
+    /// 10 s, as a test did with one tap. On a stalled runner the first tap
+    /// after a launch can be lost (captureIdea's run 41812442710): on 12
+    /// Nov, testLargestTextSize's tap after its relaunch dimmed the row and
+    /// no editor opened in 10 s. So if none is open after 5 s, and the row
+    /// is still there to tap, it is tapped once more, as its own activity,
+    /// and the editor must open in the other 5 s. It may happen once in a
+    /// test: a second time fails, so a row that keeps losing taps is still
+    /// caught.
+    func openEditor(from row: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let done = buttons["editor-done"]
+        row.tap()
+        if !done.waitForExistence(timeout: 5), row.exists, row.isHittable {
+            Retaps.row += 1
+            XCTAssertLessThanOrEqual(Retaps.row, 1,
+                                     "a tap on an idea's row opened no editor more than once in this test",
+                                     file: file, line: line)
+            XCTContext.runActivity(named: "the row's tap opened no editor in 5 s; tap the row again") { _ in
+                row.tap()
+            }
+        }
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the editor opened", file: file, line: line)
     }
 
     /// Taps the notice's Undo, at its trailing end: the banner reads as one
@@ -477,6 +512,11 @@ enum MadeUpExport {
 /// The script runs this first, notes how it went, and counts only the tests
 /// after it; every counted test still has to pass by name.
 final class KeyboardWarmUp: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        Retaps.reset()
+    }
+
     func testFirstKeyboard() throws {
         let app = launchIdeas(IdeasStoreName())
         app.captureIdea("Warm up the keyboard")

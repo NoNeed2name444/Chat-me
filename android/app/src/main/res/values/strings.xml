@@ -249,9 +249,6 @@
     <!-- Each theme's own word for a body -->
     <string name="map_role_black_hole">Black hole</string>
     <string name="map_role_star">Star</string>
-    <string name="map_role_home_star">Home star</string>
-    <string name="map_role_moon">Moon</string>
-    <string name="map_role_oort">Oort comet</string>
     <string name="map_role_gas_giant">Gas giant</string>
     <string name="map_role_rocky">Rocky planet</string>
     <string name="map_role_comet">Comet</string>

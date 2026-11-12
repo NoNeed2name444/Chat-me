@@ -134,9 +134,6 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     roles = mapOf(
         "space:galaxy" to res.getString(R.string.map_role_black_hole),
         "space:star" to res.getString(R.string.map_role_star),
-        "space:home" to res.getString(R.string.map_role_home_star),
-        "space:moon" to res.getString(R.string.map_role_moon),
-        "space:oort" to res.getString(R.string.map_role_oort),
         "space:gasGiant" to res.getString(R.string.map_role_gas_giant),
         "space:rocky" to res.getString(R.string.map_role_rocky),
         "space:comet" to res.getString(R.string.map_role_comet),
@@ -165,14 +162,14 @@ fun mapPeekInput(book: IdeaBook, body: MapBody, theme: GraphTheme, words: MapPee
         MapPeekInput(theme.rawValue, body.role, folder = true, title = folder.name, notes = book.count(folder.id),
             subfolders = book.subfolders(folder.id).size,
             recent = book.notes.filter { it.folderId == folder.id }.sortedByDescending { it.createdAt }.take(3).map { it.title },
-            flyIn = MapPeek.fliesIn(theme.rawValue, body.role))
+            flyIn = theme == GraphTheme.NEURONS)
     }
     ThemeBodyKind.HOME -> {
         val unsorted = book.folders.isNotEmpty()
         val inside = if (unsorted) book.notes.filter { it.folderId == null } else book.notes
         MapPeekInput(theme.rawValue, body.role, folder = false, home = true, unsorted = unsorted,
             title = if (unsorted) words.toSort else words.allIdeas, notes = inside.size,
-            recent = inside.sortedByDescending { it.createdAt }.take(3).map { it.title }, flyIn = MapPeek.fliesIn(theme.rawValue, body.role))
+            recent = inside.sortedByDescending { it.createdAt }.take(3).map { it.title }, flyIn = theme == GraphTheme.NEURONS)
     }
 }
 

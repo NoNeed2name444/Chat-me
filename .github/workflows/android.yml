@@ -57,7 +57,7 @@ jobs:
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=4 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=4 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=9 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=7 --expect LinkMemoryTest=5 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDragTest=18 --expect MapDrawnTest=7 --expect MapFitTest=4 --expect MapLegendRenderTest=4 --expect MapLegendTest=7 --expect MapLinkFocusTest=6 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=6 --expect MapModeRenderTest=9 --expect MapModeTest=10 --expect MapNameShowTest=12 --expect MapNamesTest=7 --expect MapPanelsTouchTargetTest=5 --expect MapPeekCardTest=13 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapTouchCardTest=3 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceDepthTest=15 --expect SpaceStyleTest=21 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=4 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=4 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=6 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=9 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkMemoryTest=5 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=7 --expect MapCardCoverTest=4 --expect MapDragTest=16 --expect MapDrawnTest=6 --expect MapFitTest=4 --expect MapLegendRenderTest=4 --expect MapLegendTest=7 --expect MapLinkFocusTest=6 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=6 --expect MapModeRenderTest=9 --expect MapModeTest=10 --expect MapNameShowTest=12 --expect MapNamesTest=7 --expect MapPanelsTouchTargetTest=5 --expect MapPeekCardTest=11 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapTouchCardTest=3 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceDepthTest=15 --expect SpaceStyleTest=20 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: sorta-android-apks
@@ -88,13 +88,10 @@ jobs:
   # about 100 frames each; the tablet's SwiftShader draws about 3 frames a
   # second, so its Space test took 5.5 minutes on its own (run 43234510513)
   # and the job runs about 16 to 17: so 35.
-  # S05h: one limit per device, about twice the measured green times (phone
-  # 13.3 and 14.1 min, tablet 14.3 and 15.8): 30 for the phone, 35 for the
-  # tablet. The Universe's steps and its lively test are measured on top.
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.device == 'tablet' && 35 || 30 }}
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -193,17 +190,6 @@ jobs:
           adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeSpaceRenderTest \
             com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode.txt
           echo "Map mode's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          # S05h A3: Space's Universe with animations on, the test turning them on for itself
-          lively_source=app/src/androidTest/java/com/cramdown/sorta/MapSpaceLivelyTest.kt
-          lively_tests=$(grep -c '@Test' "$lively_source")
-          echo "expecting OK ($lively_tests tests) and $lively_tests renders of the Universe orbiting" | tee -a test-results/expected.txt
-          [ "$lively_tests" -gt 0 ]
-          started=$SECONDS
-          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapSpaceLivelyTest \
-            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-lively.txt
-          echo "The lively Universe took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          # whatever happened, animations are off again for what follows
-          adb shell settings put global animator_duration_scale 0
           # the phone also renders To sort with Android's three-button
           # navigation bar, by day and by night (S05, A6); the test checks
           # the bar is the tappable three-button one
@@ -262,13 +248,6 @@ jobs:
           test "$(find renders -name 'mapmode-legend-foot-space-*.png' | wc -l)" -eq "$mode_tests"
           test "$(find renders -name 'mapmode-legend-foot-neurons-*.png' | wc -l)" -eq "$mode_tests"
           test "$(find renders -name 'mapmode-legend-foot-performance-*.png' | wc -l)" -eq "$mode_tests"
-          # S05h A3: the Universe at rest, Fly in, a moved black hole, the legend's top; and orbiting
-          test "$(find renders -name 'mapmode-universe-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-fly-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-drag-star-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-legend-top-space-*.png' | wc -l)" -eq "$mode_tests"
-          grep -qF "OK ($lively_tests tests)" test-results/instrumentation-lively.txt
-          test "$(find renders -name 'mapmode-lively-universe-*.png' | wc -l)" -eq "$lively_tests"
           if [ "$device" = phone ]; then
             # 0 is the three-button bar
             [ "$(cat test-results/navigation-mode.txt)" = 0 ]

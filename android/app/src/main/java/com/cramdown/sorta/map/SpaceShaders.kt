@@ -427,9 +427,7 @@ void main() {
     vec2 yP = vec2(-xP.y, xP.x);
     rpDetailFor(c, r);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
-    // S05h: an empty galaxy's black hole has no disk (UniverseLooks.EMPTY_GALAXY)
-    float rp_disk = abs(vMark.z - 5.0) < 0.5 ? 0.0 : 1.0;
-    vec3 col = rpFadedGlow(bhRing(dot(q, xP), dot(q, yP), vA.w, vLight.w), rp_dfF) * rp_disk;
+    vec3 col = rpFadedGlow(bhRing(dot(q, xP), dot(q, yP), vA.w, vLight.w), rp_dfF);
     float b = length(q) * 3.0;
     float side = r * 2.1 * uFocal / max(length(c - uEye), 1e-4);
     float shadow = clamp((1.0 - b) * side / 3.0 + 0.5, 0.0, 1.0);
@@ -603,13 +601,9 @@ void main() {
     rpSphere(rd, c, R, n, cover);
     rpDetailFor(c, r);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
-    // S05h: a Universe star's tier colour, and a dark star with no corona (UniverseLooks)
-    float rp_look = vMark.z;
-    vec3 rp_tint = rp_look > 3.5 && rp_look < 4.5 ? vec3(0.42, 0.20, 0.14)
-        : (rp_look > 2.5 && rp_look < 3.5 ? vec3(1.0, 0.52, 0.36) : (rp_look > 1.5 && rp_look < 2.5 ? vec3(1.0, 0.74, 0.50) : vec3(1.0)));
-    vec4 res = vec4(rpFadedBody(sunBody(n, -rd, X, Y, Z, vB.w * 1.1) * rp_tint, rp_dfF) * cover, cover);
+    vec4 res = vec4(rpFadedBody(sunBody(n, -rd, X, Y, Z, vB.w * 1.1), rp_dfF) * cover, cover);
     vec2 q = rpPlane(c, R * 4.0);
-    if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0 && !(rp_look > 3.5 && rp_look < 4.5)) res.rgb = res.rgb + rpFadedGlow(sunCorona(q.x, q.y, vA.w) * rp_tint, rp_dfF);
+    if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(sunCorona(q.x, q.y, vA.w), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
     fragColor = fragColor * vMark.x;
@@ -759,11 +753,6 @@ void main() {
 
     private val GAS = """
 uniform float rpRinged;
-// S05h: from here on rpRinged means this body's, off for a Universe gas giant that is not ringed
-// (UniverseLooks.UNRINGED); GAS_MAIN sets it from the uniform, read through rpRingedSet
-float rpRingedNow = 1.0;
-float rpRingedSet() { return rpRinged; }
-#define rpRinged rpRingedNow
 uniform vec3 rpTintA;
 uniform vec3 rpTintB;
 uniform vec3 rpTintC;
@@ -897,7 +886,6 @@ void main() {
     rpFrame(vA.xyz, rpClock * rpMotion * 0.2 + vLight.w * 6.2831853, X, Y, Z);
     vec3 n;
     float cover;
-    rpRingedNow = abs(vMark.z - 8.0) < 0.5 ? 0.0 : rpRingedSet();
     float t = rpSphere(rd, c, R, n, cover);
     rpDetailFor(c, r);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));

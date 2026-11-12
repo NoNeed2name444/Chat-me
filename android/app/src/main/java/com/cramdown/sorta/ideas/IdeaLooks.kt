@@ -44,10 +44,10 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         PERFORMANCE -> "Your ideas, built for speed"
     }
 
-    /** What the map is made of: Space's default look is iOS's Universe (S05h; GraphTheme.swift:118-122). */
+    /** What the map is made of on Android: Space's bodies come from links (the Universe is not ported, GraphStyleChoice.codes). */
     val cardText: String get() = when (this) {
-        SPACE -> "Top-level folders are black holes, folders are stars, pages are gas giants " +
-            "and ideas are rocky planets. Bigger holds more."
+        SPACE -> "Every idea is a body, and its links choose which: a comet has none, a pulsar one, " +
+            "a rocky planet two, a gas giant three or four, a sun five to seven and a black hole eight or more."
         NEURONS -> "Top-level folders are cells, folders are the parts inside them, " +
             "pages are vesicles and ideas granules. Ideas in no folder share one cell. " +
             "Links grow out of the cells as axons carrying impulses."
@@ -56,10 +56,8 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     }
 
     val cardSteps: List<String> get() = when (this) {
-        // Space: iOS's three (GraphTheme.swift:136-141)
-        SPACE -> listOf("Hold an idea › Choose folder › New folder: a new galaxy round its black hole.",
-            "Type an idea in a folder in Sort: a new rocky planet.",
-            "Type [[ and another idea’s title in an idea: a link joins them.")
+        SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them. Each idea’s links choose its body.",
+            "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
         // Map mode has no + menu and no bar (S05f item 4): a top-level folder comes from Choose
         // folder on an idea held on the map (in a folder in Sort it would make one inside), an
         // idea from Sort, and nothing in Sorta makes a page

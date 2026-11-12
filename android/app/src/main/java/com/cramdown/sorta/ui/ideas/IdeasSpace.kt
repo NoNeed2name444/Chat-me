@@ -58,7 +58,6 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.MapMenuItem
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.NoteFolder
-import com.cramdown.sorta.ideas.NoteTone
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
@@ -85,15 +84,11 @@ import com.cramdown.sorta.map.UniverseEdge
 import com.cramdown.sorta.map.UniverseFolder
 import com.cramdown.sorta.map.UniverseInput
 import com.cramdown.sorta.map.UniverseNote
-import com.cramdown.sorta.map.UniversePlan
-import com.cramdown.sorta.map.UniverseRole
-import com.cramdown.sorta.map.LabelRgb
 import com.cramdown.sorta.map.NoteLike
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SyntheticGraph
 import com.cramdown.sorta.ui.map.Map3DView
 import com.cramdown.sorta.ui.map.MapEase
-import com.cramdown.sorta.ui.map.MapFlyTo
 import com.cramdown.sorta.ui.map.MapScene
 import com.cramdown.sorta.ui.map.MapTheme
 import com.cramdown.sorta.ui.sources.ReaderDoneButton
@@ -176,9 +171,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     // Neurons: the cells opened on the map, outermost first (Fly in opens one, as iOS's flying in
     // does, Graph3DView.swift:1070-1074; Recentre closes them all)
     var openPath by remember(theme) { mutableStateOf<List<String>>(emptyList()) }
-    // Space's Universe: the folder Fly in last flew to, with a serial so the same folder flies again (S05h)
-    var flyTo by remember(theme) { mutableStateOf<MapFlyTo?>(null) }
-    LaunchedEffect(recenter) { openPath = emptyList(); flyTo = null }
+    LaunchedEffect(recenter) { openPath = emptyList() }
 
     fun openBody(body: MapBody) {
         held = null
@@ -255,7 +248,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
-                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown) { shown = it }
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -295,10 +288,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     val (body, content) = peek
                     androidx.compose.runtime.key(body.id) {
                         MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { react(MapSelectionEvent.OpenCard, body) },
-                            flyIn = {
-                                if (theme == GraphTheme.NEURONS) cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it }
-                                else flyTo = MapFlyTo(body.id, (flyTo?.serial ?: 0) + 1)
-                            },
+                            flyIn = { cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it } },
                             chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
                             option = { pick(it, body) },
                             linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) })
@@ -377,7 +367,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
-                                  chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
+                                  chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -404,15 +394,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 val degree = IntArray(graph.nodeCount)
                 for (k in graph.edges.indices) degree[graph.edges[k]]++
                 val styles = GraphStyleChoice.codes(book, graph.ids, degree, main, folderRaw)
-                // the Universe, Space's default main look (S05h; iOS's isUniverse, Graph3DView.swift:879-881): its
-                // folders black holes and stars, its notes planets, moons, a pulsar and comets, on orbits
-                val universe = if (spaceStyle(main) == null) UniversePlan.of(universeInput(book, edges, linkLength)) else null
-                if (universe != null && universe.bodies.isNotEmpty()) {
-                    BuiltMap(MapScene.universe(universe, galaxyTones(universe, book)),
-                        universe.bodies.associate { it.id.uppercase() to it.role.raw }, null)
-                }
-                // one single style: today's map (S05g2: a held body pulls its neighbours)
-                else BuiltMap(MapScene.of(graph, theme = MapTheme.SPACE, styles = styles, universe = false),
+                // the Universe, Space's default main look, or one single style (S05g2: a held body pulls its neighbours only then)
+                BuiltMap(MapScene.of(graph, theme = MapTheme.SPACE, styles = styles, universe = spaceStyle(main) == null),
                     graph.ids.indices.associate { graph.ids[it].uppercase() to MapPeek.spaceRole(SpaceStyle.of(styles[it].toInt())) }, styles)
             }
         }
@@ -436,14 +419,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val bodyOf: (Int) -> MapBody? = remember(map) {
         { index ->
             val body = map.scene.neurons?.plan?.bodies?.getOrNull(index)
-            val star = map.scene.universePlan?.bodies?.getOrNull(index)
             when {
                 body != null -> MapBody(body.id, body.kind, body.role.toString())
-                star != null -> MapBody(star.id, when (star.role) {
-                    UniverseRole.HOME -> ThemeBodyKind.HOME
-                    UniverseRole.GALAXY, UniverseRole.STAR -> ThemeBodyKind.FOLDER
-                    else -> ThemeBodyKind.NOTE
-                }, star.role.raw)
                 else -> map.scene.ids.getOrNull(index)?.let { id ->
                     MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
                 }
@@ -464,7 +441,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease)
         if (!shown) Building(null)
     }
 }
@@ -480,41 +457,6 @@ internal fun cellsOpenedBy(kind: ThemeBodyKind, id: String, book: IdeaBook): Lis
         book.path(folder.id).map { it.id.uppercase() }
     }
     ThemeBodyKind.NOTE -> null
-}
-
-/**
- * What Space's Universe plan reads (S05h; iOS's universeInput, Graph3DView.swift:1103-1122): every
- * note, folder and link, ids uppercased, words, kind and creation (seconds from 1 Jan 2001), and the
- * Link length as its linkScale. No anatomy, and no cells opened.
- */
-internal fun universeInput(book: IdeaBook, edges: List<Pair<String, String>>, linkScale: Double): UniverseInput {
-    val epoch2001 = 978_307_200.0
-    val notes = book.notes.map { n ->
-        UniverseNote(n.id.uppercase(), n.title, n.noteKind == NoteKind.PAGE, n.folderId?.uppercase(),
-            GraphUniverse.wordCount(n.body), n.createdAt / 1000.0 - epoch2001)
-    }
-    val folders = book.folders.map { UniverseFolder(it.id.uppercase(), it.name, it.parentId?.uppercase()) }
-    return UniverseInput(notes, folders, edges.map { UniverseEdge(it.first.uppercase(), it.second.uppercase()) }, linkScale = linkScale)
-}
-
-/**
- * Each galaxy's tone, by its body index (iOS's galaxyTones, GraphUniverseScene.swift:311-331): a
- * top-level folder's own NoteTone; a galaxy made of a folder whose parent is missing takes the
- * palette's next colours after them, in name order. Its names' rims take it (LabelChooser.rim).
- */
-internal fun galaxyTones(plan: UniversePlan, book: IdeaBook): Map<Int, LabelRgb> {
-    val tops = book.subfolders(null).map { it.id.uppercase() }
-    val tones = HashMap<Int, LabelRgb>()
-    val extra = ArrayList<Pair<String, Int>>()
-    for ((i, body) in plan.bodies.withIndex()) {
-        if (body.role != UniverseRole.GALAXY) continue
-        val top = tops.indexOf(body.id.uppercase())
-        if (top >= 0) tones[i] = NoteTone.at(top).let { LabelRgb(it[0].toDouble(), it[1].toDouble(), it[2].toDouble()) }
-        else extra.add(body.title to i)
-    }
-    extra.sortWith(compareBy<Pair<String, Int>, String>(String.CASE_INSENSITIVE_ORDER) { it.first }.thenBy { it.second })
-    for ((k, pair) in extra.withIndex()) tones[pair.second] = NoteTone.at(tops.size + k).let { LabelRgb(it[0].toDouble(), it[1].toDouble(), it[2].toDouble()) }
-    return tones
 }
 
 /**

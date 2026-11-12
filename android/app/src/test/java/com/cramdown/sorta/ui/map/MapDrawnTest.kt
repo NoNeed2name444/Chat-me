@@ -112,29 +112,4 @@ class MapDrawnTest {
         assertFalse(FrameQuiet.settled(10 * second - 1, 0))
         assertTrue(FrameQuiet.settled(10 * second, 0))
     }
-
-    // S05h: the Universe's fields, no words
-    @Test fun theUniverseFieldsChangeOnlyWithWhatIsDrawn() {
-        val d = MapDrawn()
-        assertEquals(emptyList<Int>(), d.roles)
-        assertEquals(-1, d.flown)
-        assertEquals(0, d.nearLinks + d.archedLinks + d.farLinks + d.orbitSeconds)
-        val roles = listOf(2, 3, 0, 21, 2, 6, 1, 2, 0)
-        val u = d.universe(roles, 12, 9, 4, 0, 1f)
-        assertEquals(roles, u.roles)
-        assertEquals(12, u.nearLinks); assertEquals(9, u.archedLinks); assertEquals(4, u.farLinks)
-        assertEquals(0, u.orbitSeconds); assertEquals(1f, u.orbitRate)
-        // the same frame again: the same record, so nothing more goes to the main thread
-        assertSame(u, u.universe(roles, 12, 9, 4, 0, 1f))
-        // the clock in whole seconds and the rate to a hundredth: a new second or rate is a new record
-        val later = u.universe(roles, 12, 9, 4, 3, 0.04f)
-        assertEquals(3, later.orbitSeconds); assertEquals(0.04f, later.orbitRate)
-        // Fly in, and Recentre back
-        val flown = later.flying(5)
-        assertEquals(5, flown.flown)
-        assertSame(flown, flown.flying(5))
-        assertEquals(-1, flown.flying(-1).flown)
-        // the fields leave the rest of the record alone
-        assertEquals(later.copy(flown = 5), flown)
-    }
 }

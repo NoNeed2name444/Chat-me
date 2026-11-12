@@ -200,10 +200,7 @@ object MapNameShow {
      * The names on show over time, one board a scene: when each went up (its pop) and its style's
      * tracker (GraphSim.updateLabels, styleLabels). Times are in seconds on one clock.
      */
-    class Board(
-        /** A body's galaxy tone in the Universe (S05h), which tints its name's rim; null elsewhere. */
-        private val tone: (Int) -> LabelRgb? = { null },
-    ) {
+    class Board {
         private val up = LinkedHashMap<Int, Double>()
         private val trackers = HashMap<Int, LabelTracker>()
         private var sinceMeasure = 0.0
@@ -226,8 +223,7 @@ object MapNameShow {
         fun look(i: Int, settings: LabelSettings, measure: (Int) -> Pair<LabelBackdrop, LabelRgb>?): LabelLook? {
             trackers[i]?.let { return it.shown }
             val (back, tint) = measure(i) ?: return null
-            val tone = tone(i)
-            return LabelTracker(LabelChooser.choose(back, tint, settings, tone = tone), tone).also { trackers[i] = it }.shown
+            return LabelTracker(LabelChooser.choose(back, tint, settings)).also { trackers[i] = it }.shown
         }
 
         /**
