@@ -277,6 +277,13 @@ class MapDrag(
     @Volatile var pressSlowedAfter: Double = -1.0; private set
     private var pressStart = -1.0
 
+    /**
+     * Whether the latest step of the orbit clock took a press (S05h repair 5): true from the first
+     * step that saw a body pressed until the first that saw none. The renderer notes the device's
+     * uptime at the frame where it turns true (MapDrawn.pressTakenAtMs).
+     */
+    val pressTaken: Boolean get() = pressStart >= 0
+
     // the orbit clock eases to a stop within about 0.3 s while a body is pressed, hovered or held,
     // so it never slides from under the finger, and back over about 1.5 s after (advanceOrbits,
     // :1750-1765); still, the plan's own picture, time 0

@@ -178,4 +178,33 @@ class MapDrawnTest {
         assertEquals(-1f, next.pressSlowedSeconds, 0f)
         assertEquals(d, next.copy(pressSlowedSeconds = 0.3f))
     }
+
+    // S05h repair 5: the uptime of the frame that first took the press, kept while it lasts, −1 after
+    @Test fun thePressTakenAtIsTheFirstPressedFramesUptime() {
+        var clock = 1_000L
+        var reads = 0
+        val now = { reads++; clock }
+        var d = MapDrawn().after(5, 16).stepped().pressing(0f, -1f, false, now)
+        assertEquals("none before a press", -1L, d.pressTakenAtMs)
+        assertEquals("the clock is not read without a press", 0, reads)
+        d = d.stepped().pressing(1f / 60, -1f, true, now)
+        assertEquals(1_000L, d.pressTakenAtMs)
+        repeat(30) {
+            clock += 16
+            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, if (it >= 16) 0.3f else -1f, true, now)
+        }
+        assertEquals("kept from the first pressed frame", 1_000L, d.pressTakenAtMs)
+        assertEquals("the clock read once, at that frame", 1, reads)
+        // unchanged: the same record
+        assertSame(d, d.pressing(d.pressedSeconds, d.pressSlowedSeconds, true, now))
+        // the lift: −1, nothing else changed
+        val lifted = d.pressing(d.pressedSeconds, d.pressSlowedSeconds, false, now)
+        assertEquals(-1L, lifted.pressTakenAtMs)
+        assertEquals(d, lifted.copy(pressTakenAtMs = 1_000L))
+        // a new press takes the uptime of its own first frame
+        clock = 9_000L
+        val again = lifted.pressing(lifted.pressedSeconds + 1f / 60, -1f, true, now)
+        assertEquals(9_000L, again.pressTakenAtMs)
+        assertEquals(2, reads)
+    }
 }

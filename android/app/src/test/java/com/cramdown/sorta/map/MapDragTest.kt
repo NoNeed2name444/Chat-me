@@ -346,6 +346,26 @@ class MapDragTest {
         assertEquals(-1.0, still.pressSlowedAfter, 0.0)
     }
 
+    @Test fun aPressIsTakenAtItsFirstStepAndEndsAtTheFirstWithout() {
+        // S05h repair 5: MapDrag.pressTaken, which the renderer turns into MapDrawn.pressTakenAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertFalse("no press yet", drag.pressTaken)
+        drag.pressed = 0
+        assertFalse("not till a step sees it", drag.pressTaken)
+        drag.step(frame)
+        assertTrue("taken at the first pressed step", drag.pressTaken)
+        repeat(30) { drag.step(frame) }
+        assertTrue("still taken while pressed", drag.pressTaken)
+        drag.pressed = -1
+        assertTrue("held till a step sees the lift", drag.pressTaken)
+        drag.step(frame)
+        assertFalse("ended at the first step without", drag.pressTaken)
+        drag.hovered = 0
+        repeat(10) { drag.step(frame) }
+        assertFalse("a hover is no press", drag.pressTaken)
+    }
+
     @Test fun aHeldStarCarriesItsPlanetsAndMoons() {
         // a star (0), its planet (1) and the planet's moon (2): held at d, each settles at d within
         // 2 %, never above 1.05 d (S05h A2)

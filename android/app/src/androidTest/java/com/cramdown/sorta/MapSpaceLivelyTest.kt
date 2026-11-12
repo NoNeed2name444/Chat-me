@@ -62,12 +62,15 @@ import java.util.UUID
  * thread) inside waitUntil, which moves Compose's frames on, and taps on the map go through the map's
  * hit test (MapTapKey) or UiAutomation. Over 3 s the orbit clock rises above 0 (MapDrawn.orbitSeconds)
  * and a chosen planet's place on the screen changes; a still, mapmode-lively-universe-<light|dark>-<device>.png.
- * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s,
- * judged on the map's own clock, since its record reaches the test through Compose's state, on the
- * test's frame clock, late: the press must be taken (MapDrawn.pressedSeconds rising) within 5 s, and
- * once 0.5 s of it has stepped the rate is under 0.05 and fell under it within those 0.5 s
- * (MapDrawn.pressSlowedSeconds). The frames drawn over the 3 s (the clock's steps) are logged, a first
- * look at A7's frame budget.
+ * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s of
+ * the finger, on the device's uptime: its record reaches the test through Compose's state, on the
+ * test's frame clock, late, so the test times nothing by when the record arrives. The renderer notes
+ * the uptime of the frame that first took the press (MapDrawn.pressTakenAtMs), and the press's own
+ * seconds until the rate fell under 0.05 (MapDrawn.pressSlowedSeconds); the uptime noted just before
+ * the finger came down, the touch's way to the renderer plus that ease must be 0.5 s at most, and the
+ * rate under 0.05 once 0.5 s of the press has stepped. 5 s and 10 s are only guards against a hang
+ * while waiting. The frames drawn over the 3 s (the clock's steps) are logged, a first look at A7's
+ * frame budget.
  */
 @RunWith(AndroidJUnit4::class)
 class MapSpaceLivelyTest {
@@ -157,36 +160,45 @@ class MapSpaceLivelyTest {
         val origin = checkNotNull(mapNode()).positionOnScreen
         val x = origin.x + at.x; val y = origin.y + at.y
         val p0 = checkNotNull(drawn()).pressedSeconds
+        // the uptime read before the down is injected: the earliest bound at or before the real down, so
+        // the touch's way to the renderer (pressTakenAtMs − down) can only be counted long, never short
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, down, x, y)
         try {
             // iOS's rule (GraphMotion.swift:1750-1757, MapDrag.advanceClock): while a body is pressed the rate
             // eases to 0 with tau 0.1 s, each frame stepping the clock by its interval (at most 0.25 s,
             // GlMapRenderer's dt), so after 0.3 s of steps it is under 0.05. The map takes the press from the
-            // touch itself (Map3DView's gestures), so its clock counts it from the next frame: not counting it
-            // within 5 s fails (a press never taken)
-            try { compose.waitUntil(5_000) { drawn()?.let { it.pressedSeconds > p0 } == true } } catch (_: ComposeTimeoutException) {}
+            // touch itself (Map3DView's gestures), at its next frame (MapDrawn.pressTakenAtMs); 5 s is only a
+            // guard against a hang while waiting for the record
+            try { compose.waitUntil(5_000) { drawn()?.let { it.pressTakenAtMs >= 0 && it.pressedSeconds > p0 } == true } } catch (_: ComposeTimeoutException) {}
             val taken = checkNotNull(drawn())
-            check(taken.pressedSeconds > p0) {
+            check(taken.pressTakenAtMs >= 0 && taken.pressedSeconds > p0) {
                 "A finger held on planet $planet at ($x, $y) was not taken as a press within 5 s " +
                     "(${SystemClock.uptimeMillis() - down} ms) for $name: $taken"
             }
-            // then judged once 0.5 s of the press has stepped on the map's clock, 10 s at most against a hang:
-            // the rate under 0.05 then, and it fell under 0.05 within those 0.5 s however late this record came
-            try { compose.waitUntil(10_000) { drawn()?.let { it.pressedSeconds - p0 >= 0.5f } == true } } catch (_: ComposeTimeoutException) {}
+            val takenAt = taken.pressTakenAtMs
+            // then judged once 0.5 s of the press has stepped on the map's clock, 10 s at most against a hang
+            try { compose.waitUntil(10_000) { drawn()?.let { it.pressTakenAtMs == takenAt && it.pressedSeconds - p0 >= 0.5f } == true } } catch (_: ComposeTimeoutException) {}
             val held = checkNotNull(drawn())
             val pressed = held.pressedSeconds - p0
             val took = SystemClock.uptimeMillis() - down
+            check(held.pressTakenAtMs == takenAt) {
+                "A finger held on planet $planet at ($x, $y): the press taken at uptime $takenAt ms ended or was taken again " +
+                    "(${held.pressTakenAtMs}) before 0.5 s of it stepped, after $took ms for $name: $held"
+            }
             check(pressed >= 0.5f) {
                 "A finger held on planet $planet at ($x, $y) was pressed only $pressed s on the map's clock after $took ms for $name: $held"
             }
             check(held.orbitRate < 0.05f) {
                 "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate} after $pressed s of the press " +
-                    "on the map's clock ($took ms), not below 0.05 within 0.5 s for $name: $held"
+                    "on the map's clock ($took ms), not below 0.05 for $name: $held"
             }
-            check(held.pressSlowedSeconds >= 0f && held.pressSlowedSeconds <= 0.5f) {
-                "A finger held on planet $planet at ($x, $y): the orbit rate fell under 0.05 after ${held.pressSlowedSeconds} s " +
-                    "of the press on the map's clock (−1: not yet), not within 0.5 s for $name: $held"
+            // within 0.5 s of the finger, both on the device's uptime: the touch's way to the renderer, then the ease
+            val reached = (takenAt - down) / 1000f
+            check(held.pressSlowedSeconds >= 0f && reached >= 0f && reached + held.pressSlowedSeconds <= 0.5f) {
+                "A finger held on planet $planet at ($x, $y): the press was taken ${reached} s after the down (uptime $down to $takenAt ms) " +
+                    "and the orbit rate fell under 0.05 after ${held.pressSlowedSeconds} s more of it (−1: not yet), " +
+                    "${reached + held.pressSlowedSeconds} s in all, not within 0.5 s of the finger for $name: $held"
             }
         } finally {
             touch(MotionEvent.ACTION_UP, down, x, y)
