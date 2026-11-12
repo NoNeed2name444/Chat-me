@@ -349,8 +349,14 @@ class MapModeSpaceRenderTest {
         val mode = if (dark) "dark" else "light"
         val name = "mapmode-chosen-$look-$mode-$device"
         val res = instrumentation.targetContext.resources
+        // measurement copy only (S05g A7): three seconds chosen, then three with Show links on
+        android.util.Log.i("SortaBudget", "mark chosen $name")
+        SystemClock.sleep(3_000)
         compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(res.getString(R.string.map_peek_show_links))).performClick()
         try { compose.waitUntil(10_000) { mapDrawn()?.focus == true } } catch (_: ComposeTimeoutException) {}
+        android.util.Log.i("SortaBudget", "mark links $name")
+        SystemClock.sleep(3_000)
+        android.util.Log.i("SortaBudget", "mark end $name")
         val focused = checkNotNull(mapDrawn())
         if (look == "performance") {
             // Performance steps the other links back and fades no point (GraphPerfShaders): its own links drawn, nothing counted faded

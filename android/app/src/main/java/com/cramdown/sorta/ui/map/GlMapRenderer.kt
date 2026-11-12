@@ -536,6 +536,8 @@ class GlMapRenderer(
                 summaries = plan.summaryCount, bundles = plan.bundleCount, resident = cache.residentCount, detail = budget.detail,
                 bodies = bodyCount,
             ))
+            // measurement copy only (S05g A7), never landed
+            android.util.Log.i("SortaBudget", "tree space=$space hz=${displayHz()} detail=${budget.detail} frameMs=${stats.medianInterval()} workMs=${stats.medianWork()} fps=${stats.fps(vsync)} bodies=$bodyCount")
         }
         record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000, linksNow,
             if (space) samples else 0, space && straightNow)
@@ -670,6 +672,8 @@ class GlMapRenderer(
             onReadout(MapReadout(fps = stats.fps(vsync), displayMaxHz = displayMaxHz, displayHz = displayHz(),
                 frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = gl.linkCount,
                 drawnNodes = count, detail = budget.detail, bodies = count))
+            // measurement copy only (S05g A7), never landed
+            android.util.Log.i("SortaBudget", "neurons hz=${displayHz()} detail=${budget.detail} frameMs=${stats.medianInterval()} workMs=${stats.medianWork()} fps=${stats.fps(vsync)} bodies=$count")
         }
         // the bridges ignore Lines, as iOS's (fillBridge returns before it reads straight)
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
