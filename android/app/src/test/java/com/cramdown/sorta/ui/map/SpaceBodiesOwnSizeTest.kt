@@ -26,8 +26,10 @@ import org.junit.Test
 import kotlin.math.max
 
 /**
- * Space chooses body or point by each body's own radius, as iOS's GraphSpaceDepthStage.update
- * (`size = radius[i]`), not by the scene's median node radius (S05h A3, the tablet's MapRenderTest).
+ * Space chooses body or point, and culls, by each body's own reach (its links' reach, iOS's
+ * reachRadius: GraphNodeFactory.swift:206, :305, the radius GraphSpaceDepthStage.update takes as
+ * `size = radius[i]`), not by the scene's median node radius (S05h A3, the tablet's MapRenderTest),
+ * nor by the radius the shaders take; outside the Universe, with no reaches, by its radius.
  */
 class SpaceBodiesOwnSizeTest {
     private fun openPlan(tree: Octree): FramePlan {
@@ -53,10 +55,11 @@ class SpaceBodiesOwnSizeTest {
             HomeView(camera, scene.viewRadius).fit(camera, width, height, insets)
             val focal = camera.focalPixels(height.toFloat())
             assertEquals("the tablet's focal length", 1715f, focal, 1f)
+            val reaches = FloatArray(tree.nodeCount) { k -> UniverseBeams.reach(plan.bodies[tree.order[k]]) }
             val bodies = SpaceBodies(tree, scene.nodeRadius).apply {
                 homes = tree.positions.copyOf()
                 this.radii = radii
-                reaches = FloatArray(tree.nodeCount) { k -> UniverseBeams.reach(plan.bodies[tree.order[k]]) }
+                this.reaches = reaches
             }
             val eye = camera.eye()
             val vp = Mat4.multiply(camera.projection(width.toFloat() / height), camera.view())
@@ -72,24 +75,45 @@ class SpaceBodiesOwnSizeTest {
             assertTrue("the tablet's first view under $insets draws full bodies: $count", count > 0)
             for (j in 0 until count) {
                 val node = bodies.nodes[j]
-                assertEquals("body $node is chosen by its own radius ${radii[node]}", SpaceBodyLevel.BODY,
-                    bodies.level(false, SpaceLod.pixels(radii[node], focal, depth(node)), band.fade(depth(node))))
+                assertEquals("body $node is chosen by its own reach ${reaches[node]}", SpaceBodyLevel.BODY,
+                    bodies.level(false, SpaceLod.pixels(reaches[node], focal, depth(node)), band.fade(depth(node))))
             }
         }
     }
 
-    @Test fun eachBodyIsChosenByItsOwnRadiusAndAFarChunkWithABigBodyIsLookedAt() {
-        // one note a chunk: a big body far off, a small one near; the median radius between them
+    @Test fun eachBodyIsChosenByItsOwnReachNotItsRadiusAndAFarChunkWithABigReachIsLookedAt() {
+        // one note a chunk: a big reach far off, a small one near, each radius the other way round
+        // (the median, 0.2, everywhere): its reach decides, and the far chunk is looked at by it
+        val reach = floatArrayOf(1.0f, 0.05f, 0.2f)
+        chooses(reach) { tree -> SpaceBodies(tree, nodeRadius = 0.2f).apply {
+            radii = FloatArray(tree.nodeCount) { 0.2f }
+            reaches = FloatArray(tree.nodeCount) { k -> reach[tree.order[k]] }
+        } }
+        // a reach set before the radii is kept as the chunk's largest too
+        chooses(reach) { tree -> SpaceBodies(tree, nodeRadius = 0.2f).apply {
+            reaches = FloatArray(tree.nodeCount) { k -> reach[tree.order[k]] }
+            radii = FloatArray(tree.nodeCount) { 0.2f }
+        } }
+    }
+
+    @Test fun withNoReachesEachBodyIsChosenByItsOwnRadius() {
+        // outside the Universe: no reaches, so its radius is its reach
         val mine = floatArrayOf(1.0f, 0.05f, 0.2f)
+        chooses(mine) { tree -> SpaceBodies(tree, nodeRadius = 0.2f).apply { radii = FloatArray(tree.nodeCount) { k -> mine[tree.order[k]] } } }
+    }
+
+    /** Three notes, one a chunk, at depths 100, 40 and 140, each of [size] (1.0, 0.05, 0.2): only the first is a body. */
+    private fun chooses(size: FloatArray, made: (Octree) -> SpaceBodies) {
         val positions = floatArrayOf(-3f, 0f, 0f, 0f, 0f, 60f, 3f, 0f, -40f)
         val graph = MapGraph(positions, ByteArray(3) { SpaceStyle.ROCKY.code.toByte() }, IntArray(0))
         val tree = Octree.build(graph, leafCapacity = 1, palette = SpacePalette.rgb)
         val chunk = IntArray(3).also { c -> for (k in 0 until tree.nodeCount) c[tree.order[k]] = k }
-        val bodies = SpaceBodies(tree, nodeRadius = 0.2f).apply { radii = FloatArray(tree.nodeCount) { k -> mine[tree.order[k]] } }
+        val bodies = made(tree)
         val camera = OrbitCamera(target = Vec3.ZERO, distance = 100f, yaw = 0f, pitch = 0f)
         val vp = Mat4.multiply(camera.projection(1f), camera.view())
         val focal = camera.focalPixels(1000f)
-        // the big body (depth 100) is a point by the median radius, a body by its own; the small one (depth 40) the other way round
+        // the big one (depth 100) is a point at the median, 0.2, a body at its own size; the small one (depth 40) the other way round
+        assertEquals(listOf(1.0f, 0.05f, 0.2f), size.toList())
         assertTrue(SpaceLod.pixels(0.2f, focal, 100f) < SpaceLod.BODY_PIXELS * SpaceBodies.KEEP)
         assertTrue(SpaceLod.pixels(1.0f, focal, 100f) > SpaceLod.BODY_PIXELS)
         assertTrue(SpaceLod.pixels(0.2f, focal, 40f) > SpaceLod.BODY_PIXELS)

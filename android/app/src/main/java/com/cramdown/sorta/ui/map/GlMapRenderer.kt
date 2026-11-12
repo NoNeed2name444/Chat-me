@@ -177,9 +177,23 @@ data class MapDrawn(
      * map's record stays the same.
      */
     val orbitSteps: Int = 0,
+    /**
+     * The Universe's press (S05h), on the map's own clock: the seconds the lively orbit clock has
+     * stepped while a body was pressed, every press together, never capped (MapDrag.pressedTime); and
+     * for the latest press, the seconds of it stepped until the orbit rate was under 0.05, unrounded
+     * (−1 till then; MapDrag.pressSlowedAfter). So a test judges a held finger's ease by the map's time
+     * however late the record reaches it. They move only while a finger is on a body.
+     */
+    val pressedSeconds: Float = 0f,
+    val pressSlowedSeconds: Float = -1f,
 ) {
     /** This record after one more step of the lively orbit clock ([orbitSteps]). */
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
+
+    /** This record with the press's seconds as the latest frame stepped them; the same record when nothing changed. */
+    fun pressing(secondsNow: Float, slowedNow: Float): MapDrawn =
+        if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow)
 
     /** This record with the Universe as the latest frame drew it; the same record when nothing changed. */
     fun universe(rolesNow: List<Int>, nearNow: Int, archedNow: Int, farNow: Int, secondsNow: Int, rateNow: Float): MapDrawn =
@@ -796,7 +810,7 @@ class GlMapRenderer(
         if (uplan != null && bodies != null) {
             record = record.flying(flown)
             val d = drag
-            if (lively && d != null) record = record.stepped()
+            if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat())
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }

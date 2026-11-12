@@ -99,17 +99,24 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     /**
      * The Universe: each node's radius as the shaders take it, chunk order (UniverseBeams.shaderRadius:
      * drawn ÷ its style's bodyScale, which the shaders multiply back); null draws every body at [nodeRadius].
-     * Each body is chosen by its own radius (iOS GraphSpaceDepthStage.update, `size = radius[i]`).
      */
     var radii: FloatArray? = null
-        set(value) {
-            field = value
-            largestRadius = value?.let { r -> (r.maxOrNull() ?: nodeRadius).let { if (r.size < tree.nodeCount) max(it, nodeRadius) else it } } ?: nodeRadius
-        }
-    /** The largest of [radii] (else [nodeRadius]): a chunk is passed over only when even its largest body could not be one. */
-    private var largestRadius: Float = nodeRadius
-    /** The Universe: where each node's links stop before their trim, chunk order (UniverseBeams.reach); null uses [radii]. */
+        set(value) { field = value; largestReach = largest() }
+    /**
+     * The Universe: where each node's links stop before their trim, chunk order (UniverseBeams.reach); null
+     * uses [radii]. Each body is chosen, and culled, by it ([reachOf]): iOS's reachRadius, the radius its
+     * depth stage takes (GraphNodeFactory.swift:206, :305; GraphSpaceDepthStage.update, `size = radius[i]`).
+     */
     var reaches: FloatArray? = null
+        set(value) { field = value; largestReach = largest() }
+    /** The largest [reachOf] (else [nodeRadius]): a chunk is passed over only when even its largest body could not be one. */
+    private var largestReach: Float = nodeRadius
+    private fun largest(): Float {
+        if (radii == null && reaches == null) return nodeRadius
+        var most = 0f
+        for (i in 0 until tree.nodeCount) most = max(most, reachOf(i))
+        return if (tree.nodeCount == 0) nodeRadius else most
+    }
     /** The Universe: each node's look within its style ([UniverseLooks]), chunk order; null for none. */
     var looks: FloatArray? = null
     /** The Universe: each link's kind and centre by node pair (UniverseBeams.key, .pack); null outside it. */
@@ -166,7 +173,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             val cell = tree.leafCell[leaf]
             val dx = tree.cx[cell] - eye.x; val dy = tree.cy[cell] - eye.y; val dz = tree.cz[cell] - eye.z
             val nearest = sqrt(dx * dx + dy * dy + dz * dz) - tree.radius[cell]
-            if (nearest > 0f && SpaceLod.pixels(largestRadius, focal, nearest) < SpaceLod.BODY_PIXELS * KEEP) continue
+            if (nearest > 0f && SpaceLod.pixels(largestReach, focal, nearest) < SpaceLod.BODY_PIXELS * KEEP) continue
             for (i in tree.start[cell] until tree.end[cell]) {
                 val style = tree.groups[i].toInt()
                 if (style !in 0..5 || !enabled[style]) continue
@@ -174,9 +181,9 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 val w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15]
                 if (w <= 1e-3f) continue
                 if (band.gone(w)) continue
-                if (level(masked[i], SpaceLod.pixels(radiusOf(i), focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
+                if (level(masked[i], SpaceLod.pixels(reachOf(i), focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
                 val reach = max(SpaceDepth.reachOfLook(style), SpaceStyle.of(style).extent)
-                if (!frustum.intersectsSphere(x, y, z, reach * radiusOf(i))) continue
+                if (!frustum.intersectsSphere(x, y, z, reach * reachOf(i))) continue
                 offer(i, w, limit)
             }
         }

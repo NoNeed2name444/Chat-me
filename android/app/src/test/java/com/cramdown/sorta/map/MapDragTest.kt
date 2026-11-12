@@ -307,6 +307,45 @@ class MapDragTest {
         assertEquals("animations off: the clock stays at 0", 0.0, still.orbitTime, 0.0)
     }
 
+    @Test fun aPressIsTimedOnTheOrbitClock() {
+        // S05h repair 4: the seconds stepped while pressed, every press together, and for the latest when
+        // its ease got under SLOW (MapDrawn.pressedSeconds, .pressSlowedSeconds)
+        val drag = run()
+        repeat(60) { drag.step(frame) }
+        assertEquals(0.0, drag.pressedTime, 0.0)
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        drag.hovered = 0
+        repeat(30) { drag.step(frame) }
+        assertEquals("a hover is no press", 0.0, drag.pressedTime, 0.0)
+        drag.hovered = -1
+        repeat(150) { drag.step(frame) }
+        drag.pressed = 0
+        repeat(17) { drag.step(frame) }
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        repeat(13) { drag.step(frame) }
+        assertEquals(0.5, drag.pressedTime, 1e-5)
+        // under 0.05 after ln 20 × τ ≈ 0.2996 s: the 18th frame of 1/60 s
+        assertEquals(0.3, drag.pressSlowedAfter, 1e-5)
+        assertTrue(drag.orbitRate < MapDrag.SLOW)
+        drag.pressed = -1
+        repeat(150) { drag.step(frame) }
+        assertEquals("no press, no seconds", 0.5, drag.pressedTime, 1e-5)
+        assertEquals("the latest press's ease kept", 0.3, drag.pressSlowedAfter, 1e-5)
+        // a second press on long frames: its own ease, its seconds added to the first's
+        drag.pressed = 0
+        drag.step(0.25f)
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        drag.step(0.25f)
+        assertEquals(1.0, drag.pressedTime, 1e-5)
+        assertEquals(0.5, drag.pressSlowedAfter, 1e-5)
+        // with animations off nothing steps
+        val still = run(lively = false)
+        still.pressed = 0
+        repeat(60) { still.step(frame) }
+        assertEquals(0.0, still.pressedTime, 0.0)
+        assertEquals(-1.0, still.pressSlowedAfter, 0.0)
+    }
+
     @Test fun aHeldStarCarriesItsPlanetsAndMoons() {
         // a star (0), its planet (1) and the planet's moon (2): held at d, each settles at d within
         // 2 %, never above 1.05 d (S05h A2)
