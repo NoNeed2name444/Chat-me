@@ -350,7 +350,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
-        ).also { it.cues = cue.ticks }
+        ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
     val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
@@ -378,14 +378,13 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     val hostView = LocalView.current
     val serial = ease?.serial ?: 0
     LaunchedEffect(renderer, chosenIndex, linksShown, serial) {
-        renderer.chosen = chosenIndex
-        renderer.linksShown = linksShown
         // a body chosen by a Select: iOS's light tick (syncChoice), Android's lightest, kept to the
-        // person's haptics setting, and the pop; a scene built again with the choice kept does neither
-        if (cue.tick(serial, chosenIndex >= 0)) {
-            renderer.cues = cue.ticks
-            hostView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-        }
+        // person's haptics setting, and the pop; a scene built again with the choice kept does neither.
+        // The body and its cue go to the renderer in one write, so no frame draws the one without the other
+        val cued = cue.tick(serial, chosenIndex >= 0)
+        renderer.choice = MapChoice(chosenIndex, cue.ticks)
+        renderer.linksShown = linksShown
+        if (cued) hostView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         loop.moved()
     }
     // the camera's ease towards a chosen body, frame by frame, until done or a finger comes down

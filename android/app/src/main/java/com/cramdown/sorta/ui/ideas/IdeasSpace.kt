@@ -409,13 +409,18 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val ready = map.scene
     val description = "${theme.mapLabel}: ${notes.size} ${if (notes.size == 1) "idea" else "ideas"}, ${edges.size} ${if (edges.size == 1) "link" else "links"}. " +
         theme.hint
-    // each body the map reports, as the card and the selection take it (an idea's role from its look)
-    fun bodyOf(index: Int): MapBody? {
-        val body = ready.neurons?.plan?.bodies?.getOrNull(index)
-        return when {
-            body != null -> MapBody(body.id, body.kind, body.role.toString())
-            else -> ready.ids.getOrNull(index)?.let { id ->
-                MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
+    // each body the map reports, as the card and the selection take it (an idea's role from its look).
+    // A value made per built map, not a local fun: the touch lambdas below are remembered by what they
+    // capture, which leaves out a local fun's own captures, so after a new look they kept the old
+    // map's bodies and a tap on a Neurons cell chose the Space idea at its index
+    val bodyOf: (Int) -> MapBody? = remember(map) {
+        { index ->
+            val body = map.scene.neurons?.plan?.bodies?.getOrNull(index)
+            when {
+                body != null -> MapBody(body.id, body.kind, body.role.toString())
+                else -> map.scene.ids.getOrNull(index)?.let { id ->
+                    MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
+                }
             }
         }
     }
@@ -425,7 +430,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     Box(Modifier.fillMaxSize()) {
         Map3DView(ready, Modifier.fillMaxSize(), description = description,
             // the map decides each touch while the finger is down (S05g); a body it can't name is empty space
-            onTap = { index -> latestTap(index?.let(::bodyOf)) },
+            onTap = { index -> latestTap(index?.let(bodyOf)) },
             onDoubleTap = { index -> bodyOf(index)?.let { latestDouble(it) } },
             onHold = { index, at -> bodyOf(index)?.let { latestHold(it, at) } },
             showReadout = theme == GraphTheme.PERFORMANCE && settings.readout, showControls = false, recenter = recenter, corner = 0.dp,

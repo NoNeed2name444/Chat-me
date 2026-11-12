@@ -62,6 +62,12 @@ data class MapReadout(
 )
 
 /**
+ * The chosen body as the page hands it to the renderer (S05g): its scene index, −1 for none, and how
+ * many choices the page has cued (MapChoiceCue.tick), a new count popping it and growing its ring in.
+ */
+data class MapChoice(val chosen: Int, val cues: Int)
+
+/**
  * What the map has finished drawing on its GL context, for tests: Map3DView puts it on the
  * map's node as [MapDrawnKey], which accessibility services do not read. The counts stop at
  * [ENOUGH], so the record changes a few times per context, never every frame. A frame counts
@@ -329,15 +335,14 @@ class GlMapRenderer(
     @Volatile var band: SpaceDepthBand = SpaceDepthBand.OFF; private set
     private var bandUniform = band.uniform
 
-    /** The chosen body (S05g), a scene index, −1 for none; set from the page, the next frame draws it. */
-    @Volatile var chosen: Int = -1
+    /**
+     * The chosen body and its cue (S05g), set from the page in one write, so no frame sees a new
+     * choice without its cue; the next frame draws it. A new renderer takes the cue count it is
+     * made with as seen.
+     */
+    @Volatile var choice: MapChoice = MapChoice(-1, 0)
     /** Show links: only the chosen body's links, the rest faded (focusLinks). */
     @Volatile var linksShown: Boolean = false
-    /**
-     * How many choices the page has cued (MapChoiceCue.tick): a new count pops the chosen body and
-     * grows its ring in. Set before [chosen] is read by a frame, a new renderer takes it as seen.
-     */
-    @Volatile var cues: Int = 0
     private var motion: MapChoiceMotion? = null
     private val pop get() = motion?.pop ?: restingPop
     private val restingPop = MapPop(false)
@@ -553,9 +558,10 @@ class GlMapRenderer(
      * the ring step [dt] seconds (MapChoiceMotion). A scene built again keeps the choice at rest.
      */
     private fun stepChoice(dt: Float) {
-        val wanted = chosen.takeIf { it in 0 until sceneCount } ?: -1
+        val now = choice
+        val wanted = now.chosen.takeIf { it in 0 until sceneCount } ?: -1
         val show = linksShown
-        val cued = cues
+        val cued = now.cues
         val m = motion ?: MapChoiceMotion(lively, lively && theme != MapTheme.PLAIN, cued).also { motion = it }
         m.step(wanted, cued, dt)
         if (wanted != focusedChosen || show != focusedShown) refocus(wanted, show)

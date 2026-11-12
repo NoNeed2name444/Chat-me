@@ -240,6 +240,23 @@ class MapPeekCardTest {
         run.until { cue.ticks == 2 && cue.eases == 2 }
     }
 
+    @Test fun aNewLookChoosesItsOwnBodies() {
+        // Space first, then Neuron from the look chip, as a person goes: the tap is handed the new
+        // look's bodies, so a cell chooses its folder, never the Space idea at the same index
+        val shed = IdeasFixture.shed
+        IdeasSettings(run.context).setLook(MapLook.SPACE)
+        IdeaStore(run.store).replaceIdeas(listOf(gate, shed), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        run.until { tapper() != null && shown(MapPanelTags.HINT) }
+        compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
+        run.until { shown(MapLook.NEURON.identifier) }
+        compose.onNode(hasTestTag(MapLook.NEURON.identifier)).performClick()
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true }
+        tapBody(garden.id)
+        cardFor(garden.name)
+    }
+
     private fun drawnPose(): List<Float> =
         checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
 }

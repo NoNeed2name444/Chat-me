@@ -83,7 +83,7 @@ import kotlin.math.max
  * Performance, chosen after Neurons, a point tapped at the map's spot is marked and Show links brings
  * out its own links, fading no point (stills mapmode-chosen-<look>-... and mapmode-links-<look>-...);
  * in each a hold opens the options with the finger down, and a double tap on empty space brings back
- * the first view, Recentre's (requireChoice). Each legend, scrolled to its end, ends its touch help
+ * the first view, Recentre's (requireChoice). Each look's legend, scrolled to its end, ends its touch help
  * the sheet's foot above its bottom, which is above the navigation bar (requireLegendFoot, a still
  * mapmode-legend-foot-<theme>-...).
  */
@@ -143,6 +143,13 @@ class MapModeSpaceRenderTest {
         check(pose.size == 6 && after.size == 6 && pose.indices.all { abs(pose[it] - after[it]) <= 1e-4f * max(1f, abs(pose[it])) }) {
             "Got it moved the camera for $name: $pose, then $after"
         }
+        // S05g: Space's first view with the card put away (S05d item 2), as Recentre frames it before
+        // any choice or ease: the reference the double tap on empty space must come back to
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        val spaceHome = checkNotNull(mapDrawn()).pose
+        check(spaceHome.size == 6) { "No camera pose after Recentre for $name: ${mapDrawn()}" }
         // S05e: Space's first view draws its links, each a strip of 40 samples, curved
         try { compose.waitUntil(30_000) { (mapDrawn()?.links ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
         val curved = checkNotNull(mapDrawn())
@@ -164,7 +171,7 @@ class MapModeSpaceRenderTest {
         // S05f: Space's names, at rest, under a finger and for a chosen body
         val (spaceChosen, spaceBefore) = requireNames("space", dark, press = true)
         // S05g A3: the chosen body's mark, Show links, the hold and the empty double tap
-        requireChoice("space", dark, spaceChosen, spaceBefore, home = null)
+        requireChoice("space", dark, spaceChosen, spaceBefore, home = spaceHome)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -205,6 +212,9 @@ class MapModeSpaceRenderTest {
         }
         check(!shown(MapPanelTags.HINT)) { "Performance shows a first-run card for $performance" }
         val performanceHome = drawnPerformance.pose
+        // S05g A2: Performance's legend, its last line clear of the foot and the bar too
+        shotLegend(GraphTheme.PERFORMANCE, dark)
+        check(same(performanceHome, checkNotNull(mapDrawn()).pose)) { "The legend moved Performance's camera for $performance: $performanceHome, now ${mapDrawn()?.pose}" }
         val (performanceChosen, at) = spot(performance)
         compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(at) }
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
@@ -257,17 +267,16 @@ class MapModeSpaceRenderTest {
      * neighbourhood, keeps its lit links and reads All links: a still, mapmode-links-<look>-....
      * All links brings everything back. A finger held still past 0.55 s opens its options with the
      * finger still down; one held and moved before then turns the camera and opens nothing. A tap on
-     * empty space lets it go, and the second of a double tap brings back the first view: the one
-     * Recentre frames, and [home] where it is known (the first-run card still up, as in Neurons;
-     * after Space's Got it the first view is framed without the card, S05d item 2, which no pose
-     * taken before it shows).
+     * empty space lets it go, and the second of a double tap brings back the first view, [home]: in
+     * Space the pose Recentre gave right after Got it, before any choice (the first view framed
+     * without the card, S05d item 2); in Neurons the one framed above its card; in Performance the
+     * one it opened on. It is Recentre's too.
      */
-    private fun requireChoice(look: String, dark: Boolean, index: Int, before: List<Float>, home: List<Float>?) {
+    private fun requireChoice(look: String, dark: Boolean, index: Int, before: List<Float>, home: List<Float>) {
         val mode = if (dark) "dark" else "light"
         val name = "mapmode-chosen-$look-$mode-$device"
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
         val res = instrumentation.targetContext.resources
-        fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
         try { compose.waitUntil(10_000) { mapDrawn()?.let { it.chosen == index && it.marked } == true } } catch (_: ComposeTimeoutException) {}
         val chosen = checkNotNull(mapDrawn())
         check(chosen.chosen == index && chosen.marked) { "The chosen body ($index) is not marked for $name: $chosen" }
@@ -330,7 +339,7 @@ class MapModeSpaceRenderTest {
         compose.waitForIdle()
         val doubled = checkNotNull(mapDrawn()).pose
         check(!same(turned, doubled)) { "A double tap on empty space left the turned camera where it was for $name: $turned" }
-        if (home != null) check(same(home, doubled)) { "A double tap on empty space did not bring back the first view for $name: $home, now $doubled" }
+        check(same(home, doubled)) { "A double tap on empty space did not bring back the first view for $name: $home, now $doubled" }
         compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
         compose.waitForIdle()
         SystemClock.sleep(500)
@@ -339,6 +348,9 @@ class MapModeSpaceRenderTest {
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
     }
+
+    /** Two camera poses alike, each value within a thousandth of its size (at least 1). */
+    private fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
 
     /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
     private fun emptySpot(name: String): Offset {
@@ -376,6 +388,10 @@ class MapModeSpaceRenderTest {
         shot("mapmode-legend-${theme.rawValue}-${if (dark) "dark" else "light"}-$device")
         requireLegendFoot(theme, dark)
         ui.pressBack()
+        // a phone's sheet, taken full by requireLegendFoot's swipe, steps back to its half height at the
+        // first back (Material3 settles an expanded sheet that has a half height there) and goes at the
+        // second; a tablet's, which has none, goes at the first
+        try { compose.waitUntil(3_000) { !shown(sheet) } } catch (_: ComposeTimeoutException) { ui.pressBack() }
         compose.waitUntil(10_000) { !shown(sheet) }
         compose.waitForIdle()
     }
