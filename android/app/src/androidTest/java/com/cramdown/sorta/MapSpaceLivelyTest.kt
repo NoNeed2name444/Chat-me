@@ -654,7 +654,6 @@ class MapSpaceLivelyTest {
         check(ui.click(middle.x.toInt(), middle.y.toInt())) { "$what could not be tapped" }
     }
 
-    /** Waits [ms] while Compose's frames move on, as waitUntil moves them. */
     /**
      * The chosen body [index] moved clear of its card, as a person would see to it before putting a
      * finger on it: two fingers on the map, above the card and on the far side from the body, carry
@@ -700,12 +699,15 @@ class MapSpaceLivelyTest {
         }
         val card = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull() ?: return
         val body = checkNotNull(named(index))
-        check(checkNotNull(mapNode()).positionOnScreen.y + body.y <= card.positionOnScreen.y - 24 * px) {
+        val bodyX = checkNotNull(mapNode()).positionOnScreen.x + body.x
+        val beside = bodyX < card.positionOnScreen.x - 24 * px || bodyX > card.positionOnScreen.x + card.size.width + 24 * px
+        check(beside || checkNotNull(mapNode()).positionOnScreen.y + body.y <= card.positionOnScreen.y - 24 * px) {
             "Body $index stays under its card after three moves of the map for $name: body $body, card at ${card.positionOnScreen}; ${drawn()}"
         }
         check(drawn()?.chosen == index) { "Moving the map let body $index go for $name: ${drawn()}" }
     }
 
+    /** Waits [ms] while Compose's frames move on, as waitUntil moves them. */
     private fun settle(ms: Long) {
         try { compose.waitUntil(ms) { false } } catch (_: ComposeTimeoutException) {}
     }

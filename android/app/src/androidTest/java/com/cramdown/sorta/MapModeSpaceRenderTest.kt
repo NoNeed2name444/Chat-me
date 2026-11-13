@@ -502,14 +502,6 @@ class MapModeSpaceRenderTest {
     }
 
     /**
-     * S05j items 3 and 4: Space's first view, the card up. Every drawn body lies between the strip's foot
-     * and the card's top (requireClearOfTheCard); on the phone the bodies' box is centred in that band: its
-     * middle within 4% of the view's height of the band's middle, at rest and as the map runs, and the gaps
-     * above and below the box the bodies fill as the map runs within 8% of the band (repair 4: the first
-     * view frames every place the Universe's bodies reach, not one instant of their orbits). A still,
-     * mapmode-first-view-<light|dark>-<device>.png.
-     */
-    /**
      * v13: Performance's first view frames every body it draws inside the map's window: across the map,
      * below the strip and above the map's foot. On CI's stills the map's names ran off the phone's right
      * edge; HomeViewTest's performancesFirstViewFrames... prove iOS's room round each body
@@ -526,6 +518,14 @@ class MapModeSpaceRenderTest {
         }
     }
 
+    /**
+     * S05j items 3 and 4: Space's first view, the card up. Every drawn body lies between the strip's foot
+     * and the card's top (requireClearOfTheCard); on the phone the bodies' box is centred in that band: its
+     * middle within 4% of the view's height of the band's middle, at rest and as the map runs, and the gaps
+     * above and below the box the bodies fill as the map runs within 8% of the band (repair 4: the first
+     * view frames every place the Universe's bodies reach, not one instant of their orbits). A still,
+     * mapmode-first-view-<light|dark>-<device>.png.
+     */
     private fun requireFirstView(dark: Boolean, later: MutableList<String>) {
         val name = "mapmode-first-view-${if (dark) "dark" else "light"}-$device"
         shot(name)
@@ -1925,10 +1925,13 @@ class MapModeSpaceRenderTest {
         // below the bodies too, down to the highest of the chosen body's card and the mode switch: on
         // Chat-me copy 03eb608's phone the dragged Garden black hole left the bodies from y 40 to 1296 of
         // 2400 and from x 17 to 1022 of 1080, so no room beside or above them, and over 800 px below
+        // a piece that reaches below the bodies' foot bounds the room there, even where its top is higher:
+        // on Chat-me copy de0fd0f's phone the chosen sun's card began above the foot, was left out, and the
+        // tap meant for empty space landed on the card
         val chrome = listOf(MapPanelTags.PEEK, SortaMode.MAP.identifier, SortaMode.SORT.identifier, SortaMode.TOGGLE)
             .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() }
-            .map { it.boundsInRoot.top - map.top }
-            .filter { it > drawn.box[3] }
+            .filter { it.boundsInRoot.bottom - map.top > drawn.box[3] }
+            .map { maxOf(it.boundsInRoot.top - map.top, drawn.box[3]) }
         val floor = chrome.minOrNull() ?: map.height
         val choices = listOf(
             Offset(drawn.box[0] / 2, middle) to drawn.box[0],
