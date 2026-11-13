@@ -47,7 +47,6 @@ import com.cramdown.sorta.ideas.NoteEditing
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.NoteKind
 import com.cramdown.sorta.ideas.NoteTone
-import com.cramdown.sorta.map.NeuronStateChoice
 import com.cramdown.sorta.map.SpaceStyle
 
 /**
@@ -210,18 +209,6 @@ class IdeasSettings(context: Context) {
     private var heldFolderStyles by mutableStateOf(str(GraphStyleChoice.FOLDERS_KEY, ""))
     val folderStyles: String get() = heldFolderStyles
     fun setFolderStyles(value: String) { heldFolderStyles = value; put { putString(GraphStyleChoice.FOLDERS_KEY, value) } }
-
-    // the Neurons' cell states (S05i): one for every idea, and one per cell, under iOS's two keys
-    // (GraphNeuronStates.swift:187-188); "natural" is nothing chosen, every idea resting
-    private var heldCellState by mutableStateOf(str(NeuronStateChoice.KEY, NeuronStateChoice.NATURAL_VALUE))
-    val cellState: String get() = heldCellState
-    fun setCellState(value: String) { heldCellState = value; put { putString(NeuronStateChoice.KEY, value) } }
-
-    private var heldCellFolders by mutableStateOf(str(NeuronStateChoice.FOLDERS_KEY, ""))
-    val cellFolders: String get() = heldCellFolders
-    fun setCellFolders(value: String) { heldCellFolders = value; put { putString(NeuronStateChoice.FOLDERS_KEY, value) } }
-    /** The cell states in force, as the Neurons plan reads them. */
-    val cells: NeuronStateChoice get() = NeuronStateChoice.of(heldCellState, heldCellFolders)
 
     private var heldPerfDemo by mutableIntStateOf(runCatching { prefs?.getInt(PERF_DEMO_KEY, 0) }.getOrNull() ?: 0)
     val perfDemo: Int get() = heldPerfDemo

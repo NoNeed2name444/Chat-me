@@ -268,16 +268,44 @@ class MapDrag(
     /** A body under a pointer with no button down (iOS hovered), −1 for none (S05h): the same. */
     @Volatile var hovered: Int = -1
 
+    /**
+     * The seconds the orbit clock has stepped while a body was pressed, every press together, never
+     * capped (MapDrawn.pressedSeconds); and for the latest press, the seconds of it stepped until the
+     * rate was under [SLOW] (−1 till then): the map's own time, whenever its record reaches a test.
+     */
+    @Volatile var pressedTime: Double = 0.0; private set
+    @Volatile var pressSlowedAfter: Double = -1.0; private set
+    private var pressStart = -1.0
+
+    /**
+     * Whether the latest step of the orbit clock took a press (S05h repair 5): true from the first
+     * step that saw a body pressed until the first that saw none. The renderer notes the device's
+     * uptime at the frame where it turns true (MapDrawn.pressTakenAtMs).
+     */
+    val pressTaken: Boolean get() = pressStart >= 0
+
+    /**
+     * Whether the current press has slowed the orbit rate under [SLOW] (S05h repair 6): true from the
+     * first step of a taken press whose rate is under it until the press ends. The renderer notes the
+     * device's uptime at the frame where it turns true (MapDrawn.pressSlowedAtMs).
+     */
+    val pressSlowed: Boolean get() = pressStart >= 0 && pressSlowedAfter >= 0
+
     // the orbit clock eases to a stop within about 0.3 s while a body is pressed, hovered or held,
     // so it never slides from under the finger, and back over about 1.5 s after (advanceOrbits,
     // :1750-1765); still, the plan's own picture, time 0
     private fun advanceClock(dt: Float) {
         if (!lively) { orbitTime = 0.0; return }
-        val busy = grabbed >= 0 || pressed >= 0 || hovered >= 0
+        val press = pressed >= 0
+        val busy = grabbed >= 0 || press || hovered >= 0
         val tau = if (busy) TAU_BUSY else TAU_FREE
         val goal = if (busy) 0f else 1f
         orbitRate += (goal - orbitRate) * (1f - exp(-dt / tau))
         orbitTime += (dt * orbitRate).toDouble()
+        if (!press) { pressStart = -1.0; return }
+        if (pressStart < 0) { pressStart = pressedTime; pressSlowedAfter = -1.0 }
+        pressedTime += dt
+        if (pressSlowedAfter < 0 && orbitRate < SLOW) pressSlowedAfter = pressedTime - pressStart
     }
 
     private fun activate(i: Int) {
@@ -447,6 +475,8 @@ class MapDrag(
         /** The orbit clock's ease to a stop while a body is held, and back (:1755-1756). */
         const val TAU_BUSY = 0.1f
         const val TAU_FREE = 0.5f
+        /** The rate a held finger's orbits are under within 0.5 s (S05h A3; exp(−0.5 / [TAU_BUSY]) ≈ 0.007). */
+        const val SLOW = 0.05f
         /**
          * How far off home, in note radii, a body pulls its neighbours into the run (Android's own: iOS
          * steps every body, :1703-1741). A link of 4 against a home spring of 6 hands a neighbour at

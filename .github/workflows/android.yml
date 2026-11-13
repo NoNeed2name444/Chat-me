@@ -57,7 +57,7 @@ jobs:
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=4 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=4 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=9 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=8 --expect LinkMemoryTest=5 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDragTest=18 --expect MapDrawnTest=9 --expect MapFilterTest=15 --expect MapFitTest=4 --expect MapLegendRenderTest=4 --expect MapLegendTest=7 --expect MapLinkFocusTest=6 --expect MapLookCellsTest=4 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=6 --expect MapModeRenderTest=9 --expect MapModeTest=10 --expect MapNameShowTest=12 --expect MapNamesTest=7 --expect MapPanelsTouchTargetTest=7 --expect MapPeekCardTest=13 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapTouchCardTest=3 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=19 --expect NeuronMembraneTest=7 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceDepthTest=15 --expect SpaceStyleTest=21 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=4 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=4 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=9 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=8 --expect LinkMemoryTest=5 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDragTest=21 --expect MapDrawnTest=11 --expect MapFitTest=4 --expect MapLegendRenderTest=4 --expect MapLegendTest=7 --expect MapLinkFocusTest=6 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=6 --expect MapModeRenderTest=9 --expect MapModeTest=10 --expect MapNameShowTest=12 --expect MapNamesTest=7 --expect MapPanelsTouchTargetTest=5 --expect MapPeekCardTest=13 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapTouchCardTest=3 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=17 --expect NeuronMembraneTest=7 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceBodiesOwnSizeTest=3 --expect SpaceDepthTest=15 --expect SpaceStyleTest=21 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: sorta-android-apks
@@ -173,124 +173,21 @@ jobs:
           adb shell settings put system font_scale 1.0
           adb install -r -t built-apks/debug/app-debug.apk
           adb install -r -t built-apks/androidTest/debug/app-debug-androidTest.apk
-          source=app/src/androidTest/java/com/cramdown/sorta/MapRenderTest.kt
-          tests=$(grep -c '@Test' "$source")
-          echo "expecting OK ($tests tests) and $tests renders" | tee test-results/expected.txt
-          [ "$tests" -gt 0 ]
+          # S05h A7, the measurement copy only (never landed): FrameBudget's readout, Suns at rest
+          # against the Universe orbiting, logcat tag SortaFrameBudget; nothing else runs here
+          echo "expecting OK (2 tests) and 2 medians files" | tee test-results/expected.txt
           started=$SECONDS
-          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapRenderTest \
-            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation.txt
-          echo "the renders took $((SECONDS - started)) seconds" | tee test-results/time.txt
-          # Map mode's Space, Sorta itself on made-up ideas, by day and by night (S05b, A6)
-          mode_source=app/src/androidTest/java/com/cramdown/sorta/MapModeSpaceRenderTest.kt
-          mode_tests=$(grep -c '@Test' "$mode_source")
-          # each a Space still and, after its first-run card's Got it, a Neurons one (S05d, A6),
-          # and Space's links drawn Straight between them (S05e, A6), and each look with a chosen
-          # body's name on show (S05f, A3)
-          echo "expecting OK ($mode_tests tests) and $mode_tests renders each of Map mode's Space, Space with Straight lines, Neurons and each with a body named" | tee -a test-results/expected.txt
-          [ "$mode_tests" -gt 0 ]
-          started=$SECONDS
-          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeSpaceRenderTest \
-            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode.txt
-          echo "Map mode's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          # S05h A3: Space's Universe with animations on, the test turning them on for itself
-          lively_source=app/src/androidTest/java/com/cramdown/sorta/MapSpaceLivelyTest.kt
-          lively_tests=$(grep -c '@Test' "$lively_source")
-          echo "expecting OK ($lively_tests tests) and $lively_tests renders of the Universe orbiting" | tee -a test-results/expected.txt
-          [ "$lively_tests" -gt 0 ]
-          started=$SECONDS
-          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapSpaceLivelyTest \
-            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-lively.txt
-          echo "The lively Universe took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          # S05i A7, the measurement copy only: FrameBudget's readout, logcat tag SortaFrameBudget
-          started=$SECONDS
-          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapFrameBudgetMeasureTest \
+          adb shell am instrument -w -r -e device "$device" \
+            -e class 'com.cramdown.sorta.MapSpaceLivelyTest#measureByDay,com.cramdown.sorta.MapSpaceLivelyTest#measureByNight' \
             com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-measure.txt
           adb logcat -d -s SortaFrameBudget > test-results/frame-budget.txt 2>&1 || true
-          echo "The measurement took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          # whatever happened, animations are off again for what follows
+          echo "The measurement took $((SECONDS - started)) seconds" | tee test-results/time.txt
+          # whatever happened, animations are off again
           adb shell settings put global animator_duration_scale 0
-          # the phone also renders To sort with Android's three-button
-          # navigation bar, by day and by night (S05, A6); the test checks
-          # the bar is the tappable three-button one
-          sort_tests=0
-          if [ "$device" = phone ]; then
-            adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton
-            for attempt in $(seq 1 15); do
-              if [ "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 0 ]; then break; fi
-              sleep 2
-            done
-            adb shell settings get secure navigation_mode | tr -d '\r' | tee test-results/navigation-mode.txt
-            sort_source=app/src/androidTest/java/com/cramdown/sorta/SortNavBarRenderTest.kt
-            sort_tests=$(grep -c '@Test' "$sort_source")
-            echo "expecting OK ($sort_tests tests) and $sort_tests renders of To sort" | tee -a test-results/expected.txt
-            started=$SECONDS
-            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SortNavBarRenderTest \
-              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sort.txt
-            echo "To sort's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-            # Map mode with the same bar, by day and by night (S05b, A6)
-            map_bar_source=app/src/androidTest/java/com/cramdown/sorta/MapModeNavBarRenderTest.kt
-            map_bar_tests=$(grep -c '@Test' "$map_bar_source")
-            echo "expecting OK ($map_bar_tests tests) and $map_bar_tests renders of Map mode with the bar" | tee -a test-results/expected.txt
-            started=$SECONDS
-            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeNavBarRenderTest \
-              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode-navbar.txt
-            echo "Map mode's renders with the bar took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
-          fi
           # pulled first, so a failed run still uploads what it took
           adb pull /sdcard/Download/sorta-renders/. renders/ || true
-          grep -qF "OK ($tests tests)" test-results/instrumentation.txt
-          test "$(find renders -name 'map-*.png' | wc -l)" -eq "$tests"
-          grep -qF "OK ($mode_tests tests)" test-results/instrumentation-mapmode.txt
-          test "$(find renders -name 'mapmode-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-straight-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-named-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-named-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          # S05g A3: the first run's steps, a chosen body and Show links in Space, Neurons and Performance
-          test "$(find renders -name 'mapmode-card-steps-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-chosen-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-chosen-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-chosen-performance-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-links-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-links-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-links-performance-*.png' | wc -l)" -eq "$mode_tests"
-          # S05g A6, repair 3: a chosen sun in Space, and a cell's bridges chosen and shown in Neurons
-          test "$(find renders -name 'mapmode-chosen-sun-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-chosen-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-links-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          # S05g2 A3: a body held, then moved, in Space and Neurons; a sun pulling its neighbours; an open cell carrying its idea
-          test "$(find renders -name 'mapmode-drag-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-drag-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-drag-sun-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-drag-cell-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          # S05g A2: each legend scrolled to its end, its last line above the sheet's foot and the bar
-          test "$(find renders -name 'mapmode-legend-foot-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-legend-foot-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-legend-foot-performance-*.png' | wc -l)" -eq "$mode_tests"
-          # S05h A3: the Universe at rest, Fly in, a moved black hole, the legend's top; and orbiting
-          test "$(find renders -name 'mapmode-universe-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-fly-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-drag-star-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-legend-top-space-*.png' | wc -l)" -eq "$mode_tests"
-          # S05i A3: the filter's menu in each theme, the Neurons' cell states and the legend's Cell states row
-          test "$(find renders -name 'mapmode-filter-space-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-filter-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-filter-performance-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-cells-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          test "$(find renders -name 'mapmode-legend-cells-neurons-*.png' | wc -l)" -eq "$mode_tests"
-          grep -qF "OK ($lively_tests tests)" test-results/instrumentation-lively.txt
-          test "$(find renders -name 'mapmode-lively-universe-*.png' | wc -l)" -eq "$lively_tests"
-          if [ "$device" = phone ]; then
-            # 0 is the three-button bar
-            [ "$(cat test-results/navigation-mode.txt)" = 0 ]
-            [ "$sort_tests" -gt 0 ]
-            grep -qF "OK ($sort_tests tests)" test-results/instrumentation-sort.txt
-            test "$(find renders -name 'sort-navbar-*.png' | wc -l)" -eq "$sort_tests"
-            [ "$map_bar_tests" -gt 0 ]
-            grep -qF "OK ($map_bar_tests tests)" test-results/instrumentation-mapmode-navbar.txt
-            test "$(find renders -name 'navbar-map-*.png' | wc -l)" -eq "$map_bar_tests"
-          fi
+          grep -qF "OK (2 tests)" test-results/instrumentation-measure.txt
+          test "$(find renders -name 'framebudget-*.txt' | wc -l)" -eq 2
           SCRIPT
       - name: The renders
         uses: reactivecircus/android-emulator-runner@v2
@@ -306,6 +203,17 @@ jobs:
           emulator-options: -no-window -gpu software -noaudio -no-boot-anim -camera-back none -no-snapshot
           working-directory: android
           script: bash "$RUNNER_TEMP/renders.sh" ${{ matrix.device }}
+      - name: The medians
+        if: ${{ always() }}
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          {
+            echo "### S05h A7 frame budget, $DEVICE (medians of 3 s of 250 ms readouts)"
+            echo '```'
+            cat android/renders/framebudget-*.txt 2>/dev/null || echo "no medians file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:

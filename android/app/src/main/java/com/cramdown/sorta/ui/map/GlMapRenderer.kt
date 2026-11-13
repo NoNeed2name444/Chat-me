@@ -3,6 +3,7 @@ package com.cramdown.sorta.ui.map
 import android.content.res.AssetManager
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
@@ -12,11 +13,6 @@ import com.cramdown.sorta.map.UniverseLooks
 import com.cramdown.sorta.map.UniversePlan
 import com.cramdown.sorta.map.UniverseRole
 import com.cramdown.sorta.map.FrameBudget
-import com.cramdown.sorta.map.FilterLinkGrowth
-import com.cramdown.sorta.map.FilterPop
-import com.cramdown.sorta.map.LinkWant
-import com.cramdown.sorta.map.FilterSlice
-import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.FramePlan
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.FrameStats
@@ -183,24 +179,51 @@ data class MapDrawn(
      */
     val orbitSteps: Int = 0,
     /**
-     * The filter (S05i): whether one is in force; the bodies the latest frame drew and those it hid
-     * (a body on its way out counts as drawn until it is gone; in the Neurons the hidden are counted as
-     * drawn, elsewhere as the filter has them); the links the filter lets through; and in the Neurons
-     * the ideas drawn in each cell state, in NeuronState's order (empty elsewhere). No words.
+     * The Universe's press (S05h), on the map's own clock: the seconds the lively orbit clock has
+     * stepped while a body was pressed, every press together, never capped (MapDrag.pressedTime); and
+     * for the latest press, the seconds of it stepped until the orbit rate was under 0.05, unrounded
+     * (−1 till then; MapDrag.pressSlowedAfter). So a test judges a held finger's ease by the map's time
+     * however late the record reaches it. They move only while a finger is on a body.
      */
-    val filtered: Boolean = false,
-    val shown: Int = 0,
-    val hidden: Int = 0,
-    val filterLinks: Int = 0,
-    val states: List<Int> = emptyList(),
+    val pressedSeconds: Float = 0f,
+    val pressSlowedSeconds: Float = -1f,
+    /**
+     * The device's uptime (SystemClock.uptimeMillis) at the renderer frame that first took the
+     * current press (S05h repair 5), −1 while no press is taken; reset when the press ends. A test
+     * notes the uptime before its finger comes down, so the touch's way to the renderer is timed on
+     * the same clock as the press's ease, however late the record reaches it.
+     */
+    val pressTakenAtMs: Long = -1,
+    /**
+     * The device's uptime (SystemClock.uptimeMillis) at the renderer frame where the orbit rate first
+     * fell under 0.05 during the current press (S05h repair 6), −1 until then; reset when the press
+     * ends. With a test's uptime noted before its finger comes down, the touch's whole way to the
+     * slow-down is one difference on one clock, however late the record reaches the test.
+     */
+    val pressSlowedAtMs: Long = -1,
 ) {
-    /** This record with the filter's counts as the latest frame had them; the same record when nothing changed. */
-    fun filtering(filteredNow: Boolean, shownNow: Int, hiddenNow: Int, filterLinksNow: Int, statesNow: List<Int>): MapDrawn =
-        if (filtered == filteredNow && shown == shownNow && hidden == hiddenNow && filterLinks == filterLinksNow && states == statesNow) this
-        else copy(filtered = filteredNow, shown = shownNow, hidden = hiddenNow, filterLinks = filterLinksNow, states = statesNow)
-
     /** This record after one more step of the lively orbit clock ([orbitSteps]). */
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
+
+    /**
+     * This record with the press's seconds as the latest frame stepped them; when [takenNow]
+     * (MapDrag.pressTaken), the uptime the press was first taken; and when [slowNow] too
+     * (MapDrag.pressSlowed), the uptime its rate first fell under 0.05. Each is kept from an earlier
+     * frame of the same press, else [nowMs], read at most once, at this frame; −1 when no press is
+     * taken (and, for the slow-down, until it comes). The same record when nothing changed.
+     */
+    fun pressing(
+        secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, slowNow: Boolean = false,
+        nowMs: () -> Long = { -1L },
+    ): MapDrawn {
+        var clock = -1L
+        val now = { if (clock < 0) clock = nowMs(); clock }
+        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else now()
+        val slowedAt = if (!takenNow || !slowNow) -1L else if (pressSlowedAtMs >= 0) pressSlowedAtMs else now()
+        return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt &&
+            pressSlowedAtMs == slowedAt) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt, pressSlowedAtMs = slowedAt)
+    }
 
     /** This record with the Universe as the latest frame drew it; the same record when nothing changed. */
     fun universe(rolesNow: List<Int>, nearNow: Int, archedNow: Int, farNow: Int, secondsNow: Int, rateNow: Float): MapDrawn =
@@ -452,33 +475,6 @@ class GlMapRenderer(
     private val startNanos = System.nanoTime()
     private var maskTexture = 0
     private val maskHeight = if (space) max(1, (tree.nodeCount + 1023) / 1024) else 1
-    /**
-     * The filter (S05i), set from the page as it changes; the GL thread applies it at the next frame.
-     * Its own texture, a texel a chunk-order node in every theme (255 hidden, 128 a ghost, whose links
-     * are hidden), apart from Space's body mask and the offsets sized from it ([maskHeight]).
-     */
-    @Volatile var filter: MapFilterView? = null
-    private var filterTexture = 0
-    private val filterHeight = max(1, (tree.nodeCount + 1023) / 1024)
-    private val filterMask = ByteArray(1024 * filterHeight)
-    private var filterOn = false
-    /** The filter last applied on the GL thread, and whether a new context needs it applied again. */
-    private var appliedFilter: MapFilterView? = null
-    private var filterStale = true
-    /** Space's bodies on their filter springs, by scene index (Performance's go at once, the Neurons' are NeuronGl's). */
-    private val filterPop: FilterPop? = if (space) FilterPop(tree.nodeCount, lively) else null
-    private val filterLinks: FilterLinkGrowth? = if (space) FilterLinkGrowth(lively) else null
-    /** Space, chunk order: each node's pop, and whether it is shown and not a ghost (its beams' ends). */
-    private val chunkScale: FloatArray? = if (space) FloatArray(tree.nodeCount) { 1f } else null
-    /** Space, chunk order: each node's bloom as it comes back (FilterPop.bloom), the body shader's vMark.w. */
-    private val chunkBloom: FloatArray? = if (space) FloatArray(tree.nodeCount) else null
-    /** A filter was applied: the springs' sizes are written again on the next frame, moving or not. */
-    private var filterFillDue = true
-    private var chunkWanted = BooleanArray(0)
-    /** The latest frame's filter counts (MapDrawn): bodies shown and hidden, links shown. */
-    private var shownNow = 0
-    private var hiddenNow = 0
-    private var filterLinksNow = 0
     /** One byte per node (chunk order): 255 while the node is drawn as its body. */
     private val mask = ByteArray(1024 * maskHeight)
     private val maskTexel: ByteBuffer = ByteBuffer.allocateDirect(1)
@@ -623,39 +619,10 @@ class GlMapRenderer(
      * False where it cannot fly there.
      */
     fun flyTo(index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
-        neuronGl?.let { gl -> return flyToCell(gl, index, viewWidth, viewHeight, insets) }
         val plan = uplan ?: return false
         if (!canFlyTo(index)) return false
         val centre = plan.bodies[index].home
         val points = plan.systems[index].map { centre + it }
-        val fit = synchronized(camera) {
-            val f = MapFly.fit(camera, centre, points, viewWidth, viewHeight, insets) ?: return false
-            flight = CameraFlight(camera.target, camera.distance, f, MapFly.seconds(lively))
-            f
-        }
-        flown = index
-        return fit.distance > 0f
-    }
-
-    /**
-     * The Neurons' filter (S05i; iOS flies to the folder's slot where `universe` is set, which the
-     * Neurons are, GraphThemeScene.swift:300): the camera flies to cell [index] (the scene's), framing
-     * it and everything inside it, without opening it.
-     */
-    private fun flyToCell(gl: NeuronGl, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
-        if (index !in 0 until gl.bodyCount) return false
-        val p = parents ?: return false
-        val time = neuronTime()
-        val centre = gl.position(index, time)
-        val points = ArrayList<Vec3>()
-        for (i in 0 until gl.bodyCount) {
-            var up = i; var steps = 0
-            while (up >= 0 && up != index && steps <= gl.bodyCount) { up = p[up]; steps++ }
-            if (up != index) continue
-            val at = gl.position(i, time); val r = gl.size(i)
-            points.add(at + Vec3(r, 0f, 0f)); points.add(at - Vec3(r, 0f, 0f))
-            points.add(at + Vec3(0f, r, 0f)); points.add(at - Vec3(0f, r, 0f))
-        }
         val fit = synchronized(camera) {
             val f = MapFly.fit(camera, centre, points, viewWidth, viewHeight, insets) ?: return false
             flight = CameraFlight(camera.target, camera.distance, f, MapFly.seconds(lively))
@@ -709,8 +676,6 @@ class GlMapRenderer(
         uploadNodes()
         uploadLeafTexture()
         uploadMask()
-        uploadFilterMask()
-        filterStale = true
         uploadFocusMask()
         uploadOffsets()
         val ids = IntArray(4)
@@ -784,7 +749,6 @@ class GlMapRenderer(
         drag?.step(dt)
         val orbiting = refreshLive()
         stepChoice(dt)
-        val filterMoving = stepFilter(dt)
         flight?.let { f -> synchronized(camera) { f.step(camera, dt) }; if (f.finished) flight = null }
         // the depth fade follows what the camera looks at: its orbit target
         val focusDepth = SpaceDepth.depth(target, eye, forward)
@@ -833,7 +797,7 @@ class GlMapRenderer(
         animating = bodyCount > 0 || (bodies?.beamCount ?: 0) > 0 || moved > 1e-5f || plan.detailLeaves.size.let { n -> (0 until n).any { plan.leafState[plan.detailLeaves[it] * 4 + 3] < 1f } } || cache.uploadedThisFrame > 0
             || pop.moving || (markChunk >= 0 && orbitGrow < 1f) || (ring != null && lively) || drag?.busy == true
             // the Universe's orbits turn whenever animations run (the packet's question 1: as iOS)
-            || orbiting || (uplan != null && lively) || flight != null || filterMoving
+            || orbiting || (uplan != null && lively) || flight != null
 
         if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -876,7 +840,8 @@ class GlMapRenderer(
         if (uplan != null && bodies != null) {
             record = record.flying(flown)
             val d = drag
-            if (lively && d != null) record = record.stepped()
+            if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat(),
+                d.pressTaken, d.pressSlowed) { SystemClock.uptimeMillis() }
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }
@@ -886,7 +851,6 @@ class GlMapRenderer(
         val faded = if (space && focusOn) fadedPoints(plan) + plan.fadedSummaries else 0
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
-        record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
@@ -991,7 +955,7 @@ class GlMapRenderer(
         clock = (seconds % SpaceOptics.CLOCK_PERIOD).toFloat()
         val moved = lastEye?.let { (eye - it).length() } ?: 0f
         lastEye = eye
-        animating = neuronLively || moved > 1e-5f || pop.moving || drag?.busy == true || gl.popping || flight != null
+        animating = neuronLively || moved > 1e-5f || pop.moving || drag?.busy == true
         val time = neuronTime()
         val deep = NeuronPalette.deep
         GLES30.glClearColor(deep.x, deep.y, deep.z, 1f)
@@ -1002,9 +966,7 @@ class GlMapRenderer(
         val count = gl.bodyCount
         onScreenNodes?.let { callback ->
             val out = ArrayList<ScreenNode>(count)
-            val f = appliedFilter
             for (i in 0 until count) {
-                if (f != null && !f.reachable(i)) continue
                 val p = gl.position(i, time)
                 Mat4.project(viewProj, p.x, p.y, p.z, clip)
                 if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
@@ -1027,7 +989,6 @@ class GlMapRenderer(
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
         val focusOn = gl.focus != null
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
-        record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn)
         record = dragRecord(if (grabbedScene >= 0) gl.position(grabbedScene, time) else null, grabbedScene, record.chosen)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
@@ -1093,110 +1054,6 @@ class GlMapRenderer(
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1024, maskHeight, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.wrap(mask))
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
-    }
-
-    private fun uploadFilterMask() {
-        val ids = IntArray(1)
-        GLES30.glGenTextures(1, ids, 0); filterTexture = ids[0]
-        writeFilterMask()
-    }
-
-    private fun writeFilterMask() {
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, filterTexture)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST)
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1024, filterHeight, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.wrap(filterMask))
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
-    }
-
-    /**
-     * The filter on the GL thread (S05i): a new one is applied once (iOS apply), and each frame Space's
-     * springs and its beams' drawing back step [dt] seconds. Performance's points and links go and come
-     * back at once; the Neurons' bodies are NeuronGl's. Returns whether anything still moves.
-     */
-    private fun stepFilter(dt: Float): Boolean {
-        val f = filter
-        if (f !== appliedFilter || filterStale) applyFilter(f)
-        var moving = false
-        val pop = filterPop
-        val b = bodies
-        if (pop != null && b != null && chunkScale != null && chunkBloom != null) {
-            // the springs' sizes and blooms, written again only on a frame they change (none once settled)
-            val ran = pop.moving
-            pop.step(dt)
-            if (ran || filterFillDue) {
-                var blooming = false
-                for (k in 0 until tree.nodeCount) {
-                    val i = tree.order[k]
-                    chunkScale[k] = if (pop.gone(i)) 0f else pop.scale(i)
-                    chunkBloom[k] = pop.bloom(i)
-                    if (chunkBloom[k] > 0f) blooming = true
-                }
-                filterFillDue = false
-                val whole = f == null && !pop.moving
-                b.filterScale = if (whole) null else chunkScale
-                b.filterBloom = if (whole || !blooming) null else chunkBloom
-            }
-            moving = pop.moving
-            val links = filterLinks
-            if (links != null) {
-                moving = links.step(dt, linkWanted) || moving
-                if (f == null && links.idle) b.filterWanted = null
-            }
-        }
-        return moving
-    }
-
-    /** A beam's ends both wanted under the filter, or every end with none (chunk order, by its pair key). */
-    private val linkWanted = LinkWant { key ->
-        val wanted = chunkWanted
-        val u = (key ushr 32).toInt(); val v = key.toInt()
-        wanted.isEmpty() || (u < wanted.size && v < wanted.size && wanted[u] && wanted[v])
-    }
-
-    private fun applyFilter(f: MapFilterView?) {
-        appliedFilter = f
-        filterStale = false
-        val n = tree.nodeCount
-        val shownScene = f?.shown
-        neuronGl?.let { gl ->
-            gl.filter = f
-            shownNow = 0; hiddenNow = 0
-            filterLinksNow = f?.links?.count { it } ?: gl.linkCount
-        }
-        if (neuronGl != null) return
-        // far points and chunk links, every theme: hidden, a ghost (its links hidden), or shown
-        filterOn = f != null
-        val wanted = BooleanArray(if (f == null) 0 else n)
-        var shown = 0
-        for (k in 0 until n) {
-            val i = tree.order[k]
-            val code: Byte = when {
-                f == null || i !in f.shown.indices -> 0
-                !f.shown[i] -> -1
-                f.ghost[i] -> 0x80.toByte()
-                else -> 0
-            }
-            filterMask[k] = code
-            if (f != null && i in f.shown.indices && f.shown[i] && !f.ghost[i]) wanted[k] = true
-            if (f == null || (i in f.shown.indices && f.shown[i])) shown++
-        }
-        shownNow = shown; hiddenNow = n - shown
-        filterLinksNow = f?.links?.count { it } ?: (sceneLinks.size / 2)
-        if (filterTexture != 0) writeFilterMask()
-        // summaries and bundles count only what shows
-        lod.filter = if (f == null) null else FilterSlice.of(tree, wanted)
-        // Space: the bodies' springs, ghosts and beams; at once in Performance and with motion off
-        chunkWanted = wanted
-        bodies?.let { b ->
-            filterPop?.apply(shownScene, f?.instant ?: false)
-            filterFillDue = true
-            b.filterGhost = if (f == null) null else BooleanArray(n) { k -> tree.order[k].let { i -> i in f.ghost.indices && f.ghost[i] } }
-            // Everything again: links drawn back grow out once more (every end wanted) before the filter lets go
-            b.filterWanted = if (f != null) wanted else if (filterLinks?.idle == false) BooleanArray(n) { true } else null
-            b.filterLinks = if (f?.instant == true) null else filterLinks
-        }
     }
 
     private fun uploadFocusMask() {
@@ -1400,11 +1257,6 @@ class GlMapRenderer(
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, offsetTexture)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uOffsets"), 3)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMoved"), if (offsetTexture != 0 && offsetTexels.isNotEmpty()) 1f else 0f)
-        // the filter (S05i): its own mask, read only while one is in force
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE4)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, filterTexture)
-        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uFilterMask"), 4)
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFiltered"), if (filterOn) 1f else 0f)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocus"), if (space && focusChunks != null && chosenChunk >= 0) 1f else 0f)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uChosen"), if (theme == MapTheme.PLAIN) chosenChunk else -1)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uDensity"), density)
@@ -1490,9 +1342,7 @@ class GlMapRenderer(
         val out = ArrayList<ScreenNode>(tree.nodeCount)
         val focal = camera.focalPixels(height.toFloat())
         val band = band
-        val f = appliedFilter
         for (k in 0 until tree.nodeCount) {
-            if (f != null && !f.reachable(tree.order[k])) continue
             val leaf = tree.leafOfNode[k]
             val t = plan.leafState[leaf * 4 + 3]
             if (t <= 0f) continue
@@ -1580,18 +1430,10 @@ uniform float uDensity;
 // hold to move (S05g2): each node's offset from home in world units, read while any is off home
 uniform highp sampler2D uOffsets;
 uniform float uMoved;
-// the filter (S05i): 1 for a node it hides, 0.5 for a ghost, read while one is in force
-uniform mediump sampler2D uFilterMask;
-uniform float uFiltered;
 """ + LIGHT + """// Space theme: 1 while this node is drawn as its body (its point hides)
 float bodyMasked() {
     if (uSpace < 0.5) return 0.0;
     return texelFetch(uBodyMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r;
-}
-// the filter (S05i): 1 for a node it hides (its point goes), 0.5 for a ghost (its links go)
-float filterCode() {
-    if (uFiltered < 0.5) return 0.0;
-    return texelFetch(uFilterMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r;
 }
 // Show links in Space: 0.15 for a node outside the chosen body's neighbourhood (focusLinks), else 1
 float focusFade() {
@@ -1630,7 +1472,7 @@ void main() {
     }
     gl_PointSize = vSize;
     vColor = uPalette[int(aGroup) % 6] * cover * cover * rpLight(w) * focusFade();
-    if (bodyMasked() > 0.5 || filterCode() > 0.75 || rpGone(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    if (bodyMasked() > 0.5 || rpGone(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 """
 
@@ -1664,11 +1506,8 @@ void main() {
 out vec3 vColor;
 // 1 at the chosen body's end of a link, 0 at the other: above 0 along a link only where it is the chosen body's own
 out highp float vTouch;
-// above 0 along a link with an end the filter hides or makes a ghost: the whole link is cut (S05i)
-out highp float vCut;
 void main() {
     vTouch = gl_VertexID == uFocusNode ? 1.0 : 0.0;
-    vCut = filterCode() > 0.25 ? 1.0 : 0.0;
     vec4 st = leafState();
     gl_Position = uVP * vec4(placed(st), 1.0);
     vColor = uPalette[int(aGroup) % 6];
@@ -1693,11 +1532,9 @@ void main() {
 precision mediump float;
 in vec3 vColor;
 in highp float vTouch;
-in highp float vCut;
 uniform float uFocusMode;
 out vec4 fragColor;
 void main() {
-    if (vCut > 0.0) discard;
     vec3 c = vColor * 0.32;
     if (uFocusMode > 0.5 && uFocusMode < 1.5 && vTouch <= 0.0) discard;
     if (uFocusMode > 1.5) c = min(c * (vTouch > 0.0 ? ${MapMark.PERF_FOCUS} : ${MapMark.FADED}), vec3(1.0));

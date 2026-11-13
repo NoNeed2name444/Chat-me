@@ -70,11 +70,11 @@ class MapLegendTest {
         assertEquals("Bigger cells hold more.", c.ladderCaption)
         assertEquals("Size ladder: cell, part, page, idea", c.ladderLabel)
         assertEquals(LegendTint(0.35, 1.0, 0.5, 0.22), c.rungs[0].fill)
-        assertEquals(listOf("Cell", "Cell part", "Vesicle", "Granule", "To sort", "Opening a cell", "Cell states", "Axons and synapses"), c.rows.map { it.name })
+        assertEquals(listOf("Cell", "Cell part", "Vesicle", "Granule", "To sort", "Opening a cell", "Axons and synapses"), c.rows.map { it.name })
         assertEquals(listOf("circle.hexagongrid.fill", "smallcircle.filled.circle", "circle.fill", "aqi.medium", "tray.fill",
-            "arrow.up.left.and.arrow.down.right", "sparkles", "bolt.horizontal.fill"), c.rows.map { it.symbol })
+            "arrow.up.left.and.arrow.down.right", "bolt.horizontal.fill"), c.rows.map { it.symbol })
         assertEquals(listOf(MapLegend.MAKE_FOLDER, MapLegend.FOLDER_INSIDE, "", MapLegend.ADD_IDEA, "Choose folder › To sort.",
-            "Tap a cell, then Fly in on its card.", CELL_STATES_HOW, MapLegend.LINK_IDEAS), c.rows.map { it.how })
+            "Tap a cell, then Fly in on its card.", MapLegend.LINK_IDEAS), c.rows.map { it.how })
     }
 
     @Test fun performanceHasTheRungsAndRowsAndroidDraws() {
@@ -99,32 +99,17 @@ class MapLegendTest {
             .joinToString("\n").lowercase()
         // S05g brought Show links and the empty double tap, S05g2 the move (theTouchHelpIsTheHint); the
         // rest waits
-        // S05i brought the cell states: "cell states" and "breathing" left this list for the exact check of
-        // Neurons' Cell states row below
-        for (later in listOf("moon", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
-            "orbits")) {
+        for (later in listOf("moon", "cell states", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
+            "breathing", "orbits")) {
             assertFalse("\"$later\" waits for later work", all.contains(later))
         }
-        // Neurons' rows run …, Opening a cell, Cell states, Axons and synapses, the Cell states row iOS's word for word
-        val neurons = MapLegend.of(GraphTheme.NEURONS).rows
-        assertEquals(listOf("Opening a cell", "Cell states", "Axons and synapses"), neurons.map { it.name }.takeLast(3))
-        val cells = neurons.single { it.name == "Cell states" }
-        assertEquals(CELL_STATES_TEXT, cells.text)
-        assertEquals(CELL_STATES_HOW, cells.how)
-        assertEquals("sparkles", cells.symbol)
-        assertEquals(LegendTint(0.82, 0.36, 1.0), cells.tint)
-        // and only there: no other line of any look names a cell state's breathing
-        val cellsPinned = setOf(cells.name, cells.text, cells.how)
-        assertFalse("breathing only in the Cell states row", GraphTheme.entries.flatMap { linesOf(it) }.filter { it !in cellsPinned }
-            .any { it.lowercase().contains("breathing") || it.lowercase().contains("cell states") })
         // the four allowed in Space only where pinned: every pinned Space row and the touch help exactly
         assertEquals(spacePinned, space.rows)
         assertEquals(spaceTouch, space.touch)
         // and no row says what Android does not draw: no larger page point in Performance
         assertFalse(MapLegend.of(GraphTheme.PERFORMANCE, true).rows.any { it.name == "Page" })
         // nothing of S05h2's or S05i's (deaths, sparks, cell states, the Look filter)
-        // (Neurons' Cell states row, S05i's own, is pinned above and left out here)
-        val words = everyLine.filter { it !in cellsPinned }.joinToString("\n").lowercase()
+        val words = everyLine.joinToString("\n").lowercase()
         for (later in listOf("death", "spark", "cell state", "look filter", "ghost")) assertFalse("\"$later\" is S05h2's or S05i's", words.contains(later))
     }
 
@@ -186,11 +171,5 @@ class MapLegendTest {
         val comet = MapLegend.of(GraphTheme.SPACE).rows[6]
         assertEquals("Comet: an idea in no folder. It swings past the folder it links to most; file it and it settles into orbit. " +
             "Older ones wait in the far cloud. Move an idea out of its folder: Choose folder › To sort.", MapLegend.spoken(comet))
-    }
-
-    private companion object {
-        /** Neurons' Cell states row, iOS's words (GraphLegend.swift:302-304). */
-        const val CELL_STATES_TEXT = "Each idea shows a state, as the space’s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, every idea rests."
-        const val CELL_STATES_HOW = "Look › Cells: one state for every idea, or Cell by cell for one folder."
     }
 }

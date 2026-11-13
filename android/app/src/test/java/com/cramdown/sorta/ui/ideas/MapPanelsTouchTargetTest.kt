@@ -26,7 +26,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,14 +89,7 @@ class MapPanelsTouchTargetTest {
             MapTouchCard({}, {}, title = GraphTheme.NEURONS.cardTitle, steps = GraphTheme.NEURONS.cardSteps)
         },
         Panel("the no-folder hint", MapPanelTags.EMPTY_HINT, listOf("Add folder")) { MapEmptyHint(GraphTheme.NEURONS, {}) },
-        // S05i: the Cell by cell sheet, a row per top-level folder (made-up folders)
-        Panel("the Cell by cell sheet", MapPanelTags.CELL_BY_CELL, listOf("Garden", "Shed")) {
-            CellByCellSheet(cellBook, IdeasSettings(compose.activity)) {}
-        },
     )
-
-    private val cellBook = com.cramdown.sorta.ideas.IdeaBook(emptyList(), listOf(
-        com.cramdown.sorta.ideas.NoteFolder(name = "Garden"), com.cramdown.sorta.ideas.NoteFolder(name = "Shed")))
 
     private var which by mutableIntStateOf(0)
     private var scale by mutableFloatStateOf(1f)
@@ -121,96 +113,6 @@ class MapPanelsTouchTargetTest {
             val rows = measure(MapPanelTags.MENU, what)
             check("$what: Rename, Choose folder and Delete, in order", rows == listOf(words.rename, words.moveToFolder, words.delete), rows.joinToString(" | "))
         }
-    }
-
-    /** S05i: the Filter tool and each row of its menu, at both sizes. */
-    @Config(qualifiers = "w360dp-h748dp-port-xxhdpi")
-    @Test fun theFilterToolAndItsRowsAreTargetsAtBothSizes() = checks {
-        val folders = listOf("f1" to "Garden", "f2" to "A shed at the far end of the long garden")
-        compose.setContent { host { key(scale) { MapFilterTool(com.cramdown.sorta.map.MapFilter.All, folders) {} } } }
-        val density = compose.density.density
-        val rows = listOf(com.cramdown.sorta.map.MapFilter.All, com.cramdown.sorta.map.MapFilter.Pages, com.cramdown.sorta.map.MapFilter.Ideas,
-            com.cramdown.sorta.map.MapFilter.Linked, com.cramdown.sorta.map.MapFilter.Folder("f1"), com.cramdown.sorta.map.MapFilter.Folder("f2"))
-            .map { MapPanelTags.filterRow(it) }
-        for (s in listOf(1f, 2f)) {
-            scale = s
-            compose.waitForIdle()
-            val what = "the Filter tool at font scale $s"
-            val tool = compose.onNode(hasTestTag(MapPanelTags.FILTER_TOOL)).fetchSemanticsNode().touchBoundsInRoot
-            check("$what: at least ${least.toInt()} dp", minOf(tool.width, tool.height) / density >= least - 0.5,
-                "${f2(tool.width / density.toDouble())} x ${f2(tool.height / density.toDouble())} dp")
-            compose.onNode(hasTestTag(MapPanelTags.FILTER_TOOL)).performClick()
-            compose.waitForIdle()
-            for (r in rows) {
-                val found = compose.onAllNodes(hasTestTag(r)).fetchSemanticsNodes()
-                check("$what: $r is there", found.size == 1, "${found.size}")
-                val b = found.firstOrNull()?.touchBoundsInRoot ?: continue
-                check("$what: $r at least ${least.toInt()} dp tall", b.height / density >= least - 0.5, "${f2(b.height / density.toDouble())} dp")
-            }
-            // Everything closes it
-            compose.onNode(hasTestTag(rows[0])).performClick()
-            compose.waitForIdle()
-        }
-    }
-
-    /**
-     * S05i: the Neurons' Look menu's Cells rows and its Cell by cell row, then each folder's picker in
-     * the Cell by cell sheet (Same as all and the six), every row a target at both sizes.
-     */
-    @Config(qualifiers = "w360dp-h748dp-port-xxhdpi")
-    @Test fun theCellsRowsAndEachFoldersPickerAreTargetsAtBothSizes() = checks {
-        val settings = IdeasSettings(compose.activity)
-        val same = compose.activity.resources.getString(R.string.map_same_as_all)
-        compose.setContent {
-            host {
-                key(which, scale) {
-                    if (which == 0) SpaceLookTool(cellBook, settings, GraphTheme.NEURONS, {}, {}, {}, showCellByCell = {})
-                    else CellByCellSheet(cellBook, settings) {}
-                }
-            }
-        }
-        val density = compose.density.density
-        fun tall(what: String, node: SemanticsNode?) {
-            check("$what is there", node != null)
-            val b = node?.touchBoundsInRoot ?: return
-            check("$what at least ${least.toInt()} dp", minOf(b.width, b.height) / density >= least - 0.5,
-                "${f2(b.width / density.toDouble())} x ${f2(b.height / density.toDouble())} dp")
-        }
-        val cells = com.cramdown.sorta.map.NeuronState.menuOrder.map { "lookCell-" + it.rawValue } + MapPanelTags.LOOK_CELL_BY_CELL
-        for (s in listOf(1f, 2f)) {
-            which = 0
-            scale = s
-            compose.waitForIdle()
-            compose.onNode(hasClickAction() and hasContentDescription("Look")).performClick()
-            compose.waitForIdle()
-            for (t in cells) tall("the Look menu's $t at font scale $s", compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().singleOrNull())
-            // Resting closes the menu, and stores natural
-            compose.onNode(hasTestTag("lookCell-resting")).performClick()
-            compose.waitForIdle()
-        }
-        val notRow = SemanticsMatcher("not a folder's row") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("cellByCell-") != true }
-        val picks = listOf(same) + com.cramdown.sorta.map.NeuronState.menuOrder.map { it.title }
-        for (s in listOf(1f, 2f)) {
-            which = 1
-            scale = s
-            compose.waitForIdle()
-            compose.mainClock.advanceTimeBy(1_000) // the sheet comes up
-            compose.waitForIdle()
-            for (folder in cellBook.folders) {
-                val row = "cellByCell-" + folder.id
-                tall("the Cell by cell row for ${folder.name} at font scale $s", compose.onAllNodes(hasTestTag(row)).fetchSemanticsNodes().singleOrNull())
-                compose.onNode(hasTestTag(row)).performSemanticsAction(SemanticsActions.OnClick)
-                compose.mainClock.advanceTimeBy(1_000)
-                compose.waitForIdle()
-                for (p in picks) tall("${folder.name}'s picker row \"$p\" at font scale $s",
-                    compose.onAllNodes(hasClickAction() and androidx.compose.ui.test.hasText(p) and notRow).fetchSemanticsNodes().singleOrNull())
-                // Same as all closes it, the folder left as it was
-                compose.onNode(hasClickAction() and androidx.compose.ui.test.hasText(same) and notRow).performClick()
-                compose.mainClock.advanceTimeBy(1_000)
-                compose.waitForIdle()
-            }
-        }
-        check("the folders left as all", com.cramdown.sorta.map.NeuronStateChoice.parse(settings.cellFolders).isEmpty(), settings.cellFolders)
     }
 
     @Config(qualifiers = "w411dp-h914dp-port-xxhdpi")

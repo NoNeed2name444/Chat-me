@@ -34,8 +34,7 @@ import kotlin.math.sqrt
  * - pulsar: light.x its nebula's turn, A its beam, A.w 2 + how edge-on its nebula is, B its spin axis;
  * - comet: A its ion tail, B its dust tail (SpaceOptics.cometTails).
  * A fifth vec4 (S05g), the mark: x its fade under Show links (1, or [MapMark.FADED] outside
- * [focus]), y 1 for the marked body; z its look in the Universe; w its bloom as the filter brings it
- * back (S05i, [filterBloom]), which brightens its glows as [bloomed] says.
+ * [focus]), y 1 for the marked body; z and w spare.
  *
  * The marked body, the one held ([grabbed], S05g2) or else the chosen one (S05g): its links' beams
  * are lit (beam float 9, as iOS's lit bit) and its radius is scaled by [chosenScale] (the pop).
@@ -63,27 +62,6 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         const val MAX_LIGHTS = 4096
         /** A body stays one down to this share of [SpaceLod.BODY_PIXELS] (SpaceDepth's gap, 1.5 / 2.25). */
         const val KEEP = SpaceDepth.POINT_ENTER / SpaceDepth.POINT_LEAVE
-
-        /**
-         * The bloom's gain on a body's glows (iOS shapeRing, GraphMotion.swift:2134-2135: a halo's
-         * opacity 0.85 at rest and 0.35 more at a full bloom, so 0.35 / 0.85 of its resting light).
-         */
-        const val BLOOM_GAIN = 0.35f / 0.85f
-        /** Where every glow of a body's shader passes (SpaceShaders' rpFadedGlow), which the bloom brightens. */
-        const val GLOW_HEAD = "vec3 rpFadedGlow(vec3 rp_col, float rp_dfF) {\n"
-
-        /**
-         * A body's fragment shader with the filter's bloom (S05i): each glow (halo, corona, ring,
-         * coma) brighter by [BLOOM_GAIN] × vMark.w as the body comes back, as iOS's halo blooms; the
-         * body itself is not. A shader without [GLOW_HEAD] exactly once is refused.
-         */
-        fun bloomed(fragment: String): String {
-            val at = fragment.indexOf(GLOW_HEAD)
-            require(at >= 0 && fragment.indexOf(GLOW_HEAD, at + 1) < 0) { "a body shader without one rpFadedGlow" }
-            val gain = String.format(java.util.Locale.ROOT, "%.6f", BLOOM_GAIN)
-            return fragment.substring(0, at + GLOW_HEAD.length) +
-                "    rp_col = rp_col * (1.0 + $gain * vMark.w);\n" + fragment.substring(at + GLOW_HEAD.length)
-        }
     }
 
     val data = FloatArray(capacity * STRIDE)
@@ -123,8 +101,22 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
      * drawn ÷ its style's bodyScale, which the shaders multiply back); null draws every body at [nodeRadius].
      */
     var radii: FloatArray? = null
-    /** The Universe: where each node's links stop before their trim, chunk order (UniverseBeams.reach); null uses [radii]. */
+        set(value) { field = value; largestReach = largest() }
+    /**
+     * The Universe: where each node's links stop before their trim, chunk order (UniverseBeams.reach); null
+     * uses [radii]. Each body is chosen, and culled, by it ([reachOf]): iOS's reachRadius, the radius its
+     * depth stage takes (GraphNodeFactory.swift:206, :305; GraphSpaceDepthStage.update, `size = radius[i]`).
+     */
     var reaches: FloatArray? = null
+        set(value) { field = value; largestReach = largest() }
+    /** The largest [reachOf] (else [nodeRadius]): a chunk is passed over only when even its largest body could not be one. */
+    private var largestReach: Float = nodeRadius
+    private fun largest(): Float {
+        if (radii == null && reaches == null) return nodeRadius
+        var most = 0f
+        for (i in 0 until tree.nodeCount) most = max(most, reachOf(i))
+        return if (tree.nodeCount == 0) nodeRadius else most
+    }
     /** The Universe: each node's look within its style ([UniverseLooks]), chunk order; null for none. */
     var looks: FloatArray? = null
     /** The Universe: each link's kind and centre by node pair (UniverseBeams.key, .pack); null outside it. */
@@ -144,17 +136,6 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     private fun reachOf(i: Int): Float = reaches?.getOrNull(i) ?: radiusOf(i)
     /** Its radius's scale this frame (MapPop.scale). */
     var chosenScale: Float = 1f
-    /**
-     * The filter (S05i), by chunk-order node: each body's pop ([FilterPop.scale]), a node gone not a body
-     * at all; a ghost drawn at 0.3; a beam only while both its ends are [filterWanted] (shown, not a
-     * ghost), drawing back as [filterLinks] says. Null with no filter.
-     */
-    var filterScale: FloatArray? = null
-    var filterGhost: BooleanArray? = null
-    var filterWanted: BooleanArray? = null
-    var filterLinks: FilterLinkGrowth? = null
-    /** Each node's bloom as the filter brings it back ([FilterPop.bloom]), chunk order; null for none. */
-    var filterBloom: FloatArray? = null
     /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
     var focus: IntArray? = null
     /** Bodies drawn faded this frame (MapDrawn.faded), and beams drawn lit (MapDrawn.lit). */
@@ -192,18 +173,17 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             val cell = tree.leafCell[leaf]
             val dx = tree.cx[cell] - eye.x; val dy = tree.cy[cell] - eye.y; val dz = tree.cz[cell] - eye.z
             val nearest = sqrt(dx * dx + dy * dy + dz * dz) - tree.radius[cell]
-            if (nearest > 0f && SpaceLod.pixels(nodeRadius, focal, nearest) < SpaceLod.BODY_PIXELS * KEEP) continue
+            if (nearest > 0f && SpaceLod.pixels(largestReach, focal, nearest) < SpaceLod.BODY_PIXELS * KEEP) continue
             for (i in tree.start[cell] until tree.end[cell]) {
                 val style = tree.groups[i].toInt()
                 if (style !in 0..5 || !enabled[style]) continue
-                if (filterScale?.let { it[i] <= FilterPop.HIDE_AT } == true) continue
                 val x = at(i, 0); val y = at(i, 1); val z = at(i, 2)
                 val w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15]
                 if (w <= 1e-3f) continue
                 if (band.gone(w)) continue
-                if (level(masked[i], SpaceLod.pixels(nodeRadius, focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
+                if (level(masked[i], SpaceLod.pixels(reachOf(i), focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
                 val reach = max(SpaceDepth.reachOfLook(style), SpaceStyle.of(style).extent)
-                if (!frustum.intersectsSphere(x, y, z, reach * nodeRadius)) continue
+                if (!frustum.intersectsSphere(x, y, z, reach * reachOf(i))) continue
                 offer(i, w, limit)
             }
         }
@@ -321,15 +301,13 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val o = j * STRIDE
         val chosenHere = node == marked
         val own = radiusOf(node)
-        val popped = own * (filterScale?.getOrNull(node) ?: 1f)
-        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) popped * chosenScale else popped
+        data[o] = c.x; data[o + 1] = c.y; data[o + 2] = c.z; data[o + 3] = if (chosenHere) own * chosenScale else own
         data[o + 4] = light.x; data[o + 5] = light.y; data[o + 6] = light.z; data[o + 7] = seed
         data[o + 8] = a.x; data[o + 9] = a.y; data[o + 10] = a.z; data[o + 11] = codeA
         data[o + 12] = b.x; data[o + 13] = b.y; data[o + 14] = b.z; data[o + 15] = SpaceLod.pixels(own, focal, depth)
-        val fade = fadeOf(node) * if (filterGhost?.getOrNull(node) == true) MapFilterView.GHOST_ALPHA else 1f
+        val fade = fadeOf(node)
         if (fade < 1f) fadedCount++
-        data[o + 16] = fade; data[o + 17] = if (chosenHere) 1f else 0f; data[o + 18] = looks?.getOrNull(node) ?: 0f
-        data[o + 19] = filterBloom?.getOrNull(node) ?: 0f
+        data[o + 16] = fade; data[o + 17] = if (chosenHere) 1f else 0f; data[o + 18] = looks?.getOrNull(node) ?: 0f; data[o + 19] = 0f
     }
 
     /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]. */
@@ -387,12 +365,8 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 if (slot[u] < 0 && slot[v] < 0) continue
                 // Show links: only the chosen body's own (focusLinks)
                 if (focus != null && !MapFocus.own(only, u, v)) continue
-                val key = Octree.pairKey(min(u, v), maxOf(u, v))
-                if (!seen.add(key)) continue
-                // the filter: a link whose end is hidden or a ghost draws back into its sending end (S05i)
-                val wanted = filterWanted
-                val kept = if (wanted == null) 1f else (filterLinks?.level(key, wanted[u] && wanted[v]) ?: if (wanted[u] && wanted[v]) 1f else 0f)
-                val grow = (growth?.shown(u, v) ?: 1f) * kept
+                if (!seen.add(Octree.pairKey(min(u, v), maxOf(u, v)))) continue
+                val grow = growth?.shown(u, v) ?: 1f
                 if (grow <= 0.001f) continue
                 addBeam(plan, u, v, grow)
             }

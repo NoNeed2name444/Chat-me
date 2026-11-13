@@ -50,8 +50,6 @@ import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
 import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.MapPanelTags
-import com.cramdown.sorta.map.MapFilter
-import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
@@ -216,8 +214,6 @@ class MapModeSpaceRenderTest {
         requireSun(dark)
         // S05h A3: the Universe at rest, Fly in and a moved black hole
         requireUniverse(dark)
-        // S05i A3: the filter in Space's Universe
-        requireFilter(GraphTheme.SPACE, dark)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -243,10 +239,6 @@ class MapModeSpaceRenderTest {
         requireNeuronLinks(dark, neuronsChosen)
         // S05g A6: a chosen cell with bridges, its lit bridges, and Show links on its idea that bridges out
         requireNeuronBridges(dark)
-        // S05i A3: the filter in Neurons, the cell states chosen, and the legend's Cell states row
-        requireFilter(GraphTheme.NEURONS, dark)
-        requireCells(dark)
-        shotLegendCells(dark)
         // S05g A3: Performance, chosen after Neurons, shows no first-run card; a tap on a point
         // chooses it, and the same marks, Show links, hold and double tap as the other looks
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
@@ -274,235 +266,6 @@ class MapModeSpaceRenderTest {
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK)) { "A tap on a point brought up no card for $performance" }
         requireChoice("performance", dark, performanceChosen, performanceHome, home = performanceHome)
-        // S05i A3: the filter in Performance, at once, no camera move, no empty line, the choice kept
-        requireFilter(GraphTheme.PERFORMANCE, dark)
-    }
-
-    /** A click as a person's, by the node's own action: the card may sit over the tools on a phone. */
-    private fun press(matcher: SemanticsMatcher) {
-        compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(matcher).performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
-    }
-
-    private fun chooseFilter(filter: MapFilter) {
-        press(hasTestTag(MapPanelTags.FILTER_TOOL))
-        press(hasTestTag(MapPanelTags.filterRow(filter)))
-    }
-
-    /** No card, the map at its first view; the pose it rests in. */
-    private fun atHome(name: String): List<Float> {
-        if (shown(MapPanelTags.PEEK)) {
-            compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
-            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
-        }
-        press(hasContentDescription("Recentre") and hasClickAction())
-        SystemClock.sleep(1_500)
-        compose.waitForIdle()
-        return checkNotNull(mapDrawn()).pose
-    }
-
-    /**
-     * S05i A3, read from MapDrawn, in [theme]: the Filter's menu open (a still,
-     * mapmode-filter-<theme>-<light|dark>-<device>.png); a body chosen, then Pages, of which the fixture
-     * has none, so nothing shows, no link, "Nothing here for this filter." over Space and Neurons, and
-     * the card let go (kept in Performance, as iOS); Garden alone, its bodies only, the camera flying
-     * to it in the Universe and Neurons and still in Performance; Linked ideas hiding the unlinked;
-     * Everything bringing all back, and the first view where it flew. In Neurons, first with every
-     * cell closed: Garden hides each closed cell, as iOS's (a closed cell holds no idea,
-     * GraphNeurons.swift:430), yet no empty line, which counts the book's ideas; then Garden opened
-     * for the rest, and still open after Everything, which only frames the map again.
-     */
-    private fun requireFilter(theme: GraphTheme, dark: Boolean) {
-        val look = theme.rawValue
-        val name = "mapmode-filter-$look-${if (dark) "dark" else "light"}-$device"
-        val perf = theme == GraphTheme.PERFORMANCE
-        val neurons = theme == GraphTheme.NEURONS
-        var home = atHome(name)
-        try { compose.waitUntil(30_000) { framed(mapDrawn()) || (perf && (mapDrawn()?.frames ?: 0) >= MapDrawn.ENOUGH) } } catch (_: ComposeTimeoutException) {}
-        if (neurons) {
-            val closed = checkNotNull(mapDrawn())
-            chooseFilter(MapFilter.Folder(garden.id))
-            try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.hidden == closed.shown } == true } } catch (_: ComposeTimeoutException) {}
-            val closedGarden = checkNotNull(mapDrawn())
-            check(closedGarden.filtered && closedGarden.shown == 0 && closedGarden.hidden == closed.shown) {
-                "Garden, every cell closed, did not hide each closed cell as iOS's for $name: $closedGarden (before $closed)"
-            }
-            check(!shown(MapPanelTags.FILTER_EMPTY)) { "The empty line counted the drawn ideas, not the book's, for $name" }
-            chooseFilter(MapFilter.All)
-            try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hidden == 0 } == true } } catch (_: ComposeTimeoutException) {}
-            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
-            check(same(home, checkNotNull(mapDrawn()).pose)) { "Everything, cells closed, did not bring back the first view for $name: ${mapDrawn()?.pose}, home $home" }
-            openGarden(name)
-            home = checkNotNull(mapDrawn()).pose
-        }
-        val all = checkNotNull(mapDrawn())
-        check(!all.filtered && all.hidden == 0 && all.shown > 0) { "The map is filtered before any filter for $name: $all" }
-        // a body chosen, as a person would
-        val (_, at) = spot(name)
-        compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(at) }
-        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
-        check(shown(MapPanelTags.PEEK)) { "A tap on the spot brought up no card for $name" }
-        // the menu open, Everything checked
-        press(hasTestTag(MapPanelTags.FILTER_TOOL))
-        compose.waitUntil(10_000) { shown(MapPanelTags.filterRow(MapFilter.Pages)) }
-        shot(name)
-        press(hasTestTag(MapPanelTags.filterRow(MapFilter.Pages)))
-        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown == 0 } == true } } catch (_: ComposeTimeoutException) {}
-        val pages = checkNotNull(mapDrawn())
-        check(pages.filtered && pages.shown == 0 && pages.hidden == all.shown && pages.filterLinks == 0) {
-            "Pages, of which there are none, left something on the map for $name: $pages (before $all)"
-        }
-        check(shown(MapPanelTags.FILTER_EMPTY) == !perf) { "The empty line is ${if (perf) "over" else "missing from"} $name" }
-        if (perf) check(shown(MapPanelTags.PEEK)) { "Performance let go of its choice under a filter for $name" }
-        else {
-            try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
-            check(!shown(MapPanelTags.PEEK)) { "The chosen body, filtered away, kept its card for $name" }
-        }
-        // one folder: Garden's bodies only, the camera flying to it where iOS's does
-        chooseFilter(MapFilter.Folder(garden.id))
-        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 } == true } } catch (_: ComposeTimeoutException) {}
-        val others = notes.count { it.folderId != garden.id }
-        val inGarden = checkNotNull(mapDrawn())
-        check(inGarden.filtered && inGarden.shown > 0 && inGarden.hidden > 0 && !shown(MapPanelTags.FILTER_EMPTY)) { "Garden alone for $name: $inGarden" }
-        if (perf) check(inGarden.shown == notes.size - others && inGarden.hidden == others) { "Performance's Garden is not its three ideas for $name: $inGarden" }
-        if (theme == GraphTheme.SPACE) check(inGarden.hidden >= others) { "Space's Garden keeps another folder's idea for $name: $inGarden" }
-        if (perf) {
-            SystemClock.sleep(1_500)
-            check(same(home, checkNotNull(mapDrawn()).pose)) { "Performance's camera moved for a folder filter for $name: ${mapDrawn()?.pose}" }
-        } else {
-            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { !same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
-            check(!same(home, checkNotNull(mapDrawn()).pose)) { "The camera did not fly to Garden for $name" }
-        }
-        // Linked ideas: the unlinked go (the closed Neurons draw no idea, so only Space and Performance can show it)
-        chooseFilter(MapFilter.Linked)
-        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 && it.shown != inGarden.shown } == true } } catch (_: ComposeTimeoutException) {}
-        val linked = checkNotNull(mapDrawn())
-        val unlinked = notes.count { n -> n.links.isEmpty() && notes.none { n.id in it.links } && !notes.any { it.body.contains("[[" + n.title + "]]") } }
-        check(linked.filtered && linked.shown > 0) { "Linked ideas showed nothing for $name: $linked" }
-        if (theme != GraphTheme.NEURONS) check(linked.hidden >= unlinked && unlinked > 0) { "Linked ideas kept an unlinked idea for $name: $linked, $unlinked unlinked" }
-        // Everything: all back, and the first view where the folder filter flew
-        chooseFilter(MapFilter.All)
-        try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hidden == 0 } == true } } catch (_: ComposeTimeoutException) {}
-        val back = checkNotNull(mapDrawn())
-        check(!back.filtered && back.hidden == 0 && back.shown == all.shown && back.filterLinks == all.filterLinks) { "Everything did not bring all back for $name: $back (before $all)" }
-        if (neurons) check(back.build == all.build && gardenOpen()) { "Everything after a filter closed Garden's cell for $name: $back (before $all)" }
-        if (!perf) {
-            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
-            check(same(home, checkNotNull(mapDrawn()).pose)) { "Everything after a filter did not bring back the first view for $name: ${mapDrawn()?.pose}, home $home" }
-        }
-        if (shown(MapPanelTags.PEEK)) atHome(name)
-    }
-
-    /** Whether the Neurons' Garden cell is open: its first idea is a body on the map. */
-    private fun gardenOpen(): Boolean {
-        val first = notes.first { it.folderId == garden.id }
-        return mapNode()?.config?.getOrNull(MapTapKey)?.ids?.any { it.equals(first.id, ignoreCase = true) } == true
-    }
-
-    /** Neurons, every cell closed: Garden chosen and flown into, its ideas drawn, then its card put away. */
-    private fun openGarden(name: String) {
-        val res = instrumentation.targetContext.resources
-        val ideas = notes.count { it.folderId == garden.id }
-        val closed = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
-        val cell = closed.ids.indexOfFirst { it.equals(garden.id, ignoreCase = true) }
-        check(cell >= 0) { "No Garden cell for $name" }
-        compose.runOnIdle { closed.tap(cell) }
-        compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) }
-        compose.onNode(hasText(res.getString(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
-        compose.waitUntil(30_000) { gardenOpen() }
-        try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.states?.sum() == ideas } } catch (_: ComposeTimeoutException) {}
-        if (shown(MapPanelTags.PEEK)) {
-            compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
-            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
-        }
-        compose.waitForIdle()
-    }
-
-    private fun openLook(theme: GraphTheme) =
-        press(hasContentDescription("Look") and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, theme.title))
-
-    /** The Neurons' ideas drawn, by state, once a new scene has drawn them all. */
-    private fun statesAfter(build: Int, want: (List<Int>) -> Boolean): List<Int> {
-        try { compose.waitUntil(60_000) { mapDrawn()?.let { it.build != build && framed(it) && want(it.states) } == true } } catch (_: ComposeTimeoutException) {}
-        return checkNotNull(mapDrawn()).states
-    }
-
-    /**
-     * S05i A3 in Neurons: Garden opened, its three ideas drawn resting; Look › Cells › Firing draws
-     * each firing; Cell by cell gives Garden Engulfing, which wins inside it (a still,
-     * mapmode-cells-neurons-<light|dark>-<device>.png); Same as all and Resting, none firing. The
-     * choices are left natural.
-     */
-    private fun requireCells(dark: Boolean) {
-        val name = "mapmode-cells-neurons-${if (dark) "dark" else "light"}-$device"
-        val res = instrumentation.targetContext.resources
-        atHome(name)
-        val ideas = notes.count { it.folderId == garden.id }
-        openGarden(name)
-        val natural = checkNotNull(mapDrawn())
-        check(natural.states.size == 6 && natural.states[NeuronState.RESTING.code] == ideas && natural.states.sum() == ideas) {
-            "Garden's $ideas ideas do not rest, left alone, for $name: ${natural.states}"
-        }
-        // Firing for every idea
-        openLook(GraphTheme.NEURONS)
-        press(hasTestTag("lookCell-" + NeuronState.FIRING.rawValue))
-        val firing = statesAfter(natural.build) { it.getOrNull(NeuronState.FIRING.code) == ideas }
-        check(firing.getOrNull(NeuronState.FIRING.code) == ideas && firing.sum() == ideas) { "Look › Cells › Firing does not draw every idea firing for $name: $firing" }
-        // Cell by cell: Garden Engulfing, which wins inside it
-        val firingBuild = checkNotNull(mapDrawn()).build
-        openLook(GraphTheme.NEURONS)
-        press(hasTestTag(MapPanelTags.LOOK_CELL_BY_CELL))
-        compose.waitUntil(10_000) { shown(MapPanelTags.CELL_BY_CELL) }
-        SystemClock.sleep(800) // the sheet comes to rest
-        press(hasTestTag("cellByCell-" + garden.id))
-        press(hasText(NeuronState.ENGULFING.title) and hasClickAction())
-        ui.pressBack()
-        compose.waitUntil(10_000) { !shown(MapPanelTags.CELL_BY_CELL) }
-        val engulfing = statesAfter(firingBuild) { it.getOrNull(NeuronState.ENGULFING.code) == ideas }
-        shot(name)
-        check(engulfing.getOrNull(NeuronState.ENGULFING.code) == ideas && engulfing.sum() == ideas) { "Cell by cell's Engulfing does not win in Garden for $name: $engulfing" }
-        // Same as all, then Resting: none firing
-        val engulfBuild = checkNotNull(mapDrawn()).build
-        openLook(GraphTheme.NEURONS)
-        press(hasTestTag(MapPanelTags.LOOK_CELL_BY_CELL))
-        compose.waitUntil(10_000) { shown(MapPanelTags.CELL_BY_CELL) }
-        SystemClock.sleep(800)
-        press(hasTestTag("cellByCell-" + garden.id))
-        press(hasText(res.getString(R.string.map_same_as_all)) and hasClickAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
-            and SemanticsMatcher("not the row") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("cellByCell-") != true })
-        ui.pressBack()
-        compose.waitUntil(10_000) { !shown(MapPanelTags.CELL_BY_CELL) }
-        val sameAsAll = statesAfter(engulfBuild) { it.getOrNull(NeuronState.FIRING.code) == ideas }
-        check(sameAsAll.getOrNull(NeuronState.FIRING.code) == ideas && sameAsAll.getOrNull(NeuronState.ENGULFING.code) == 0 && sameAsAll.sum() == ideas) {
-            "Same as all did not give Garden back to Cells' Firing for $name: $sameAsAll"
-        }
-        val sameBuild = checkNotNull(mapDrawn()).build
-        openLook(GraphTheme.NEURONS)
-        press(hasTestTag("lookCell-" + NeuronState.RESTING.rawValue))
-        val resting = statesAfter(sameBuild) { it.getOrNull(NeuronState.RESTING.code) == ideas }
-        check(resting.getOrNull(NeuronState.RESTING.code) == ideas && resting.getOrNull(NeuronState.FIRING.code) == 0) { "Resting left an idea firing for $name: $resting" }
-        atHome(name)
-    }
-
-    /** S05i A6: Neurons' legend at its Cell states row (a still, mapmode-legend-cells-neurons-<light|dark>-<device>.png). */
-    private fun shotLegendCells(dark: Boolean) {
-        val theme = GraphTheme.NEURONS
-        openLook(theme)
-        press(hasText(theme.legendTitle) and hasClickAction())
-        val sheet = MapPanelTags.legend(theme)
-        compose.waitUntil(10_000) { shown(sheet) }
-        SystemClock.sleep(1_000)
-        compose.onNode(hasTestTag(sheet)).performTouchInput { swipeUp() }
-        SystemClock.sleep(800)
-        compose.onNode(hasText("Cell states")).performScrollTo()
-        compose.waitForIdle()
-        SystemClock.sleep(800)
-        shot("mapmode-legend-cells-neurons-${if (dark) "dark" else "light"}-$device")
-        ui.pressBack()
-        try { compose.waitUntil(3_000) { !shown(sheet) } } catch (_: ComposeTimeoutException) { ui.pressBack() }
-        compose.waitUntil(10_000) { !shown(sheet) }
-        compose.waitForIdle()
     }
 
     /**
@@ -1013,7 +776,9 @@ class MapModeSpaceRenderTest {
         check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
         // the black hole moved, a planet inside it chosen: found by their names, as Neurons' cell and its idea are
         val drag = "mapmode-drag-star-space-$mode-$device"
-        compose.runOnIdle { tap.tap(g) }
+        // still chosen after Fly in and Recentre: a second tap on the chosen body would open its folder,
+        // which on a phone takes the map's place (MapSelection, as iOS)
+        if (mapDrawn()?.chosen != g) compose.runOnIdle { tap.tap(g) }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
         SystemClock.sleep(1_000) // the ease's 0.45 s, done
         val holeAt = checkNotNull(named(g)) { "The Garden black hole ($g) shows no name to find it by for $drag: ${mapDrawn()}" }

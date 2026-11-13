@@ -76,7 +76,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
 import com.cramdown.sorta.map.LabelBackdrop
-import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.LabelEstimate
 import com.cramdown.sorta.map.LabelGlow
 import com.cramdown.sorta.map.LabelLook
@@ -357,11 +356,6 @@ data class MapFlyTo(val id: String, val serial: Int)
     ease: MapEase? = null,
     /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
     flyTo: MapFlyTo? = null,
-    /**
-     * The filter (S05i), null for everything: the bodies and links it shows, by the scene's index. A
-     * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
-     */
-    filter: MapFilterView? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -421,6 +415,12 @@ data class MapFlyTo(val id: String, val serial: Int)
     }
     val gles3 = remember(context) { supportsGles3(context) }
     val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
+    // S05h A7's measurement copy: a measure test can start this loop again once it has stopped
+    DisposableEffect(loop) {
+        val kick: () -> Unit = { mainHandler.post { loop.moved() } }
+        FrameBudgetLog.kick = kick
+        onDispose { if (FrameBudgetLog.kick === kick) FrameBudgetLog.kick = null }
+    }
     // Lines: the renderer reads it each frame, so a change only needs a frame drawn
     LaunchedEffect(renderer, straight) {
         if (renderer.straight != straight) { renderer.straight = straight; loop.moved() }
@@ -444,14 +444,6 @@ data class MapFlyTo(val id: String, val serial: Int)
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
         if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
-    }
-    // the filter reaches the renderer as it changes; the next frame applies it (S05i)
-    // a map built again under a filter starts filtered, with no pop (its first one is set at once)
-    val filterSet = remember(renderer) { booleanArrayOf(false) }
-    LaunchedEffect(renderer, filter) {
-        val next = if (!filterSet[0]) filter?.at(instantNow = true) else filter
-        filterSet[0] = true
-        if (renderer.filter !== next) { renderer.filter = next; loop.moved() }
     }
     // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
@@ -540,8 +532,8 @@ data class MapFlyTo(val id: String, val serial: Int)
         else MapNameShow.Board { i -> plan.bodies.getOrNull(i)?.galaxy?.let { scene.galaxyTones[it] } }
     }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
-    // a body pressed or hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752)
-    LaunchedEffect(renderer, pressedName) { renderer.press(pressedName ?: -1) }
+    // a body hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752); a body
+    // pressed does too, handed to the renderer by the touch itself (the gestures below), as iOS's is
     LaunchedEffect(renderer, hoveredName) { renderer.hover(hoveredName ?: -1) }
     // the held slot: the body whose options are open, else the one a finger holds to move (S05g2), which
     // the page never learns of (GraphMotion's wantLabel(grabbed), :2183); the options take it back
@@ -707,12 +699,14 @@ data class MapFlyTo(val id: String, val serial: Int)
                     grabbedName = null
                     loop.moved()
                 }
-                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
+                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed.
+                // The renderer takes the press at once, from the touch, as iOS's at touch-down
+                // (Graph3DView.swift:2922-2931): its orbit clock eases from this frame, not a recomposition later
                 val press = MapNameShow.Press(slop)
-                if (pills) {
-                    press.down(hit)
-                    pressedName = press.pressed
-                }
+                press.down(hit)
+                var pressedNow = press.pressed ?: -1
+                renderer.press(pressedNow)
+                if (pills) pressedName = press.pressed
                 try {
                     var now = down.uptimeMillis
                     while (true) {
@@ -791,6 +785,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                                 synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
                             }
                         }
+                        if ((press.pressed ?: -1) != pressedNow) { pressedNow = press.pressed ?: -1; renderer.press(pressedNow) }
                         if (pills && pressedName != press.pressed) pressedName = press.pressed
                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
@@ -798,6 +793,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                     // lifted, or the gesture cancelled: the press is over either way, and a body held is let
                     // go, with the finger's speed if it moved (release, GraphMotion.swift:1269-1283)
                     press.up()
+                    renderer.press(-1)
                     if (pressedName != null) pressedName = null
                     letGo(still = !dragging)
                 }
@@ -1054,7 +1050,10 @@ private class FrameLoop(
         renderer.vsyncNanos = frameTimeNanos
         view?.requestRender()
         if (renderer.animating || autoOrbit) active(frameTimeNanos)
-        if (continuous || !FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)) {
+        val settled = FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)
+        // S05h A7's measurement copy: a still map keeps drawing while a measure test asks, and says so
+        if (FrameBudgetLog.keepDrawing && settled && !continuous) FrameBudgetLog.forced++
+        if (continuous || FrameBudgetLog.keepDrawing || !settled) {
             Choreographer.getInstance().postFrameCallback(this)
         } else running = false
     }

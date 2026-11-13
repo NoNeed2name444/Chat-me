@@ -24,8 +24,7 @@ class MainActivity : ComponentActivity() {
         // (MapPreview), as iOS's -graphPreview; no screen a user reaches opens it
         val preview: String? = intent?.getStringExtra(MAP_PREVIEW)
         if (preview != null) {
-            val cells: String? = intent?.getStringExtra(MAP_PREVIEW_CELLS)
-            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview, cells) } }
+            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview) } }
             return
         }
         // the store, opened at launch: ideas.json in the files directory, or the tests' own
@@ -37,8 +36,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** The launch extra that shows [MapPreview]: "space", "neurons", "performance" or "board". */
         const val MAP_PREVIEW = "sortaMapPreview"
-        /** The Neurons' cell state for every idea in [MapPreview], as iOS's -graphPreviewCells (S05i). */
-        const val MAP_PREVIEW_CELLS = "sortaMapPreviewCells"
         /**
          * The tests' launch extras: a directory for the store (a new one gives a fresh store; the
          * same one again reopens it), and a file handed to the import as the picker's result is.

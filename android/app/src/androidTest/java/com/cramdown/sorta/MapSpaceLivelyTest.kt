@@ -26,7 +26,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.ideas.GraphStyleChoice
 import com.cramdown.sorta.ideas.GraphTheme
+import com.cramdown.sorta.ideas.rawValue
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
@@ -38,6 +40,7 @@ import com.cramdown.sorta.ui.ideas.IdeasTags
 import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.ideas.universeInput
+import com.cramdown.sorta.ui.map.FrameBudgetLog
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
 import com.cramdown.sorta.ui.map.MapTapKey
@@ -62,10 +65,16 @@ import java.util.UUID
  * thread) inside waitUntil, which moves Compose's frames on, and taps on the map go through the map's
  * hit test (MapTapKey) or UiAutomation. Over 3 s the orbit clock rises above 0 (MapDrawn.orbitSeconds)
  * and a chosen planet's place on the screen changes; a still, mapmode-lively-universe-<light|dark>-<device>.png.
- * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s:
- * judged once 0.5 s has passed and the orbit clock has stepped three times since the finger came down
- * (MapDrawn.orbitSteps, never capped; each step at most 0.25 s). The frames drawn over the 3 s
- * (the clock's steps) are logged, a first look at A7's frame budget.
+ * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s of
+ * the finger, on the device's uptime: its record reaches the test through Compose's state, on the
+ * test's frame clock, late, so the test times nothing by when the record arrives. The renderer notes
+ * the uptime of the frame that first took the press (MapDrawn.pressTakenAtMs) and of the frame where
+ * the rate first fell under 0.05 (MapDrawn.pressSlowedAtMs); with the uptime noted just before the
+ * finger came down, the slow-down must come 500 ms after it at most. The hold is not polled, since a
+ * semantics read takes the main thread that also paces the map's frames: the test thread sleeps
+ * HOLD_MS, then reads the record, with 10 s only a guard against a hang. The frames drawn over the
+ * 3 s (the clock's steps) are logged, a first look at A7's
+ * frame budget.
  */
 @RunWith(AndroidJUnit4::class)
 class MapSpaceLivelyTest {
@@ -83,6 +92,8 @@ class MapSpaceLivelyTest {
     }
 
     @After fun back() {
+        FrameBudgetLog.keepDrawing = false
+        FrameBudgetLog.phase = ""
         ui.executeShellCommand("settings put global animator_duration_scale 0")
         scenario?.close()
         activity = null
@@ -91,6 +102,94 @@ class MapSpaceLivelyTest {
 
     @Test fun orbitingByDay() = orbit(dark = false)
     @Test fun orbitingByNight() = orbit(dark = true)
+
+    // S05h A7, the measurement copy only (branch s05h-measure, never landed): FrameBudget's readout,
+    // logged every 250 ms under logcat tag FrameBudgetLog.TAG, and the medians of 3 s per phase, logged
+    // as "median ..." lines and written to /sdcard/Download/sorta-renders/framebudget-<light|dark>-<device>.txt.
+    // Animations on throughout. The phases: single-style Space at rest (Look › Suns, the notes still),
+    // then the Universe at rest with its orbits running. In both the frame loop is kept drawing every
+    // vsync (FrameBudgetLog.keepDrawing), so a still map has readouts; `forced` counts the frames that
+    // drew only for that. It checks that each phase ran and had readouts; the numbers are read, not judged.
+    @Test fun measureByDay() = measure(dark = false)
+    @Test fun measureByNight() = measure(dark = true)
+
+    private fun measure(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val lines = ArrayList<String>()
+        FrameBudgetLog.keepDrawing = false
+        ui.executeShellCommand("cmd uimode night ${if (dark) "yes" else "no"}")
+        SystemClock.sleep(1_000) // the system takes the new mode
+        // Look › Suns, chosen before the map is built
+        instrumentation.targetContext.getSharedPreferences(IdeasSettings.FILE, android.content.Context.MODE_PRIVATE).edit()
+            .putString(GraphStyleChoice.KEY, SpaceStyle.SUN.rawValue).commit()
+        val context = instrumentation.targetContext
+        val dir = File(context.cacheDir, "measure-" + UUID.randomUUID()).also { it.mkdirs() }
+        IdeaStore(dir).replaceIdeas(notes, folders)
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
+        checkNotNull(scenario).onActivity { activity = it }
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(IdeasTags.TITLE)).fetchSemanticsNodes().isNotEmpty() }
+        // animations on, then the activity made again, so every map it builds (the tablet's Suns
+        // from the start) is a lively scene, as the Universe after it
+        ui.executeShellCommand("settings put global animator_duration_scale 1")
+        try { compose.waitUntil(5_000) { ValueAnimator.areAnimatorsEnabled() } } catch (_: ComposeTimeoutException) {}
+        check(ValueAnimator.areAnimatorsEnabled()) { "Animations stayed off 5 s after the animator duration scale was set to 1 ($mode)" }
+        checkNotNull(scenario).recreate()
+        checkNotNull(scenario).onActivity { activity = it }
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(IdeasTags.TITLE)).fetchSemanticsNodes().isNotEmpty() }
+        if (compose.onAllNodes(hasTestTag(SortaMode.MAP.identifier)).fetchSemanticsNodes().isNotEmpty()) {
+            tapOnScreen(compose.onNode(hasTestTag(SortaMode.MAP.identifier)).fetchSemanticsNode(), "Map mode's switch")
+        }
+        try { compose.waitUntil(90_000) { drawn()?.let { framed(it) } == true } } catch (_: ComposeTimeoutException) {}
+        val suns = drawn()
+        check(suns != null && framed(suns) && suns.roles.isEmpty()) { "Single-style Space (Suns) was not drawn within 90 s ($mode): $suns" }
+        settle(2_000) // links grown in, springs done: at rest
+        FrameBudgetLog.keepDrawing = true
+        FrameBudgetLog.kick?.invoke()
+        phase("suns-rest-$mode-$device", lines)
+        // the Universe, its orbits running
+        chooseStyle("Universe", idle = false)
+        try { compose.waitUntil(90_000) { drawn()?.let { framed(it) && it.roles.isNotEmpty() && it.orbitRate >= 0.5f } == true } } catch (_: ComposeTimeoutException) {}
+        val universe = drawn()
+        check(universe != null && framed(universe) && universe.roles.isNotEmpty() && universe.orbitRate >= 0.5f) {
+            "The Universe was not drawn orbiting within 90 s ($mode): $universe"
+        }
+        settle(2_000)
+        val before = checkNotNull(drawn())
+        phase("universe-orbiting-$mode-$device", lines)
+        val after = checkNotNull(drawn())
+        lines += "orbit universe-orbiting-$mode-$device steps=${after.orbitSteps - before.orbitSteps} " +
+            "clock=${before.orbitSeconds}s->${after.orbitSeconds}s rate=${after.orbitRate}"
+        android.util.Log.i(FrameBudgetLog.TAG, lines.last())
+        FrameBudgetLog.keepDrawing = false
+        ui.executeShellCommand("mkdir -p $DIRECTORY")
+        val out = File(DIRECTORY).also { it.mkdirs() }
+        runCatching { File(out, "framebudget-$mode-$device.txt").writeText(lines.joinToString("\n", postfix = "\n")) }
+            .onFailure { android.util.Log.w(FrameBudgetLog.TAG, "the medians file was not written: ${it.message}") }
+        check(lines.count { it.startsWith("median ") && !it.contains(" n=0 ") } == 2) { "Not every phase had readouts: ${lines.joinToString(" | ")}" }
+    }
+
+    /** 3 s of readouts as [name], then their medians, logged and kept in [lines]. Compose's frames move on meanwhile. */
+    private fun phase(name: String, lines: MutableList<String>) {
+        val forced = FrameBudgetLog.forced
+        FrameBudgetLog.start(name)
+        settle(3_000)
+        val s = FrameBudgetLog.of(name)
+        FrameBudgetLog.phase = ""
+        val line = String.format(java.util.Locale.ROOT,
+            "median phase=%s n=%d frame=%.1f work=%.1f fps=%.1f detail=%.2f drawn=%d chunks=%d summaries=%d bodies=%d forced=%d",
+            name, s.size, median(s.map { it.frameMs }), median(s.map { it.workMs }), median(s.map { it.fps }),
+            median(s.map { it.detail.toDouble() }), median(s.map { it.drawn.toDouble() }).toInt(),
+            median(s.map { it.chunks.toDouble() }).toInt(), median(s.map { it.summaries.toDouble() }).toInt(),
+            median(s.map { it.bodies.toDouble() }).toInt(), FrameBudgetLog.forced - forced)
+        android.util.Log.i(FrameBudgetLog.TAG, line)
+        lines += line
+    }
+
+    private fun median(v: List<Double>): Double {
+        if (v.isEmpty()) return Double.NaN
+        val s = v.sorted()
+        return if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2
+    }
 
     private fun orbit(dark: Boolean) {
         val name = "mapmode-lively-universe-${if (dark) "dark" else "light"}-$device"
@@ -154,24 +253,37 @@ class MapSpaceLivelyTest {
         val at = checkNotNull(named(planet)) { "The chosen planet $planet shows no name to put a finger on for $name" }
         val origin = checkNotNull(mapNode()).positionOnScreen
         val x = origin.x + at.x; val y = origin.y + at.y
-        val s0 = checkNotNull(drawn()).orbitSteps
+        // the uptime read before the down is injected: the earliest bound at or before the real down, so
+        // the touch's way to the slow-down (pressSlowedAtMs − down) can only be counted long, never short
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, down, x, y)
         try {
             // iOS's rule (GraphMotion.swift:1750-1757, MapDrag.advanceClock): while a body is pressed the rate
-            // eases to 0 with tau 0.1 s, each frame stepping the clock by its interval (at most 0.25 s,
-            // GlMapRenderer's dt), so after 0.3 s of steps it is under 0.05. Judged once 0.5 s has passed and
-            // the clock has stepped at least three times since the finger came down (MapDrawn.orbitSteps, never
-            // capped): on a quick device the 0.5 s decides; on a slow one, whose long frames each step the clock
-            // up to 0.25 s, at least two steps with the press taken even where it reaches the renderer a frame
-            // late. Not under 0.05 by then fails. 10 s at most, against a hang
-            fun judged(d: MapDrawn) = SystemClock.uptimeMillis() - down >= 500 && d.orbitSteps - s0 >= 3
-            try { compose.waitUntil(10_000) { drawn()?.let { it.orbitRate < 0.05f || judged(it) } == true } } catch (_: ComposeTimeoutException) {}
-            val held = checkNotNull(drawn())
+            // eases to 0 with tau 0.1 s, so after 0.3 s of steps it is under 0.05. The map takes the press from
+            // the touch itself (Map3DView's gestures) and notes the uptime of the frame where the rate first
+            // fell under 0.05 (MapDrawn.pressSlowedAtMs). The hold is not polled: reading the semantics takes
+            // the main thread, which also paces the map's frames, so polling would slow the frames it judges.
+            // The test thread only sleeps, a bounded HOLD_MS, then reads the record
+            SystemClock.sleep(HOLD_MS)
+            // the read: Compose's test clock brings the latest record into the semantics; 10 s at most
+            // against a hang. The times it judges were stamped by the renderer, so a late read changes nothing
+            try { compose.waitUntil(10_000) { drawn()?.let { it.pressSlowedAtMs >= 0 } == true } } catch (_: ComposeTimeoutException) {}
+            val held = checkNotNull(drawn()) { "No map record to read after the hold for $name" }
             val took = SystemClock.uptimeMillis() - down
+            val times = "down at uptime $down ms, press taken at ${held.pressTakenAtMs} ms, rate under 0.05 at " +
+                "${held.pressSlowedAtMs} ms (−1: not taken, or not slowed), frames ${held.frameMs} ms apart, read $took ms after the down"
+            check(held.pressTakenAtMs >= down && held.pressSlowedAtMs >= held.pressTakenAtMs) {
+                "A finger held on planet $planet at ($x, $y) was not taken as one press that slowed the orbits " +
+                    "and is still held: $times for $name: $held"
+            }
             check(held.orbitRate < 0.05f) {
-                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate} after $took ms and " +
-                    "${held.orbitSteps - s0} steps of the orbit clock, not below 0.05 within 0.5 s for $name: $held"
+                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate}, not below 0.05: " +
+                    "$times for $name: $held"
+            }
+            // within 0.5 s of the finger, on the device's uptime: the touch's dispatch, the press, the ease
+            check(held.pressSlowedAtMs - down <= 500) {
+                "A finger held on planet $planet at ($x, $y) slowed the orbits under 0.05 only " +
+                    "${held.pressSlowedAtMs - down} ms after the down, not within 500 ms: $times for $name: $held"
             }
         } finally {
             touch(MotionEvent.ACTION_UP, down, x, y)
@@ -259,6 +371,8 @@ class MapSpaceLivelyTest {
 
     private companion object {
         const val DIRECTORY = "/sdcard/Download/sorta-renders"
+        /** How long A3's finger is held before the record is read, the test thread asleep: the 0.5 s bar and room. */
+        const val HOLD_MS = 1_500L
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 

@@ -102,20 +102,6 @@ object MapPanelTags {
     /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
     const val TOP_STRIP = "mapTopStrip"
 
-    /** The Filter tool, its empty line and the Look menu's Cell by cell row and sheet (S05i). */
-    const val FILTER_TOOL = "mapFilterTool"
-    const val FILTER_EMPTY = "mapFilterEmpty"
-    const val LOOK_CELL_BY_CELL = "lookCellByCell"
-    const val CELL_BY_CELL = "cellByCellSheet"
-    /** A row of the Filter menu. */
-    fun filterRow(filter: com.cramdown.sorta.map.MapFilter): String = when (filter) {
-        com.cramdown.sorta.map.MapFilter.All -> "filterAll"
-        com.cramdown.sorta.map.MapFilter.Pages -> "filterPages"
-        com.cramdown.sorta.map.MapFilter.Ideas -> "filterIdeas"
-        com.cramdown.sorta.map.MapFilter.Linked -> "filterLinked"
-        is com.cramdown.sorta.map.MapFilter.Folder -> "filterFolder-" + filter.id
-    }
-
     /** The legend's touch help, its last line (S05g). */
     const val LEGEND_TOUCH = "legendTouch"
 
