@@ -303,6 +303,25 @@ class MapDrawnTest {
         assertEquals("the rest of the record left alone", d.copy(diedTotal = 1, dyingLinksTotal = 3), over)
     }
 
+    @Test fun theDyingBodyDrawnIsHandedOnWithItsPlaceOnTheScreen() {
+        // S05h2 repair 6: the dying bodies drawn whole, and the biggest's centre and size, rounded
+        val d = MapDrawn()
+        assertEquals(0, d.dyingDrawn); assertEquals(emptyList<Float>(), d.dyingAt)
+        val seen = d.dying(1, 3, 0.5f, 1, 3, 1, listOf(812.4f, 877.6f, 40.26f))
+        assertEquals(1, seen.dyingDrawn)
+        assertEquals(listOf(812f, 878f, 40.3f), seen.dyingAt)
+        // moved by less than the rounding: the same record
+        assertSame(seen, seen.dying(1, 3, 0.5f, 1, 3, 1, listOf(812.3f, 877.7f, 40.31f)))
+        // moved: handed on
+        assertEquals(listOf(820f, 878f, 40.3f), seen.dying(1, 3, 0.5f, 1, 3, 1, listOf(820f, 878f, 40.3f)).dyingAt)
+        // none drawn (or too short a place): empty
+        val none = seen.dying(1, 3, 0.5f, 1, 3, 0, emptyList())
+        assertEquals(0, none.dyingDrawn); assertEquals(emptyList<Float>(), none.dyingAt)
+        assertEquals(emptyList<Float>(), d.dying(1, 3, 0.5f, 1, 3, 1, listOf(1f, 2f)).dyingAt)
+        // the callers that hand on no drawing leave both at none
+        assertEquals(0, d.dying(1, 3, 0.5f, 1, 3).dyingDrawn)
+    }
+
     @Test fun sparksRoundUpToTensAndNoneStaysNone() {
         val d = MapDrawn()
         assertSame(d, d.sparking(0, 0L))

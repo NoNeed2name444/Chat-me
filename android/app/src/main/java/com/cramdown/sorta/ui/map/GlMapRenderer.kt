@@ -226,6 +226,13 @@ data class MapDrawn(
     val dyingReach: Float = 0f,
     val diedTotal: Int = 0,
     val dyingLinksTotal: Int = 0,
+    /**
+     * The dying bodies drawn whole this frame (S05h2 repair 6), and the biggest of them as drawn: its
+     * centre (x, y, whole pixels of the view) and how many pixels across it is now, to a tenth; empty
+     * when none is drawn. So a still of a death can show the dying body is in the window. No words.
+     */
+    val dyingDrawn: Int = 0,
+    val dyingAt: List<Float> = emptyList(),
     /** Sparks (S05h2): those alive this frame, rounded up to tens (0 stays 0), and those thrown in the map's life. No words. */
     val sparks: Int = 0,
     val sparksTotal: Long = 0L,
@@ -259,12 +266,19 @@ data class MapDrawn(
             pressArrivedAtMs = arrivedAt, pressPrevFrameAtMs = prevFrameAt)
     }
 
-    /** This record with the deaths as the latest frame drew them; the same record when nothing changed. */
-    fun dying(dyingNow: Int, linksNow: Int, reachNow: Float, diedTotalNow: Int, linksTotalNow: Int): MapDrawn {
+    /**
+     * This record with the deaths as the latest frame drew them, [drawnNow] dying bodies drawn whole and
+     * the biggest at [atNow] (x, y, pixels across; rounded here); the same record when nothing changed.
+     */
+    fun dying(dyingNow: Int, linksNow: Int, reachNow: Float, diedTotalNow: Int, linksTotalNow: Int,
+              drawnNow: Int = 0, atNow: List<Float> = emptyList()): MapDrawn {
         val reach = Math.round(reachNow * 100) / 100f
+        val at = if (atNow.size < 3) emptyList()
+            else listOf(Math.round(atNow[0]).toFloat(), Math.round(atNow[1]).toFloat(), Math.round(atNow[2] * 10) / 10f)
         return if (dying == dyingNow && dyingLinks == linksNow && dyingReach == reach && diedTotal == diedTotalNow &&
-            dyingLinksTotal == linksTotalNow) this
-        else copy(dying = dyingNow, dyingLinks = linksNow, dyingReach = reach, diedTotal = diedTotalNow, dyingLinksTotal = linksTotalNow)
+            dyingLinksTotal == linksTotalNow && dyingDrawn == drawnNow && dyingAt == at) this
+        else copy(dying = dyingNow, dyingLinks = linksNow, dyingReach = reach, diedTotal = diedTotalNow, dyingLinksTotal = linksTotalNow,
+            dyingDrawn = drawnNow, dyingAt = at)
     }
 
     /** This record with [liveNow] sparks alive (rounded up to tens) and [totalNow] thrown; the same record when nothing changed. */
@@ -1018,7 +1032,7 @@ class GlMapRenderer(
         // deaths and sparks (S05h2), the totals the map's own
         if (space) {
             record = record.dying(death?.aliveCount() ?: 0, dyingLinksNow, if (dyingLinksNow > 0) bodies?.dyingReach ?: 0f else 0f,
-                totals.died, totals.dyingLinks)
+                totals.died, totals.dyingLinks, bodies?.dyingDrawn ?: 0, dyingOnScreen())
             record = record.sparking(sparkCount, totals.sparks)
         }
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
@@ -1027,6 +1041,17 @@ class GlMapRenderer(
 
     /** The chosen body as drawn: its scene index, −1 for none. */
     private fun markedChosen(): Int = focusedChosen
+
+    /**
+     * The biggest dying body drawn this frame (S05h2 repair 6) on the screen: its centre (x, y in the
+     * view's pixels) and how many pixels across it is drawn now; empty when none is drawn.
+     */
+    private fun dyingOnScreen(): List<Float> {
+        val b = bodies?.biggestDyingDrawn() ?: return emptyList()
+        Mat4.project(viewProj, b[0], b[1], b[2], clip)
+        if (clip[3] <= 1e-4f) return emptyList()
+        return listOf((clip[0] / clip[3] * 0.5f + 0.5f) * width, (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height, b[3])
+    }
 
     /**
      * Each frame: a new cue kicks the pop and grows the orbit ring in from 1.35 (at once with

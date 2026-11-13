@@ -217,7 +217,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         }
         if (kept) offer(keep, keepDepth, limit)
         // the dying (S05h2), after the live bodies against the capacity, the biggest plan first
-        val dying = chooseDying(viewProj, frustum, focal, band, capacity - heapSize)
+        val dying = chooseDying(viewProj, frustum, band, capacity - heapSize)
         // the chosen, by style, far to near (each style is drawn far to near over what is behind); a
         // dying body is −(k + 1)
         val order = ((0 until heapSize) + dying).sortedWith(compareBy<Int>({ styleOfEntry(it) }, { -depthOfEntry(it) }))
@@ -262,11 +262,14 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
 
     /**
      * The dying bodies drawn this frame, as −(k + 1), at most [room]: each before its own plan's end,
-     * in front of the eye, inside the depth band and the frustum, and big enough to be a body (it was
-     * one), the biggest first (S05h2).
+     * in front of the eye, inside the depth band and the frustum, the biggest first (S05h2). Each is
+     * drawn whole however small it is on the screen (repair 6): iOS plays a dying body as its own copy,
+     * a plain node with no level of detail (GraphDeathArt.play, GraphDeathScene.swift:226-242), so a
+     * far one shrinks as a body; it is never a point, nor left out for its size.
      */
-    private fun chooseDying(viewProj: FloatArray, frustum: Frustum, focal: Float, band: SpaceDepthBand, room: Int): List<Int> {
+    private fun chooseDying(viewProj: FloatArray, frustum: Frustum, band: SpaceDepthBand, room: Int): List<Int> {
         dyingDrawn = 0
+        firstDying = -1
         val stage = death ?: return emptyList()
         if (dyingSlot.size != stage.dying.size) { dyingSlot = IntArray(stage.dying.size); dyingDepth = FloatArray(stage.dying.size) }
         dyingSlot.fill(-1)
@@ -281,14 +284,29 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             val p = d.place
             val w = viewProj[3] * p.x + viewProj[7] * p.y + viewProj[11] * p.z + viewProj[15]
             if (w <= 1e-3f || band.gone(w)) continue
-            if (level(true, SpaceLod.pixels(nodeRadius, focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
             val reach = max(SpaceDepth.reachOfLook(d.code), SpaceStyle.of(d.code).extent)
             if (!frustum.intersectsSphere(p.x, p.y, p.z, reach * max(nodeRadius, d.shader))) continue
             dyingDepth[k] = w
+            if (firstDying < 0) firstDying = k
             out.add(-(k + 1))
         }
         dyingDrawn = out.size
         return out
+    }
+
+    /** The biggest dying body drawn this frame (its slot in the stage), −1 for none. */
+    private var firstDying = -1
+
+    /**
+     * The biggest dying body drawn this frame (S05h2 repair 6), as drawn: its centre in the world
+     * (x, y, z) and how many pixels across it is now, its plan's size applied; null when none is drawn.
+     */
+    fun biggestDyingDrawn(): FloatArray? {
+        val k = firstDying
+        val j = dyingSlot.getOrElse(k) { -1 }
+        if (k < 0 || j < 0) return null
+        val o = j * STRIDE
+        return floatArrayOf(data[o], data[o + 1], data[o + 2], data[o + 15])
     }
 
     /**

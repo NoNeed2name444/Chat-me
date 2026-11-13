@@ -7,11 +7,15 @@ import com.cramdown.sorta.map.FrameBudget
 import com.cramdown.sorta.map.FramePlan
 import com.cramdown.sorta.map.GuardBand
 import com.cramdown.sorta.map.LodSelector
+import com.cramdown.sorta.map.DeathKind
+import com.cramdown.sorta.map.MapDeathStage
+import com.cramdown.sorta.map.MapDeparture
 import com.cramdown.sorta.map.Mat4
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.SpaceBodies
 import com.cramdown.sorta.map.SpaceLod
+import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SpaceTrails
 import com.cramdown.sorta.map.UniverseBeams
 import com.cramdown.sorta.map.UniversePlan
@@ -20,6 +24,8 @@ import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.universeInput
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,7 +35,8 @@ import org.junit.Test
  * openness. The tablet's red run (43383798070): MapSpaceLivelyTest's Universe in one chunk, at the
  * failing frame's pose on the 1536 x 1600 map with the frame budget at its floor, is part way to its
  * summary (openness under SpaceBodies.OPEN), so no body was drawn, the held star had no emitter and
- * threw no sparks. Made-up fixture, as the lively test's.
+ * threw no sparks. Repair 6: a dying body is drawn whole too, however small, as iOS's dying copy is a
+ * plain node with no level of detail (GraphDeathScene.swift:226-242). Made-up fixture, as the lively test's.
  */
 class SpaceBodiesKeptTest {
     private val book = run {
@@ -145,4 +152,32 @@ class SpaceBodiesKeptTest {
         val b = bodies().apply { chosen = star }
         assertEquals(0, update(b, FramePlan(tree.leafCount), vp = vp, cam = away))
     }
+
+    @Test fun aDyingBodyIsDrawnWholeHoweverSmallOnTheScreen() {
+        // a rocky idea dying at the star's place, the camera far back: a few pixels across, under a body's size
+        val at = Vec3(tree.positions[3 * star], tree.positions[3 * star + 1], tree.positions[3 * star + 2])
+        val far = OrbitCamera(target = at, distance = 400f, yaw = 0.6f, pitch = 0.7f)
+        val vp = Mat4.multiply(far.projection(aspect), far.view())
+        val shader = 0.16f
+        val pixels = SpaceLod.pixels(scene.nodeRadius, focal, far.distance)
+        assertTrue("the dying body is under a body's size on the screen: $pixels px", pixels < SpaceLod.BODY_PIXELS)
+        val departure = MapDeparture("gone", 0, at, shader, shader, shader, DeathKind.ROCKY, 0, SpaceStyle.ROCKY.code, 0f, emptyList())
+        val stage = MapDeathStage.make(listOf(departure), lively = true, smooth = false)!!
+        val b = bodies().apply { death = stage }
+        // nothing live is a body this far; the dying one is drawn, whole, at its place
+        assertEquals(0, update(b, FramePlan(tree.leafCount), vp = vp, cam = far))
+        assertEquals(1, b.dyingDrawn)
+        assertEquals(1, b.count)
+        val drawn = assertNotNullOf(b.biggestDyingDrawn())
+        assertEquals(at.x, drawn[0], 1e-6f); assertEquals(at.y, drawn[1], 1e-6f); assertEquals(at.z, drawn[2], 1e-6f)
+        assertTrue("its size as drawn, a few pixels: ${drawn[3]}", drawn[3] > 0f && drawn[3] < SpaceLod.BODY_PIXELS)
+        // once its plan is over it is not drawn
+        stage.frame(0.0, shown = true)
+        repeat(20) { stage.frame(0.25, shown = true) }
+        assertEquals(0, update(b, FramePlan(tree.leafCount), vp = vp, cam = far))
+        assertEquals(0, b.dyingDrawn)
+        assertNull(b.biggestDyingDrawn())
+    }
+
+    private fun <T> assertNotNullOf(value: T?): T { assertNotNull(value); return value!! }
 }

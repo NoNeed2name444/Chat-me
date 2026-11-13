@@ -40,6 +40,8 @@ import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
 import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.MapPanelTags
+import com.cramdown.sorta.ui.ideas.MapStepsSeen
+import com.cramdown.sorta.ui.ideas.MapTouchSeen
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
@@ -125,10 +127,17 @@ class MapSpaceLivelyTest {
      * first full record.
      */
     private fun open(dark: Boolean, name: String, notes: List<Note> = Companion.notes,
-                     folders: List<NoteFolder> = Companion.folders): Pair<UniversePlan, MapDrawn> {
+                     folders: List<NoteFolder> = Companion.folders, cardSeen: Boolean = false): Pair<UniversePlan, MapDrawn> {
         ui.executeShellCommand("cmd uimode night ${if (dark) "yes" else "no"}")
         SystemClock.sleep(1_000) // the system takes the new mode
         val context = instrumentation.targetContext
+        // Space's first-run card already put away (S05h2 repair 6): both its steps and its touch lines seen,
+        // under the keys Got it marks (MapPanelSettings.markCardSeen), so it covers no part of the map
+        // (iOS's preview renders show none) and the first view is framed without it
+        if (cardSeen) check(context.getSharedPreferences(IdeasSettings.FILE, android.content.Context.MODE_PRIVATE).edit()
+            .putString(MapTouchSeen.KEY, GraphTheme.SPACE.rawValue).putBoolean(MapStepsSeen.SPACE_KEY, true).commit()) {
+            "The first-run card could not be marked seen for $name"
+        }
         val dir = File(context.cacheDir, "lively-" + UUID.randomUUID()).also { it.mkdirs() }
         IdeaStore(dir).replaceIdeas(notes, folders)
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
@@ -252,7 +261,10 @@ class MapSpaceLivelyTest {
      * the fixture's idea with the most links the map draws (kinds 0-2), deleted from its card's
      * options with the death's clock held (MapDeath.testHold) at half its plan's linksGone, is one body
      * dying with its links drawn half way back (dyingReach 0.5 ± 0.05; mapmode-lively-death-...);
-     * released, none is dying within the plan's length + 0.5 s of steps. Dust: Look › Comets, an idea
+     * repair 6: Space's first-run card is seen before the map opens, the idea's galaxy is flown in to
+     * before the deletion, and the still is taken once the death is drawn whole, a body's size at least,
+     * in the uncovered window (deathInView); each spark still once its held body is at rest with its
+     * name on it (heldAtRest). Released, none is dying within the plan's length + 0.5 s of steps. Dust: Look › Comets, an idea
      * dragged fast throws sparks, frozen for mapmode-lively-dust-.... The frames a second at rest,
      * over the plasma fling and over the death are logged; the dust fling's are not, as Comets has
      * no orbit clock.
@@ -261,7 +273,7 @@ class MapSpaceLivelyTest {
         val mode = if (dark) "dark" else "light"
         val death = "mapmode-lively-death-$mode-$device"
         val notes = starNotes
-        val (plan, start) = open(dark, death, starNotes, starFolders)
+        val (plan, start) = open(dark, death, starNotes, starFolders, cardSeen = true)
         // A7: the orbit at rest, the reference the fling and the death are logged against
         val t0 = SystemClock.uptimeMillis()
         settle(2_000)
@@ -285,6 +297,26 @@ class MapSpaceLivelyTest {
         val body = plan.bodies[idea]
         val dies = MapDeath.plan(MapDeath.kind(body.role, body.count), smooth = false)
         val hold = 0.5 * dies.linksGone
+        // framed close (S05h2 repair 6, A6): the idea's galaxy flown in to by Fly in on its card, so the
+        // dying body is large in the window, whole, among bodies drawn whole. The page keeps its Fly in,
+        // so the scene built after the deletion flies in to the same galaxy (Map3DView's flyTo, per renderer)
+        var top = idea
+        while (plan.bodies[top].role != UniverseRole.GALAXY && plan.bodies[top].parent >= 0) top = plan.bodies[top].parent
+        val galaxy = top
+        val galaxyId = plan.bodies[galaxy].id
+        check(plan.bodies[galaxy].role == UniverseRole.GALAXY && tap.ids.getOrNull(galaxy).equals(galaxyId, ignoreCase = true)) {
+            "The most linked idea $ideaId ($idea) is in no galaxy on the map to fly in to for $death: ${plan.bodies.map { it.role to it.parent }}"
+        }
+        onMain { tap.tap(galaxy) }
+        val flyIn = hasText(instrumentation.targetContext.getString(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        try { compose.waitUntil(10_000) { drawn()?.chosen == galaxy && compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty() } } catch (_: ComposeTimeoutException) {}
+        check(drawn()?.chosen == galaxy && compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty()) {
+            "The galaxy $galaxyId ($galaxy) is not chosen with its card's Fly in for $death: ${drawn()}"
+        }
+        tapOnScreen(compose.onNode(flyIn).fetchSemanticsNode(), "Fly in on galaxy $galaxyId's card")
+        try { compose.waitUntil(10_000) { drawn()?.flown == galaxy } } catch (_: ComposeTimeoutException) {}
+        check(drawn()?.flown == galaxy) { "Fly in on galaxy $galaxyId ($galaxy) did not fly in to it for $death: ${drawn()}" }
+        settle(1_500) // the flight's 0.8 s
         onMain { tap.tap(idea) }
         val more = hasContentDescription(instrumentation.targetContext.getString(R.string.map_peek_more)) and hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
         try { compose.waitUntil(10_000) { drawn()?.chosen == idea && compose.onAllNodes(more).fetchSemanticsNodes().isNotEmpty() } } catch (_: ComposeTimeoutException) {}
@@ -310,7 +342,16 @@ class MapSpaceLivelyTest {
             "With the death's clock held at $hold s (half of ${dies.linksGone} s), the map drew ${held.dying} dying and ${held.dyingLinks} links " +
                 "reaching ${held.dyingReach}, not 1 and 0.5 ± 0.05, for $death: $held"
         }
+        // in the still (repair 6, A6): the new scene flown in to the same galaxy, the camera come to rest, and
+        // the dying body drawn whole, at least a body's size across (SpaceLod.BODY_PIXELS), its centre in the
+        // part of the map no chrome covers
+        val framedDeath = deathInView(galaxyId, death)
         shot(death)
+        val inView = checkNotNull(drawn())
+        check(inView.dying == 1 && inView.dyingDrawn == 1 && inView.dyingAt.size == 3 && abs(inView.dyingReach - 0.5f) <= 0.05f &&
+            abs(inView.dyingAt[0] - framedDeath.dyingAt[0]) <= 2f && abs(inView.dyingAt[1] - framedDeath.dyingAt[1]) <= 2f) {
+            "The death moved on or out of the window while its still was taken for $death: before $framedDeath, after $inView"
+        }
         // released: gone within the plan's length + 0.5 s, judged by the orbit clock's steps (MapDrawn.orbitSteps,
         // never capped; the lively Universe steps it every frame, each step at most 0.25 s)
         val left = dies.duration - hold + 0.5
@@ -411,6 +452,10 @@ class MapSpaceLivelyTest {
             check(seen > 0 && frozen.sparks > 0 && frozen.sparksTotal > before.sparksTotal) {
                 "Body $index dragged fast threw no sparks (at most $seen alive; ${frozen.sparks} now, ${frozen.sparksTotal - before.sparksTotal} thrown) for $name: $frozen"
             }
+            // the still once the held body has come to rest under the still finger, its name drawn on it
+            // (S05h2 repair 6): the name's body centre within 2 px of where the renderer drew the body
+            val still = heldAtRest(index, name)
+            check(still.sparks > 0) { "The frozen sparks were gone by the time body $index was at rest for $name: $still" }
             shot(name)
         } finally {
             touch(MotionEvent.ACTION_UP, down, middle, y)
@@ -418,6 +463,79 @@ class MapSpaceLivelyTest {
         }
         return rate(checkNotNull(start), checkNotNull(drawn()), t0)
     }
+
+    /**
+     * The held body [index] at rest under a still finger, its name on it (S05h2 repair 6): read every
+     * 400 ms of Compose's frames until two reads in a row, a renderer frame apart, put the body at the same place (within 1 px)
+     * and the name's body centre is within 2 px of it, 10 s at most. The name is placed from the
+     * renderer's screen nodes a frame behind the drawing (Map3DView's names), so a still of a body still
+     * moving can show its name where it was; at rest the two agree.
+     */
+    private fun heldAtRest(index: Int, name: String): MapDrawn {
+        fun nameOff(d: MapDrawn): Float {
+            val n = d.names.firstOrNull { it.index == index } ?: return Float.MAX_VALUE
+            if (d.dragged.size < 2) return Float.MAX_VALUE
+            return kotlin.math.hypot(n.body[0] - d.dragged[0], n.body[1] - d.dragged[1])
+        }
+        var previous: MapDrawn? = null
+        var now = checkNotNull(drawn())
+        val until = SystemClock.uptimeMillis() + 10_000
+        while (SystemClock.uptimeMillis() < until) {
+            settle(400)
+            now = checkNotNull(drawn())
+            val p = previous
+            // a renderer frame between the two reads: the orbit clock stepped (the Universe), or there is
+            // none (Comets, whose held body sits at the finger at once)
+            if (p != null && (now.orbitSteps > p.orbitSteps || now.orbitSteps == 0) && now.grabbed == index && now.dragged.size == 2 &&
+                p.dragged.size == 2 && abs(now.dragged[0] - p.dragged[0]) <= 1f && abs(now.dragged[1] - p.dragged[1]) <= 1f && nameOff(now) <= 2f) return now
+            previous = now
+        }
+        error("Body $index did not come to rest with its name on it within 10 s for $name: drawn at ${now.dragged}, " +
+            "its name's body at ${now.names.firstOrNull { it.index == index }?.body} (${nameOff(now)} px off), before ${previous?.dragged}; $now")
+    }
+
+    /**
+     * The held death in the still (S05h2 repair 6, A6): the scene built after the deletion flown in to
+     * the galaxy [galaxyId] (MapDrawn.flown, by the new map's ids), the camera at rest over two reads 500 ms
+     * of Compose's frames apart with a renderer frame between them (MapDrawn.pose, orbitSteps), and the dying body drawn whole (MapDrawn.dyingDrawn), at
+     * least SpaceLod.BODY_PIXELS across, its centre (MapDrawn.dyingAt) inside the map clear of its edges
+     * by 48 dp, below the top strip and above the Undo banner where they cover the map. 30 s at most.
+     */
+    private fun deathInView(galaxyId: String, name: String): MapDrawn {
+        val margin = 48f * instrumentation.targetContext.resources.displayMetrics.density
+        fun covered(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        fun window(): FloatArray? {
+            val map = mapNode() ?: return null
+            val bounds = map.boundsInRoot
+            var top = margin; var bottom = bounds.height - margin
+            covered(MapPanelTags.TOP_STRIP)?.let { s -> if (s.right > bounds.left && s.left < bounds.right) top = maxOf(top, s.bottom - bounds.top + margin / 2) }
+            covered(IdeasTags.BANNER)?.let { b -> if (b.right > bounds.left && b.left < bounds.right) bottom = minOf(bottom, b.top - bounds.top - margin / 2) }
+            return floatArrayOf(margin, top, bounds.width - margin, bottom)
+        }
+        fun inside(d: MapDrawn, w: FloatArray?): Boolean = w != null && d.dyingAt.size == 3 &&
+            d.dyingAt[0] in w[0]..w[2] && d.dyingAt[1] in w[1]..w[3] && d.dyingAt[2] >= com.cramdown.sorta.map.SpaceLod.BODY_PIXELS
+        var previous: MapDrawn? = null
+        var now = checkNotNull(drawn())
+        var w: FloatArray? = null
+        var galaxy = -1
+        val until = SystemClock.uptimeMillis() + 30_000
+        while (SystemClock.uptimeMillis() < until) {
+            settle(500)
+            now = checkNotNull(drawn())
+            galaxy = mapNode()?.config?.getOrNull(MapTapKey)?.ids?.indexOfFirst { it.equals(galaxyId, ignoreCase = true) } ?: -1
+            w = window()
+            val p = previous
+            // the same pose across a renderer frame (the orbit clock stepped between the reads): no flight moving it
+            if (p != null && galaxy >= 0 && now.flown == galaxy && now.dying == 1 && now.dyingDrawn >= 1 && now.orbitSteps > p.orbitSteps &&
+                same(p.pose, now.pose) && inside(now, w)) return now
+            previous = now
+        }
+        error("The held death is not in the still for $name: flown ${now.flown} (galaxy $galaxyId at $galaxy), ${now.dyingDrawn} dying drawn " +
+            "at ${now.dyingAt} (x, y, px across) in the window ${w?.toList()} (left, top, right, bottom), the camera ${previous?.pose} then ${now.pose}; $now")
+    }
+
+    /** Two camera poses alike to a thousandth. */
+    private fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f }
 
     /**
      * Frames a second between two records, [t0] the first's uptime, counted by the orbit clock's steps
