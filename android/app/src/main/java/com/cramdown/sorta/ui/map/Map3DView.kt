@@ -147,7 +147,13 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 */
                val universePlan: UniversePlan? = null,
                /** Each Universe galaxy's tone, by its body index, for its names' rims (S05h). */
-               val galaxyTones: Map<Int, LabelRgb> = emptyMap()) {
+               val galaxyTones: Map<Int, LabelRgb> = emptyMap(),
+               /**
+                * How close the camera may come to its target: four node radii; in the Neurons four of the
+                * smallest body's (S05i repair 6), so an idea in an open cell, a twentieth of the cell, can be
+                * brought close as on iOS, whose pinch has no floor (allowsCameraControl, Graph3DView.swift:1650).
+                */
+               val closest: Float = nodeRadius * 4) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -174,9 +180,10 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             val tree = Octree.build(graph, 4096)
             val sizes = bodies.map { it.sphere }.sorted()
             val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
+            val smallest = (sizes.firstOrNull() ?: 0.35f).coerceIn(0.002f, 2f)
             // the bridges' half width: the wider of a tract's and a fibre's (NeuronGl.drawBridges)
             return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene,
-                edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE))
+                edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE), closest = smallest * 4)
         }
 
         /**
@@ -395,7 +402,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         val pitch = if (scene.theme == MapTheme.NEURONS) NEURONS_PITCH else 0.7f
         OrbitCamera(target = Vec3(tree.cx[0], tree.cy[0], tree.cz[0]), pitch = pitch).apply {
             distance = max(fitDistance(scene.viewRadius, aspect = 0.75f), 4f)
-            minDistance = scene.nodeRadius * 4; maxDistance = max(tree.radius[0], 1f) * 80
+            minDistance = scene.closest; maxDistance = max(tree.radius[0], 1f) * 80
         }
     }
     val home = remember(scene) { HomeView(camera, scene.viewRadius) }
@@ -530,6 +537,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     val latestDrawn by rememberUpdatedState(onDrawn)
     val firstDrawn = !gles3 || drawnNow.frames >= 1
     val box = remember(screenNodes) { drawnBox(screenNodes) }
+    // the Neurons' ideas on screen with their cell states (MapDrawn.cells, S05i repair 6)
+    val cells = remember(scene, screenNodes) { MapDrawnCell.of(scene.neurons, screenNodes) }
     LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
 
     // The names (S05f): in Space and Neurons only the hovered, pressed, held and chosen bodies have
@@ -649,7 +658,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow)
+        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow, cells = cells)
         val tapped = onTap
         if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it.takeIf { i -> i >= 0 }) }, scene.build, cue)
     }

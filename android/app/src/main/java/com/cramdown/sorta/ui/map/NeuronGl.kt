@@ -92,8 +92,15 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
     /** The ideas drawn in the latest frame, by state (NeuronState's order), and the bodies the filter left undrawn (MapDrawn). */
     @Volatile var statesDrawn: List<Int> = emptyList(); private set
     @Volatile var hiddenDrawn = 0; private set
+    /**
+     * The ideas whose own halo the latest frame drew, by the state it drew (NeuronState's order; S05i
+     * repair 6): a resting idea inside a cell has none, any other state keeps one with its process
+     * (GraphNeuronLook.swift:340); the chosen body's hot halo is not counted (MapDrawn.halos).
+     */
+    @Volatile var halosDrawn: List<Int> = emptyList(); private set
     /** Each frame's ideas by state and bodies' opacity, kept so a frame allocates neither. */
     private val stateCounts = IntArray(NeuronState.entries.size)
+    private val haloCounts = IntArray(NeuronState.entries.size)
     private val opacityNow = FloatArray(plan.bodies.size)
 
     /** The chosen body (its index, the scene's), or −1; set on the GL thread before [draw]. */
@@ -270,12 +277,20 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         while (!changed && k < states.size) { if (last[k] != states[k]) changed = true; k++ }
         if (changed) statesDrawn = states.toList()
         hiddenDrawn = hidden
+        val halos = haloCounts
+        halos.fill(0)
         for (b in look.bodies) {
             if (pop.gone(b.index)) continue
             val hot = b.index == marked
+            if (b.standingHalo && !hot && plan.bodies[b.index].kind == ThemeBodyKind.NOTE) halos[b.state.code]++
             if (b.standingHalo || hot) drawHalo(b, places[b.index], view, proj, clock, fade, hot,
                 opacity.getOrElse(b.index) { 1f } * min(pop.scale(b.index), 1f) * (1f + pop.bloom(b.index)))
         }
+        val lastHalos = halosDrawn
+        var halosChanged = lastHalos.size != halos.size
+        var h = 0
+        while (!halosChanged && h < halos.size) { if (lastHalos[h] != halos[h]) halosChanged = true; h++ }
+        if (halosChanged) halosDrawn = halos.toList()
         for (b in look.bodies) {
             if (pop.gone(b.index)) continue
             val level = pulses.shown(b.index)

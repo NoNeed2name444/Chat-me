@@ -56,6 +56,7 @@ import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
+import com.cramdown.sorta.ui.map.MapDrawnCell
 import com.cramdown.sorta.ui.map.MapDrawnKey
 import com.cramdown.sorta.ui.map.MapTapKey
 import com.cramdown.sorta.ui.ward.WardSpace
@@ -133,8 +134,9 @@ import kotlin.math.sqrt
  * map under Pages and under Garden alone (mapmode-filtered-<pages|garden>-<theme>-...); in Neurons,
  * its first-run card put away first, the cell states (requireCells): the Look menu with its Cells
  * group (mapmode-cells-menu-neurons-...), the Cell by cell sheet (mapmode-cells-sheet-neurons-...),
- * Cell by cell's Engulfing over the map (mapmode-cells-neurons-...), and a close-up of the open Garden
- * cell under each of the six states, chosen in Look › Cells (mapmode-cells-<state>-neurons-...).
+ * Cell by cell's Engulfing over the map (mapmode-cells-neurons-...), and a close-up of one of the open
+ * Garden cell's ideas and its halo under each of the six states, chosen in Look › Cells
+ * (mapmode-cells-<state>-neurons-...), each told from resting's by numbers and by pixels.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -459,7 +461,8 @@ class MapModeSpaceRenderTest {
      * Look menu with its Cells group (mapmode-cells-menu-neurons-...) and the Cell by cell sheet
      * (mapmode-cells-sheet-neurons-...), as iOS's testNeuronsLookMenu shows the menu; then each of the
      * six states chosen in Look › Cells draws all of Garden's ideas in it, seen close up
-     * (closeUpOnGarden; mapmode-cells-<state>-neurons-...). The choices are left natural.
+     * (closeUpOnIdea; mapmode-cells-<state>-neurons-...), one idea framed with its halo, each still told
+     * from resting's by MapDrawn.halos and by its pixels round the idea. The choices are left natural.
      */
     private fun requireCells(dark: Boolean) {
         val mode = if (dark) "dark" else "light"
@@ -518,8 +521,12 @@ class MapModeSpaceRenderTest {
         press(hasTestTag("lookCell-" + NeuronState.RESTING.rawValue))
         val resting = statesAfter(sameBuild) { it.getOrNull(NeuronState.RESTING.code) == ideas }
         check(resting.getOrNull(NeuronState.RESTING.code) == ideas && resting.getOrNull(NeuronState.FIRING.code) == 0) { "Resting left an idea firing for $name: $resting" }
-        // A6: each state close up, Resting last, so every choice builds the cells again and the choice ends natural
+        // A6: each state close up, Resting last, so every choice builds the cells again and the choice ends
+        // natural. Each still is framed on one of Garden's ideas, its body and its own halo, where its state
+        // is drawn (closeUpOnIdea); each still is told from resting's by MapDrawn's numbers and by its pixels
+        val subject = checkNotNull(notes.firstOrNull { it.folderId == garden.id }) { "Garden has no idea for $name" }
         var plan: CloseUp? = null
+        val crops = LinkedHashMap<NeuronState, IdeaCrop>()
         for (state in NeuronState.menuOrder.filter { it != NeuronState.RESTING } + NeuronState.RESTING) {
             val still = "mapmode-cells-${state.rawValue}-neurons-$mode-$device"
             val build = checkNotNull(mapDrawn()).build
@@ -527,32 +534,50 @@ class MapModeSpaceRenderTest {
             press(hasTestTag("lookCell-" + state.rawValue))
             val drawn = statesAfter(build) { it.getOrNull(state.code) == ideas }
             check(drawn.getOrNull(state.code) == ideas && drawn.sum() == ideas) { "Look › Cells › ${state.title} does not draw every idea in it for $still: $drawn" }
-            plan = closeUpOnGarden(still, plan)
+            plan = closeUpOnIdea(still, subject.id, plan)
+            // the state's own halo: every other state keeps one for each idea, resting none (GraphNeuronLook.swift:340)
+            val halos = if (state == NeuronState.RESTING) 0 else ideas
+            try { compose.waitUntil(10_000) { mapDrawn()?.halos?.let { it.getOrNull(state.code) == halos && it.sum() == halos } == true } } catch (_: ComposeTimeoutException) {}
             val close = checkNotNull(mapDrawn())
             check(close.states.getOrNull(state.code) == ideas && close.states.sum() == ideas && gardenOpen()) {
                 "Garden, close up, does not draw its $ideas ideas ${state.title} for $still: $close"
             }
+            check(close.halos.getOrNull(state.code) == halos && close.halos.sum() == halos) {
+                "Garden's ideas, close up, do not draw ${state.title}'s halos ($halos, each in its state) for $still: ${close.halos}"
+            }
+            val cell = requireCloseUp(still, subject.id, close)
+            check(cell.state == state.code) { "${subject.title}, close up, is not drawn ${state.title} for $still: $cell" }
             shot(still)
+            crops[state] = ideaCrop(cell)
+        }
+        // each state's still differs from resting's round the idea, where its halo and soma are drawn
+        val restingCrop = checkNotNull(crops[NeuronState.RESTING])
+        for ((state, crop) in crops) {
+            if (state == NeuronState.RESTING) continue
+            val share = crop.differs(restingCrop)
+            android.util.Log.i("MapModeSpaceRenderTest", "mapmode-cells-${state.rawValue}-neurons-$mode-$device: ${"%.3f".format(share)} of the pixels round ${subject.title} differ from resting's")
+            check(share >= IdeaCrop.DIFFERENT) {
+                "mapmode-cells-${state.rawValue}-neurons-$mode-$device looks like resting's round ${subject.title}: only $share of its pixels differ, under ${IdeaCrop.DIFFERENT}"
+            }
         }
         atHome(name)
     }
 
-    /** The two-finger moves that brought Garden close, and the camera they left: the same scene from its first view takes them again. */
+    /** The two-finger moves that brought an idea close, and the camera they left: the same scene from its first view takes them again. */
     private class CloseUp(val moves: List<FloatArray>, val pose: List<Float>)
 
     /**
-     * S05i A6: the open Garden cell brought to the middle of the map and close, as a person would with
-     * two fingers (moved together to pan, spread to zoom; Map3DView's own rule), so the state of each
-     * of its ideas reads in a still. Where a body is drawn is read from its name, on show while it is
-     * chosen (MapDrawn.names); a tap on empty space lets it go. The cell is panned to the middle twice
-     * (it lies off the camera's focal plane), the fingers spread about the middle until Garden's ideas
-     * lie about 0.3 of the map's shorter side from its centre, and the cell panned to the middle once
-     * more. Each of Garden's ideas then lies on the map, the farthest at least 0.15 of that side from
-     * the cell's centre. A new scene starts from the same first view, so [last]'s moves, taken again,
-     * leave the camera where they did; where they do not, the close-up is measured afresh from there
-     * (Recentre would close the cell). As CI runs it, with animations off, a tap moves no camera.
+     * S05i A6 (repair 6): one of Garden's ideas, [id], brought to the middle of the map and close, as a
+     * person would with two fingers (moved together to pan, spread to zoom; Map3DView's own rule), so its
+     * state reads in a still: its body about [CLOSE_DP] across and its own halo, 2.5 times that, where each
+     * state's process is drawn (NeuronGl.drawHalo; GraphNeuronShaders.swift:543-605). Where the idea is
+     * drawn, and how big, is read from MapDrawn.cells, so nothing is chosen. It is panned to the middle,
+     * then zoomed and panned in turn until it lies near the middle at about that size (it lies off the
+     * camera's focal plane, so a zoom moves it). A new scene starts from the same first view, so [last]'s
+     * moves, taken again, leave the camera where they did; where they do not, the close-up is measured
+     * afresh from there (Recentre would close the cell). As CI runs it, with animations off, a tap moves no camera.
      */
-    private fun closeUpOnGarden(name: String, last: CloseUp?): CloseUp {
+    private fun closeUpOnIdea(name: String, id: String, last: CloseUp?): CloseUp {
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
         val size = checkNotNull(mapNode()).size
         val w = size.width.toFloat(); val h = size.height.toFloat()
@@ -560,6 +585,7 @@ class MapModeSpaceRenderTest {
         val density = instrumentation.targetContext.resources.displayMetrics.density
         val apart = 40f * density
         val widest = w / 2 - 24f * density
+        val want = CLOSE_DP * density
         val moves = ArrayList<FloatArray>()
         fun fingers(from: Offset, to: Offset, near: Float, far: Float) {
             compose.onNode(map).performTouchInput {
@@ -576,39 +602,107 @@ class MapModeSpaceRenderTest {
             android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${mapDrawn()?.pose}, not ${last.pose}; measured afresh")
             moves.clear()
         }
-        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
-        fun at(id: String): Offset {
-            val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
-            val i = tap.ids.indexOfFirst { it.equals(id, ignoreCase = true) }
-            check(i >= 0) { "$id is not on the map for $name" }
-            compose.runOnIdle { tap.tap(i) }
-            try { compose.waitUntil(10_000) { mapDrawn()?.chosen == i && named(i) != null } } catch (_: ComposeTimeoutException) {}
-            val spot = checkNotNull(named(i)) { "$id shows no name to find it by for $name: ${mapDrawn()}" }
-            compose.runOnIdle { tap.tap(-1) }
-            try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
-            check(!shown(MapPanelTags.PEEK)) { "A tap on empty space kept $id's card for $name" }
-            return spot
+        val index = ideaIndex(name, id)
+        fun cell(): MapDrawnCell {
+            try { compose.waitUntil(10_000) { mapDrawn()?.cells?.any { it.index == index } == true } } catch (_: ComposeTimeoutException) {}
+            return checkNotNull(mapDrawn()?.cells?.firstOrNull { it.index == index }) { "$id is not on the map for $name: ${mapDrawn()?.cells}" }
         }
-        val inGarden = notes.filter { it.folderId == garden.id }
-        fun spread(): Pair<Float, List<Offset>> {
-            val cell = at(garden.id)
-            val spots = inGarden.map { at(it.id) }
-            return spots.maxOf { (it - cell).getDistance() } to spots
+        val before = cell()
+        repeat(2) { fingers(cell().let { Offset(it.x, it.y) }, middle, apart, apart) }
+        val most = widest / apart
+        for (step in 0 until 12) {
+            val c = cell()
+            val off = (Offset(c.x, c.y) - middle).getDistance()
+            val zoom = want / max(c.across, 1f)
+            if (off > 0.06f * min(w, h)) fingers(Offset(c.x, c.y), middle, apart, apart)
+            else if (zoom > 1.15f) fingers(middle, middle, apart, apart * min(zoom, most))
+            else if (zoom < 0.87f) fingers(middle, middle, apart * min(1f / zoom, most), apart)
+            else break
         }
-        val (before, _) = spread()
-        repeat(2) { fingers(at(garden.id), middle, apart, apart) }
-        var zoom = (0.3f * min(w, h) / max(before, 1f)).coerceIn(1f, 6f)
-        while (zoom > 1.01f) {
-            val step = min(zoom, widest / apart)
-            fingers(middle, middle, apart, apart * step)
-            zoom /= step
-        }
-        fingers(at(garden.id), middle, apart, apart)
-        val (after, spots) = spread()
-        for ((n, spot) in inGarden.zip(spots)) check(spot.x in 0f..w && spot.y in 0f..h) { "${n.title} is off the map close up for $name: $spot in $w x $h" }
-        check(after >= 0.15f * min(w, h)) { "Garden is not close for $name: its ideas lie $after px from its centre, $before px before, in $w x $h" }
-        android.util.Log.i("MapModeSpaceRenderTest", "$name: Garden's ideas lie $after px from its centre close up, $before px before; ${moves.size} moves")
+        val close = cell()
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: $id is ${close.across} px across close up at (${close.x}, ${close.y}), ${before.across} px before; ${moves.size} moves")
         return CloseUp(moves, checkNotNull(mapDrawn()).pose)
+    }
+
+    /** The scene index of the idea [id], from the map's taps (MapTap.ids, ignoring case). */
+    private fun ideaIndex(name: String, id: String): Int {
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map takes no taps for $name" }
+        val i = tap.ids.indexOfFirst { it.equals(id, ignoreCase = true) }
+        check(i >= 0) { "$id is not on the map for $name" }
+        return i
+    }
+
+    /**
+     * S05i A6 (repair 6): the idea [id] in [drawn], close up: at least [LEAST_DP] across, and its whole
+     * halo (2.5 times that across, MapDrawnCell.HALO_ACROSS) inside the map, so the state drawn there is
+     * in the still. No body is chosen, so no hot halo stands in for the state's own.
+     */
+    private fun requireCloseUp(name: String, id: String, drawn: MapDrawn): MapDrawnCell {
+        val size = checkNotNull(mapNode()).size
+        val w = size.width.toFloat(); val h = size.height.toFloat()
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val index = ideaIndex(name, id)
+        val cell = checkNotNull(drawn.cells.firstOrNull { it.index == index }) { "$id is not on the map close up for $name: ${drawn.cells}" }
+        check(cell.across >= LEAST_DP * density) {
+            "$id is not close for $name: ${cell.across} px across, under ${LEAST_DP * density} ($LEAST_DP dp), in $w x $h"
+        }
+        val half = cell.across * MapDrawnCell.HALO_ACROSS / 2
+        check(cell.x - half >= 0f && cell.x + half <= w && cell.y - half >= 0f && cell.y + half <= h) {
+            "$id's halo is not all on the map for $name: $cell, its halo $half px each side, in $w x $h"
+        }
+        check(drawn.chosen == -1 && !drawn.marked) { "A body is chosen in the close-up of $id for $name: ${drawn.chosen}" }
+        return cell
+    }
+
+    /** The screen round an idea, its halo's square, as the latest still shows it. */
+    private class IdeaCrop(val width: Int, val height: Int, val pixels: IntArray) {
+        /**
+         * The share of the pixels where a channel differs from [other]'s by more than [STEP], over the
+         * square both hold round the idea (the smaller, centred on each); 0 when either is empty.
+         */
+        fun differs(other: IdeaCrop): Float {
+            val cw = min(width, other.width); val ch = min(height, other.height)
+            if (cw <= 0 || ch <= 0) return 0f
+            val ax = (width - cw) / 2; val ay = (height - ch) / 2
+            val bx = (other.width - cw) / 2; val by = (other.height - ch) / 2
+            var count = 0
+            for (y in 0 until ch) for (x in 0 until cw) {
+                val a = pixels[(ay + y) * width + ax + x]; val b = other.pixels[(by + y) * other.width + bx + x]
+                val dr = abs(((a shr 16) and 0xFF) - ((b shr 16) and 0xFF))
+                val dg = abs(((a shr 8) and 0xFF) - ((b shr 8) and 0xFF))
+                val db = abs((a and 0xFF) - (b and 0xFF))
+                if (max(dr, max(dg, db)) > STEP) count++
+            }
+            return count.toFloat() / (cw * ch)
+        }
+
+        companion object {
+            /** A channel's step, out of 255, that counts a pixel as different. */
+            const val STEP = 8
+            /**
+             * The least share that tells a state's still from resting's. A halo's ring at its body's edge
+             * alone, a resting idea's having none inside a cell, covers about 7% of the square.
+             */
+            const val DIFFERENT = 0.02f
+        }
+    }
+
+    /** The screen round [cell], its halo's square, now: from the device's own screenshot, in the map's place on screen. */
+    private fun ideaCrop(cell: MapDrawnCell): IdeaCrop {
+        val at = checkNotNull(mapNode()).positionOnScreen
+        val shot = checkNotNull(instrumentation.uiAutomation.takeScreenshot()) { "No screenshot for the crop" }
+        try {
+            val half = (cell.across * MapDrawnCell.HALO_ACROSS / 2).toInt()
+            val left = (at.x + cell.x).toInt() - half
+            val top = (at.y + cell.y).toInt() - half
+            val l = left.coerceIn(0, shot.width); val t = top.coerceIn(0, shot.height)
+            val r = (left + 2 * half).coerceIn(l, shot.width); val b = (top + 2 * half).coerceIn(t, shot.height)
+            val pixels = IntArray((r - l) * (b - t))
+            if (pixels.isNotEmpty()) shot.getPixels(pixels, 0, r - l, l, t, r - l, b - t)
+            return IdeaCrop(r - l, b - t, pixels)
+        } finally {
+            shot.recycle()
+        }
     }
 
     /** S05i A6: Neurons' legend at its Cell states row (a still, mapmode-legend-cells-neurons-<light|dark>-<device>.png). */
@@ -1470,6 +1564,9 @@ class MapModeSpaceRenderTest {
 
     private companion object {
         const val DIRECTORY = "/sdcard/Download/sorta-renders"
+        /** S05i A6 (repair 6): an idea's size across in a cell state's close-up, and the least it may be, in dp. */
+        const val CLOSE_DP = 48f
+        const val LEAST_DP = 36f
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 

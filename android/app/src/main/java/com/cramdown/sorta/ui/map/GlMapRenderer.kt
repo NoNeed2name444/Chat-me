@@ -243,6 +243,15 @@ data class MapDrawn(
      * this count shows it: a test waits for the count, then reads the pose.
      */
     val homes: Int = 0,
+    /**
+     * The Neurons' cell states as drawn (S05i repair 6), so a still of a state is told from resting's
+     * by numbers, not only by eye: [halos], the ideas whose own halo the latest frame drew, by the
+     * state it drew (NeuronState's order; a resting idea inside a cell has none, every other state one,
+     * GraphNeuronLook.swift:340; empty outside the Neurons); and, added by Map3DView, [cells], each idea
+     * on screen with its state, centre and size across. No words.
+     */
+    val halos: List<Int> = emptyList(),
+    val cells: List<MapDrawnCell> = emptyList(),
 ) {
     /** This record with the latest frame's level of detail, [detailNow] to 0.01; the same record when nothing changed. */
     fun detailing(detailNow: Float, chunksNow: Int, openNow: Int, summariesNow: Int): MapDrawn {
@@ -252,9 +261,11 @@ data class MapDrawn(
     }
 
     /** This record with the filter's counts as the latest frame had them; the same record when nothing changed. */
-    fun filtering(filteredNow: Boolean, shownNow: Int, hiddenNow: Int, filterLinksNow: Int, statesNow: List<Int>): MapDrawn =
-        if (filtered == filteredNow && shown == shownNow && hidden == hiddenNow && filterLinks == filterLinksNow && states == statesNow) this
-        else copy(filtered = filteredNow, shown = shownNow, hidden = hiddenNow, filterLinks = filterLinksNow, states = statesNow)
+    fun filtering(filteredNow: Boolean, shownNow: Int, hiddenNow: Int, filterLinksNow: Int, statesNow: List<Int>,
+                  halosNow: List<Int> = halos): MapDrawn =
+        if (filtered == filteredNow && shown == shownNow && hidden == hiddenNow && filterLinks == filterLinksNow && states == statesNow &&
+            halos == halosNow) this
+        else copy(filtered = filteredNow, shown = shownNow, hidden = hiddenNow, filterLinks = filterLinksNow, states = statesNow, halos = halosNow)
 
     /** This record after one more step of the lively orbit clock ([orbitSteps]). */
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
@@ -332,6 +343,29 @@ data class MapDrawn(
     companion object {
         /** Finished frames worth counting: by the last of them, the ones before it were handed to the screen. */
         const val ENOUGH = 3
+    }
+}
+
+/**
+ * A Neurons idea on screen (MapDrawn.cells, S05i repair 6): its body's index, its cell state's code
+ * (NeuronState.code), its centre (x, y) and its body's size across, in the view's pixels. Its own halo,
+ * where it has one, reaches 2.5 times that across (NeuronGl.drawHalo, iOS's five sizes).
+ */
+data class MapDrawnCell(val index: Int, val state: Int, val x: Float, val y: Float, val across: Float) {
+    companion object {
+        /** A halo's size across, as a share of its body's (the billboard's half is 2.5 body radii). */
+        const val HALO_ACROSS = 2.5f
+
+        /** Each idea of the Neurons [scene] in [nodes] (ScreenNode), in their order; empty in another theme. */
+        fun of(scene: NeuronScene?, nodes: List<ScreenNode>): List<MapDrawnCell> {
+            if (scene == null) return emptyList()
+            val bodies = scene.look.bodies
+            return nodes.mapNotNull { n ->
+                val body = bodies.getOrNull(n.index) ?: return@mapNotNull null
+                if (scene.plan.bodies[n.index].kind != ThemeBodyKind.NOTE) null
+                else MapDrawnCell(n.index, body.state.code, n.x, n.y, n.pixels)
+            }
+        }
     }
 }
 
@@ -1137,7 +1171,7 @@ class GlMapRenderer(
         record = record.detailing(budget.detail, 0, 0, 0)
         val focusOn = gl.focus != null
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
-        record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn)
+        record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn, gl.halosDrawn)
         record = dragRecord(if (grabbedScene >= 0) gl.position(grabbedScene, time) else null, grabbedScene, record.chosen)
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++

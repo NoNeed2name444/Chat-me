@@ -5,6 +5,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.cramdown.sorta.map.NeuronScene
+import com.cramdown.sorta.map.NeuronState
+import com.cramdown.sorta.map.NeuronStateChoice
+import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.map.UniverseEdge
+import com.cramdown.sorta.map.UniverseFolder
+import com.cramdown.sorta.map.UniverseInput
+import com.cramdown.sorta.map.UniverseNote
 
 /** The record ScreenshotTest waits on before it looks at the map (MapDrawn, Map3DView's MapDrawnKey). */
 class MapDrawnTest {
@@ -305,6 +313,78 @@ class MapDrawnTest {
         assertEquals("the rest of the record kept", all.copy(filtered = true, shown = 7, hidden = 5, filterLinks = 2, states = pages.states), pages)
         // Everything again: all back
         assertEquals(all, pages.filtering(false, 12, 0, 9, firing))
+    }
+
+    // S05i repair 6: the cell states as drawn, so a state's still is told from resting's by numbers
+    @Test fun theHalosDrawnByStateAreHandedOnWhenTheyChange() {
+        val start = MapDrawn(build = 5)
+        assertEquals(emptyList<Int>(), start.halos)
+        // Garden's three ideas resting inside their cell: no halo of their own
+        val resting = start.filtering(false, 6, 0, 3, listOf(3, 0, 0, 0, 0, 0), listOf(0, 0, 0, 0, 0, 0))
+        assertEquals(listOf(0, 0, 0, 0, 0, 0), resting.halos)
+        // the filter's own call, with no halos given, keeps them
+        assertSame("nothing changed: the same record", resting, resting.filtering(false, 6, 0, 3, listOf(3, 0, 0, 0, 0, 0)))
+        // firing: each of the three keeps a halo, drawn firing
+        val firing = resting.filtering(false, 6, 0, 3, listOf(0, 3, 0, 0, 0, 0), listOf(0, 3, 0, 0, 0, 0))
+        assertEquals(listOf(0, 3, 0, 0, 0, 0), firing.halos)
+        assertEquals("the rest of the record kept", resting.copy(states = firing.states, halos = firing.halos), firing)
+        assertSame(firing, firing.filtering(false, 6, 0, 3, listOf(0, 3, 0, 0, 0, 0), listOf(0, 3, 0, 0, 0, 0)))
+    }
+
+    @Test fun eachIdeaOnScreenCarriesItsStateAndSize() {
+        // the made-up Garden and Kitchen of the emulator's test, Garden open, every idea firing
+        val scene = gardenOpen(NeuronStateChoice(NeuronState.FIRING.rawValue))
+        val ideas = scene.plan.bodies.indices.filter { scene.plan.bodies[it].kind == ThemeBodyKind.NOTE }
+        assertEquals(3, ideas.size)
+        val nodes = scene.plan.bodies.indices.map { ScreenNode(it, 10f * it, 20f * it, 4f + it) }
+        val cells = MapDrawnCell.of(scene, nodes)
+        assertEquals("the ideas only, not the cells or the home", ideas, cells.map { it.index })
+        for (c in cells) {
+            assertEquals(NeuronState.FIRING.code, c.state)
+            assertEquals(10f * c.index, c.x, 0f); assertEquals(20f * c.index, c.y, 0f); assertEquals(4f + c.index, c.across, 0f)
+        }
+        // an idea off screen is not listed; another theme lists none
+        assertEquals(ideas.drop(1), MapDrawnCell.of(scene, nodes.filter { it.index != ideas[0] }).map { it.index })
+        assertEquals(emptyList<MapDrawnCell>(), MapDrawnCell.of(null, nodes))
+        // left alone, every idea rests (GraphNeuronStates.swift:169-171)
+        assertTrue(MapDrawnCell.of(gardenOpen(NeuronStateChoice.NATURAL), nodes).all { it.state == NeuronState.RESTING.code })
+        // a halo reaches five body radii across (GraphNeuronLook.swift:343-344), 2.5 times the body's size across
+        assertEquals(2.5f, MapDrawnCell.HALO_ACROSS, 0f)
+    }
+
+    @Test fun theNeuronsComeAsCloseAsTheirSmallestBody() {
+        // iOS's pinch has no floor (allowsCameraControl, Graph3DView.swift:1650); Android's stops at four
+        // radii of the smallest body, so an idea in an open cell, a twentieth of it, can be brought close
+        val open = MapScene.neurons(gardenOpen(NeuronStateChoice.NATURAL))
+        val smallest = open.neurons!!.plan.bodies.minOf { it.sphere }
+        assertEquals(0.41f / 20, smallest, 1e-4f)
+        assertEquals(smallest * 4, open.closest, 1e-6f)
+        assertTrue("closer than four median radii, the floor before", open.closest < open.nodeRadius * 4 / 10)
+        // every cell closed: the cells are the smallest bodies, about as close as before
+        val closed = MapScene.neurons(neurons(emptyList(), NeuronStateChoice.NATURAL))
+        assertEquals(closed.neurons!!.plan.bodies.minOf { it.sphere } * 4, closed.closest, 1e-6f)
+    }
+
+    private fun id(n: Int) = ("00000000-0000-4000-8000-" + n.toString().padStart(12, '0')).uppercase()
+
+    private fun gardenOpen(cells: NeuronStateChoice) = neurons(listOf(id(201)), cells)
+
+    /** MapModeSpaceRenderTest's made-up book as the Neurons plan it (made up, not medical). */
+    private fun neurons(open: List<String>, cells: NeuronStateChoice): NeuronScene {
+        val garden = id(201); val kitchen = id(202)
+        val folders = listOf(UniverseFolder(garden, "Garden", null), UniverseFolder(kitchen, "Kitchen", null))
+        val notes = listOf(
+            UniverseNote(id(11), "Fix the gate latch", false, null, 0, 9.0),
+            UniverseNote(id(12), "Buy brushes", false, null, 0, 8.0),
+            UniverseNote(id(13), "Paint the shed green", false, garden, 5, 7.0),
+            UniverseNote(id(14), "Turn the compost", false, garden, 0, 6.0),
+            UniverseNote(id(15), "Plant tulips before the frost", false, garden, 0, 5.0),
+            UniverseNote(id(16), "Try the seeded bread", false, kitchen, 0, 4.0),
+            UniverseNote(id(17), "Order more coffee beans", false, kitchen, 0, 3.0),
+            UniverseNote(id(18), "Plan the weekend walk", false, null, 0, 2.0))
+        val edges = listOf(UniverseEdge(id(13), id(12)), UniverseEdge(id(14), id(13)), UniverseEdge(id(15), id(13)),
+            UniverseEdge(id(15), id(14)), UniverseEdge(id(13), id(11)), UniverseEdge(id(17), id(16)))
+        return NeuronScene.of(UniverseInput(notes, folders, edges, open = open), cells)
     }
 
     // S05i repair 3: the level of detail a frame chose, so a far view with no bodies says why
