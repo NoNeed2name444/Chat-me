@@ -844,7 +844,8 @@ class MapModeSpaceRenderTest {
             press(hasTestTag("lookCell-" + state.rawValue))
             val drawn = statesAfter(build) { it.getOrNull(state.code) == ideas }
             check(drawn.getOrNull(state.code) == ideas && drawn.sum() == ideas) { "Look › Cells › ${state.title} does not draw every idea in it for $still: $drawn" }
-            plan = closeUpOnIdea(still, subject.id, plan)
+            val closeUp = closeUpOnIdea(still, subject.id, plan)
+            plan = closeUp
             // the state's own halo: every other state keeps one for each idea, resting none (GraphNeuronLook.swift:340)
             val halos = if (state == NeuronState.RESTING) 0 else ideas
             try { compose.waitUntil(10_000) { mapDrawn()?.halos?.let { it.getOrNull(state.code) == halos && it.sum() == halos } == true } } catch (_: ComposeTimeoutException) {}
@@ -855,7 +856,7 @@ class MapModeSpaceRenderTest {
             check(close.halos.getOrNull(state.code) == halos && close.halos.sum() == halos) {
                 "Garden's ideas, close up, do not draw ${state.title}'s halos ($halos, each in its state) for $still: ${close.halos}"
             }
-            val cell = requireCloseUp(still, subject.id, close)
+            val cell = requireCloseUp(still, subject.id, close, closeUp.trail)
             check(cell.state == state.code) { "${subject.title}, close up, is not drawn ${state.title} for $still: $cell" }
             shot(still)
             crops[state] = ideaCrop(cell)
@@ -873,19 +874,33 @@ class MapModeSpaceRenderTest {
         atHome(name)
     }
 
-    /** The two-finger moves that brought an idea close, and the camera they left: the same scene from its first view takes them again. */
-    private class CloseUp(val moves: List<FloatArray>, val pose: List<Float>)
+    /**
+     * The two-finger moves that brought an idea close, the camera they left, the idea as a frame drawn
+     * there showed it, and each step's evidence: the same scene from its first view takes them again.
+     */
+    private class CloseUp(val moves: List<FloatArray>, val pose: List<Float>, val cell: MapDrawnCell, val trail: String)
 
     /**
      * S05i A6 (repair 6): one of Garden's ideas, [id], brought to the middle of the map and close, as a
      * person would with two fingers (moved together to pan, spread to zoom; Map3DView's own rule), so its
      * state reads in a still: its body about [CLOSE_DP] across and its own halo, 2.5 times that, where each
      * state's process is drawn (NeuronGl.drawHalo; GraphNeuronShaders.swift:543-605). Where the idea is
-     * drawn, and how big, is read from MapDrawn.cells, so nothing is chosen. It is panned to the middle,
-     * then zoomed and panned in turn until it lies near the middle at about that size (it lies off the
-     * camera's focal plane, so a zoom moves it). A new scene starts from the same first view, so [last]'s
-     * moves, taken again, leave the camera where they did; where they do not, the close-up is measured
-     * afresh from there (Recentre would close the cell). As CI runs it, with animations off, a tap moves no camera.
+     * drawn, and how big, is read from MapDrawn.cells, so nothing is chosen. A new scene starts from the
+     * same first view, so [last]'s moves, taken again, leave the camera where they did; where they do not,
+     * the close-up is measured afresh from there (Recentre would close the cell). As CI runs it, with
+     * animations off, a tap moves no camera.
+     *
+     * Each move is judged by a frame drawn after it ([settledCell]): MapDrawn.cells is the latest frame's,
+     * and the tablet draws about 3 frames a second, so a read 500 ms after a pinch could be a frame from
+     * before it. Judged so, the loop can zoom on a stale size and stop on a stale one in the band, leaving
+     * the idea under [LEAST_DP] (v13: the tablet's pacemaker close-up, 67.9 px, where fresh reads reach 96).
+     *
+     * The idea lies off the camera's target, in front of it from the first view (the target is the
+     * whole map's middle), so it grows faster than the camera closes in, and a pan carries it further
+     * than the fingers. A zoom moves the eye along its line of sight, so the idea's depth is the
+     * camera's distance less a fixed [front], which two sizes at two distances give
+     * (across x (distance - front) is constant): the first zoom is a modest one, and each later pinch
+     * and pan is sized from it, as a person adjusts to what they see.
      */
     private fun closeUpOnIdea(name: String, id: String, last: CloseUp?): CloseUp {
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
@@ -897,25 +912,62 @@ class MapModeSpaceRenderTest {
         val widest = w / 2 - 24f * density
         val want = CLOSE_DP * density
         val moves = ArrayList<FloatArray>()
+        val trail = StringBuilder()
         fun fingers(from: Offset, to: Offset, near: Float, far: Float) {
             compose.onNode(map).performTouchInput {
                 pinch(from - Offset(near, 0f), to - Offset(far, 0f), from + Offset(near, 0f), to + Offset(far, 0f), 600)
             }
             compose.waitForIdle()
-            SystemClock.sleep(500)
             moves += floatArrayOf(from.x, from.y, to.x, to.y, near, far)
+        }
+        val index = ideaIndex(name, id)
+        fun pose(): List<Float> = checkNotNull(mapDrawn()).pose
+        fun note(what: String, c: MapDrawnCell, pose: List<Float>) {
+            val off = (Offset(c.x, c.y) - middle).getDistance()
+            trail.append("\n  ").append(what).append(": ").append("%.1f".format(c.across)).append(" px across at (")
+                .append("%.0f, %.0f".format(c.x, c.y)).append("), ").append("%.0f".format(off)).append(" px off the middle, pose ")
+                .append(pose.joinToString(", ", "[", "]") { "%.4f".format(it) })
         }
         if (last != null) {
             for (m in last.moves) fingers(Offset(m[0], m[1]), Offset(m[2], m[3]), m[4], m[5])
             try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(last.pose, it) } == true } } catch (_: ComposeTimeoutException) {}
-            if (same(last.pose, checkNotNull(mapDrawn()).pose)) return last
-            android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${mapDrawn()?.pose}, not ${last.pose}; measured afresh")
+            if (same(last.pose, pose())) {
+                // the moves are taken again in a new scene of the same bodies: a frame drawn after them
+                // shows the idea where the first close-up left it
+                val match = { c: MapDrawnCell? -> c != null && abs(c.x - last.cell.x) <= 1f && abs(c.y - last.cell.y) <= 1f && abs(c.across - last.cell.across) <= 0.01f * last.cell.across }
+                try { compose.waitUntil(15_000) { match(mapDrawn()?.cells?.firstOrNull { it.index == index }) } } catch (_: ComposeTimeoutException) {}
+                val c = mapDrawn()?.cells?.firstOrNull { it.index == index }
+                if (match(c)) return CloseUp(last.moves, last.pose, checkNotNull(c), last.trail + "\n  taken again: ${last.moves.size} moves")
+                android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${last.pose}, but no frame drew $id as ${last.cell} within 15 s (latest $c); measured afresh")
+            } else {
+                android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${mapDrawn()?.pose}, not ${last.pose}; measured afresh")
+            }
             moves.clear()
+            trail.append("\n  the moves taken again did not leave it as before; measured afresh")
         }
-        val index = ideaIndex(name, id)
-        fun cell(): MapDrawnCell {
-            try { compose.waitUntil(10_000) { mapDrawn()?.cells?.any { it.index == index } == true } } catch (_: ComposeTimeoutException) {}
-            return checkNotNull(mapDrawn()?.cells?.firstOrNull { it.index == index }) { "$id is not on the map for $name: ${mapDrawn()?.cells}" }
+        /**
+         * The idea as a frame drawn after the latest move shows it: once the record differs from [before]
+         * (a move that changes nothing, the zoom at the camera's closest, draws it as before: at most
+         * [CloseUpWait.CHANGE_MS]), the same for [CloseUpWait.SETTLED_MS], longer than the tablet's
+         * frames, so no frame drawn mid-pinch is taken for the last.
+         */
+        fun settledCell(before: MapDrawnCell?): MapDrawnCell {
+            fun now() = mapDrawn()?.cells?.firstOrNull { it.index == index }
+            val start = SystemClock.uptimeMillis()
+            if (before != null) {
+                while (SystemClock.uptimeMillis() - start < CloseUpWait.CHANGE_MS && now().let { it == null || it == before }) SystemClock.sleep(50)
+                if (now() == before) trail.append("\n  no frame drew it otherwise within ${CloseUpWait.CHANGE_MS} ms")
+            }
+            var seen = now()
+            var since = SystemClock.uptimeMillis()
+            while (SystemClock.uptimeMillis() - start < CloseUpWait.GIVE_UP_MS) {
+                SystemClock.sleep(100)
+                val c = now()
+                if (c != seen) { seen = c; since = SystemClock.uptimeMillis() }
+                else if (c != null && SystemClock.uptimeMillis() - since >= CloseUpWait.SETTLED_MS) return c
+            }
+            trail.append("\n  the frames did not settle within ${CloseUpWait.GIVE_UP_MS} ms")
+            return checkNotNull(seen) { "$id is not on the map for $name: ${mapDrawn()?.cells}$trail" }
         }
         // fingers only move the map where they land on it, clear of its strip, bar and tools: a pan
         // starts at the idea's spot, or the nearest in the map's middle half where the idea is drawn
@@ -923,9 +975,14 @@ class MapModeSpaceRenderTest {
         // A replay that left the camera elsewhere can leave the idea off the map (on CI, 3b5f900's
         // pacemaker close-up drew it at x 1620 of a 1080 px map, and 14 moves from there moved nothing)
         val left = w / 4; val right = 3 * w / 4; val top = h / 4; val bottom = 3 * h / 4
+        // how far in front of the camera's target the idea lies, once a zoom has shown it
+        var front: Float? = null
         fun toMiddle(c: MapDrawnCell) {
+            // a pan slides the target; the idea, nearer or further, slides distance / (distance - front) as far
+            val d = pose()[3]
+            val gain = front?.let { f -> (d - f).takeIf { it > 0f }?.let { d / it } } ?: 1f
             val from = Offset(c.x.coerceIn(left, right), c.y.coerceIn(top, bottom))
-            val by = middle - Offset(c.x, c.y)
+            val by = (middle - Offset(c.x, c.y)) / gain
             fun room(at: Float, d: Float, low: Float, high: Float) = when {
                 d > 0f -> (high - at) / d
                 d < 0f -> (low - at) / d
@@ -934,21 +991,53 @@ class MapModeSpaceRenderTest {
             val k = min(1f, min(room(from.x, by.x, left, right), room(from.y, by.y, top, bottom)))
             fingers(from, from + by * k, apart, apart)
         }
-        val before = cell()
-        repeat(2) { toMiddle(cell()) }
+        var c = settledCell(null)
+        val before = c
+        note("first", c, pose())
         val most = widest / apart
-        for (step in 0 until 12) {
-            val c = cell()
+        for (step in 1..12) {
             val off = (Offset(c.x, c.y) - middle).getDistance()
             val zoom = want / max(c.across, 1f)
-            if (off > 0.06f * min(w, h)) toMiddle(c)
-            else if (zoom > 1.15f) fingers(middle, middle, apart, apart * min(zoom, most))
-            else if (zoom < 0.87f) fingers(middle, middle, apart * min(1f / zoom, most), apart)
-            else break
+            if (off > 0.06f * min(w, h)) {
+                toMiddle(c)
+                c = settledCell(c)
+                note("$step pan", c, pose())
+                continue
+            }
+            if (zoom in 0.87f..1.15f) break
+            // the pinch: modest while the idea's depth is unknown, then sized so it ends [want] across
+            val d = pose()[3]
+            val asked = front?.let { f ->
+                val kept = c.across * (d - f)
+                (d / (f + kept / want)).takeIf { it.isFinite() && it > 0f }
+            } ?: zoom.coerceIn(0.5f, 2f)
+            val spread = asked.coerceIn(1f / most, most)
+            if (spread >= 1f) fingers(middle, middle, apart, apart * spread)
+            else fingers(middle, middle, apart / spread, apart)
+            val was = c
+            c = settledCell(c)
+            val now = pose()[3]
+            val got = d / now
+            val stopped = abs(got - spread) > 0.02f * spread
+            note("$step zoom ${"%.3f".format(spread)}, the camera ${"%.4f".format(d)} to ${"%.4f".format(now)}" +
+                if (stopped) (if (spread > 1f) " (stopped at the camera's closest)" else " (stopped at the camera's farthest)") else "", c, pose())
+            if (c.across != was.across && now != d) {
+                front = (c.across * now - was.across * d) / (c.across - was.across)
+                trail.append(", the idea ${"%.4f".format(front)} in front of the target")
+            }
+            if (stopped && (spread > 1f) == (c.across < want)) break
         }
-        val close = cell()
-        android.util.Log.i("MapModeSpaceRenderTest", "$name: $id is ${close.across} px across close up at (${close.x}, ${close.y}), ${before.across} px before; ${moves.size} moves")
-        return CloseUp(moves, checkNotNull(mapDrawn()).pose)
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: $id is ${c.across} px across close up at (${c.x}, ${c.y}), ${before.across} px before; ${moves.size} moves$trail")
+        return CloseUp(moves, pose(), c, trail.toString())
+    }
+
+    /** How long a close-up waits for the map's frames (closeUpOnIdea's settledCell). */
+    private object CloseUpWait {
+        /** For a frame that draws the idea otherwise after a move. */
+        const val CHANGE_MS = 5_000L
+        /** The same record this long: over twice the tablet's slowest frames (about 800 ms apart). */
+        const val SETTLED_MS = 2_000L
+        const val GIVE_UP_MS = 20_000L
     }
 
     /** The scene index of the idea [id], from the map's taps (MapTap.ids, ignoring case). */
@@ -962,22 +1051,23 @@ class MapModeSpaceRenderTest {
     /**
      * S05i A6 (repair 6): the idea [id] in [drawn], close up: at least [LEAST_DP] across, and its whole
      * halo (2.5 times that across, MapDrawnCell.HALO_ACROSS) inside the map, so the state drawn there is
-     * in the still. No body is chosen, so no hot halo stands in for the state's own.
+     * in the still. No body is chosen, so no hot halo stands in for the state's own. A failure names
+     * [trail], the close-up's steps (closeUpOnIdea).
      */
-    private fun requireCloseUp(name: String, id: String, drawn: MapDrawn): MapDrawnCell {
+    private fun requireCloseUp(name: String, id: String, drawn: MapDrawn, trail: String): MapDrawnCell {
         val size = checkNotNull(mapNode()).size
         val w = size.width.toFloat(); val h = size.height.toFloat()
         val density = instrumentation.targetContext.resources.displayMetrics.density
         val index = ideaIndex(name, id)
-        val cell = checkNotNull(drawn.cells.firstOrNull { it.index == index }) { "$id is not on the map close up for $name: ${drawn.cells}" }
+        val cell = checkNotNull(drawn.cells.firstOrNull { it.index == index }) { "$id is not on the map close up for $name: ${drawn.cells}$trail" }
         check(cell.across >= LEAST_DP * density) {
-            "$id is not close for $name: ${cell.across} px across, under ${LEAST_DP * density} ($LEAST_DP dp), in $w x $h"
+            "$id is not close for $name: ${cell.across} px across, under ${LEAST_DP * density} ($LEAST_DP dp), in $w x $h; the close-up's steps:$trail"
         }
         val half = cell.across * MapDrawnCell.HALO_ACROSS / 2
         check(cell.x - half >= 0f && cell.x + half <= w && cell.y - half >= 0f && cell.y + half <= h) {
-            "$id's halo is not all on the map for $name: $cell, its halo $half px each side, in $w x $h"
+            "$id's halo is not all on the map for $name: $cell, its halo $half px each side, in $w x $h; the close-up's steps:$trail"
         }
-        check(drawn.chosen == -1 && !drawn.marked) { "A body is chosen in the close-up of $id for $name: ${drawn.chosen}" }
+        check(drawn.chosen == -1 && !drawn.marked) { "A body is chosen in the close-up of $id for $name: ${drawn.chosen}$trail" }
         return cell
     }
 

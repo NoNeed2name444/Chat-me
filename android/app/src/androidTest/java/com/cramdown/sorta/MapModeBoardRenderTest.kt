@@ -65,20 +65,43 @@ class MapModeBoardRenderTest {
 
     @After fun back() {
         scenario?.close()
-        instrumentation.uiAutomation.executeShellCommand("settings put system font_scale 1.0").close()
+        fontScale(1f)
         ui.executeShellCommand("cmd uimode night no")
+    }
+
+    /**
+     * Sets the system font scale and waits until the system's configuration has it. Each write is
+     * waited for (UiDevice reads the command's output to its end): on Chat-me copy eec4320's tablet the
+     * night test's reset to 1.0, sent and closed unread, was still being applied when the day test
+     * wrote 2.0; the 2.0 never reached the configuration, and settings read back 1.0 for 10 s. A write
+     * that hasn't shown after 3 s is sent again, spelled the other way ("2" for "2.0"), so the setting
+     * changes and the system is told again.
+     */
+    private fun fontScale(scale: Float) {
+        val spellings = listOf(if (scale == 1f) "1.0" else "2.0", if (scale == 1f) "1" else "2")
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        var tries = 0
+        while (true) {
+            ui.executeShellCommand("settings put system font_scale ${spellings[tries % 2]}")
+            tries += 1
+            val retry = SystemClock.uptimeMillis() + 3_000
+            while (SystemClock.uptimeMillis() < minOf(retry, deadline)) {
+                if (abs(android.content.res.Resources.getSystem().configuration.fontScale - scale) < 0.01f) return
+                SystemClock.sleep(200)
+            }
+            check(SystemClock.uptimeMillis() < deadline) {
+                "the system's font scale reads ${android.content.res.Resources.getSystem().configuration.fontScale}, " +
+                    "not $scale, after $tries writes in 15 s; settings reads " + ui.executeShellCommand("settings get system font_scale").trim()
+            }
+        }
     }
 
     @Test fun looksAtFontScaleTwoByDay() = render(dark = false)
     @Test fun looksAtFontScaleTwoByNight() = render(dark = true)
 
     private fun render(dark: Boolean) {
-        instrumentation.uiAutomation.executeShellCommand("settings put system font_scale 2.0").close()
+        fontScale(2f)
         ui.executeShellCommand("cmd uimode night ${if (dark) "yes" else "no"}")
-        val deadline = SystemClock.uptimeMillis() + 10_000
-        while (ui.executeShellCommand("settings get system font_scale").trim() != "2.0" && SystemClock.uptimeMillis() < deadline) {
-            SystemClock.sleep(200)
-        }
         SystemClock.sleep(1_000) // the system takes the new mode
         val context = instrumentation.targetContext
         val dir = File(context.cacheDir, "board-looks-" + UUID.randomUUID()).also { it.mkdirs() }
