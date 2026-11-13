@@ -14,6 +14,7 @@ final class MapModeTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     /// The look stored as 2D before launch, through the argument domain

@@ -9,6 +9,7 @@ final class IdeasBehaviourTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     // MARK: capture
