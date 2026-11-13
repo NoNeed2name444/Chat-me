@@ -7,8 +7,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 // The map's filter (S05i), a port of iOS's GraphFilter and what GraphSim does with it
-// (GraphMotion.swift:7-27, :1290-1380, :1913-1985) and of GraphPerfGraph.mask (GraphPerfGraph.swift:327-361,
-// notes only: Android's Performance has no hubs yet). Pure: the renderers and the page read it.
+// (GraphMotion.swift:7-27, :1290-1380, :1913-1985) and of GraphPerfGraph.mask (GraphPerfGraph.swift:327-361:
+// notes, then the hubs, S05i2). Pure: the renderers and the page read it.
 
 /** Which notes the map shows (iOS GraphFilter). Not stored: the page holds it while it is open. */
 sealed class MapFilter {
@@ -58,6 +58,13 @@ sealed class MapFilter {
          */
         fun perfMask(filter: MapFilter, pages: BooleanArray, roots: Array<String?>, degree: IntArray): BooleanArray? =
             if (filter == All) null else BooleanArray(pages.size) { filter.admits(pages[it], roots[it], degree[it]) }
+
+        /**
+         * Performance's mask over its bodies, notes then hubs (GraphPerfGraph.mask, S05i2): null under
+         * Everything; a hub shows while any note under it does, and under a folder filter every hub
+         * inside the folder shows. An unknown folder hides everything.
+         */
+        fun perfMask(filter: MapFilter, graph: PerfGraph): BooleanArray? = graph.mask(filter)
     }
 }
 
@@ -119,8 +126,38 @@ class MapFilterBodies(
     val links: IntArray,
     /** The Universe: a hidden planet whose moon shows stays, faintly (GraphMotion.swift:1296-1300). */
     val universe: Boolean = false,
+    /**
+     * Performance's hubs (S05i2, GraphPerfGraph.swift:338-353): under a folder filter every folder body
+     * whose root is that folder shows, though no note under it does.
+     */
+    val hubsInside: Boolean = false,
 ) {
     val count: Int get() = kinds.size
+
+    companion object {
+        /**
+         * Performance's bodies (S05i2; GraphPerfGraph.swift:338-353), notes then hubs, as the filter reads
+         * them: a note sits in its folder's hub and a hub in its parent folder's, so a hub shows while any
+         * note under it does; each body's root is its top-level folder (a loose note none), and under a
+         * folder filter every hub in that folder shows ([hubsInside]). [links] are the scene's.
+         */
+        fun performance(g: PerfGraph, links: IntArray): MapFilterBodies {
+            val n = g.noteCount
+            return MapFilterBodies(
+                Array(g.nodeCount) { if (it < n) ThemeBodyKind.NOTE else ThemeBodyKind.FOLDER },
+                BooleanArray(g.nodeCount) { it < n && g.isPage[it] },
+                Array(g.nodeCount) { i ->
+                    val f = if (i < n) g.folder[i] else i - n
+                    if (f >= 0) g.folderIds[g.folderRegion[f]] else null
+                },
+                IntArray(g.nodeCount) { i ->
+                    val f = if (i < n) g.folder[i] else g.folderParent[i - n]
+                    if (f >= 0) g.hubNode(f) else -1
+                },
+                links, hubsInside = true)
+        }
+    }
+
     /** Each body's links (iOS degree, counted over the scene's links). */
     val degree = IntArray(kinds.size).also { d ->
         for (k in 0 until links.size / 2) {
@@ -167,7 +204,9 @@ class MapFilterBodies(
             if (kinds[i] == ThemeBodyKind.NOTE) filter.admits(pages[i], roots[i], degree[i]) else filter == MapFilter.All
         }
         if (filter != MapFilter.All) for (i in 0 until count) {
-            if (kinds[i] != ThemeBodyKind.NOTE) wanted[i] = members[i].any { wanted[it] }
+            if (kinds[i] == ThemeBodyKind.NOTE) continue
+            wanted[i] = if (hubsInside && filter is MapFilter.Folder) roots[i]?.equals(filter.id, ignoreCase = true) == true
+                else members[i].any { wanted[it] }
         }
         val ghost = BooleanArray(count) { i ->
             universe && !wanted[i] && kinds[i] == ThemeBodyKind.NOTE && moons[i].any { wanted[it] }

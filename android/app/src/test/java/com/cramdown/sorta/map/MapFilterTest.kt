@@ -100,6 +100,46 @@ class MapFilterTest {
         assertArrayEquals("an unknown folder hides everything", BooleanArray(4), MapFilter.perfMask(MapFilter.Folder("zz"), p, r, d))
     }
 
+    // S05i2: P2's hub cases (GraphPerfTests.swift:203-223, GraphPerfGraph.swift:338-353). Folders: F0 top, F1 in F0,
+    // F2 top, F3 in F2 (empty); notes: N0 a page in F1, N1 an idea in F0 linked to N2, N2 a loose idea, N3 an idea in F2
+    private val perfInput = PerfInput(listOf("N0", "N1", "N2", "N3"), booleanArrayOf(true, false, false, false), intArrayOf(1, 0, -1, 2),
+        listOf("F0", "F1", "F2", "F3"), intArrayOf(-1, 0, -1, 2), intArrayOf(1, 2))
+    private val perfGraph = PerfGraph(perfInput)
+
+    /** The mask as the input's own order: notes N0-N3 then hubs F0-F3. */
+    private fun perfShown(filter: MapFilter): List<Boolean>? {
+        val m = MapFilter.perfMask(filter, perfGraph) ?: return null
+        val g = perfGraph
+        return (0 until 4).map { m[g.noteOfInput[it]] } + (0 until 4).map { m[g.hubNode(g.inputOfFolder.indexOf(it))] }
+    }
+
+    @Test fun performancesMaskOverNotesAndHubs() {
+        val t = true; val f = false
+        assertNull("Everything: no mask", perfShown(MapFilter.All))
+        // a hub shows while any note under it does
+        assertEquals(listOf(t, f, f, f, t, t, f, f), perfShown(MapFilter.Pages))
+        assertEquals(listOf(f, t, t, t, t, f, t, f), perfShown(MapFilter.Ideas))
+        assertEquals(listOf(f, t, t, f, t, f, f, f), perfShown(MapFilter.Linked))
+        // under a folder filter every hub inside it shows, an empty one too, ignoring case
+        assertEquals(listOf(t, t, f, f, t, t, f, f), perfShown(MapFilter.Folder("F0")))
+        assertEquals(listOf(f, f, f, t, f, f, t, t), perfShown(MapFilter.Folder("f2")))
+        assertEquals("an unknown folder hides everything", List(8) { f }, perfShown(MapFilter.Folder("zz")))
+    }
+
+    @Test fun performancesBodiesAgreeWithItsMask() {
+        // what the map's filter shows (MapFilterBodies.performance, hubsInside) is P2's mask, body for body,
+        // here and on the 4,000-note vault under every choice and each top folder
+        for (g in listOf(perfGraph, PerfVault.smallGraph)) {
+            val links = IntArray(2 * g.linkCount) { k -> if (k % 2 == 0) g.edgeA[k / 2] else g.edgeB[k / 2] }
+            val bodies = MapFilterBodies.performance(g, links)
+            val tops = (0 until g.folderCount).filter { g.folderParent[it] < 0 }.map { g.folderIds[it] }
+            for (filter in listOf(MapFilter.Pages, MapFilter.Ideas, MapFilter.Linked) + tops.map { MapFilter.Folder(it.lowercase()) }) {
+                assertArrayEquals("$filter", MapFilter.perfMask(filter, g), bodies.visibility(filter).shown)
+            }
+            assertTrue(bodies.visibility(MapFilter.All).shown.all { it })
+        }
+    }
+
     @Test fun topFoldersAreTheGalaxiesByNameInTheUniverse() {
         val tops = listOf("Beta", "Alpha")
         assertEquals("elsewhere the book's top level, as given", tops, MapFilter.topFolders(tops, null, { it }, naturalOrder()))

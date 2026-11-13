@@ -481,12 +481,18 @@ enum MadeUpExport {
     /// Two more ideas with no board place, so at (0, 0), as an import leaves
     /// them (`base64(stacked: true)`, S05c).
     static let placeless = ["Oil the gate", "Ask about the allotment waiting list"]
+    /// One more in the stacked export, with a title of over 100 characters
+    /// and a clear place (S05m item 5), as Android's IdeasFixture.boiler.
+    static let long = "Ask the landlord when the boiler service is booked, and whether the hall light can be fixed the same day"
+    /// A page, under `page` only, so the board holds both kinds (S05m item 4).
+    static let page = "Plot plan for spring"
     /// Each idea's stored board place, as its board card's identifier names
-    /// it (`IdeaBoardView`, "board-card x y").
+    /// it (`IdeaBoardView`, "board-card <symbol> x y").
     static let places: [String: CGPoint] = [
         "Paint the shed green": CGPoint(x: 120, y: -40), "Seed swap list": .zero,
         "Try a rye starter": CGPoint(x: -75.5, y: 210.25), "A bell for the bike": CGPoint(x: 0, y: 33),
         "Oil the gate": .zero, "Ask about the allotment waiting list": .zero,
+        long: CGPoint(x: 0, y: -230), page: CGPoint(x: -330, y: 150),
     ]
 
     static let manifest = """
@@ -519,22 +525,32 @@ enum MadeUpExport {
     {"body":"","createdAt":"2026-09-06T10:00:00Z","id":"\(id(5))","kind":"idea","links":[],"tags":[],\
     "title":"Oil the gate","updatedAt":"2026-09-06T10:00:00Z"},\
     {"body":"","createdAt":"2026-09-07T10:00:00Z","id":"\(id(6))","kind":"idea","links":[],"tags":[],\
-    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"}
+    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"},\
+    {"boardX":0,"boardY":-230,"body":"","createdAt":"2026-09-08T10:00:00Z","id":"\(id(7))","kind":"idea","links":[],\
+    "tags":[],"title":"\(long)","updatedAt":"2026-09-08T10:00:00Z"}
+    """
+
+    static let pageNote = """
+    {"boardX":-330,"boardY":150,"body":"Beds by the fence first.","createdAt":"2026-09-09T10:00:00Z",\
+    "id":"\(id(8))","kind":"page","links":[],"tags":[],"title":"\(page)","updatedAt":"2026-09-09T10:00:00Z"}
     """
 
     /// The backup as base64, for `-SortaImportFile`; `version` 2 is a newer
-    /// Stethoscore's; `stacked` adds the two `placeless` ideas.
-    static func base64(version: Int = 1, stacked: Bool = false) throws -> String {
+    /// Stethoscore's; `stacked` adds the two `placeless` ideas and the
+    /// `long` one; `page`, with `stacked`, adds the page.
+    static func base64(version: Int = 1, stacked: Bool = false, page: Bool = false) throws -> String {
         let last = "\"updatedAt\":\"2026-09-05T10:00:00Z\"}]}"
-        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + placelessNotes + "]}") : notes
-        precondition(!stacked || ideas != notes, "the stacked export adds its two ideas")
+        let more: String = placelessNotes + (stacked && page ? "," + pageNote : "")
+        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + more + "]}") : notes
+        precondition(!stacked || ideas != notes, "the stacked export adds its ideas")
+        precondition(stacked || !page, "the page comes with the stacked export")
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorta-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let parts: [(String, String)] = [
             ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")
-                .replacingOccurrences(of: "NOTES", with: stacked ? "6" : "4")),
+                .replacingOccurrences(of: "NOTES", with: stacked ? (page ? "8" : "7") : "4")),
             ("notes.json", ideas),
         ]
         var files: [(name: String, file: URL)] = []

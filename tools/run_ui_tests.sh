@@ -119,11 +119,15 @@ case "$set_" in
           dark:SortaUITests/IdeasRenderTests/testScreensRender
           light:SortaUITests/MapModeRenderTests/testMapRenders
           dark:SortaUITests/MapModeRenderTests/testMapRenders
-          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls)
+          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls
+          light:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard
+          dark:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard)
     if [ "$kind" = "iphone" ]; then
+      # the largest text size by night too: the look menu's surface (S05m)
       runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
             light:SortaUITests/IdeasRenderTests/testLargestTextSize
-            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
+            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap
+            dark:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
     fi
     # one test, or one launch of the whole class's: each test starts the
     # app afresh, and the longest relaunches it once

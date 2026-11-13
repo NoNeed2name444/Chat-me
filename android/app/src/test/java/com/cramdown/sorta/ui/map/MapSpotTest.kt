@@ -53,4 +53,13 @@ class MapSpotTest {
     @Test fun noBodyClearOfTheCardIsNone() {
         assertNull(pick(listOf(lower), card))
     }
+
+    @Test fun aPerformanceHubIsPassedOverForAnIdea() {
+        // S05i2: bodies from [below] on are Performance's hubs, whose tap gives a folder's card; the
+        // biggest idea is taken though a hub is bigger, and with only hubs there is none
+        val hub = ScreenNode(9, 540f, 1100f, pixels = 60f)
+        assertEquals(1, MapSpot.pick(listOf(upper, hub), width, height, high, low, margin, null, below = 9)?.index)
+        assertEquals(9, MapSpot.pick(listOf(upper, hub), width, height, high, low, margin, null)?.index)
+        assertNull(MapSpot.pick(listOf(hub), width, height, high, low, margin, null, below = 9))
+    }
 }

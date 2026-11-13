@@ -77,11 +77,23 @@ class MapLegendTest {
             "Tap a cell, then Fly in on its card.", CELL_STATES_HOW, MapLegend.LINK_IDEAS), c.rows.map { it.how })
     }
 
+    /** Performance's Folder and Lines rows (S05i2), pinned word for word: a hub, and the folder lines in the colour Android draws. */
+    private val performanceFolder = LegendRow("circle.hexagongrid.fill", "Folder",
+        "A bright hub with its ideas round it in a ball. Everything in a top-level folder is drawn in one colour.",
+        LegendTint(0.86, 0.9, 1.0), MapLegend.MAKE_FOLDER)
+    private val performanceLines = LegendRow("line.diagonal", "Lines",
+        "Links, coloured by the ideas at their ends, fainter in the distance. Lines in the folders’ colours join each folder’s hub to the hub of the one it sits in.",
+        LegendTint.white(0.75), MapLegend.LINK_IDEAS)
+
     @Test fun performanceHasTheRungsAndRowsAndroidDraws() {
         val c = MapLegend.of(GraphTheme.PERFORMANCE)
-        assertEquals(listOf("Glow" to 30, "Idea" to 11, "Far idea" to 5), c.rungs.map { it.caption to it.size })
+        // S05i2: a hub's Folder rung, 22 and hubWhite, between Glow and Idea (GraphLegend.swift:325)
+        assertEquals(listOf("Glow" to 30, "Folder" to 22, "Idea" to 11, "Far idea" to 5), c.rungs.map { it.caption to it.size })
+        assertEquals(LegendTint(0.86, 0.9, 1.0), c.rungs[1].fill)
         assertEquals("Nearer things show more detail.", c.ladderCaption)
-        assertEquals("Size ladder: glow, idea, far idea", c.ladderLabel)
+        assertEquals("Size ladder: glow, folder, idea, far idea", c.ladderLabel)
+        assertEquals(performanceFolder, c.rows[0])
+        assertEquals(performanceLines, c.rows[3])
         assertEquals(listOf("Folder", "Idea", "Glow", "Lines"), c.rows.map { it.name })
         assertEquals("Speed only while the readout shows", listOf("Folder", "Idea", "Glow", "Lines", "Speed"),
             MapLegend.of(GraphTheme.PERFORMANCE, readout = true).rows.map { it.name })
@@ -101,10 +113,14 @@ class MapLegendTest {
         // rest waits
         // S05i brought the cell states: "cell states" and "breathing" left this list for the exact check of
         // Neurons' Cell states row below
-        for (later in listOf("moon", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
+        // S05i2 brought the hubs: "hub with" left this list for the exact check of Performance's Folder row
+        // below; "folder lines" stays, as the pinned Lines row has it not
+        for (later in listOf("moon", "its planets", "planets follow", "folder lines", "thin grey lines", "tour",
             "orbits")) {
             assertFalse("\"$later\" waits for later work", all.contains(later))
         }
+        assertEquals(performanceFolder, MapLegend.of(GraphTheme.PERFORMANCE).rows.single { it.name == "Folder" })
+        assertFalse("the pinned Lines row has no \"folder lines\"", performanceLines.text.lowercase().contains("folder lines"))
         // Neurons' rows run …, Opening a cell, Cell states, Axons and synapses, the Cell states row iOS's word for word
         val neurons = MapLegend.of(GraphTheme.NEURONS).rows
         assertEquals(listOf("Opening a cell", "Cell states", "Axons and synapses"), neurons.map { it.name }.takeLast(3))
@@ -135,8 +151,8 @@ class MapLegendTest {
             assertFalse("names New page: $line", line.contains("New page"))
         }
         assertEquals(listOf("Hold an idea › Choose folder › New folder: a new cell.", "Type an idea in Sort: a new granule."), GraphTheme.NEURONS.cardSteps.take(2))
-        // Android's Performance draws no hub (S05g), so the step names the folder's colour
-        assertEquals(listOf("Hold an idea › Choose folder › New folder: a folder of points in one colour.", "Type an idea in Sort: a new point."),
+        // S05i2: Android's Performance draws a hub for each folder, so the step is iOS's (GraphTheme.swift:150)
+        assertEquals(listOf("Hold an idea › Choose folder › New folder: a new cluster round its hub.", "Type an idea in Sort: a new point."),
             GraphTheme.PERFORMANCE.cardSteps.take(2))
     }
 

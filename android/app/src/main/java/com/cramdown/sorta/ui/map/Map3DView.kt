@@ -121,6 +121,11 @@ import com.cramdown.sorta.map.MapFocus
 import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.grouped
+import com.cramdown.sorta.map.PerfForce
+import com.cramdown.sorta.map.PerfInput
+import com.cramdown.sorta.map.PerfLayout
+import com.cramdown.sorta.map.PerfMap
+import com.cramdown.sorta.map.PerfSynthetic
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
 import com.cramdown.sorta.ui.ward.WardType
@@ -160,7 +165,14 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 * smallest body's (S05i repair 6), so an idea in an open cell, a twentieth of the cell, can be
                 * brought close as on iOS, whose pinch has no floor (allowsCameraControl, Graph3DView.swift:1650).
                 */
-               val closest: Float = nodeRadius * 4) {
+               val closest: Float = nodeRadius * 4,
+               /**
+                * Performance from the book (S05i2; iOS's GraphPerfScene): the folder layout its bodies come
+                * from, notes then each folder's hub, and the force that settles the notes a slice a frame on
+                * the GL thread; null for the demo map and the other themes.
+                */
+               val perf: PerfMap? = null,
+               val force: PerfForce? = null) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -219,6 +231,23 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             val reach = plan.envelope.maxOfOrNull { (it - centre).length() } ?: 0f
             return MapScene(tree, radius, graph.titles, graph.ids, if (reach > 1e-3f) reach else viewRadius(tree), MapTheme.SPACE,
                 links = edges, linkHalf = UniverseBeams.HALF_WIDTH, universe = true, universePlan = plan, galaxyTones = tones)
+        }
+
+        /**
+         * Performance (S05i2): node i is the layout's body i at its seed place, notes then hubs (a hub per
+         * folder, [PerfGraph.hubNode]), each in its region's colour; a note's point is the layout's note
+         * radius, as sizes do not scale with the links. Names come from [input] where it has them, else
+         * the synthetic vault's made-up titles; a hub's id is its folder's. Builds the force too: off main.
+         */
+        fun performance(map: PerfMap, input: PerfInput, leafCapacity: Int = 4096): MapScene {
+            val g = map.graph
+            val titles = ArrayList<String>(g.nodeCount)
+            for (i in 0 until g.noteCount) { val k = g.inputOfNote[i]; titles.add(input.noteTitles.getOrNull(k) ?: PerfSynthetic.title(k)) }
+            for (f in 0 until g.folderCount) titles.add(input.folderNames.getOrNull(g.inputOfFolder[f]) ?: "")
+            val graph = map.mapGraph(titles, g.noteIds + g.folderIds)
+            val tree = Octree.build(graph, leafCapacity)
+            return MapScene(tree, PerfLayout.NOTE_RADIUS, graph.titles, graph.ids, viewRadius(tree), MapTheme.PLAIN,
+                links = graph.edges, perf = map, force = PerfForce(g, map.seed))
         }
 
         /** A Universe body's Space style (S05h): what it is drawn as. */
@@ -412,6 +441,8 @@ data class MapFlyTo(val id: String, val serial: Int)
      * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
      */
     filter: MapFilterView? = null,
+    /** The proof tour (S05i2, PerfTour): a Performance scene from the layout flies its path by itself. Never shown to a person. */
+    tour: Boolean = false,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -473,6 +504,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
             universe = scene.universe, universePlan = scene.universePlan,
             departures = recall.departures, testHooks = testHooks, totals = totals,
+            perf = scene.perf, force = scene.force, tour = tour,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
@@ -689,8 +721,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // semantics are, in one pass with no lists made
     fun spot(): List<Float> {
         val margin = with(density) { MapSpot.MARGIN_DP.dp.toPx() }
+        // an idea, not a Performance hub, whose tap gives a folder's card (S05i2)
         val best = MapSpot.pick(screenNodes, viewSize.width.toFloat(), viewSize.height.toFloat(),
-            high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek)
+            high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek, below = scene.perf?.graph?.noteCount ?: Int.MAX_VALUE)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
@@ -1183,14 +1216,16 @@ private class FrameLoop(
 internal object MapSpot {
     const val MARGIN_DP = 48f
 
-    fun pick(nodes: List<ScreenNode>, width: Float, height: Float, high: Float, low: Float, margin: Float, peek: Rect?): ScreenNode? {
+    /** The biggest crisp body clear of the chrome and the card, of those indexed under [below]. */
+    fun pick(nodes: List<ScreenNode>, width: Float, height: Float, high: Float, low: Float, margin: Float, peek: Rect?,
+             below: Int = Int.MAX_VALUE): ScreenNode? {
         val right = width - margin
         val top = high + margin
         val bottom = height - low - margin
         val card = peek?.inflate(margin)
         var best: ScreenNode? = null
         for (n in nodes) {
-            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < top || n.y > bottom) continue
+            if (n.index >= below || !n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < top || n.y > bottom) continue
             if (card != null && card.contains(Offset(n.x, n.y))) continue
             if (best == null || n.pixels > best.pixels) best = n
         }

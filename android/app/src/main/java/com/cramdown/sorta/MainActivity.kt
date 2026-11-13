@@ -27,7 +27,9 @@ class MainActivity : ComponentActivity() {
         val preview: String? = intent?.getStringExtra(MAP_PREVIEW)
         if (preview != null) {
             val cells: String? = intent?.getStringExtra(MAP_PREVIEW_CELLS)
-            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview, cells) } }
+            // the proof tour (S05i2): read only beside the "performance" preview
+            val tour = preview == "performance" && intent?.getBooleanExtra(MAP_PREVIEW_TOUR, false) == true
+            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview, cells, tour) } }
             return
         }
         // the store, opened at launch: ideas.json in the files directory, or the tests' own
@@ -44,6 +46,11 @@ class MainActivity : ComponentActivity() {
         const val MAP_PREVIEW = "sortaMapPreview"
         /** The Neurons' cell state for every idea in [MapPreview], as iOS's -graphPreviewCells (S05i). */
         const val MAP_PREVIEW_CELLS = "sortaMapPreviewCells"
+        /**
+         * Beside "performance" in [MAP_PREVIEW], the proof tour (S05i2, as iOS's -graphPreviewPerfTour):
+         * 100,000 made-up ideas fly PerfTour's path, each phase's frame numbers to logcat (tag SortaTour).
+         */
+        const val MAP_PREVIEW_TOUR = "sortaMapPreviewTour"
         /**
          * The tests' launch extras: a directory for the store (a new one gives a fresh store; the
          * same one again reopens it), and a file handed to the import as the picker's result is.

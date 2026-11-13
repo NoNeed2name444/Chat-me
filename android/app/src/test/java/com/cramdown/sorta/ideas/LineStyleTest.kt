@@ -260,6 +260,77 @@ class LineStyleTest {
                 && IdeaBoardFit.camera(spread, card, phone, 220.0, room, sizes = spread.map { card }) == wide)
     }
 
+    /**
+     * S05m item 1: the first view on four windows and the two panes, on the stacked fixture's spread
+     * and on four cards apart. The box fills at least 85 % of the room (16 in from each edge, below
+     * the strip) along the side that binds, or the zoom is 1; no card is under the tools; every card
+     * is in the room and at least a target tall; never zoomed in past 1.
+     */
+    @Test fun l6FirstViewFillsTheBoard() {
+        data class Window(val name: String, val view: IdeaBoardFit.Size, val hidden: Double, val top: Double,
+                          val tools: IdeaBoardFit.Tools, val target: Double)
+        val windows = listOf(
+            Window("Android phone", IdeaBoardFit.Size(411.0, 914.0), 82.0, 56.0, IdeaBoardFit.Tools(80.0, 208.0, false), 48.0),
+            Window("Android tablet", IdeaBoardFit.Size(1280.0, 800.0), 0.0, 56.0, IdeaBoardFit.Tools(80.0, 208.0, true), 48.0),
+            Window("Android tablet's map pane", IdeaBoardFit.Size(768.0, 800.0), 0.0, 56.0, IdeaBoardFit.Tools(80.0, 208.0, true), 48.0),
+            Window("iPhone", IdeaBoardFit.Size(402.0, 874.0), 94.0, 60.0, IdeaBoardFit.Tools(76.0, 196.0, false), 44.0),
+            Window("iPad", IdeaBoardFit.Size(1032.0, 1376.0), 20.0, 60.0, IdeaBoardFit.Tools(76.0, 196.0, false), 44.0),
+            Window("iPad's map pane", IdeaBoardFit.Size(619.0, 1300.0), 20.0, 60.0, IdeaBoardFit.Tools(76.0, 196.0, false), 44.0))
+        // the stacked fixture as both platforms store it (IdeasFixture.stacked, MadeUpExport stacked)
+        val stacked = listOf(card(1, 120.0, -40.0), card(2, 0.0, 0.0), card(3, -75.5, 210.25), card(4, 0.0, 33.0),
+            card(5, 0.0, 0.0), card(6, 0.0, 0.0), card(7, 0.0, -230.0)).map { it.copy(width = 180.0) }
+        val four = listOf(card(1, -330.0, -120.0), card(2, 360.0, 40.0), card(3, 10.0, 300.0), card(4, -40.0, -260.0))
+        val least = IdeaBoardFit.Size(150.0, 88.0)
+        for (w in windows) for ((name, cards) in listOf("stacked" to stacked, "four apart" to four)) {
+            val at = IdeaBoardSpread.places(cards)
+            val centres = cards.map { at.getValue(it.id) }
+            val sizes = cards.map { IdeaBoardFit.Size(it.width, it.height) }
+            val cam = IdeaBoardFit.firstView(centres, sizes, least, w.view, w.hidden, w.top, w.tools, w.target)
+            val seen = w.view.height - w.hidden
+            val roomW = w.view.width - 32; val roomH = seen - w.top - 32
+            val spanW = cards.indices.maxOf { centres[it].x + sizes[it].width / 2 } - cards.indices.minOf { centres[it].x - sizes[it].width / 2 }
+            val spanH = cards.indices.maxOf { centres[it].y + sizes[it].height / 2 } - cards.indices.minOf { centres[it].y - sizes[it].height / 2 }
+            val fill = max(spanW * cam.zoom / roomW, spanH * cam.zoom / roomH)
+            val tools = IdeaBoardFit.toolsRect(w.view, w.hidden, w.tools)
+            var under = false; var outside = false
+            cards.indices.forEach { k ->
+                val x = w.view.width / 2 + cam.panX + centres[k].x * cam.zoom
+                val y = seen / 2 + cam.panY + centres[k].y * cam.zoom
+                val hw = sizes[k].width * cam.zoom / 2; val hh = sizes[k].height * cam.zoom / 2
+                if (x + hw > tools[0] && x - hw < tools[2] && y + hh > tools[1] && y - hh < tools[3]) under = true
+                if (x - hw < 16 - 1e-6 || x + hw > w.view.width - 16 + 1e-6 || y - hh < 16 + w.top - 1e-6 || y + hh > seen - 16 + 1e-6) outside = true
+            }
+            val label = "${w.name}, $name: zoom ${cam.zoom}, fill $fill"
+            assertTrue("L6 the box fills at least 85 % of the room, or the zoom is 1: $label", fill >= 0.85 - 1e-9 || cam.zoom >= 1 - 1e-9)
+            // a board too wide for the room at the floor opens on its middle, as before (L7)
+            val tooWide = fill > 1 + 1e-9 && cam.zoom <= IdeaBoardFit.firstRange(sizes.minOf { it.height }, w.target).start + 1e-9
+            assertTrue("L6 no card under the tools: $label", tooWide || !under)
+            assertTrue("L6 every card in the room: $label", tooWide || !outside)
+            assertTrue("L6 never past 1, every card a target tall: $label",
+                cam.zoom <= 1 + 1e-9 && sizes.minOf { it.height } * cam.zoom >= w.target - 1e-6)
+        }
+        // the old trailing 76 down the whole height held the phone's box to 84 % across
+        val phone = windows[0]
+        val at = IdeaBoardSpread.places(stacked)
+        val old = IdeaBoardFit.camera(stacked.map { at.getValue(it.id) }, least, phone.view, phone.hidden,
+            IdeaBoardFit.Margins(16.0 + phone.top, 16.0, 16.0, 76.0), IdeaBoardFit.firstRange(88.0, 48.0),
+            stacked.map { IdeaBoardFit.Size(it.width, it.height) })
+        val now = IdeaBoardFit.firstView(stacked.map { at.getValue(it.id) }, stacked.map { IdeaBoardFit.Size(it.width, it.height) },
+            least, phone.view, phone.hidden, phone.top, phone.tools, phone.target)
+        assertTrue("L6 the phone opens larger than with the old margins: ${now.zoom} > ${old.zoom}", now.zoom > old.zoom)
+        // a board with a card where the tools are: it is moved or zoomed clear of them
+        val corner = listOf(card(1, -150.0, -300.0), card(2, 150.0, 300.0))
+        val cornerAt = corner.map { it.centre }
+        val cornerCam = IdeaBoardFit.firstView(cornerAt, corner.map { IdeaBoardFit.Size(it.width, it.height) }, least,
+            phone.view, phone.hidden, phone.top, phone.tools, phone.target)
+        val r = IdeaBoardFit.toolsRect(phone.view, phone.hidden, phone.tools)
+        val seen = phone.view.height - phone.hidden
+        val bx = phone.view.width / 2 + cornerCam.panX + 150 * cornerCam.zoom
+        val by = seen / 2 + cornerCam.panY + 300 * cornerCam.zoom
+        assertTrue("L6 a card at the bottom-trailing corner is drawn clear of the tools: $cornerCam",
+            !(bx + 75 * cornerCam.zoom > r[0] && by + 44 * cornerCam.zoom > r[1]))
+    }
+
     // ---- L7 the first view keeps every card big enough to tap ----
 
     @Test fun l7FirstViewKeepsCardsTappable() {
@@ -283,10 +354,12 @@ class LineStyleTest {
         assertEquals("L8 let go in a clear place, it stays", clear, IdeaBoardDrop.settle(clear, 150.0, 88.0, others))
         val onTop = BoardPoint(10.0, 4.0)
         val settled = IdeaBoardDrop.settle(onTop, 150.0, 88.0, others)
-        fun overlaps(a: BoardPoint, b: BoardPoint) = abs(a.x - b.x) < 150 + 8 - 1e-6 && abs(a.y - b.y) < 88 + 8 - 1e-6
+        val gap = IdeaBoardDrop.GAP
+        assertEquals("L8 the board keeps 12 between cards (S05m)", 12.0, gap, 0.0)
+        fun overlaps(a: BoardPoint, b: BoardPoint) = abs(a.x - b.x) < 150 + gap - 1e-6 && abs(a.y - b.y) < 88 + gap - 1e-6
         val moved = hypot(settled.x - onTop.x, settled.y - onTop.y)
         assertTrue("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap: $settled",
-            others.none { overlaps(settled, it) } && moved > 0 && moved <= 150 + 8 + 8)
+            others.none { overlaps(settled, it) } && moved > 0 && moved <= 150 + gap + 8)
     }
 
     // ---- L9 the board draws no card over another (S05c) ----
@@ -297,7 +370,7 @@ class LineStyleTest {
             val a = cards[i]; val b = cards[j]
             val p = at[a.id] ?: return false
             val q = at[b.id] ?: return false
-            if (IdeaBoardDrop.covers(p, a.width, a.height, q, b.width, b.height, 8.0 - 1e-6)) return false
+            if (IdeaBoardDrop.covers(p, a.width, a.height, q, b.width, b.height, 12.0 - 1e-6)) return false
         }
         return true
     }
@@ -308,7 +381,8 @@ class LineStyleTest {
         assertTrue("L9 cards that cover none stay where they are stored: $apartAt", apart.all { apartAt[it.id] == it.centre })
         val pair = listOf(card(1, 10.0, 10.0), card(2, 10.0, 10.0))
         val pairAt = IdeaBoardSpread.places(pair)
-        assertTrue("L9 two on one place end apart, the first kept: $pairAt", pairAt[pair[0].id] == pair[0].centre && noneCover(pair, pairAt))
+        assertTrue("L9 two on one place are drawn round it, the first moved with them: $pairAt",
+            noneCover(pair, pairAt) && pairAt[pair[0].id] != pair[0].centre && nearD(middle(pair, pairAt).x, 10.0, 1.0) && nearD(middle(pair, pairAt).y, 10.0, 1.0))
         // the second is drawn away from the first; the third covers the second's stored place but
         // neither drawn card, so it keeps its own
         val clear = listOf(card(1, 0.0, 0.0), card(2, 10.0, 0.0), card(3, 165.0, -50.0))
@@ -317,17 +391,19 @@ class LineStyleTest {
             clearAt[clear[2].id] == clear[2].centre && clearAt[clear[1].id] != clear[1].centre && noneCover(clear, clearAt))
         val stack = (1..5).map { card(it, 0.0, 0.0) }
         val stackAt = IdeaBoardSpread.places(stack)
-        assertTrue("L9 five at (0, 0) end apart, none covering another: $stackAt", stackAt.size == 5 && noneCover(stack, stackAt))
+        assertTrue("L9 five at (0, 0) end apart round it, none covering another: $stackAt",
+            stackAt.size == 5 && noneCover(stack, stackAt) && nearD(middle(stack, stackAt).x, 0.0, 1.0) && nearD(middle(stack, stackAt).y, 0.0, 1.0))
         // 96 down clears two 88 dp cards, not a 200 dp one
         val tall = listOf(card(1, 0.0, 0.0, h = 200.0), card(2, 0.0, 96.0))
         val tallAt = IdeaBoardSpread.places(tall)
         assertTrue("L9 a tall card and a short one are kept apart by their own sizes: $tallAt",
             tallAt[tall[0].id] == tall[0].centre && tallAt[tall[1].id] != tall[1].centre && noneCover(tall, tallAt))
         assertEquals("L9 the same cards give the same places", stackAt, IdeaBoardSpread.places(stack))
-        assertEquals("L9 the store's order decides who stays", pair[1].centre, IdeaBoardSpread.places(listOf(pair[1], pair[0]))[pair[1].id])
+        assertEquals("L9 the store's order decides who goes where", pairAt[pair[0].id], IdeaBoardSpread.places(listOf(pair[1], pair[0]))[pair[1].id])
         val crowd = (1..300).map { card(it, 0.0, 0.0) }
         val crowdAt = IdeaBoardSpread.places(crowd, rings = 40)
-        assertTrue("L9 a crowd past the rings still ends with none covering another", crowdAt.size == 300 && noneCover(crowd, crowdAt))
+        assertTrue("L9 a crowd on one point ends round it, none covering another",
+            crowdAt.size == 300 && noneCover(crowd, crowdAt) && nearD(middle(crowd, crowdAt).x, 0.0, 1.0) && nearD(middle(crowd, crowdAt).y, 0.0, 1.0))
         // a card let go of settles clear of the drawn cards, as the board does it
         val a = card(1, 0.0, 0.0); val b = card(2, 30.0, 0.0)
         val drawn = IdeaBoardSpread.places(listOf(a, b))
@@ -338,5 +414,49 @@ class LineStyleTest {
         assertTrue("L9 a card let go of clear of the drawn cards is drawn where it settled, ahead of a moved one in the order: $after",
             after[c.id] == drop && noneCover(listOf(a, c, b), after))
         assertTrue("L9 no cards, no places", IdeaBoardSpread.places(emptyList()).isEmpty())
+    }
+
+    /** The middle of the box round [cards] as drawn at [at]. */
+    private fun middle(cards: List<IdeaBoardSpread.Card>, at: Map<String, BoardPoint>): BoardPoint {
+        val minX = cards.minOf { at.getValue(it.id).x - it.width / 2 }; val maxX = cards.maxOf { at.getValue(it.id).x + it.width / 2 }
+        val minY = cards.minOf { at.getValue(it.id).y - it.height / 2 }; val maxY = cards.maxOf { at.getValue(it.id).y + it.height / 2 }
+        return BoardPoint((minX + maxX) / 2, (minY + maxY) / 2)
+    }
+
+    // S05m item 2: cards on one point are drawn round it; a card stored off it on the side it is stored
+    @Test fun l9SpreadDrawsAStackRoundItsPoint() {
+        val three = (1..3).map { card(it, 0.0, 0.0) }
+        val bell = card(4, 0.0, 33.0)
+        val all = three + bell
+        val at = IdeaBoardSpread.places(all)
+        val mid = middle(three, at)
+        assertTrue("L9 three on one point are drawn round it, the box's middle within 1: $mid", gap(mid, BoardPoint(0.0, 0.0)) <= 1)
+        val bottom = three.maxOf { at.getValue(it.id).y + it.height / 2 }
+        val bellTop = at.getValue(bell.id).y - bell.height / 2
+        assertTrue("L9 the bell, stored 33 below, is drawn below them, a gap clear: $bellTop vs $bottom",
+            bellTop >= bottom + 12 - 1e-6 && noneCover(all, at))
+        // stored above, to the left and to the right: drawn on that side
+        val above = IdeaBoardSpread.places(three + card(4, 10.0, -30.0))
+        assertTrue("L9 a card stored above the point is drawn above the block",
+            above.getValue("c4").y + 44 <= three.minOf { above.getValue(it.id).y - 44 } - 12 + 1e-6)
+        val left = IdeaBoardSpread.places(three + card(4, -120.0, 5.0))
+        assertTrue("L9 a card stored left of it is drawn left of the block",
+            left.getValue("c4").x + 75 <= three.minOf { left.getValue(it.id).x - 75 } - 12 + 1e-6)
+        val right = IdeaBoardSpread.places(three + card(4, 120.0, -5.0))
+        assertTrue("L9 a card stored right of it is drawn right of the block",
+            right.getValue("c4").x - 75 >= three.maxOf { right.getValue(it.id).x + 75 } + 12 - 1e-6)
+        // the stored order puts the bell first: it is still drawn below the block
+        val bellFirst = IdeaBoardSpread.places(listOf(bell) + three)
+        assertTrue("L9 the bell is drawn below the block whatever its place in the order",
+            bellFirst.getValue(bell.id).y - 44 >= three.maxOf { bellFirst.getValue(it.id).y + 44 } + 12 - 1e-6)
+        // a lone card that covers nothing keeps its place
+        val lone = card(5, 600.0, 0.0)
+        assertEquals("L9 a lone card clear of the block keeps its place", lone.centre, IdeaBoardSpread.places(all + lone)[lone.id])
+        // two points whose blocks would meet are drawn apart, each whole
+        val twoPoints = (1..4).map { card(it, 0.0, 0.0) } + (5..8).map { card(it, 100.0, 0.0) }
+        val twoAt = IdeaBoardSpread.places(twoPoints)
+        assertTrue("L9 two blocks that would meet are drawn apart: $twoAt", noneCover(twoPoints, twoAt)
+            && gap(middle(twoPoints.take(4), twoAt), BoardPoint(0.0, 0.0)) <= 1)
+        assertEquals("L9 the same input, the same places", at, IdeaBoardSpread.places(all))
     }
 }

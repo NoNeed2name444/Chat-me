@@ -104,6 +104,9 @@ import com.cramdown.sorta.map.LabelRgb
 import com.cramdown.sorta.map.NoteLike
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SyntheticGraph
+import com.cramdown.sorta.map.PerfInput
+import com.cramdown.sorta.map.PerfMap
+import com.cramdown.sorta.map.PerfSynthetic
 import com.cramdown.sorta.ui.map.Map3DView
 import com.cramdown.sorta.ui.map.MapEase
 import com.cramdown.sorta.ui.map.MapFlyTo
@@ -117,6 +120,7 @@ import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
@@ -472,23 +476,28 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 // (Graph3DView.swift:861-862, galaxyOf from GraphThemeScene.swift:191): a note in a closed cell counts for no folder
                 return@builtOffMain BuiltMap(neurons, roles, null, bodies, stored = stored(plan?.let { MapFilterNotes.drawnIn(it) } ?: emptyMap()))
             }
+            if (theme == GraphTheme.PERFORMANCE) {
+                // Performance (S05i2; iOS's GraphPerfAdapter.input and GraphPerfScene): the folder layout,
+                // each note in its folder's ball round the folder's hub, settled by the force on the GL thread
+                val input = perfInput(book, edges, linkLength)
+                val layout = PerfMap.build(input) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
+                val scene = MapScene.performance(layout, input)
+                // what the filter reads (P2): notes then hubs, a hub showing while any note under it does
+                val bodies = MapFilterBodies.performance(layout.graph, scene.links)
+                return@builtOffMain BuiltMap(scene, emptyMap(), null, bodies, stored = stored())
+            }
             val out = HashMap<String, MutableList<String>>()
             for ((a, b) in edges) out.getOrPut(a) { ArrayList() }.add(b)
-            val performance = theme == GraphTheme.PERFORMANCE
-            val nodes = notes.map { note ->
-                NoteNode(note.id, note.title.ifEmpty { "Untitled" }, out[note.id] ?: emptyList(),
-                    if (performance) listOfNotNull(book.rootFolder(note.folderId)) else emptyList())
-            }
+            val nodes = notes.map { note -> NoteNode(note.id, note.title.ifEmpty { "Untitled" }, out[note.id] ?: emptyList(), emptyList()) }
             // the Link length is the links' rest length (A5)
             val graph = MapGraph.fromNotes(nodes, rest = MapGraph.REST * linkLength.toFloat())
-            // the single looks and Performance: every body a note, its root its top-level folder
+            // the single looks: every body a note, its root its top-level folder
             val noteById = notes.associateBy { it.id }
             fun plain(scene: MapScene) = MapFilterBodies(Array(graph.nodeCount) { ThemeBodyKind.NOTE },
                 BooleanArray(graph.nodeCount) { graph.ids[it].uppercase() in pageIds },
                 Array(graph.nodeCount) { noteById[graph.ids[it]]?.let { n -> book.rootFolder(n.folderId) } },
                 IntArray(graph.nodeCount) { -1 }, scene.links)
-            if (performance) MapScene.of(graph, theme = MapTheme.PLAIN).let { BuiltMap(it, emptyMap(), null, plain(it), stored = stored()) }
-            else {
+            run {
                 val degree = IntArray(graph.nodeCount)
                 for (k in graph.edges.indices) degree[graph.edges[k]]++
                 val styles = GraphStyleChoice.codes(book, graph.ids, degree, main, folderRaw)
@@ -562,6 +571,10 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                     UniverseRole.GALAXY, UniverseRole.STAR -> ThemeBodyKind.FOLDER
                     else -> ThemeBodyKind.NOTE
                 }, star.role.raw)
+                // a Performance hub stands for its folder (S05i2): its card is a folder's, with Fly in
+                map.scene.perf != null && index >= map.scene.perf.graph.noteCount -> map.scene.ids.getOrNull(index)?.let { id ->
+                    MapBody(id, ThemeBodyKind.FOLDER, MapPeek.HUB)
+                }
                 else -> map.scene.ids.getOrNull(index)?.let { id ->
                     MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
                 }
@@ -603,6 +616,18 @@ internal fun cellsOpenedBy(kind: ThemeBodyKind, id: String, book: IdeaBook): Lis
         book.path(folder.id).map { it.id.uppercase() }
     }
     ThemeBodyKind.NOTE -> null
+}
+
+/**
+ * Performance's input from the book (S05i2; iOS's GraphPerfAdapter.input): the notes, the folders and
+ * the links, as the map lays them out; the emulator's test lays out the same to find a folder's ball.
+ */
+internal fun perfInput(book: IdeaBook, edges: List<Pair<String, String>>, linkScale: Double): PerfInput {
+    val notes = book.notes
+    return PerfInput.of(notes.map { it.id }, BooleanArray(notes.size) { notes[it].noteKind == NoteKind.PAGE },
+        notes.map { it.folderId }, book.folders.map { it.id }, book.folders.map { it.parentId }, edges,
+        linkScale = linkScale.toFloat(), noteTitles = notes.map { it.title.ifEmpty { "Untitled" } },
+        folderNames = book.folders.map { it.name })
 }
 
 /**
@@ -681,6 +706,27 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
     if (ready == null) { Building(size); return }
     Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(size)} made-up ideas, not your ideas",
         continuous = true, autoOrbit = true, showReadout = readout, showControls = false, recenter = recenter, corner = 0.dp)
+}
+
+/**
+ * The proof tour's map (S05i2; iOS's -graphPreviewPerfTour): the synthetic vault, 100,000 made-up ideas in
+ * 24 top-level folders, laid out as Performance lays out the book, flying PerfTour's path by itself and
+ * logging its frames. Only MainActivity's tour extra beside the "performance" preview opens it; no screen a
+ * person reaches does.
+ */
+@Composable internal fun TourMap(onShown: (Boolean) -> Unit = {}) {
+    val spec = remember { PerfSynthetic.Spec() }
+    val scene by produceState<MapScene?>(null, spec) {
+        value = builtOffMain {
+            val input = PerfSynthetic.make(spec)
+            PerfMap.build(input) { !isActive }?.let { MapScene.performance(it, input) } ?: throw kotlinx.coroutines.CancellationException()
+        }
+    }
+    val ready = scene
+    MapShown(ready != null, onShown)
+    if (ready == null) { Building(spec.notes); return }
+    Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(spec.notes)} made-up ideas, not your ideas",
+        showControls = false, corner = 0.dp, tour = true)
 }
 
 /** Tells [onShown] whether the map is drawn, not waiting on its layout, and that it isn't once it goes. */

@@ -4,6 +4,7 @@ import android.content.res.AssetManager
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.SystemClock
+import android.util.Log
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
@@ -53,6 +54,16 @@ import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.Vec3
+import com.cramdown.sorta.map.MapPose
+import com.cramdown.sorta.map.PerfForce
+import com.cramdown.sorta.map.PerfFrameReport
+import com.cramdown.sorta.map.PerfLines
+import com.cramdown.sorta.map.PerfLook
+import com.cramdown.sorta.map.PerfMap
+import com.cramdown.sorta.map.PerfTour
+import com.cramdown.sorta.map.PerfTourMap
+import com.cramdown.sorta.map.PerfTourStep
+import com.cramdown.sorta.map.ViewFrustum
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -301,7 +312,22 @@ data class MapDrawn(
      */
     val halos: List<Int> = emptyList(),
     val cells: List<MapDrawnCell> = emptyList(),
+    /**
+     * Performance (S05i2): the folders' hubs the latest frame drew, the folder lines it drew (hub to
+     * parent hub, while either end is in view and both show), whether the force refinement has settled
+     * (true where there is none), and the tour's phase as it now runs ("" outside the tour). No words a
+     * person sees: the tour is never shown.
+     */
+    val hubs: Int = 0,
+    val folderLines: Int = 0,
+    val settled: Boolean = true,
+    val tourPhase: String = "",
 ) {
+    /** This record with Performance's hubs, folder lines, force and tour as the latest frame had them; the same record when nothing changed. */
+    fun performing(hubsNow: Int, folderLinesNow: Int, settledNow: Boolean, tourPhaseNow: String = tourPhase): MapDrawn =
+        if (hubs == hubsNow && folderLines == folderLinesNow && settled == settledNow && tourPhase == tourPhaseNow) this
+        else copy(hubs = hubsNow, folderLines = folderLinesNow, settled = settledNow, tourPhase = tourPhaseNow)
+
     /** This record with the latest frame's level of detail, [detailNow] to 0.01; the same record when nothing changed. */
     fun detailing(detailNow: Float, chunksNow: Int, openNow: Int, summariesNow: Int): MapDrawn {
         val rounded = Math.round(detailNow * 100f) / 100f
@@ -577,6 +603,18 @@ class GlMapRenderer(
     private val testHooks: Boolean = false,
     /** What the map counts over its life (S05h2), kept by Map3DView across its scenes. */
     private val totals: MapTotals = MapTotals(),
+    /**
+     * Performance from the book (S05i2, MapScene.perf): its folders' hubs, drawn in a pass of their own,
+     * and the folder lines from each hub to its parent's; null for the demo map and the other themes.
+     */
+    private val perf: PerfMap? = null,
+    /** Its force (MapScene.force), stepped a slice of about 3 ms a frame till it settles, animations on or off. */
+    private val force: PerfForce? = null,
+    /**
+     * The proof tour (S05i2, PerfTour): the camera flies its path by itself, choosing the hub on the way,
+     * each phase's line goes to logcat and the phase to the record. Never shown to a person.
+     */
+    tour: Boolean = false,
 ) : GLSurfaceView.Renderer {
     private val linkGrowth = LinkGrowth.of(ids, links, recall, lively)
     private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null)
@@ -781,6 +819,33 @@ class GlMapRenderer(
     private val focusMask = ByteArray(1024 * maskHeight)
     private var focusTexels = IntArray(0)
 
+    // ---- Performance (S05i2) ----
+    /** Each folder's hub as its chunk-order node, in the layout's folder order, and its radius; empty elsewhere. */
+    private val hubChunks: IntArray = perf?.let { p -> IntArray(p.graph.folderCount) { f -> chunkOf.getOrElse(p.graph.hubNode(f)) { -1 } } } ?: IntArray(0)
+    private val hubRadii: FloatArray = perf?.let { p -> FloatArray(p.graph.folderCount) { f -> p.seed.radius[p.graph.hubNode(f)] } } ?: FloatArray(0)
+    /** The hubs in view this frame, by folder (PerfLines.visible's either end). */
+    private val hubInView = BooleanArray(hubChunks.size)
+    private var hubIbo = 0; private var hubVao = 0; private var lineIbo = 0; private var lineVao = 0
+    private val lineIndices: IntBuffer = ByteBuffer.allocateDirect(max(perf?.lines?.size ?: 0, 2) * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+    /** The latest frame's hubs drawn (in view and shown) and folder lines drawn (MapDrawn.hubs, folderLines). */
+    private var hubsDrawn = 0
+    private var linesDrawn = 0
+    /** The force's slice, in notes, sized each frame to about 3 ms (PerfForce.nextBudget). */
+    private var layoutBudget = PerfForce.FIRST_BUDGET
+    /** The node buffer's bytes as uploaded, kept while the force moves notes: the touched span goes up again. */
+    private var nodeData: ByteBuffer? = null
+    /** The force's sweep the tree's balls were last fitted at, and whether its settling was seen. */
+    private var forceSweep = force?.sweep ?: 0
+    private var forceSettledSeen = force?.isSettled ?: true
+    /** The tour (S05i2): on only for a Performance scene from the book's layout. */
+    private val touring = tour && perf != null
+    private var tourRun: PerfTour? = null
+    private var tourStartNanos = 0L
+    private var tourStep: PerfTourStep? = null
+    private var tourPhase = ""
+    private var tourDone = false
+    private var tourChose = false
+
     /**
      * Where body [index] (the scene's) is: its place in the octree, or a Neurons body where it has
      * drifted to now; null for no such body. For the camera's ease (MapCameraEase).
@@ -873,8 +938,9 @@ class GlMapRenderer(
     /** The folder body flown in to (the scene's index), −1 for none (MapDrawn.flown). */
     @Volatile var flown: Int = -1; private set
 
-    /** Whether body [index] can be flown in to: a Universe folder or the home, with a system to frame. */
+    /** Whether body [index] can be flown in to: a Universe folder or the home, with a system to frame; a Performance hub (S05i2). */
     fun canFlyTo(index: Int): Boolean {
+        perf?.let { p -> return index >= p.graph.noteCount && index < p.graph.nodeCount }
         val plan = uplan ?: return false
         val body = plan.bodies.getOrNull(index) ?: return false
         return body.role.isFolder && plan.systems.getOrNull(index)?.isNotEmpty() == true
@@ -887,6 +953,7 @@ class GlMapRenderer(
      */
     fun flyTo(index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         neuronGl?.let { gl -> return flyToCell(gl, index, viewWidth, viewHeight, insets) }
+        perf?.let { p -> return flyToFolder(p, index, viewWidth, viewHeight, insets) }
         val plan = uplan ?: return false
         if (!canFlyTo(index)) return false
         val centre = plan.bodies[index].home
@@ -926,6 +993,25 @@ class GlMapRenderer(
         }
         flown = index
         return fit.distance > 0f
+    }
+
+    /**
+     * Performance's Fly in (S05i2; iOS's fly(toCluster:), GraphPerfMapView.swift:386-392): hub [index]'s
+     * folder ball (its system's centre and reach, at least 1) framed to 0.88 of what the [insets] leave,
+     * from the camera's yaw and pitch, over 0.8 s, at once with animations off.
+     */
+    private fun flyToFolder(p: PerfMap, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
+        if (!canFlyTo(index)) return false
+        val f = index - p.graph.noteCount
+        val c = p.seed.systemCentre
+        val centre = Vec3(c[3 * f], c[3 * f + 1], c[3 * f + 2])
+        val reach = max(p.seed.systemRadius[f], 1f)
+        synchronized(camera) {
+            val fit = camera.framing(centre, reach, viewWidth, viewHeight, insets, MapFly.FILL)
+            flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
+        }
+        flown = index
+        return true
     }
 
     /** Recentre (or a rebuild): no folder is flown in to, and a flight under way stops. */
@@ -993,6 +1079,7 @@ class GlMapRenderer(
         filterStale = true
         uploadFocusMask()
         uploadOffsets()
+        uploadPerf()
         val ids = IntArray(4)
         GLES30.glGenBuffers(4, ids, 0)
         edgeIbo = ids[0]; summaryVbo = ids[1]; bundleVbo = ids[2]; cornerVbo = ids[3]
@@ -1056,13 +1143,17 @@ class GlMapRenderer(
         frameIntervalMs = intervalMs.toFloat()
         frame++
         budget.refreshHz = displayHz()
+        // the proof tour (S05i2) puts the camera where its path has it now, before the frame reads it
+        stepTour(start)
 
         val eye: Vec3; val target: Vec3; val view: FloatArray; val proj: FloatArray; val focal: Float; val forward: Vec3
         val aspect = width.toFloat() / height
+        val frustum: ViewFrustum?
         synchronized(camera) {
             eye = camera.eye(); target = camera.target
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
+            frustum = if (perf != null) camera.frustum(width.toFloat(), height.toFloat()) else null
         }
         drag?.step(dt)
         val orbiting = refreshLive()
@@ -1076,6 +1167,8 @@ class GlMapRenderer(
         stepChoice(dt)
         val filterMoving = stepFilter(dt)
         stepFlight(dt)
+        // Performance's force (S05i2): a slice of about 3 ms, before the chunks are chosen from the places
+        val settling = stepForce()
         // the depth fade follows what the camera looks at: its orbit target
         val focusDepth = SpaceDepth.depth(target, eye, forward)
         if (neuronGl != null) {
@@ -1138,6 +1231,8 @@ class GlMapRenderer(
             || orbiting || (uplan != null && lively) || flight != null || filterMoving
             // a death playing, and sparks alive (S05h2)
             || death?.finished == false || sparkCount > 0
+            // Performance's force settling, and the tour under way (S05i2)
+            || settling || (touring && !tourDone)
 
         if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -1147,8 +1242,12 @@ class GlMapRenderer(
         // Show links: Space draws no bundle (none carries the chosen body's link); Performance draws them at 0.15
         if (!(space && focusOn)) drawBundles(plan, if (focusOn) MapMark.FADED else 1f)
         drawEdges(plan, eye, focal, if (!focusOn || chosenChunk < 0) 0f else if (space) 1f else if (theme == MapTheme.PLAIN) 2f else 0f)
+        // Performance (S05i2): the folder lines after the links, then the hubs over the notes
+        if (frustum != null) seePerf(frustum)
+        drawFolderLines(focal, focusOn)
         drawSummaries(plan)
         val drawn = drawNodes(plan, eye, focal)
+        drawHubs(focal)
         val straightNow = straight
         var linksNow = 0
         var ringNow = false
@@ -1168,6 +1267,7 @@ class GlMapRenderer(
         val workMs = (System.nanoTime() - start) / 1e6
         budget.onFrame(intervalMs, workMs)
         stats.add(vsync, intervalMs, workMs)
+        recordTour(intervalMs, workMs)
         if (vsync - lastReadout > 250_000_000L) {
             lastReadout = vsync
             onReadout(MapReadout(
@@ -1196,6 +1296,7 @@ class GlMapRenderer(
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
+        if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
         // deaths and sparks (S05h2), the totals the map's own
@@ -1210,6 +1311,78 @@ class GlMapRenderer(
 
     /** The chosen body as drawn: its scene index, −1 for none. */
     private fun markedChosen(): Int = focusedChosen
+
+    /**
+     * Performance's hubs and folder lines this frame (S05i2): each hub in view where any of its ball is
+     * inside [frustum]; a hub drawn where it is in view and the filter shows it; a folder line drawn while
+     * either end is in view and both show (GraphPerfClusters.swift:330-336), its ends listed for the pass.
+     */
+    private fun seePerf(frustum: ViewFrustum) {
+        val p = perf ?: return
+        val n = p.graph.noteCount
+        val shown = appliedFilter?.shown
+        var hubs = 0
+        for (h in hubChunks.indices) {
+            val k = hubChunks[h]
+            val inView = k >= 0 && frustum.touches(Vec3(nodeAt(k, 0), nodeAt(k, 1), nodeAt(k, 2)), hubRadii[h])
+            hubInView[h] = inView
+            if (inView && (shown == null || shown.getOrElse(n + h) { true })) hubs++
+        }
+        hubsDrawn = hubs
+        val ends = p.lines
+        lineIndices.clear()
+        var lines = 0
+        for (j in 0 until ends.size / 2) {
+            if (!PerfLines.visible(ends, j, { i -> hubInView.getOrElse(i - n) { false } }, shown)) continue
+            lineIndices.put(chunkOf[ends[2 * j]]); lineIndices.put(chunkOf[ends[2 * j + 1]])
+            lines++
+        }
+        lineIndices.flip()
+        linesDrawn = lines
+    }
+
+    /**
+     * The tour's step for this frame (S05i2): made at its first frame from the first view (the whole map
+     * framed from the camera's angle, its hub the most linked note in the middle in front); its pose on
+     * the camera, the hub chosen while it asks; once over, its last lines to logcat and the choice let go.
+     */
+    private fun stepTour(start: Long) {
+        if (!touring || tourDone || width <= 1 || height <= 1) return
+        val run = tourRun ?: makeTour()?.also { tourRun = it; tourStartNanos = start } ?: return
+        val step = run.step((start - tourStartNanos) / 1e9)
+        if (step == null) {
+            for (line in run.finish()) Log.i(TOUR_TAG, line)
+            tourDone = true; tourStep = null; tourPhase = "done"
+            if (tourChose) { choice = MapChoice(-1, choice.cues); tourChose = false }
+            return
+        }
+        synchronized(camera) { step.pose.applyTo(camera) }
+        val select = step.select
+        if (select != null && choice.chosen != select) { choice = MapChoice(select, choice.cues); tourChose = true }
+        else if (select == null && tourChose) { choice = MapChoice(-1, choice.cues); tourChose = false }
+        tourStep = step
+        tourPhase = step.phase
+    }
+
+    private fun makeTour(): PerfTour? {
+        val p = perf ?: return null
+        val w = width.toFloat(); val h = height.toFloat()
+        val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
+        val from = synchronized(camera) { OrbitCamera(camera.target, camera.distance, camera.yaw, camera.pitch, camera.fovY, camera.roll) }
+        val fit = from.framing(centre, viewRadius, w, h, MapInsets.NONE, 0.9f)
+        val whole = MapPose(fit.target, fit.distance, from.yaw, from.pitch, from.roll)
+        val lens = OrbitCamera(whole.target, whole.distance, whole.yaw, whole.pitch, from.fovY, whole.roll)
+        fun at(i: Int): Vec3 = chunkOf.getOrElse(i) { -1 }.let { k -> if (k < 0) Vec3.ZERO else Vec3(nodeAt(k, 0), nodeAt(k, 1), nodeAt(k, 2)) }
+        val hub = PerfTour.frontHub(p.graph.noteCount, ::at, { p.graph.degree(it) }, lens, w, h)
+        return PerfTour(PerfTourMap(centre, viewRadius, w, h, whole, from.fovY, hub, hub?.let { at(it) }))
+    }
+
+    /** This frame's numbers to the tour, and each phase that just ended to logcat (S05i2). */
+    private fun recordTour(intervalMs: Double, workMs: Double) {
+        val run = tourRun ?: return
+        val step = tourStep ?: return
+        for (line in run.record(PerfFrameReport(intervalMs / 1000.0, workMs / 1000.0), step)) Log.i(TOUR_TAG, line)
+    }
 
     /**
      * The biggest dying body drawn this frame (S05h2 repair 6) on the screen: its centre (x, y in the
@@ -1378,19 +1551,29 @@ class GlMapRenderer(
             minX = min(minX, p[3 * i]); maxX = max(maxX, p[3 * i]); minY = min(minY, p[3 * i + 1]); maxY = max(maxY, p[3 * i + 1])
             minZ = min(minZ, p[3 * i + 2]); maxZ = max(maxZ, p[3 * i + 2])
         }
+        // Performance (S05i2): the box every note keeps to however the force moves it, so the shorts hold
+        perf?.seed?.bounds()?.let { b ->
+            minX = min(minX, b[0]); minY = min(minY, b[1]); minZ = min(minZ, b[2])
+            maxX = max(maxX, b[3]); maxY = max(maxY, b[4]); maxZ = max(maxZ, b[5])
+        }
         center[0] = (minX + maxX) / 2; center[1] = (minY + maxY) / 2; center[2] = (minZ + maxZ) / 2
         half[0] = max((maxX - minX) / 2, 1e-3f); half[1] = max((maxY - minY) / 2, 1e-3f); half[2] = max((maxZ - minZ) / 2, 1e-3f)
         val buffer = ByteBuffer.allocateDirect(max(n, 1) * NODE_STRIDE).order(ByteOrder.nativeOrder())
+        // byte 9: a Performance hub's radius code (PerfLook.hubCode), 0 for a note and elsewhere
+        val hubCodes = perf?.hubCodes
         for (i in 0 until n) {
-            for (a in 0 until 3) buffer.putShort(((p[3 * i + a] - center[a]) / half[a] * 32767f).toInt().coerceIn(-32767, 32767).toShort())
+            for (a in 0 until 3) buffer.putShort(quantised(p[3 * i + a], a))
             buffer.putShort(tree.leafOfNode[i].toShort())
-            buffer.put(tree.groups[i]); buffer.put(0); buffer.put(0); buffer.put(0)
+            buffer.put(tree.groups[i]); buffer.put(hubCodes?.getOrNull(tree.order[i]) ?: 0.toByte()); buffer.put(0); buffer.put(0)
         }
         buffer.flip()
+        // kept while the force still moves notes, for the spans it touches
+        val moving = force != null && !force.isSettled
+        nodeData = if (moving) buffer else null
         val ids = IntArray(1)
         GLES30.glGenBuffers(1, ids, 0); nodeVbo = ids[0]
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, nodeVbo)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, buffer.capacity(), buffer, GLES30.GL_STATIC_DRAW)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, buffer.capacity(), buffer, if (moving) GLES30.GL_DYNAMIC_DRAW else GLES30.GL_STATIC_DRAW)
         GLES30.glGenVertexArrays(1, ids, 0); nodeVao = ids[0]
         GLES30.glBindVertexArray(nodeVao)
         bindNodeAttributes()
@@ -1405,6 +1588,75 @@ class GlMapRenderer(
         GLES30.glVertexAttribIPointer(1, 1, GLES30.GL_UNSIGNED_SHORT, NODE_STRIDE, 6)
         GLES30.glEnableVertexAttribArray(2)
         GLES30.glVertexAttribIPointer(2, 1, GLES30.GL_UNSIGNED_BYTE, NODE_STRIDE, 8)
+        GLES30.glEnableVertexAttribArray(3)
+        GLES30.glVertexAttribIPointer(3, 1, GLES30.GL_UNSIGNED_BYTE, NODE_STRIDE, 9)
+    }
+
+    /** A place along [axis] as the node buffer's normalised short, against [center] and [half]. */
+    private fun quantised(v: Float, axis: Int): Short = ((v - center[axis]) / half[axis] * 32767f).toInt().coerceIn(-32767, 32767).toShort()
+
+    /**
+     * Performance's hubs and folder lines (S05i2): the hubs' chunk-order nodes as one index list, drawn
+     * with the node program in a pass of their own; the folder lines' ends filled each frame.
+     */
+    private fun uploadPerf() {
+        if (perf == null) return
+        val ids = IntArray(2)
+        GLES30.glGenBuffers(2, ids, 0); hubIbo = ids[0]; lineIbo = ids[1]
+        val hubs = ByteBuffer.allocateDirect(max(hubChunks.size, 1) * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+        for (k in hubChunks) if (k >= 0) hubs.put(k)
+        hubs.flip()
+        GLES30.glGenVertexArrays(1, ids, 0); hubVao = ids[0]
+        GLES30.glBindVertexArray(hubVao)
+        bindNodeAttributes()
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, hubIbo)
+        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, max(hubs.limit(), 1) * 4, hubs, GLES30.GL_STATIC_DRAW)
+        GLES30.glGenVertexArrays(1, ids, 0); lineVao = ids[0]
+        GLES30.glBindVertexArray(lineVao)
+        bindNodeAttributes()
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, lineIbo)
+        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, lineIndices.capacity() * 4, null, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glBindVertexArray(0)
+    }
+
+    /**
+     * One slice of the force (S05i2; GraphPerfRenderer.swift:230-238): about 3 ms of notes, their new
+     * places into the tree and the node buffer's touched span, and the tree's balls fitted again at each
+     * sweep's end. Whether it is still settling.
+     */
+    private fun stepForce(): Boolean {
+        val f = force ?: return false
+        if (f.isSettled) {
+            if (!forceSettledSeen) { forceSettledSeen = true; tree.refit(); nodeData = null }
+            return false
+        }
+        val from = f.cursor
+        val t0 = System.nanoTime()
+        val visited = f.step(layoutBudget)
+        layoutBudget = PerfForce.nextBudget(layoutBudget, (System.nanoTime() - t0) / 1e9)
+        val p = tree.positions
+        val data = nodeData
+        var lo = Int.MAX_VALUE; var hi = -1
+        for (j in from until from + visited) {
+            val i = f.order[j]
+            val k = chunkOf.getOrElse(i) { -1 }
+            if (k < 0) continue
+            for (a in 0 until 3) {
+                val v = f.xyzr[4 * i + a]
+                p[3 * k + a] = v
+                data?.putShort(k * NODE_STRIDE + 2 * a, quantised(v, a))
+            }
+            lo = min(lo, k); hi = max(hi, k)
+        }
+        if (data != null && hi >= lo && nodeVbo != 0) {
+            val span = data.duplicate().order(ByteOrder.nativeOrder())
+            span.position(lo * NODE_STRIDE); span.limit((hi + 1) * NODE_STRIDE)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, nodeVbo)
+            GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, lo * NODE_STRIDE, (hi + 1 - lo) * NODE_STRIDE, span)
+        }
+        if (f.sweep != forceSweep || f.isSettled) { forceSweep = f.sweep; tree.refit() }
+        if (f.isSettled) { forceSettledSeen = true; nodeData = null }
+        return true
     }
 
     private fun uploadLeafTexture() {
@@ -1744,10 +1996,39 @@ class GlMapRenderer(
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uDensity"), density)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uFocal"), focal)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uNodeRadius"), nodeRadius)
-        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMaxPoint"), min(maxPointSize, 64f))
+        // Performance's hubs reach 48 dp and its notes 28 (S05i2): only the device's own limit caps them
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uMaxPoint"), if (perf != null) maxPointSize else min(maxPointSize, 64f))
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uPerf"), if (perf != null) 1f else 0f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uHubPass"), 0f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uLineScale"), 1f)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, leafTexture)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uLeafState"), 0)
+    }
+
+    /** Performance's hubs (S05i2): every hub, at its own place whatever its chunk's openness; the shader hides those filtered away. */
+    private fun drawHubs(focal: Float) {
+        if (perf == null || hubVao == 0 || hubChunks.isEmpty()) return
+        setCommon(nodeProgram, focal)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(nodeProgram, "uHubPass"), 1f)
+        GLES30.glBindVertexArray(hubVao)
+        GLES30.glDrawElements(GLES30.GL_POINTS, hubChunks.count { it >= 0 }, GLES30.GL_UNSIGNED_INT, 0)
+        GLES30.glBindVertexArray(0)
+    }
+
+    /** Performance's folder lines (S05i2): those [seePerf] listed, in their ends' colours, ×1.2, ×0.15 under Show links ([focusOn]). */
+    private fun drawFolderLines(focal: Float, focusOn: Boolean) {
+        if (perf == null || lineVao == 0 || linesDrawn == 0) return
+        setCommon(edgeProgram, focal)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(edgeProgram, "uFocusNode"), -1)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(edgeProgram, "uFocusMode"), 0f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(edgeProgram, "uHubPass"), 1f)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(edgeProgram, "uLineScale"), PerfLook.lineAlpha(focusOn))
+        GLES30.glBindVertexArray(lineVao)
+        GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, lineIbo)
+        GLES30.glBufferSubData(GLES30.GL_ELEMENT_ARRAY_BUFFER, 0, linesDrawn * 2 * 4, lineIndices)
+        GLES30.glDrawElements(GLES30.GL_LINES, linesDrawn * 2, GLES30.GL_UNSIGNED_INT, 0)
+        GLES30.glBindVertexArray(0)
     }
 
     private fun drawNodes(plan: FramePlan, eye: Vec3, focal: Float): Int {
@@ -1825,11 +2106,14 @@ class GlMapRenderer(
         val focal = camera.focalPixels(height.toFloat())
         val band = band
         val f = appliedFilter
+        val hubCodes = perf?.hubCodes
         for (k in 0 until tree.nodeCount) {
             if (f != null && !f.reachable(tree.order[k])) continue
             val leaf = tree.leafOfNode[k]
+            // Performance's hubs (S05i2) are drawn at their own places whatever their chunks' openness
+            val hubCode = hubCodes?.get(tree.order[k])?.toInt()?.and(0xFF) ?: 0
             // a body drawn whole (the kept one too, SpaceBodies) is named and picked at its own place
-            val t = if (bodies?.isBody(k) == true) 1f else plan.leafState[leaf * 4 + 3]
+            val t = if (bodies?.isBody(k) == true || hubCode > 0) 1f else plan.leafState[leaf * 4 + 3]
             if (t <= 0f) continue
             val s = leaf * 4
             val x = plan.leafState[s] + (nodeAt(k, 0) - plan.leafState[s]) * t
@@ -1839,7 +2123,13 @@ class GlMapRenderer(
             if (clip[3] <= 1e-4f || band.gone(clip[3])) continue
             val sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width
             val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
-            out.add(ScreenNode(tree.order[k], sx, sy, nodeRadius * focal / clip[3] * 2f * t, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
+            // Performance's sizes are clamped on screen as its shader draws them (S05i2)
+            val pixels = if (perf == null) nodeRadius * focal / clip[3] * 2f * t else {
+                val dp = max(density, 0.1f)
+                val rho = (if (hubCode > 0) PerfLook.hubRadiusOf(hubCode) else nodeRadius) * focal / clip[3] / dp * t
+                2f * PerfLook.drawnRadius(rho, hubCode > 0) * dp
+            }
+            out.add(ScreenNode(tree.order[k], sx, sy, pixels, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
         }
         callback(out)
     }
@@ -1870,6 +2160,8 @@ class GlMapRenderer(
 
     companion object {
         const val NODE_STRIDE = 12
+        /** The proof tour's logcat tag (S05i2). */
+        const val TOUR_TAG = "SortaTour"
 
         private fun floats(n: Int): FloatBuffer = ByteBuffer.allocateDirect(n * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
 
@@ -1892,6 +2184,8 @@ precision highp int;
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in uint aLeaf;
 layout(location = 2) in uint aGroup;
+// Performance (S05i2): a hub's radius code (PerfLook.hubCode), 0 for a note
+layout(location = 3) in uint aHub;
 uniform mat4 uVP;
 uniform vec3 uCenter;
 uniform vec3 uHalf;
@@ -1918,6 +2212,9 @@ uniform float uMoved;
 // the filter (S05i): 1 for a node it hides, 0.5 for a ghost, read while one is in force
 uniform mediump sampler2D uFilterMask;
 uniform float uFiltered;
+// Performance from the book (S05i2): its look, and the hubs' and folder lines' pass (each at its own place)
+uniform float uPerf;
+uniform float uHubPass;
 """ + LIGHT + """// Space theme: 1 while this node is drawn as its body (its point hides)
 float bodyMasked() {
     if (uSpace < 0.5) return 0.0;
@@ -1933,7 +2230,11 @@ float focusFade() {
     if (uFocus < 0.5) return 1.0;
     return texelFetch(uFocusMask, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).r > 0.5 ? 1.0 : ${MapMark.FADED};
 }
-vec4 leafState() { int l = int(aLeaf); return texelFetch(uLeafState, ivec2(l % 1024, l / 1024), 0); }
+vec4 leafState() {
+    if (uHubPass > 0.5) return vec4(0.0, 0.0, 0.0, 1.0);
+    int l = int(aLeaf); return texelFetch(uLeafState, ivec2(l % 1024, l / 1024), 0);
+}
+float hubRadius() { return float(aHub) / 255.0 * ${PerfLook.HUB_RADIUS_MAX}; }
 vec3 offsetOf() {
     if (uMoved < 0.5) return vec3(0.0);
     return texelFetch(uOffsets, ivec2(gl_VertexID % 1024, gl_VertexID / 1024), 0).xyz;
@@ -1949,6 +2250,33 @@ void main() {
     vec4 st = leafState();
     gl_Position = uVP * vec4(placed(st), 1.0);
     float w = max(gl_Position.w, 1e-4);
+    if (uPerf > 0.5) {
+        // Performance (S05i2; GraphPerfShaders perf_body_vertex): a note's radius on screen in dp clamped
+        // to ${PerfLook.NOTE_MIN}-${PerfLook.NOTE_MAX} and faded below about a pixel; a hub's to ${PerfLook.HUB_MIN}-${PerfLook.HUB_MAX}, never faded,
+        // its colour mixed ${PerfLook.HUB_WHITE} to white; the notes' pass leaves the hubs to their own
+        bool hub = aHub > 0u;
+        vRing = 0.0;
+        if (hub != (uHubPass > 0.5)) {
+            vSize = 1.0; gl_PointSize = 1.0; vColor = vec3(0.0);
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+        }
+        float rho = (hub ? hubRadius() : uNodeRadius) * uFocal / w / max(uDensity, 0.1) * st.w;
+        float drawn = hub ? clamp(rho, ${PerfLook.HUB_MIN}, ${PerfLook.HUB_MAX}) : clamp(rho, ${PerfLook.NOTE_MIN}, ${PerfLook.NOTE_MAX});
+        float fade = hub ? 1.0 : smoothstep(${PerfLook.FADE_FROM}, ${PerfLook.FADE_TO}, rho);
+        vSize = min(2.0 * drawn * uDensity, uMaxPoint);
+        if (gl_VertexID == uChosen) {
+            vSize = max(vSize * ${MapMark.PERF_GROW}, ${MapMark.PERF_LEAST_DP} * uDensity);
+            fade = 1.0;
+            vRing = 1.0;
+        }
+        gl_PointSize = vSize;
+        vec3 base = uPalette[int(aGroup) % 6];
+        if (hub) base = mix(base, vec3(1.0), ${PerfLook.HUB_WHITE});
+        vColor = base * fade;
+        if (filterCode() > 0.75) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
     // detail follows the pixels a node covers: a plain point, then shading, then glow
     float px = 2.0 * uNodeRadius * uFocal / w * st.w * uStyleScale[int(aGroup) % 6];
     vSize = clamp(px, 1.0, uMaxPoint);
@@ -2007,6 +2335,8 @@ void main() {
     vec4 st = leafState();
     gl_Position = uVP * vec4(placed(st), 1.0);
     vColor = uPalette[int(aGroup) % 6];
+    // Performance's folder lines (S05i2) take their hubs' colour, mixed to white as the hub is
+    if (uPerf > 0.5 && aHub > 0u) vColor = mix(vColor, vec3(1.0), ${PerfLook.HUB_WHITE});
     if (uSpace > 0.5) {
         // Space: warm glowing links, tinted by the note's style (sun whiter, black hole ember,
         // comet icy, rocky bluish, gas giant warm, pulsar beating with its beams); a link
@@ -2030,10 +2360,12 @@ in vec3 vColor;
 in highp float vTouch;
 in highp float vCut;
 uniform float uFocusMode;
+// Performance's folder lines (S05i2): ${PerfLook.LINE_ALPHA} as bright as a link, ${PerfLook.LINE_FOCUS_FADE} of that under Show links; 1 for a link
+uniform float uLineScale;
 out vec4 fragColor;
 void main() {
     if (vCut > 0.0) discard;
-    vec3 c = vColor * 0.32;
+    vec3 c = min(vColor * 0.32 * uLineScale, vec3(1.0));
     if (uFocusMode > 0.5 && uFocusMode < 1.5 && vTouch <= 0.0) discard;
     if (uFocusMode > 1.5) c = min(c * (vTouch > 0.0 ? ${MapMark.PERF_FOCUS} : ${MapMark.FADED}), vec3(1.0));
     fragColor = vec4(c, 1.0);

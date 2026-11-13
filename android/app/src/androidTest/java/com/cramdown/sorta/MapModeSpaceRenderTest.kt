@@ -41,10 +41,12 @@ import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapLegend
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
+import com.cramdown.sorta.ideas.SampleIdeas
 import com.cramdown.sorta.map.MapFirstView
 import com.cramdown.sorta.map.MapNameShow
 import com.cramdown.sorta.map.MapTouchRules
 import com.cramdown.sorta.map.OrbitCamera
+import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.UniversePlan
 import com.cramdown.sorta.map.UniverseRole
@@ -58,6 +60,7 @@ import com.cramdown.sorta.ui.ideas.MapTags
 import com.cramdown.sorta.map.MapFilter
 import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.ui.ideas.SortaMode
+import com.cramdown.sorta.ui.ideas.perfInput
 import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnCell
@@ -149,6 +152,13 @@ import kotlin.math.sqrt
  * Cell by cell's Engulfing over the map (mapmode-cells-neurons-...), and a close-up of one of the open
  * Garden cell's ideas and its halo under each of the six states, chosen in Look › Cells
  * (mapmode-cells-<state>-neurons-...), each told from resting's by numbers and by pixels.
+ *
+ * S05i2 A3: Performance on the sample ideas (MainActivity's map preview), its layout settled: a hub
+ * for each of the 5 folders and 3 folder lines (mapmode-hubs-performance-...), its legend's ladder
+ * whole (mapmode-legend-ladder-performance-...), a top folder's filter showing its hubs, and a hub's
+ * tap raising its folder's card, whose Fly in frames its ball (requirePerformanceSample). Then the
+ * proof tour under its launch extra reports "warm" then "measure" within 6 s of its map's first
+ * showing, and is ended (requireTour, no still).
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -318,7 +328,148 @@ class MapModeSpaceRenderTest {
         requireChoice("performance", dark, performanceChosen, performanceHome, home = performanceHome)
         // S05i A3: the filter in Performance, at once, no camera move, no empty line, the choice kept
         requireFilter(GraphTheme.PERFORMANCE, dark)
+        // S05i2 A3: Performance's hubs and folder lines on the sample, and the tour's first phases
+        requirePerformanceSample(dark)
+        requireTour()
         check(later.isEmpty()) { later.joinToString("\n") }
+    }
+
+    /** MainActivity again, on the sample ideas' [look] (its map-preview extra), the tour too if [tour]. */
+    private fun launchPreview(look: String, tour: Boolean = false) {
+        scenario?.close()
+        val context = instrumentation.targetContext
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.MAP_PREVIEW, look)
+            .putExtra(MainActivity.MAP_PREVIEW_TOUR, tour))
+    }
+
+    /**
+     * S05i2 A3 on the sample (SampleIdeas: Examples with Inguinal, Femoral and Anatomy in Inguinal, and
+     * Cardiology), read from MapDrawn once the force has settled: 5 hubs and 3 folder lines drawn
+     * (mapmode-hubs-performance-<light|dark>-<device>.png); the legend's ladder whole on the screen inside
+     * its sheet (mapmode-legend-ladder-performance-...); Examples' filter shows its 4 hubs and 3 lines, and
+     * Everything all 5 again; a tap on Cardiology's hub raises a card with its name and Fly in, and Fly in
+     * frames its ball: the ball, as the map lays it out, drawn whole inside the map and filling a good share of it.
+     */
+    private fun requirePerformanceSample(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-hubs-performance-$mode-$device"
+        val book = SampleIdeas.book()
+        check(book.folders.size == 5 && book.folders.count { it.parentId != null } == 3) { "The sample is not 5 folders, 3 inside another, for $name: ${book.folders}" }
+        launchPreview("performance")
+        try {
+            compose.waitUntil(60_000) { mapDrawn()?.let { it.frames >= MapDrawn.ENOUGH && it.box.size == 4 && it.settled && it.hubs == 5 } == true }
+        } catch (_: ComposeTimeoutException) {}
+        val rest = checkNotNull(mapDrawn()) { "No map on the sample for $name" }
+        check(rest.frames >= MapDrawn.ENOUGH && rest.settled) { "Performance on the sample has not drawn ${MapDrawn.ENOUGH} frames, settled, for $name: $rest" }
+        check(rest.hubs == 5 && rest.folderLines == 3) { "Performance on the sample drew ${rest.hubs} hubs and ${rest.folderLines} folder lines, not 5 and 3, for $name: $rest" }
+        check(!rest.filtered) { "The sample's map is filtered before any filter for $name: $rest" }
+        shot(name)
+        val home = rest.pose
+        requireLegendLadder(dark)
+        // a top folder's filter: Examples and the three folders inside it, their hubs and the lines between them
+        val examples = book.folders.first { it.name == "Examples" && it.parentId == null }
+        chooseFilter(MapFilter.Folder(examples.id))
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.hubs == 4 } == true } } catch (_: ComposeTimeoutException) {}
+        val filtered = checkNotNull(mapDrawn())
+        check(filtered.filtered && filtered.hubs == 4 && filtered.folderLines == 3) { "Examples' filter did not show its 4 hubs and 3 folder lines for $name: $filtered" }
+        chooseFilter(MapFilter.All)
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hubs == 5 } == true } } catch (_: ComposeTimeoutException) {}
+        val back = checkNotNull(mapDrawn())
+        check(!back.filtered && back.hubs == 5 && back.folderLines == 3) { "Everything did not bring back the 5 hubs and 3 folder lines for $name: $back" }
+        // a tap on Cardiology's hub, through the map's hit test: a folder's card with Fly in
+        val res = instrumentation.targetContext.resources
+        val cardiology = book.folders.first { it.name == "Cardiology" }
+        val layout = checkNotNull(PerfMap.build(perfInput(book, book.allEdges(), MapLinkLength.STANDARD))) { "No layout for the sample for $name" }
+        val g = layout.graph
+        val f = g.folderIds.indexOfFirst { it.equals(cardiology.id, ignoreCase = true) }
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map hands on no hit test for $name" }
+        val hub = tap.ids.indexOfFirst { it.equals(cardiology.id, ignoreCase = true) }
+        check(f >= 0 && hub == g.noteCount + f) { "Cardiology's hub is body $hub on the map, not the layout's ${g.noteCount + f}, for $name" }
+        compose.runOnIdle { tap.tap(hub) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == hub } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == hub) { "A tap on Cardiology's hub ($hub) raised no card for $name: ${mapDrawn()}" }
+        val inCard = hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        check(compose.onAllNodes(hasText(cardiology.name) and inCard).fetchSemanticsNodes().isNotEmpty()) { "The hub's card does not name Cardiology for $name" }
+        val flyIn = hasText(res.getString(R.string.map_peek_fly_in)) and inCard
+        check(compose.onAllNodes(flyIn).fetchSemanticsNodes().size == 1) { "The hub's card has no Fly in for $name" }
+        compose.onNode(flyIn).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.flown == hub } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_500) // the flight, or at once with animations off
+        compose.waitForIdle()
+        val flown = checkNotNull(mapDrawn())
+        check(flown.flown == hub && flown.pose.size == 6 && !same(home, flown.pose)) { "Fly in on Cardiology's hub did not fly to it for $name: $home, then $flown" }
+        // its ball as the map lays it out (the hub at its centre), seen from the pose Fly in left
+        val p = flown.pose
+        val camera = OrbitCamera(Vec3(p[0], p[1], p[2]), p[3], p[4], p[5], MapFirstView.radians(MapFirstView.FAST_FIELD_DEGREES))
+        val c = layout.seed.systemCentre
+        val centre = Vec3(c[3 * f], c[3 * f + 1], c[3 * f + 2])
+        val reach = max(layout.seed.systemRadius[f], 1f)
+        val w = flown.width.toFloat(); val h = flown.height.toFloat()
+        val at = checkNotNull(camera.project(centre, w, h)) { "Cardiology's ball is behind the camera after Fly in for $name: $flown" }
+        val apart = (camera.eye() - centre).length()
+        check(apart > reach) { "The camera is inside Cardiology's ball after Fly in for $name: $apart, the ball $reach" }
+        val across = reach * camera.focalPixels(h) / sqrt(apart * apart - reach * reach)
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: Cardiology's ball at $at, $across px round, in the ${w}x$h map")
+        check(at.first - across >= -1f && at.first + across <= w + 1f && at.second - across >= -1f && at.second + across <= h + 1f) {
+            "Fly in left Cardiology's ball ($at, $across px round) outside the ${w}x$h map for $name"
+        }
+        check(across >= 0.15f * min(w, h)) { "Fly in left Cardiology's ball only $across px round in the ${w}x$h map for $name" }
+        scenario?.close(); scenario = null
+    }
+
+    /**
+     * S05i2 A3: Performance's legend on the sample, at its top: its ladder (glow, folder, idea, far idea)
+     * one item, drawn whole on the screen inside the sheet; a still, mapmode-legend-ladder-performance-...
+     */
+    private fun requireLegendLadder(dark: Boolean) {
+        val name = "mapmode-legend-ladder-performance-${if (dark) "dark" else "light"}-$device"
+        val theme = GraphTheme.PERFORMANCE
+        val content = MapLegend.of(theme)
+        press(hasContentDescription("Look") and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, theme.title))
+        press(hasText(theme.legendTitle) and hasClickAction())
+        val tag = MapPanelTags.legend(theme)
+        compose.waitUntil(10_000) { shown(tag) }
+        SystemClock.sleep(1_000) // the sheet comes to rest
+        val sheet = compose.onNode(hasTestTag(tag)).fetchSemanticsNode().boundsInRoot
+        val ladders = compose.onAllNodes(hasContentDescription(content.ladderLabel)).fetchSemanticsNodes()
+        check(content.ladderLabel.isNotEmpty() && ladders.size == 1) { "Performance's legend shows ${ladders.size} ladders, not one, for $name" }
+        val ladder = ladders.single().boundsInRoot
+        val screen = instrumentation.targetContext.resources.displayMetrics
+        check(ladder.top >= sheet.top && ladder.bottom <= minOf(sheet.bottom, screen.heightPixels.toFloat()) && ladder.left >= 0f && ladder.right <= screen.widthPixels) {
+            "Performance's ladder ($ladder) is not whole on the screen inside its sheet ($sheet) for $name"
+        }
+        shot(name)
+        ui.pressBack()
+        try { compose.waitUntil(3_000) { !shown(tag) } } catch (_: ComposeTimeoutException) { ui.pressBack() }
+        compose.waitUntil(10_000) { !shown(tag) }
+        compose.waitForIdle()
+    }
+
+    /**
+     * S05i2 A3: the proof tour, launched with the preview's tour extra: once its map shows (its
+     * 100,000 made-up ideas built), it reports "warm" and then "measure" (MapDrawn.tourPhase) within
+     * 6 s; the test then ends it. The map's first showing is read as its node's first appearance,
+     * which comes with the map's MapShown. No still: the tour is never shown to a person.
+     */
+    private fun requireTour() {
+        launchPreview("performance", tour = true)
+        try { compose.waitUntil(240_000) { mapNode() != null } } catch (_: ComposeTimeoutException) {}
+        check(mapNode() != null) { "The tour's map did not show within 4 minutes" }
+        val shownAt = SystemClock.uptimeMillis()
+        val phases = ArrayList<String>()
+        try {
+            compose.waitUntil(6_000) {
+                val phase = mapDrawn()?.tourPhase ?: ""
+                if (phase.isNotEmpty() && phases.lastOrNull() != phase) phases.add(phase)
+                phase == "measure"
+            }
+        } catch (_: ComposeTimeoutException) {}
+        val took = SystemClock.uptimeMillis() - shownAt
+        android.util.Log.i("MapModeSpaceRenderTest", "the tour's phases $phases, measure ${took} ms after its map showed")
+        check(phases.take(2) == listOf("warm", "measure") && took <= 6_000) {
+            "The tour did not report warm then measure within 6 s of its map showing: $phases after $took ms; ${mapDrawn()}"
+        }
+        scenario?.close(); scenario = null
     }
 
     /**
@@ -540,7 +691,10 @@ class MapModeSpaceRenderTest {
         val others = notes.count { it.folderId != garden.id }
         val inGarden = checkNotNull(mapDrawn())
         check(inGarden.filtered && inGarden.shown > 0 && inGarden.hidden > 0 && !shown(MapPanelTags.FILTER_EMPTY)) { "Garden alone for $name: $inGarden" }
-        if (perf) check(inGarden.shown == notes.size - others && inGarden.hidden == others) { "Performance's Garden is not its three ideas for $name: $inGarden" }
+        // S05i2: Performance's bodies are its ideas and its folders' hubs, and a folder filter shows the hubs inside it
+        if (perf) check(inGarden.shown == notes.size - others + 1 && inGarden.hidden == others + folders.size - 1) {
+            "Performance's Garden is not its three ideas and its hub for $name: $inGarden"
+        }
         if (theme == GraphTheme.SPACE) check(inGarden.hidden >= others) { "Space's Garden keeps another folder's idea for $name: $inGarden" }
         if (perf) {
             SystemClock.sleep(1_500)

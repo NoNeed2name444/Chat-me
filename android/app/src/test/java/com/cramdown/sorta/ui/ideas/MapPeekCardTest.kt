@@ -358,6 +358,33 @@ class MapPeekCardTest {
         assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
+    @Test fun aPerformanceHubsCardIsItsFoldersAndFliesIn() {
+        // S05i2: in Performance each folder has a hub on the map (GraphPerfScene), picked as its folder
+        // (GraphPerfTheme.swift:344-346): its card a folder's, Open folder and Fly in, no Show links; Fly in
+        // keeps the card; an idea's card there has Show links and never Fly in
+        IdeasSettings(run.context).setLook(MapLook.PERFORMANCE)
+        IdeaStore(run.store).replaceIdeas(listOf(gate), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        // laid out off the main thread, then its panels up; Performance has no first-run card
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true && shown(MapPanelTags.FILTER_TOOL) }
+        assertFalse("Performance shows no first-run card", shown(MapPanelTags.HINT))
+        val ids = checkNotNull(tapper()).ids
+        assertEquals("the idea, then the folder's hub", listOf(gate.id.uppercase(), garden.id.uppercase()), ids.map { it.uppercase() })
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a hub's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_OPEN)).assert(hasText(words.openFolder))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        compose.waitForIdle()
+        cardFor(garden.name)
+        tapBody(gate.id)
+        cardFor(gate.title)
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks))
+        assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
+    }
+
     @Test fun underOneSingleStyleNoCardFliesIn() {
         // Look › Bodies › one style: today's Space, one body per idea and no folder bodies, so no card has Fly in
         IdeasSettings(run.context).setNodeStyle(SpaceStyle.SUN.rawValue)

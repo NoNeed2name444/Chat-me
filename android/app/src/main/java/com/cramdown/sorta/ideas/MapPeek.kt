@@ -106,14 +106,19 @@ object MapPeek {
         SpaceStyle.PULSAR -> "pulsar"
     }
 
+    /** Performance's folder body (S05i2): a folder's hub, picked as its folder. */
+    const val HUB = "hub"
+
     /**
-     * Whether a folder's or the home's card offers Fly in: every Neurons container, and in Space a
+     * Whether a folder's or the home's card offers Fly in: every Neurons container, in Space a
      * Universe black hole, star or home (S05h; GraphMapPanels.swift:155-157, isFolder,
-     * Graph3DView.swift:663-665). Under one single style Space has no folder bodies, so none.
+     * Graph3DView.swift:663-665), and in Performance a folder's hub (S05i2; GraphPerfTheme.swift:344-346, a
+     * hub's pick selects its folder). Under one single style Space has no folder bodies, so none.
      */
     fun fliesIn(theme: String, role: String): Boolean = when (theme) {
         "neurons" -> true
         "space" -> role == "galaxy" || role == "star" || role == "home"
+        "performance" -> role == HUB
         else -> false
     }
 

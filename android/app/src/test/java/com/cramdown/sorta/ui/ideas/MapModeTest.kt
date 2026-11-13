@@ -92,7 +92,11 @@ class MapModeTest {
 
     private fun p(id: Int, n: Int, vararg args: Any) = run.context.resources.getQuantityString(id, n, *args)
 
-    private fun card(words: String) = compose.onNode(hasContentDescription("$words, ", substring = true))
+    // a board card, by its title: read alone on a board of one kind, else followed by its kind or
+    // folder (S05m item 4)
+    private fun cardIs(words: String) = hasTestTag(BOARD_CARD_TAG) and
+        (hasContentDescription(words) or hasContentDescription("$words, ", substring = true))
+    private fun card(words: String) = compose.onNode(cardIs(words))
 
     @Test fun theSwitchChangesModesAndBack() {
         run.launch()
@@ -247,7 +251,7 @@ class MapModeTest {
         run.until { !shown(EDITOR_TAG) }
         assertFalse("back on the map, not Sort", shown(IdeasTags.CAPTURE))
         card("Paint the shed green").assertIsDisplayed()
-        assertEquals("the old title is gone", 0, compose.onAllNodes(hasContentDescription("Paint the shed, ", substring = true)).fetchSemanticsNodes().size)
+        assertEquals("the old title is gone", 0, compose.onAllNodes(cardIs("Paint the shed")).fetchSemanticsNodes().size)
     }
 
     // S05b, step 4's list (S03-result.md: "the Map group and the demo maps are in a developer's build

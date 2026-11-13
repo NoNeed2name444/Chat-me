@@ -360,6 +360,122 @@ nonisolated enum IdeaBoardFit {
     static func firstRange(cardHeight: Double, target: Double) -> ClosedRange<Double> {
         min(max(target / cardHeight, 0.3), 1)...1
     }
+
+    /// The board's tools at its trailing edge (S05m): the cluster's own
+    /// box, gutter included; in the bottom-trailing corner of the part not
+    /// under glass, or `centred` down that part in a broad window.
+    struct Tools: Equatable {
+        var width: Double
+        var height: Double
+        var centred: Bool
+    }
+
+    /// The rectangle `tools` take in the board's own view, in points.
+    static func toolsRect(view: CGSize, hidden: Double, tools: Tools) -> CGRect {
+        let seen: Double = max(Double(view.height) - hidden, 0)
+        let top: Double = tools.centred ? seen / 2 - tools.height / 2 : seen - tools.height
+        return CGRect(x: Double(view.width) - tools.width, y: top, width: tools.width, height: tools.height)
+    }
+
+    /// The first view and Recentre (S05m item 1): every card on screen, 16
+    /// in from each edge and below the top strip (`top`), the box as large
+    /// as fits, never under the tools; the zoom within `firstRange` of the
+    /// shortest card.
+    static func firstView(centres: [CGPoint], sizes: [CGSize], card: CGSize, view: CGSize, hidden: Double,
+                          top: Double, tools: Tools, target: Double) -> Camera {
+        let shortest: Double = sizes.map { Double($0.height) }.min() ?? Double(card.height)
+        return camera(centres: centres, card: card, view: view, hidden: hidden,
+                      margins: Margins(top: 16 + top, leading: 16, bottom: 16, trailing: 16),
+                      zoomRange: firstRange(cardHeight: shortest, target: target), sizes: sizes, tools: tools)
+    }
+
+    /// `camera`'s fit to the whole room, kept if no card is under `tools`;
+    /// else zoomed out in 2 % steps, the box tried centred, at the leading
+    /// edge, at the top and at the top-leading corner, until no card is
+    /// under them; and at the latest the room beside the tools (or above
+    /// them, in the corner, if that is larger).
+    static func camera(centres: [CGPoint], card: CGSize, view: CGSize, hidden: Double, margins: Margins,
+                       zoomRange: ClosedRange<Double>, sizes: [CGSize], tools: Tools) -> Camera {
+        let full = camera(centres: centres, card: card, view: view, hidden: hidden, margins: margins,
+                          zoomRange: zoomRange, sizes: sizes)
+        guard !centres.isEmpty else { return full }
+        let rect = toolsRect(view: view, hidden: hidden, tools: tools)
+        var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+        for (k, c) in centres.enumerated() {
+            let s: CGSize = k < sizes.count ? sizes[k] : card
+            minX = min(minX, Double(c.x) - Double(s.width) / 2); maxX = max(maxX, Double(c.x) + Double(s.width) / 2)
+            minY = min(minY, Double(c.y) - Double(s.height) / 2); maxY = max(maxY, Double(c.y) + Double(s.height) / 2)
+        }
+        let width: Double = Double(view.width)
+        let seen: Double = max(Double(view.height) - hidden, 0)
+        func clear(_ cam: Camera) -> Bool {
+            for (k, c) in centres.enumerated() {
+                let s: CGSize = k < sizes.count ? sizes[k] : card
+                let x: Double = width / 2 + cam.panX + Double(c.x) * cam.zoom
+                let y: Double = seen / 2 + cam.panY + Double(c.y) * cam.zoom
+                let hw: Double = Double(s.width) * cam.zoom / 2, hh: Double = Double(s.height) * cam.zoom / 2
+                if x + hw > Double(rect.minX) && x - hw < Double(rect.maxX)
+                    && y + hh > Double(rect.minY) && y - hh < Double(rect.maxY) { return false }
+            }
+            return true
+        }
+        if clear(full) { return full }
+        var besideMargins = margins
+        besideMargins.trailing = max(margins.trailing, tools.width)
+        let side = camera(centres: centres, card: card, view: view, hidden: hidden, margins: besideMargins,
+                          zoomRange: zoomRange, sizes: sizes)
+        var fallback = side
+        if !tools.centred {
+            var aboveMargins = margins
+            aboveMargins.bottom = max(margins.bottom, tools.height)
+            let above = camera(centres: centres, card: card, view: view, hidden: hidden, margins: aboveMargins,
+                               zoomRange: zoomRange, sizes: sizes)
+            if above.zoom > side.zoom { fallback = above }
+        }
+        let left: Double = margins.leading, right: Double = width - margins.trailing
+        let roomTop: Double = margins.top, roomBottom: Double = seen - margins.bottom
+        for step in 0...60 {
+            let z: Double = full.zoom * (1 - 0.02 * Double(step))
+            if step > 0 && (z <= fallback.zoom || z < zoomRange.lowerBound) { break }
+            // the box at this zoom: centred in the room, or at its leading or top edge
+            let centreX: Double = (left + right) / 2 - width / 2 - (minX + maxX) / 2 * z
+            let leadX: Double = left - width / 2 - minX * z
+            let centreY: Double = (roomTop + roomBottom) / 2 - seen / 2 - (minY + maxY) / 2 * z
+            let topY: Double = roomTop - seen / 2 - minY * z
+            for (px, py) in [(centreX, centreY), (leadX, centreY), (centreX, topY), (leadX, topY)] {
+                let cam = Camera(zoom: z, panX: px, panY: py)
+                if clear(cam) { return cam }
+            }
+        }
+        return fallback
+    }
+}
+
+/// The whole of a long title, shown over its card on the board (S05m item
+/// 5): at least 240 wide (the card's width on screen if wider), never wider
+/// than the board less 32; from the card's top-leading corner, kept 16
+/// inside the board's room and clear of its tools. In points.
+nonisolated enum IdeaBoardPeek {
+    static func width(card: Double, view: Double) -> Double {
+        max(min(max(card, 240), view - 32), 1)
+    }
+
+    /// The peek's top-leading corner, for a peek `width` by `height` over a
+    /// card whose top-leading corner is `corner`.
+    static func place(corner: CGPoint, width: Double, height: Double, view: CGSize, hidden: Double, top: Double,
+                      tools: IdeaBoardFit.Tools) -> CGPoint {
+        let seen: Double = max(Double(view.height) - hidden, 0)
+        func clampX(_ v: Double) -> Double { max(16, min(v, Double(view.width) - 16 - width)) }
+        func clampY(_ v: Double) -> Double { max(top + 16, min(v, seen - 16 - height)) }
+        var px: Double = clampX(Double(corner.x)), py: Double = clampY(Double(corner.y))
+        let r = IdeaBoardFit.toolsRect(view: view, hidden: hidden, tools: tools)
+        let under: Bool = px + width > Double(r.minX) && px < Double(r.maxX) && py + height > Double(r.minY) && py < Double(r.maxY)
+        if under {
+            // to the tools' leading side if it fits there, else above them
+            if Double(r.minX) - width >= 16 { px = Double(r.minX) - width } else { py = max(top + 16, Double(r.minY) - height) }
+        }
+        return CGPoint(x: px, y: py)
+    }
 }
 
 /// Where a card let go of on the board settles (S05b task 5): where it was
@@ -370,9 +486,15 @@ nonisolated enum IdeaBoardDrop {
     /// The 2D board's card, in board points: its width, and the height the
     /// board fits and drops by.
     static let card = CGSize(width: 150, height: 88)
-    /// The tallest card at the default text size (its folder line and four
-    /// lines of title), which a new idea is spaced by.
+    /// The tallest card at the default text size, which a new idea is
+    /// spaced by.
     static let tallest = CGSize(width: 150, height: 128)
+    /// The room kept between cards on the board, drawn and dropped (S05m
+    /// item 3).
+    static let gap: Double = 12
+    /// A title's widest line on the board is this sample's width in the
+    /// title's font: 20 letters, narrow and wide (S05m item 5).
+    static let titleSample: String = "abcdefghijklmnopqrst"
 
     /// Two cards cover each other, or come closer than `gap`: their centres
     /// nearer than half their widths (heights) and the gap, across and down.
@@ -381,7 +503,7 @@ nonisolated enum IdeaBoardDrop {
             && abs(Double(a.y - b.y)) < Double(sa.height + sb.height) / 2 + gap
     }
 
-    static func settle(_ p: CGPoint, card: CGSize, others: [CGPoint], gap: Double = 8, step: Double = 8,
+    static func settle(_ p: CGPoint, card: CGSize, others: [CGPoint], gap: Double = IdeaBoardDrop.gap, step: Double = 8,
                        rings: Int = 200) -> CGPoint {
         let w: Double = Double(card.width) + gap
         let h: Double = Double(card.height) + gap
@@ -402,13 +524,17 @@ nonisolated enum IdeaBoardDrop {
     }
 }
 
-/// Where the 2D board draws its cards (S05c): each at its stored centre,
-/// unless it would cover a card drawn before it, in the store's order; then
-/// at the nearest place that covers none, in IdeaBoardDrop's rings, with
-/// each pair's own sizes. On screen only: the stored places stay as they
-/// are, so an import's overlapping places, ideas with none (all at 0, 0)
-/// and cards grown with the text size are drawn apart. The same input gives
-/// the same places.
+/// Where the 2D board draws its cards (S05c, S05m item 2), on screen only:
+/// the stored places stay as they are. Cards stored on one point are drawn
+/// round it as a block whose middle is that point (rows of `ceil(sqrt(n))`
+/// in the store's order, `gap` apart); a block that would cover one drawn
+/// before it moves whole to the nearest free place in IdeaBoardDrop's rings.
+/// Then each other card, in the store's order, keeps its place if it covers
+/// no drawn card; one that covers a block's card is drawn on the side of
+/// that block it is stored on, as near its place as is free; one that
+/// covers only other cards goes to the nearest free place in the rings.
+/// Each pair is kept apart by its own sizes and `gap`. The same input gives
+/// the same places, the store's order breaking ties.
 nonisolated enum IdeaBoardSpread {
     struct Card: Equatable {
         var id: UUID
@@ -423,48 +549,195 @@ nonisolated enum IdeaBoardSpread {
         }
     }
 
-    static func places(_ cards: [Card], gap: Double = 8, step: Double = 8, rings: Int = 2000) -> [UUID: CGPoint] {
+    private struct Placed {
+        var at: CGPoint
+        var size: CGSize
+        var block: Int
+    }
+
+    private struct Block {
+        var point: CGPoint
+        var minX: Double
+        var maxX: Double
+        var minY: Double
+        var maxY: Double
+    }
+
+    private struct Key: Hashable {
+        var x: Double
+        var y: Double
+    }
+
+    /// The offsets from a shared point of `group`'s cards, in its order:
+    /// rows centred on the point, the whole block's middle on it.
+    private static func layout(_ group: [Card], gap: Double) -> [CGPoint] {
+        let n: Int = group.count
+        let cols: Int = Int(Double(n).squareRoot().rounded(.up))
+        var rows: [[Card]] = []
+        var start: Int = 0
+        while start < n {
+            rows.append(Array(group[start..<min(start + cols, n)]))
+            start += cols
+        }
+        let heights: [Double] = rows.map { row in row.map { Double($0.size.height) }.max() ?? 0 }
+        let total: Double = heights.reduce(0, +) + gap * Double(rows.count - 1)
+        var out: [CGPoint] = []
+        var y: Double = -total / 2
+        for (r, row) in rows.enumerated() {
+            let rowW: Double = row.map { Double($0.size.width) }.reduce(0, +) + gap * Double(row.count - 1)
+            var x: Double = -rowW / 2
+            for c in row {
+                out.append(CGPoint(x: x + Double(c.size.width) / 2, y: y + heights[r] / 2))
+                x += Double(c.size.width) + gap
+            }
+            y += heights[r] + gap
+        }
+        return out
+    }
+
+    static func places(_ cards: [Card], gap: Double = IdeaBoardDrop.gap, step: Double = 8,
+                       rings: Int = 2000) -> [UUID: CGPoint] {
         guard !cards.isEmpty else { return [:] }
         // placed cards in cells the size of the largest card and the gap, so
         // a place is checked against the 3 by 3 cells round it
         let cellW: Double = (cards.map { Double($0.size.width) }.max() ?? 1) + gap
         let cellH: Double = (cards.map { Double($0.size.height) }.max() ?? 1) + gap
         struct Cell: Hashable { var i: Int; var j: Int }
-        var grid: [Cell: [(CGPoint, CGSize)]] = [:]
+        var grid: [Cell: [Placed]] = [:]
         var right: Double = -Double.infinity
         var result: [UUID: CGPoint] = [:]
+        var blocks: [Block] = []
         func cell(_ p: CGPoint) -> Cell {
             Cell(i: Int((Double(p.x) / cellW).rounded(.down)), j: Int((Double(p.y) / cellH).rounded(.down)))
+        }
+        // the drawn cards this one would cover, at p
+        func hits(_ p: CGPoint, _ size: CGSize) -> [Placed] {
+            let c = cell(p)
+            var out: [Placed] = []
+            for di in -1...1 {
+                for dj in -1...1 {
+                    for o in grid[Cell(i: c.i + di, j: c.j + dj)] ?? []
+                    where IdeaBoardDrop.covers(p, size, o.at, o.size, gap: gap) { out.append(o) }
+                }
+            }
+            return out
         }
         func free(_ p: CGPoint, _ size: CGSize) -> Bool {
             let c = cell(p)
             for di in -1...1 {
                 for dj in -1...1 {
-                    for (q, s) in grid[Cell(i: c.i + di, j: c.j + dj)] ?? []
-                    where IdeaBoardDrop.covers(p, size, q, s, gap: gap) { return false }
+                    for o in grid[Cell(i: c.i + di, j: c.j + dj)] ?? []
+                    where IdeaBoardDrop.covers(p, size, o.at, o.size, gap: gap) { return false }
                 }
             }
             return true
         }
-        func place(_ card: Card) -> CGPoint {
-            let p = card.centre
-            if free(p, card.size) { return p }
-            for ring in 1...max(rings, 1) {
-                let r: Double = Double(ring) * step
+        func put(_ card: Card, _ at: CGPoint, _ block: Int) {
+            grid[cell(at), default: []].append(Placed(at: at, size: card.size, block: block))
+            right = max(right, Double(at.x) + Double(card.size.width) / 2)
+            result[card.id] = at
+        }
+        func ring(_ p: CGPoint, _ ring: Int, _ k: Int, from: Double = 0) -> CGPoint {
+            let a: Double = from + Double(k) * Double.pi / 12
+            let r: Double = Double(ring) * step
+            return CGPoint(x: Double(p.x) + r * cos(a), y: Double(p.y) + r * sin(a))
+        }
+
+        // the shared points, in the store's order of each one's first card
+        var order: [Key] = []
+        var byPoint: [Key: [Card]] = [:]
+        for card in cards {
+            let key = Key(x: Double(card.centre.x), y: Double(card.centre.y))
+            if byPoint[key] == nil { order.append(key) }
+            byPoint[key, default: []].append(card)
+        }
+        for key in order {
+            guard let group = byPoint[key], group.count >= 2 else { continue }
+            let point = group[0].centre
+            let offsets = layout(group, gap: gap)
+            func at(_ k: Int, _ d: CGPoint) -> CGPoint {
+                CGPoint(x: Double(point.x) + Double(d.x) + Double(offsets[k].x),
+                        y: Double(point.y) + Double(d.y) + Double(offsets[k].y))
+            }
+            func fits(_ d: CGPoint) -> Bool { group.indices.allSatisfy { free(at($0, d), group[$0].size) } }
+            let zero = CGPoint(x: 0, y: 0)
+            var shift: CGPoint? = fits(zero) ? zero : nil
+            var r: Int = 1
+            while shift == nil && r <= max(rings, 1) {
                 for k in 0..<24 {
-                    let a: Double = Double(k) * Double.pi / 12
-                    let q = CGPoint(x: Double(p.x) + r * cos(a), y: Double(p.y) + r * sin(a))
-                    if free(q, card.size) { return q }
+                    let d = ring(zero, r, k)
+                    if fits(d) { shift = d; break }
+                }
+                r += 1
+            }
+            // past the rings: beyond every placed card, at its own height
+            let leftmost: Double = group.indices.map { Double(offsets[$0].x) - Double(group[$0].size.width) / 2 }.min() ?? 0
+            let d: CGPoint = shift ?? CGPoint(x: right + gap - (Double(point.x) + leftmost), y: 0)
+            var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
+            for (k, card) in group.enumerated() {
+                let q = at(k, d)
+                put(card, q, blocks.count)
+                minX = min(minX, Double(q.x) - Double(card.size.width) / 2)
+                maxX = max(maxX, Double(q.x) + Double(card.size.width) / 2)
+                minY = min(minY, Double(q.y) - Double(card.size.height) / 2)
+                maxY = max(maxY, Double(q.y) + Double(card.size.height) / 2)
+            }
+            blocks.append(Block(point: CGPoint(x: Double(point.x) + Double(d.x), y: Double(point.y) + Double(d.y)),
+                                minX: minX, maxX: maxX, minY: minY, maxY: maxY))
+        }
+
+        for card in cards {
+            if (byPoint[Key(x: Double(card.centre.x), y: Double(card.centre.y))]?.count ?? 0) >= 2 { continue }
+            let p = card.centre
+            let hit = hits(p, card.size)
+            if hit.isEmpty { put(card, p, -1); continue }
+            // a block it covers: the nearest one's point, the store's order breaking a tie
+            let covered: [Int] = Array(Set(hit.map(\.block).filter { $0 >= 0 })).sorted()
+            var near: Int? = nil
+            var nearest: Double = Double.infinity
+            for b in covered {
+                let q = blocks[b].point
+                let dx: Double = Double(p.x - q.x), dy: Double = Double(p.y - q.y)
+                let d2: Double = dx * dx + dy * dy
+                if d2 < nearest { nearest = d2; near = b }
+            }
+            var found: CGPoint? = nil
+            let w: Double = Double(card.size.width), h: Double = Double(card.size.height)
+            if let nb = near {
+                let b = blocks[nb]
+                let ox: Double = Double(p.x - b.point.x), oy: Double = Double(p.y - b.point.y)
+                let halfW: Double = max((b.maxX - b.minX) / 2, 1e-9), halfH: Double = max((b.maxY - b.minY) / 2, 1e-9)
+                let down: Bool = abs(oy) / halfH >= abs(ox) / halfW
+                let sign: Double = down ? (oy < 0 ? -1 : 1) : (ox < 0 ? -1 : 1)
+                func past(_ q: CGPoint) -> Bool {
+                    if down && sign > 0 { return Double(q.y) - h / 2 >= b.maxY + gap - 1e-9 }
+                    if down { return Double(q.y) + h / 2 <= b.minY - gap + 1e-9 }
+                    if sign > 0 { return Double(q.x) - w / 2 >= b.maxX + gap - 1e-9 }
+                    return Double(q.x) + w / 2 <= b.minX - gap + 1e-9
+                }
+                // the rings, tried from that side's own direction, then 15 degrees each way
+                let from: Double = down ? (sign > 0 ? Double.pi / 2 : -Double.pi / 2) : (sign > 0 ? 0 : Double.pi)
+                let turns: [Int] = [0] + (1...11).flatMap { [$0, -$0] } + [12]
+                var r: Int = 1
+                while found == nil && r <= max(rings, 1) {
+                    for k in turns {
+                        let q = ring(p, r, k, from: from)
+                        if past(q) && free(q, card.size) { found = q; break }
+                    }
+                    r += 1
+                }
+            } else {
+                var r: Int = 1
+                while found == nil && r <= max(rings, 1) {
+                    for k in 0..<24 {
+                        let q = ring(p, r, k)
+                        if free(q, card.size) { found = q; break }
+                    }
+                    r += 1
                 }
             }
             // past the rings: beyond every placed card, at its own height
-            return CGPoint(x: right + Double(card.size.width) / 2 + gap, y: Double(p.y))
-        }
-        for card in cards {
-            let at = place(card)
-            grid[cell(at), default: []].append((at, card.size))
-            right = max(right, Double(at.x) + Double(card.size.width) / 2)
-            result[card.id] = at
+            put(card, found ?? CGPoint(x: right + w / 2 + gap, y: Double(p.y)), -1)
         }
         return result
     }
@@ -472,7 +745,7 @@ nonisolated enum IdeaBoardSpread {
     /// Where a card let go of at `p` settles among the drawn cards (`others`,
     /// each with its size): IdeaBoardDrop.settle's search, with each pair's
     /// own sizes.
-    static func settle(_ p: CGPoint, size: CGSize, others: [(CGPoint, CGSize)], gap: Double = 8,
+    static func settle(_ p: CGPoint, size: CGSize, others: [(CGPoint, CGSize)], gap: Double = IdeaBoardDrop.gap,
                        step: Double = 8, rings: Int = 200) -> CGPoint {
         func free(_ q: CGPoint) -> Bool {
             !others.contains { IdeaBoardDrop.covers(q, size, $0.0, $0.1, gap: gap) }

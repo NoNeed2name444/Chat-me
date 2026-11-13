@@ -526,4 +526,24 @@ class MapDrawnTest {
         val open = cut.detailing(0.53f, 3, 1, 9)
         assertEquals(1, open.openChunks); assertEquals(3, open.chunks); assertEquals(9, open.summaries)
     }
+    @Test fun performancesHubsFolderLinesForceAndTourAreHandedOnWhenTheyChange() {
+        // S05i2: the hubs and folder lines drawn, whether the force has settled, and the tour's phase
+        val start = MapDrawn(build = 7)
+        assertEquals(0, start.hubs); assertEquals(0, start.folderLines)
+        assertTrue("settled where there is no force", start.settled)
+        assertEquals("no tour", "", start.tourPhase)
+        val drawn = start.performing(5, 3, settledNow = false)
+        assertEquals(5, drawn.hubs); assertEquals(3, drawn.folderLines); assertFalse(drawn.settled)
+        assertEquals("the rest of the record kept", start, drawn.copy(hubs = 0, folderLines = 0, settled = true))
+        assertSame("nothing changed: the same record", drawn, drawn.performing(5, 3, false))
+        val settled = drawn.performing(5, 3, true)
+        assertTrue(settled.settled)
+        // the tour's phase is kept unless a new one is given, and each new one is handed on
+        val warm = settled.performing(5, 3, true, "warm")
+        assertEquals("warm", warm.tourPhase)
+        assertSame(warm, warm.performing(5, 3, true))
+        val measure = warm.performing(5, 3, true, "measure")
+        assertEquals("measure", measure.tourPhase)
+        assertEquals("a filter's fewer hubs and lines", listOf(2, 1), measure.performing(2, 1, true).let { listOf(it.hubs, it.folderLines) })
+    }
 }
