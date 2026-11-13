@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
@@ -34,7 +35,8 @@ import kotlin.math.roundToInt
 /**
  * The look chip's menu over the 2D board at font scale 2 (S05m item 7; S05b's Moved item 16, where
  * Robolectric drew the menu with no surface), by day and by night: Sorta itself (MainActivity) on a
- * board of made-up ideas, taken to Map mode and to 2D by the look chip, the menu opened, one still each,
+ * board of made-up ideas, taken to Map mode (on a phone at font scale 2, by the switch's disc and its sheet)
+ * and to 2D by the look chip, the menu opened, one still each,
  * named mapmode-board-looks-scale2-<light|dark>-<device>.png in /sdcard/Download/sorta-renders.
  * Font scale 2.0 is set through the shell before the launch and read back from the activity; 1.0
  * comes back after. The check: inside the menu (its rows' union and the menu's 8 dp above and below),
@@ -88,9 +90,19 @@ class MapModeBoardRenderTest {
         check(abs(scale - 2f) < 0.01f) { "the app's font scale reads $scale, not 2" }
 
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(IdeasTags.TITLE)).fetchSemanticsNodes().isNotEmpty() }
-        // a phone's switch; a wider window shows the map beside Sort already
+        // a phone's switch; a wider window shows the map beside Sort already. At font scale 2 a phone's
+        // switch is the disc (FloatingSwitcher at the accessibility sizes, no Map segment), and its tap
+        // lists the modes in a sheet, Map read as its spoken words: as MapModeRenderTest goes there
+        val paned = compose.onAllNodes(hasTestTag(MapLook.CHIP)).fetchSemanticsNodes().isNotEmpty()
         if (compose.onAllNodes(hasTestTag(SortaMode.MAP.identifier)).fetchSemanticsNodes().isNotEmpty()) {
             compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        } else if (!paned) {
+            compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(SortaMode.TOGGLE)).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNode(hasTestTag(SortaMode.TOGGLE)).performClick()
+            val map = hasContentDescription(context.getString(SortaMode.MAP.spoken))
+            compose.waitUntil(10_000) { compose.onAllNodes(map).fetchSemanticsNodes().size == 1 }
+            compose.waitForIdle() // the sheet up and still before the finger
+            compose.onNode(map).performClick()
         }
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(MapLook.CHIP)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()

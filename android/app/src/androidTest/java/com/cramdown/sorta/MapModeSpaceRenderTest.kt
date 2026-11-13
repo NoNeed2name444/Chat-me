@@ -389,7 +389,12 @@ class MapModeSpaceRenderTest {
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == hub } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == hub) { "A tap on Cardiology's hub ($hub) raised no card for $name: ${mapDrawn()}" }
         val inCard = hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
-        check(compose.onAllNodes(hasText(cardiology.name) and inCard).fetchSemanticsNodes().isNotEmpty()) { "The hub's card does not name Cardiology for $name" }
+        // its title, read in the unmerged tree as MapPeekCardTest's cardFor reads it: the card is one
+        // clickable item, so in the merged tree its words are merged into the card's own node and no
+        // node below the card holds them; only its buttons, clickable items of their own, stay apart
+        val titles = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK_TITLE) and inCard, useUnmergedTree = true).fetchSemanticsNodes()
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString("") { it.text } }
+        check(titles == listOf(cardiology.name)) { "The hub's card does not name Cardiology for $name: its title reads $titles" }
         val flyIn = hasText(res.getString(R.string.map_peek_fly_in)) and inCard
         check(compose.onAllNodes(flyIn).fetchSemanticsNodes().size == 1) { "The hub's card has no Fly in for $name" }
         compose.onNode(flyIn).performClick()
@@ -912,14 +917,31 @@ class MapModeSpaceRenderTest {
             try { compose.waitUntil(10_000) { mapDrawn()?.cells?.any { it.index == index } == true } } catch (_: ComposeTimeoutException) {}
             return checkNotNull(mapDrawn()?.cells?.firstOrNull { it.index == index }) { "$id is not on the map for $name: ${mapDrawn()?.cells}" }
         }
+        // fingers only move the map where they land on it, clear of its strip, bar and tools: a pan
+        // starts at the idea's spot, or the nearest in the map's middle half where the idea is drawn
+        // outside it, and carries the map the idea's way to the middle, as far as that half allows.
+        // A replay that left the camera elsewhere can leave the idea off the map (on CI, 3b5f900's
+        // pacemaker close-up drew it at x 1620 of a 1080 px map, and 14 moves from there moved nothing)
+        val left = w / 4; val right = 3 * w / 4; val top = h / 4; val bottom = 3 * h / 4
+        fun toMiddle(c: MapDrawnCell) {
+            val from = Offset(c.x.coerceIn(left, right), c.y.coerceIn(top, bottom))
+            val by = middle - Offset(c.x, c.y)
+            fun room(at: Float, d: Float, low: Float, high: Float) = when {
+                d > 0f -> (high - at) / d
+                d < 0f -> (low - at) / d
+                else -> 1f
+            }
+            val k = min(1f, min(room(from.x, by.x, left, right), room(from.y, by.y, top, bottom)))
+            fingers(from, from + by * k, apart, apart)
+        }
         val before = cell()
-        repeat(2) { fingers(cell().let { Offset(it.x, it.y) }, middle, apart, apart) }
+        repeat(2) { toMiddle(cell()) }
         val most = widest / apart
         for (step in 0 until 12) {
             val c = cell()
             val off = (Offset(c.x, c.y) - middle).getDistance()
             val zoom = want / max(c.across, 1f)
-            if (off > 0.06f * min(w, h)) fingers(Offset(c.x, c.y), middle, apart, apart)
+            if (off > 0.06f * min(w, h)) toMiddle(c)
             else if (zoom > 1.15f) fingers(middle, middle, apart, apart * min(zoom, most))
             else if (zoom < 0.87f) fingers(middle, middle, apart * min(1f / zoom, most), apart)
             else break

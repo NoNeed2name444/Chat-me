@@ -481,7 +481,13 @@ class MapSpaceLivelyTest {
             // the record read only now; 5 s only guards against a hang
             try { compose.waitUntil(5_000) { drawn()?.grabbed == index } } catch (_: ComposeTimeoutException) {}
             val picked = checkNotNull(drawn())
-            check(picked.grabbed == index) { "A finger held 350 ms on body $index, then moved fast, did not pick it up for $name: $picked" }
+            // with the down's place and the record before it, a red tells a finger off the body (the
+            // camera turned: pose's yaw moved), a rebuild (build moved) and a touch the map never had apart
+            check(picked.grabbed == index) {
+                "A finger held 350 ms on body $index, then moved fast, did not pick it up for $name: down at ($x, $y) on the screen, " +
+                    "the name's body at $at in the map at $origin; before the down: build ${before.build}, pose ${before.pose}, " +
+                    "chosen ${before.chosen}, names ${before.names}; now: $picked"
+            }
             start = picked
             t0 = SystemClock.uptimeMillis()
             var last = picked
