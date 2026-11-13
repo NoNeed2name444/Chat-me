@@ -137,6 +137,30 @@ class MapDeathTest {
         assertEquals(rock, stage.reach[live], 1e-6f)
     }
 
+    @Test fun stillBothEndsDyingTakeTheMatesReachAsIos() {
+        // repair 8: with animations off a link between two dying bodies is whole only while its own end's
+        // plan runs, and then takes min with the mate's linkReach whatever the motion (GraphDeathScene.swift:187-198)
+        val plans = listOf(MapDeath.plan(DeathKind.BLACK_HOLE, false), MapDeath.plan(DeathKind.ROCKY, false))
+        val stage = MapDeathStage(listOf(departure("hole", 0, DeathKind.BLACK_HOLE, 0.2f, "rock"), departure("rock", 1, DeathKind.ROCKY, 0.3f, "hole")),
+            plans, lively = false)
+        stage.resolve { -1 }
+        assertEquals("the pair once", 1, stage.linkCount)
+        val pair = 0
+        assertEquals(0, stage.linkDying[pair]); assertEquals(1, stage.linkMate[pair])
+        stage.step(1.0 / 30)
+        var sawDrawnBack = false
+        while (stage.elapsed < plans[1].linksGone + 0.2 && !stage.finished) {
+            val own = if (stage.elapsed < plans[0].duration) 1f else 0f
+            val mate = MapDeath.linkReach(plans[1], stage.elapsed)
+            val want = minOf(own, mate).let { if (it > 0.001f) it else 0f }
+            assertEquals("at ${stage.elapsed}", want, stage.reach[pair], 1e-6f)
+            if (stage.reach[pair] in 0.01f..0.99f) sawDrawnBack = true
+            stage.step(0.05)
+        }
+        assertTrue("drawn back with the mate's plan, not held whole", sawDrawnBack)
+        assertEquals("gone once the mate's links are", 0f, stage.reach[pair], 0f)
+    }
+
     @Test fun stillTheLinksStayWholeUntilThePlansEndAndTheSetFades() {
         val plans = MapDeath.plans(listOf(DeathInput(DeathKind.ROCKY, 0.3f, 0)), still = true, smooth = false)
         val stage = MapDeathStage(listOf(departure("rock", 1, DeathKind.ROCKY, 0.3f, "live")), plans, lively = false)

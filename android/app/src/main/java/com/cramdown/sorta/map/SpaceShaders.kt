@@ -762,16 +762,31 @@ void main() {
     float cover;
     // a dying body's tides (S05h2): stretched vMark.w times along vB.xyz; a live one is round
     vec3 rp_tide = dot(vB.xyz, vB.xyz) > 0.25 ? normalize(vB.xyz) : vec3(0.0, 1.0, 0.0);
-    float t = rpEllipsoid(rd, c, R, rp_tide, max(vMark.w, 1.0), n, cover);
+    float rp_k = max(vMark.w, 1.0);
+    float t = rpEllipsoid(rd, c, R, rp_tide, rp_k, n, cover);
     rpDetailFor(c, r);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
     vec4 planet = vec4(rpFadedBody(rockBody(n, -rd, X, Y, Z, vLight.xyz), rp_dfF) * cover, cover);
     vec3 mn;
     float mcover;
-    float mt = rpSphere(rd, c + vA.xyz * r, R * 0.27, mn, mcover);
+    // the whole copy is stretched, as iOS scales its holder (GraphDeathScene.swift:228-249): the moon's
+    // place and the moon itself along the tide
+    vec3 rp_mo = vA.xyz * r;
+    rp_mo = rp_mo + rp_tide * (dot(rp_mo, rp_tide) * (rp_k - 1.0));
+    float mt = rpEllipsoid(rd, c + rp_mo, R * 0.27, rp_tide, rp_k, mn, mcover);
     vec4 moon = vec4(rpFadedBody(moonBody(mn, vLight.xyz), rp_dfF) * mcover, mcover);
     vec4 res = (mt > 0.0 && (t < 0.0 || mt < t)) ? rpOver(moon, planet) : rpOver(planet, moon);
-    res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5), rpSeen(vLight.xyz, c), vec3(0.42, 0.66, 1.0), 1.0), rp_dfF);
+    // and the air round it: the halo's plane squeezed back along the tide as seen, by the stretched
+    // planet's outline there, sqrt(1 + (k^2 - 1) |a|^2) with a the tide on the screen
+    vec2 rp_hq = rpPlane(c, R * 1.5);
+    vec2 rp_ta = vec2(dot(rp_tide, uRight), dot(rp_tide, uUp));
+    float rp_ta2 = dot(rp_ta, rp_ta);
+    if (rp_k > 1.0 && rp_ta2 > 1e-6) {
+        vec2 rp_tu = rp_ta / sqrt(rp_ta2);
+        float rp_hs = sqrt(1.0 + (rp_k * rp_k - 1.0) * rp_ta2);
+        rp_hq = rp_hq + rp_tu * (dot(rp_hq, rp_tu) * (1.0 / rp_hs - 1.0));
+    }
+    res.rgb = res.rgb + rpFadedGlow(halo(rp_hq, rpSeen(vLight.xyz, c), vec3(0.42, 0.66, 1.0), 1.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
     fragColor = fragColor * vMark.x;

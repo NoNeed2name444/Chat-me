@@ -95,8 +95,22 @@ class SpaceTrailsTest {
         assertEquals("speeds in note radii at iOS's fallback", 2.5f, single.fullSpeed, 1e-5f)
         assertEquals(0.9f, single.trailSpeed, 1e-5f)
         val crowded = SpaceTrails.of(true, universe = false, nodeRadius = 0.05f, smooth = false, bodies = 1)
-        assertEquals(0.05f / 0.124f, crowded.scale, 1e-5f)
+        // repair 8: held to iOS's 1-3, as iOS holds pageRadius to 0.2-0.6 (GraphFraming.swift:42)
+        assertEquals("a crowded map's sparks no smaller than iOS's smallest", 1f, crowded.scale, 0f)
         assertEquals(2.5f / (0.62f * 0.3f) * 0.05f, crowded.fullSpeed, 1e-5f)
+    }
+
+    @Test fun aSingleStylesScaleIsHeldToIosOneToThree() {
+        // repair 8: iOS's pageRadius / 0.2 with pageRadius held to 0.2-0.6 (GraphFraming.swift:42, Graph3DView.swift:1341)
+        for (r in listOf(0.001f, 0.01f, 0.08f, 0.124f, 0.2f, 0.3f, 0.372f, 0.45f, 2f)) {
+            val k = SpaceTrails.singleScale(r)
+            assertTrue("$r gives $k", k in 1f..3f)
+            assertEquals("$r", (r / 0.124f).coerceIn(1f, 3f), k, 1e-5f)
+        }
+        assertEquals(1f, SpaceTrails.singleScale(0.124f * 0.5f), 0f)
+        assertEquals(2f, SpaceTrails.singleScale(0.124f * 2f), 1e-5f)
+        assertEquals(3f, SpaceTrails.singleScale(0.124f * 3.6f), 0f)
+        assertEquals("the old span's top, 3.6, held to 3", 3f, SpaceTrails.of(true, universe = false, nodeRadius = 0.4464f, smooth = false, bodies = 1).scale, 0f)
     }
 
     @Test fun theDressSpreadsLifeSizeAndSpeedAsIos() {
@@ -111,8 +125,17 @@ class SpaceTrailsTest {
                 lives.add(t.bornLife(i)); sizes.add(t.bornSize(i))
             }
         }
-        // a fresh spark's speed, before any slowing: born this step with its age 0
-        repeat(200) { step(t, floatArrayOf(5f), dt = 1f / 60); val i = t.newest; if (t.ageOf(i) == 0f) speeds.add(t.speedOf(i)) }
+        // a fresh spark's speed, before any slowing (repair 8: a birth is already its share of the step
+        // old, so its speed now is its speed at birth slowed by that age)
+        repeat(200) {
+            val before = t.thrownTotal
+            step(t, floatArrayOf(5f), dt = 1f / 60)
+            if (t.thrownTotal > before) {
+                val i = t.newest
+                speeds.add(t.speedAtBirth(i))
+                assertEquals(t.speedAtBirth(i) * exp(-1.5f * t.ageOf(i)), t.speedOf(i), 1e-4f)
+            }
+        }
         assertTrue("enough born: ${lives.size}", lives.size > 100 && speeds.size > 50)
         fun within(xs: List<Float>, base: Float, spread: Float) {
             assertTrue("${xs.min()} ${xs.max()} against $base ± $spread", xs.all { it >= base * (1 - spread) - 1e-5f && it <= base * (1 + spread) + 1e-5f })
@@ -164,6 +187,41 @@ class SpaceTrailsTest {
         assertEquals(v0.x * slow, v1.x, 1e-5f); assertEquals(v0.y * slow, v1.y, 1e-5f)
         assertEquals(born.x + v1.x * h, t.placeOf(i).x, 1e-5f)
         assertEquals(born.y + v1.y * h, t.placeOf(i).y, 1e-5f)
+    }
+
+    @Test fun birthsOverOneLongStepLieAlongTheBodysWayWithAgesSpreadOverTheStep() {
+        // repair 8: at a low frame rate a step's births are spread along the segment from the body's last
+        // place to its place now, each pre-aged by its share of the step, as a continuous emitter's
+        val t = trails(n = 1)
+        val at = arrayOf(Vec3(0f, 0f, 0f))
+        repeat(60) { step(t, floatArrayOf(5f), places = at) } // its level up, at rest in place
+        val from = Vec3(0f, 0f, 0f); val to = Vec3(4f, 0f, 0f)
+        at[0] = to
+        val dt = 0.25f
+        val before = t.thrownTotal
+        val owed = t.rate[t.owner.indexOf(0)] * dt
+        step(t, floatArrayOf(5f), dt = dt, places = at)
+        val born = (t.thrownTotal - before).toInt()
+        assertTrue("several born over the step: $born (rate × dt $owed)", born >= 3 && born >= kotlin.math.floor(owed).toInt())
+        val ages = ArrayList<Float>(); val alongs = ArrayList<Float>()
+        for (b in 0 until born) {
+            val i = (t.newest - b + SpaceTrails.CAPACITY) % SpaceTrails.CAPACITY
+            val a = t.ageOf(i)
+            assertTrue("age $a in [0, $dt]", a >= 0f && a <= dt + 1e-6f)
+            // back where it was born: its place less its own motion since (one slowed step of age a)
+            val p = t.placeOf(i) - t.velocityOf(i) * a
+            val f = 1f - a / dt
+            assertEquals("born on the segment at its share of the step", from.x + (to.x - from.x) * f, p.x, 1e-4f)
+            assertEquals(0f, p.y - (from.y + (to.y - from.y) * f), 1e-4f)
+            assertEquals(0f, p.z - (from.z + (to.z - from.z) * f), 1e-4f)
+            ages.add(a); alongs.add(p.x)
+        }
+        // newest first: the youngest nearest the body now, the oldest nearest where it was
+        for (k in 1 until ages.size) assertTrue("older further back: $ages", ages[k] > ages[k - 1])
+        assertTrue("spread over the step: $ages", ages.max() - ages.min() >= dt * (born - 1) / (born + 1) - 1e-5f)
+        assertTrue("spread along the way: $alongs", alongs.max() - alongs.min() > (to.x - from.x) * 0.5f)
+        // the per-second rate is kept: births this step are the owed whole ones
+        assertTrue(born <= kotlin.math.ceil(owed + 1).toInt())
     }
 
     @Test fun nothingIsBornWithAnimationsOff() {

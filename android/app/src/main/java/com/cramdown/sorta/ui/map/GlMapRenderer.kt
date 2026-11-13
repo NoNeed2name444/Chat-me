@@ -54,6 +54,7 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -239,7 +240,9 @@ data class MapDrawn(
      * each frame steps it by the frame's interval, the first at most 1/30 s and every later one at most
      * 0.25 s (MapDeath.FIRST_STEP, MAX_STEP; GlMapRenderer's dt), and the test clock (MapDeath.testHold)
      * holds it. So a test judges when a death ends on the clock the death runs on, however slow the frames
-     * or late the record. No words.
+     * or late the record. Unrounded, but a step of it alone under [DYING_CLOCK_STEP] makes no new record
+     * (S05h2 repair 8), so the record is not handed on every frame for a death's whole length: it is the
+     * clock as of the record's latest change, at most [DYING_CLOCK_STEP] behind the death's own. No words.
      */
     val dyingSeconds: Double = -1.0,
     /** Sparks (S05h2): those alive this frame, rounded up to tens (0 stays 0), and those thrown in the map's life. No words. */
@@ -278,7 +281,8 @@ data class MapDrawn(
     /**
      * This record with the deaths as the latest frame drew them, [drawnNow] dying bodies drawn whole and
      * the biggest at [atNow] (x, y, pixels across; rounded here), and the deaths' clock at [secondsNow]
-     * (−1 for none); the same record when nothing changed.
+     * (−1 for none), unrounded; the same record when nothing changed, the clock counting as changed only
+     * once it is [DYING_CLOCK_STEP] or more from the record's (repair 8).
      */
     fun dying(dyingNow: Int, linksNow: Int, reachNow: Float, diedTotalNow: Int, linksTotalNow: Int,
               drawnNow: Int = 0, atNow: List<Float> = emptyList(), secondsNow: Double = -1.0): MapDrawn {
@@ -286,7 +290,8 @@ data class MapDrawn(
         val at = if (atNow.size < 3) emptyList()
             else listOf(Math.round(atNow[0]).toFloat(), Math.round(atNow[1]).toFloat(), Math.round(atNow[2] * 10) / 10f)
         return if (dying == dyingNow && dyingLinks == linksNow && dyingReach == reach && diedTotal == diedTotalNow &&
-            dyingLinksTotal == linksTotalNow && dyingDrawn == drawnNow && dyingAt == at && dyingSeconds == secondsNow) this
+            dyingLinksTotal == linksTotalNow && dyingDrawn == drawnNow && dyingAt == at &&
+            abs(dyingSeconds - secondsNow) < DYING_CLOCK_STEP) this
         else copy(dying = dyingNow, dyingLinks = linksNow, dyingReach = reach, diedTotal = diedTotalNow, dyingLinksTotal = linksTotalNow,
             dyingDrawn = drawnNow, dyingAt = at, dyingSeconds = secondsNow)
     }
@@ -344,6 +349,8 @@ data class MapDrawn(
     companion object {
         /** Finished frames worth counting: by the last of them, the ones before it were handed to the screen. */
         const val ENOUGH = 3
+        /** How far the deaths' clock moves before that alone makes a new record (S05h2 repair 8), seconds. */
+        const val DYING_CLOCK_STEP = 0.1
     }
 }
 

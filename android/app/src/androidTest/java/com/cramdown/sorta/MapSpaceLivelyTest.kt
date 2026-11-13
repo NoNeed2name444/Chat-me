@@ -88,9 +88,15 @@ import kotlin.math.abs
  * S05h2 A3: deathsAndSparksBy<Day|Night>, on the fixture and a folder inside Garden, a star: sparks from the star dragged fast
  * under the Universe and from an idea under Look › Comets, each frozen for a still
  * (mapmode-lively-plasma-... and mapmode-lively-dust-...), and the most linked idea deleted with the
- * death's clock held half way through its links drawing back (mapmode-lively-death-...), then gone
- * within its plan's length + 0.5 s of its own clock once let go (MapDrawn.dyingSeconds, the map's own
- * clock, not the wall's). The test clocks are reset after every test.
+ * death's clock held half way through its links drawing back (mapmode-lively-death-...), then let go:
+ * the test waits until a record shows dying 0, or its own clock (MapDrawn.dyingSeconds, the map's own
+ * clock, not the wall's) the plan's remaining length + 0.5 s past the hold, or 20 s of the wall, and
+ * requires dying 0 (which a death that plays to its plan on that clock meets by construction; it fails on
+ * a death outliving its plan or a clock stalled for 20 s). On the clock itself (repair 8), over every
+ * record seen after the let-go: it never runs ahead of the wall (its rise since the hold at most the
+ * wall's since the let-go + 0.25 s, one frame's step), and it keeps moving while a body is dying (it has
+ * risen between records at least two frames and 1 s of the wall apart). The test clocks are reset after
+ * every test.
  */
 @RunWith(AndroidJUnit4::class)
 class MapSpaceLivelyTest {
@@ -362,13 +368,49 @@ class MapSpaceLivelyTest {
         val let = SystemClock.uptimeMillis()
         MapDeath.testHold = null
         fun run(d: MapDrawn) = d.dyingSeconds - hold
-        try { compose.waitUntil(20_000) { drawn()?.let { it.dying == 0 || run(it) >= left } == true } } catch (_: ComposeTimeoutException) {}
-        val gone = checkNotNull(drawn())
+        // every record seen after the let-go, with the uptime it was read at (repair 8)
+        val seen = ArrayList<Pair<MapDrawn, Long>>()
+        seen.add(atLet to let)
+        fun note(d: MapDrawn?): MapDrawn? { if (d != null && d !== seen.last().first) seen.add(d to SystemClock.uptimeMillis()); return d }
+        try { compose.waitUntil(20_000) { note(drawn())?.let { it.dying == 0 || run(it) >= left } == true } } catch (_: ComposeTimeoutException) {}
+        val gone = checkNotNull(note(drawn()))
         check(gone.dying == 0) {
             "A body was still dying with the death's own clock ${"%.3f".format(run(gone))} s past the hold at $hold s " +
                 "(the plan's ${dies.duration} s, so gone by ${"%.3f".format(left)} s), ${SystemClock.uptimeMillis() - let} ms and " +
                 "${gone.orbitSteps - atLet.orbitSteps} steps of the orbit clock after the clock was let go" +
                 (if (run(gone) < left) " (the clock stalled: the wall's 20 s ran out first)" else "") + " for $death: $gone"
+        }
+        // the death's own clock (repair 8), checks that can fail on it: never ahead of the wall. Each frame
+        // steps it by that frame's interval, at most 0.25 s (MapDeath.MAX_STEP), the first after the let-go
+        // included, so its rise since the hold is at most the wall's since the let-go + 0.25 s
+        for ((d, at) in seen) {
+            if (d.dyingSeconds < 0) continue
+            val wall = (at - let) / 1000.0
+            check(run(d) <= wall + 0.25 + 1e-9) {
+                "The death's own clock ran ahead of the wall: ${"%.3f".format(run(d))} s past the hold ${"%.3f".format(wall)} s " +
+                    "after the let-go (at most 0.25 s more) for $death: ${seen.map { (r, t) -> "%.3f@%d".format(r.dyingSeconds, t - let) }}"
+            }
+        }
+        // and it keeps moving while a body dies: between records at least two frames (orbit steps) and 1 s
+        // of the wall apart, the first still dying, it has risen. The record hands it on unrounded but only
+        // once it has moved a tenth (MapDrawn.DYING_CLOCK_STEP) or something else changed, and a record is
+        // read some time after its frame, so a pair is judged over 1 s of the wall, not one frame
+        var anchor = seen.first()
+        var pairs = 0
+        for ((d, at) in seen.drop(1)) {
+            val (a, aAt) = anchor
+            if (a.dying < 1) break
+            if (d.orbitSteps < a.orbitSteps + 2 || at - aAt < 1_000) continue
+            check(d.dyingSeconds > a.dyingSeconds || d.dyingSeconds < 0 && d.dying == 0) {
+                "The death's own clock stood at ${"%.3f".format(a.dyingSeconds)} s from ${aAt - let} ms to ${at - let} ms after the let-go " +
+                    "over ${d.orbitSteps - a.orbitSteps} frames while a body was dying for $death: $a, then $d"
+            }
+            pairs++
+            anchor = d to at
+        }
+        check(pairs >= 1) {
+            "No two records at least two frames and 1 s apart while the death played, so its clock's moving was not judged, for $death: " +
+                seen.map { (r, t) -> "%.3f/%d/%d@%d".format(r.dyingSeconds, r.dying, r.orbitSteps, t - let) }
         }
         val dying = rate(atLet, gone, let)
         // dust: Look › Comets, an idea dragged fast

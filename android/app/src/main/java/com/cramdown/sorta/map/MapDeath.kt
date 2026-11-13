@@ -410,7 +410,8 @@ class MapDeathStage(val dying: List<MapDeparture>, val plans: List<DeathPlan>, v
             var r = MapDeath.linkReach(plans[d], elapsed)
             if (!lively) r = if (elapsed < plans[d].duration) 1f else 0f
             val mate = linkMate[j]
-            if (mate >= 0) r = min(r, if (!lively) (if (elapsed < plans[mate].duration) 1f else 0f) else MapDeath.linkReach(plans[mate], elapsed))
+            // both ends dying: the mate's own reach, whatever the motion setting (GraphDeathScene.swift:196-198)
+            if (mate >= 0) r = min(r, MapDeath.linkReach(plans[mate], elapsed))
             reach[j] = if (r > 0.001f) r else 0f
         }
         setOpacity = if (lively) 1f else (1 - min(elapsed / max(longest, 0.01), 1.0)).toFloat()

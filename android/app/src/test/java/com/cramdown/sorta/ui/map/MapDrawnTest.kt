@@ -329,12 +329,35 @@ class MapDrawnTest {
         val held = d.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35)
         assertEquals(0.35, held.dyingSeconds, 0.0)
         assertSame(held, held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35))
-        // a step of the clock alone is a new record, unrounded
-        val on = held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35 + 0.0001)
-        assertEquals(0.3501, on.dyingSeconds, 1e-12)
+        // a step of the clock alone of a tenth or more is a new record, unrounded
+        val on = held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35 + 0.1001)
+        assertEquals(0.4501, on.dyingSeconds, 1e-12)
         assertEquals("the rest of the record left alone", held.copy(dyingSeconds = on.dyingSeconds), on)
         // the callers that hand on no clock leave it at none
         assertEquals(-1.0, held.dying(1, 3, 0.5f, 1, 3).dyingSeconds, 0.0)
+        assertEquals(-1.0, on.dying(1, 3, 0.5f, 1, 3).dyingSeconds, 0.0)
+    }
+
+    @Test fun theDeathsClockAloneIsNoNewRecordEveryFrame() {
+        // S05h2 repair 8: a death stepped at 60 frames a second, nothing else changing, is handed on about
+        // ten times a second of its clock, not every frame; each record's clock unrounded and within a tenth
+        assertEquals(0.1, MapDrawn.DYING_CLOCK_STEP, 0.0)
+        var r = MapDrawn().dying(1, 3, 0.5f, 1, 3, secondsNow = 0.0)
+        var records = 1
+        var t = 0.0
+        repeat(120) {
+            t += 1.0 / 60
+            val next = r.dying(1, 3, 0.5f, 1, 3, secondsNow = t)
+            if (next !== r) { records++; assertEquals("unrounded", t, next.dyingSeconds, 0.0) }
+            r = next
+            assertTrue("at most a tenth behind at $t: ${r.dyingSeconds}", t - r.dyingSeconds < 0.1 && r.dyingSeconds <= t)
+        }
+        assertTrue("about ten a second over 2 s, not 120: $records", records in 15..25)
+        // anything else changing is a new record with the clock as it is now, unrounded
+        val other = r.dying(0, 3, 0.5f, 1, 3, secondsNow = t + 0.01)
+        assertEquals(t + 0.01, other.dyingSeconds, 0.0)
+        // the death's end (−1) is always a new record
+        assertEquals(-1.0, r.dying(1, 3, 0.5f, 1, 3, secondsNow = -1.0).dyingSeconds, 0.0)
     }
 
     @Test fun sparksRoundUpToTensAndNoneStaysNone() {

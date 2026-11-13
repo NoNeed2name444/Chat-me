@@ -59,9 +59,14 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
 
         /**
          * One single style's scale: iOS's pageRadius / 0.2 (Graph3DView.swift:1333), its pageRadius
-         * being an idea's radius / 0.62, so [nodeRadius] / 0.124.
+         * being an idea's radius / 0.62, so [nodeRadius] / 0.124; and as iOS holds pageRadius to
+         * 0.2-0.6 (GraphFraming.swift:42), held to 1-3 (repair 8).
          */
-        fun singleScale(nodeRadius: Float): Float = nodeRadius / (IDEA_SHARE * 0.2f)
+        fun singleScale(nodeRadius: Float): Float = (nodeRadius / (IDEA_SHARE * 0.2f)).coerceIn(MIN_SINGLE_SCALE, MAX_SINGLE_SCALE)
+
+        /** iOS's pageRadius bounds, 0.2 and 0.6 (GraphFraming.swift:42), over its 0.2. */
+        const val MIN_SINGLE_SCALE = 1f
+        const val MAX_SINGLE_SCALE = 3f
 
         /** A single style's speeds: iOS's taken in note radii at its fallback page radius, times [nodeRadius]. */
         fun singleSpeed(speed: Float, nodeRadius: Float): Float = speed / (IDEA_SHARE * PAGE_RADIUS) * nodeRadius
@@ -100,6 +105,8 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
     private val code = IntArray(emitters)
     private val direction = Array(emitters) { Vec3(0f, 1f, 0f) }
     private val owed = FloatArray(emitters)
+    /** Each emitter's body's place at its last step (repair 8), null before its first. */
+    private val last = arrayOfNulls<Vec3>(emitters)
     /** Each emitter's births a second this frame. */
     val rate = FloatArray(emitters)
     private val picks = IntArray(emitters); private val pickSpeed = FloatArray(emitters); private var pickCount = 0
@@ -110,6 +117,7 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
     private val vx = FloatArray(CAPACITY); private val vy = FloatArray(CAPACITY); private val vz = FloatArray(CAPACITY)
     private val age = FloatArray(CAPACITY); private val life = FloatArray(CAPACITY) // life 0: none
     private val size = FloatArray(CAPACITY)
+    private val bornSpeed = FloatArray(CAPACITY)
     private val style = IntArray(CAPACITY)
     private var head = 0
     /** Sparks alive now. */
@@ -123,6 +131,8 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
     fun bornLife(i: Int) = life[i]
     fun bornSize(i: Int) = size[i]
     fun speedOf(i: Int) = sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i])
+    /** Spark [i]'s speed as dressed, before any slowing. */
+    fun speedAtBirth(i: Int) = bornSpeed[i]
     fun placeOf(i: Int) = Vec3(px[i], py[i], pz[i])
     fun ageOf(i: Int) = age[i]
     fun velocityOf(i: Int) = Vec3(vx[i], vy[i], vz[i])
@@ -134,7 +144,8 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
     /**
      * One frame [dt] seconds on: the bodies drawn ([drawn], the first [drawnCount]) and the held one
      * ([held], −1 for none) ease their levels by their [velocity]; the emitters go to the held body and
-     * the fastest; each throws at [placeOf] its body; the sparks age, slow and move. [frozen] (the test
+     * the fastest; each throws along its body's way this step ([place] then and now), each spark aged by
+     * its share of [dt]; the sparks age, slow and move. [frozen] (the test
      * clock) stops all of it. [styleOf] is a body's style code.
      */
     fun step(dt: Float, drawn: IntArray, drawnCount: Int, held: Int, velocity: (Int) -> Vec3, place: (Int) -> Vec3,
@@ -170,20 +181,29 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
         }
         for (s in 0 until emitters) {
             val body = owner[s]
-            if (body < 0) { rate[s] = 0f; owed[s] = 0f; continue }
+            if (body < 0) { rate[s] = 0f; owed[s] = 0f; last[s] = null; continue }
             val v = velocity(body)
+            val at = place(body)
+            // where the body was a step ago: its last place, or for a slot just handed it, back along its velocity
+            val from = last[s] ?: (at - v * h)
+            last[s] = at
             val trail = look[s] ?: continue
             if (trail.backward) {
                 val speed = v.length()
                 if (speed > 0.01f) direction[s] = v * (-1f / speed)
             }
             rate[s] = trail.rate * level[body] * particleScale
+            val owedBefore = owed[s]
             owed[s] += rate[s] * h
             val births = floor(owed[s]).toInt()
             owed[s] -= births
-            if (births > 0) {
-                val at = place(body)
-                repeat(births) { birth(s, at) }
+            // as a continuous emitter (repair 8): birth m comes when what is owed crosses m, at
+            // τ = (m − owed before) / rate into the step, on the segment from the body's last place to
+            // its place now, and is already h − τ old
+            for (m in 1..births) {
+                val tau = if (rate[s] > 0f) ((m - owedBefore) / rate[s]).coerceIn(0f, h) else h
+                val f = if (h > 0f) tau / h else 1f
+                birth(s, from + (at - from) * f, h - tau)
             }
         }
     }
@@ -216,11 +236,13 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
         code[slot] = styleCode
         direction[slot] = Vec3(0f, 1f, 0f)
         owed[slot] = 0f
+        last[slot] = null
     }
 
     private fun spread() = random.nextFloat() * 2f - 1f
 
-    private fun birth(slot: Int, at: Vec3) {
+    /** A spark from emitter [slot] born at [at], already [old] seconds old: aged, slowed and moved by that as [age] would. */
+    private fun birth(slot: Int, at: Vec3, old: Float = 0f) {
         val trail = look[slot] ?: return
         val i = head
         head = (head + 1) % CAPACITY
@@ -228,9 +250,16 @@ class SpaceTrails(val emitters: Int, val scale: Float, val fullSpeed: Float, val
         life[i] = trail.life * (1f + 0.35f * spread())
         size[i] = trail.size * scale * (1f + 0.5f * spread())
         val speed = trail.speed * scale * (1f + 0.6f * spread())
+        bornSpeed[i] = speed
         val d = cone(direction[slot], trail.spread)
         vx[i] = d.x * speed; vy[i] = d.y * speed; vz[i] = d.z * speed
         age[i] = 0f
+        if (old > 0f) {
+            age[i] = old
+            val slow = exp(-DAMPING * old)
+            vx[i] *= slow; vy[i] *= slow; vz[i] *= slow
+            px[i] += vx[i] * old; py[i] += vy[i] * old; pz[i] += vz[i] * old
+        }
         style[i] = code[slot]
         thrownTotal++
     }
