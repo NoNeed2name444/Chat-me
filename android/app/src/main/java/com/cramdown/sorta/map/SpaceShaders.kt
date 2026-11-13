@@ -37,8 +37,10 @@ flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vMark;
 void main() {
-    // the filter's bloom swells every glow by 1 + 0.6 × bloom (S05i, GraphMotion.swift:2128), so the quad too
-    vec3 w = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (uExtent * aCenter.w * (1.0 + 0.6 * aMark.w));
+    // a dying rocky body stretched along its tidal axis (aMark.w, S05h2) needs the longer reach; the
+    // filter's bloom (−aMark.w, S05i) swells every glow by 1 + 0.6 × bloom (GraphMotion.swift:2128), so
+    // the quad too. Each reads only its own side of w (SpaceBodies)
+    vec3 w = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (uExtent * aCenter.w * max(aMark.w, 1.0)) * (1.0 + 0.6 * max(-aMark.w, 0.0));
     gl_Position = uVP * vec4(w, 1.0);
     vWorld = w;
     vCenter = aCenter;
@@ -154,6 +156,26 @@ float rpSphere(vec3 rd, vec3 c, float R, out vec3 n, out float cover) {
     n = normalize(uEye + rd * t - c);
     return cover > 0.0 ? t : -1.0;
 }
+// The same against an ellipsoid stretched `along` times along the unit `ax` (S05h2, a dying rocky
+// body's tides): the eye's offset and the ray squeezed along the axis, cast at the sphere, and the
+// normal scaled back. With `along` 1 it is rpSphere.
+float rpEllipsoid(vec3 rd, vec3 c, float R, vec3 ax, float along, out vec3 n, out float cover) {
+    float k = 1.0 / along - 1.0;
+    vec3 oc = uEye - c;
+    vec3 ocS = oc + ax * (dot(oc, ax) * k);
+    vec3 rdS = rd + ax * (dot(rd, ax) * k);
+    float rl = max(length(rdS), 1e-6);
+    vec3 rdN = rdS / rl;
+    float b = dot(ocS, rdN);
+    float q = dot(ocS, ocS) - b * b;
+    float perp = sqrt(max(q, 0.0));
+    float pixel = max(-b, 1e-4) / uFocal;
+    cover = b < 0.0 ? clamp((R - perp) / pixel + 0.5, 0.0, 1.0) : 0.0;
+    float tS = -b - sqrt(max(R * R - q, 0.0));
+    vec3 pS = ocS + rdN * tS;
+    n = normalize(pS + ax * (dot(pS, ax) * k));
+    return cover > 0.0 ? tS / rl : -1.0;
+}
 // A body's own axes: Y its spin axis, turned by `a` about it.
 void rpFrame(vec3 y, float a, out vec3 X, out vec3 Y, out vec3 Z) {
     Y = normalize(y);
@@ -168,9 +190,10 @@ vec2 rpPlane(vec3 c, float h) {
     vec3 d = vWorld - c;
     return vec2(dot(d, uRight), dot(d, uUp)) / h;
 }
-// A glow's size as the filter brings its body back: iOS's swellBy, 1 + 0.6 × bloom (vMark.w), with no
-// motion term, as Space's bodies here do not move (GraphMotion.swift:2128). The body itself keeps its size.
-float rpSwell() { return 1.0 + 0.6 * vMark.w; }
+// A glow's size as the filter brings its body back: iOS's swellBy, 1 + 0.6 × bloom (−vMark.w; a dying
+// body's tides, w's positive side, are no bloom), with no motion term, as Space's bodies here do not move
+// (GraphMotion.swift:2128). The body itself keeps its size.
+float rpSwell() { return 1.0 + 0.6 * max(-vMark.w, 0.0); }
 // Where the ray meets the plane through `c` holding `along` and `across`: (across, along), world units.
 vec2 rpStrip(vec3 rd, vec3 c, vec3 along, vec3 across) {
     vec3 nrm = cross(across, along);
@@ -744,16 +767,34 @@ void main() {
     rpFrame(vec3(0.0, 1.0, 0.0), rpClock * rpMotion * 0.12 + vLight.w * 6.2831853, X, Y, Z);
     vec3 n;
     float cover;
-    float t = rpSphere(rd, c, R, n, cover);
+    // a dying body's tides (S05h2): stretched vMark.w times along vB.xyz; a live one is round
+    vec3 rp_tide = dot(vB.xyz, vB.xyz) > 0.25 ? normalize(vB.xyz) : vec3(0.0, 1.0, 0.0);
+    float rp_k = max(vMark.w, 1.0);
+    float t = rpEllipsoid(rd, c, R, rp_tide, rp_k, n, cover);
     rpDetailFor(c, r);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
     vec4 planet = vec4(rpFadedBody(rockBody(n, -rd, X, Y, Z, vLight.xyz), rp_dfF) * cover, cover);
     vec3 mn;
     float mcover;
-    float mt = rpSphere(rd, c + vA.xyz * r, R * 0.27, mn, mcover);
+    // the whole copy is stretched, as iOS scales its holder (GraphDeathScene.swift:228-249): the moon's
+    // place and the moon itself along the tide
+    vec3 rp_mo = vA.xyz * r;
+    rp_mo = rp_mo + rp_tide * (dot(rp_mo, rp_tide) * (rp_k - 1.0));
+    float mt = rpEllipsoid(rd, c + rp_mo, R * 0.27, rp_tide, rp_k, mn, mcover);
     vec4 moon = vec4(rpFadedBody(moonBody(mn, vLight.xyz), rp_dfF) * mcover, mcover);
     vec4 res = (mt > 0.0 && (t < 0.0 || mt < t)) ? rpOver(moon, planet) : rpOver(planet, moon);
-    res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5 * rpSwell()), rpSeen(vLight.xyz, c), vec3(0.42, 0.66, 1.0), 1.0), rp_dfF);
+    // and the air round it: the halo's plane, swelled by the filter's bloom (S05i), squeezed back along
+    // the tide as seen, by the stretched planet's outline there, sqrt(1 + (k^2 - 1) |a|^2) with a the
+    // tide on the screen
+    vec2 rp_hq = rpPlane(c, R * 1.5 * rpSwell());
+    vec2 rp_ta = vec2(dot(rp_tide, uRight), dot(rp_tide, uUp));
+    float rp_ta2 = dot(rp_ta, rp_ta);
+    if (rp_k > 1.0 && rp_ta2 > 1e-6) {
+        vec2 rp_tu = rp_ta / sqrt(rp_ta2);
+        float rp_hs = sqrt(1.0 + (rp_k * rp_k - 1.0) * rp_ta2);
+        rp_hq = rp_hq + rp_tu * (dot(rp_hq, rp_tu) * (1.0 / rp_hs - 1.0));
+    }
+    res.rgb = res.rgb + rpFadedGlow(halo(rp_hq, rpSeen(vLight.xyz, c), vec3(0.42, 0.66, 1.0), 1.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
     fragColor = fragColor * vMark.x;
@@ -1563,6 +1604,42 @@ void main() {
     fragColor = vec4(rpFadedGlow(rp_col, rp_dfF), 0.0);
 }
 """
+
+    // ---- sparks (S05h2): iOS's spark (GraphArt.spark, GraphLook.swift:437-444), computed ----
+
+    private const val SPARK_VS = """#version 300 es
+precision highp float;
+layout(location = 0) in vec4 aPoint;
+layout(location = 1) in vec3 aColour;
+uniform mat4 uVP;
+uniform float uFocal;
+uniform float uMaxPoint;
+out vec3 vColour;
+void main() {
+    vec4 p = uVP * vec4(aPoint.xyz, 1.0);
+    gl_Position = p;
+    float px = aPoint.w * uFocal / max(p.w, 1e-3);
+    gl_PointSize = clamp(px, 1.0, uMaxPoint);
+    // a spark smaller than a pixel lights its pixel by its share of it
+    vColour = aColour * min(px * px, 1.0);
+}
+"""
+
+    private const val SPARK_FS = """#version 300 es
+precision mediump float;
+in vec3 vColour;
+out vec4 fragColor;
+void main() {
+    vec2 rp_q = gl_PointCoord * 2.0 - 1.0;
+    float rp_r2 = dot(rp_q, rp_q);
+    float rp_glow = exp(-rp_r2 * 7.0);
+    float rp_core = exp(-rp_r2 * 40.0);
+    fragColor = vec4(vColour * (rp_glow * 0.7 + rp_core * 0.3), 0.0);
+}
+"""
+
+    val sparkVertex: String get() = SPARK_VS
+    val spark: String get() = SPARK_FS
 
     val orbitVertex: String get() = ORBIT_VS
     val orbit: String get() = ORBIT_FS_HEAD + FADE + ORBIT_MAIN

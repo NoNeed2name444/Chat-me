@@ -59,6 +59,7 @@ import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.LocalWardLook
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.launch
@@ -109,6 +110,8 @@ object IdeasTags {
     const val BANNER = "notice"
     /** Map mode with no ideas yet. */
     const val MAP_EMPTY = "map-empty"
+    /** The map's pane on two panes (S05j item 1). */
+    const val MAP_PANE = "map-pane"
 }
 
 /**
@@ -148,10 +151,25 @@ internal sealed class FolderPrompt {
 }
 
 /**
- * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
- * launch extra): it goes to the same call the system picker's result does, once.
+ * How long the banner keeps a notice (S05h2 repair 3). A notice with Undo stays for
+ * SnackbarDuration.Long, or, when the tests ask ([undoStays]), until it is acted on or dismissed,
+ * as iOS keeps an Undo notice up when the tests ask (IdeasNoticeHost.stays, IdeasKit.swift:325-337);
+ * a new notice still replaces it. A notice without Undo is never kept.
  */
-@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart()) {
+internal object IdeasBanner {
+    fun duration(undo: Boolean, undoStays: Boolean): SnackbarDuration =
+        if (undo && undoStays) SnackbarDuration.Indefinite else SnackbarDuration.Long
+
+    /** Whether a launch that asks for Undo notices to stay is heeded: only in a debuggable build, so a release build ignores it. */
+    fun undoStays(asked: Boolean, debuggable: Boolean): Boolean = asked && debuggable
+}
+
+/**
+ * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
+ * launch extra): it goes to the same call the system picker's result does, once. [undoStays]: the
+ * tests' launch extra that keeps Undo notices up (IdeasBanner), false in a release build.
+ */
+@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart(), undoStays: Boolean = false) {
     val context = LocalContext.current
     val res = context.resources
     val settings = remember(context) { IdeasSettings(context) }
@@ -182,7 +200,7 @@ internal sealed class FolderPrompt {
         scope.launch {
             banner.currentSnackbarData?.dismiss()
             val label = if (undo != null) res.getString(R.string.undo_action) else action
-            val result = banner.showSnackbar(message, actionLabel = label, duration = SnackbarDuration.Long)
+            val result = banner.showSnackbar(message, actionLabel = label, duration = IdeasBanner.duration(undo != null, undoStays))
             if (result == SnackbarResult.ActionPerformed) undo?.invoke()
         }
     }
@@ -257,18 +275,18 @@ internal sealed class FolderPrompt {
     val outer = LocalWardLook.current
 
     /** The map, edge to edge: the tools and the empty page keep above the foot ([hidden]) and the navigation bar. */
-    @Composable fun MapPane(paned: Boolean) = WardTextCap {
+    @Composable fun MapPane(paned: Boolean) = WardTextCap { CompositionLocalProvider(LocalSortaBars provides !paned) {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop)
+            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version)
         // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
                 Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
         }
-    }
+    } }
 
     /** The Sort screen, or the editor open from it, in its column. */
     @Composable fun SortSide() {
@@ -316,7 +334,9 @@ internal sealed class FolderPrompt {
                 Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) { Foot(switches = false) }
             }
             if (split.gap > 0) Spacer(Modifier.width(split.gap.dp).fillMaxHeight())
-            Box(Modifier.weight(1f).fillMaxHeight()) { MapPane(paned = true) }
+            // the map pane starts below the status bar, whose row shows the page across the window, and
+            // the bar's icons follow the page (S05j item 1, question 1's default; LocalSortaBars)
+            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
         } else {
             if (mapShown) WardHingePane(shape, Modifier.fillMaxSize()) { MapPane(paned = false) }
             else WardHingePane(shape, Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) { SortSide() }
@@ -328,23 +348,24 @@ internal sealed class FolderPrompt {
 
     // first, so the chooser, the naming sheet and the dialog it opens come over it
     if (sheetUp) MapListSheet(book, model.version, banner, folderId = listFolder, setFolder = { listFolder = it }, onDone = { listing = false },
-        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it })
+        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it },
+        overMap = night)
     choosing?.let { id ->
         val note = book.note(id)
         if (note == null) choosing = null
         else FolderChooser(book, note.folderId, version = model.version, onDismiss = { choosing = null },
-            onChoose = { to -> choosing = null; file(id, to) },
+            onChoose = { to -> choosing = null; file(id, to) }, overMap = night,
             // a new folder goes in the folder being browsed: the sheet's, while it is up
             onNewFolder = { choosing = null; naming = FolderPrompt.New(parent = if (sheetUp) listFolder else folderId, filing = id) })
     }
     when (val prompt = naming) {
         is FolderPrompt.New -> NameSheet(stringResource(R.string.name_new_title), stringResource(R.string.name_field), "",
-            stringResource(R.string.name_create), { naming = null }) { name ->
+            stringResource(R.string.name_create), { naming = null }, overMap = night) { name ->
             val folder = model.book.createFolder(name, prompt.parent)
             prompt.filing?.let { file(it, folder.id) }
         }
         is FolderPrompt.Rename -> NameSheet(stringResource(R.string.name_rename_title), stringResource(R.string.name_field), prompt.folder.name,
-            stringResource(R.string.name_rename), { naming = null }) { model.book.renameFolder(prompt.folder.id, it) }
+            stringResource(R.string.name_rename), { naming = null }, overMap = night) { model.book.renameFolder(prompt.folder.id, it) }
         null -> {}
     }
     deletingFolder?.let { folder ->

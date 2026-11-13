@@ -112,4 +112,15 @@ class MapNamesTest {
         assertEquals("Plant tulips before th…", names.single().label)
         assertEquals(MapNames.CUT, names.single().label.length)
     }
+
+    // S05j 6c: counted and cut by code point, as MapNameShow.cut: an emoji across the cut stays whole
+    @Test fun anEmojiAcrossTheCutStaysWhole() {
+        val seedling = "🌱"
+        val title = "a".repeat(21) + seedling + seedling + "bc"
+        assertEquals("a".repeat(21) + seedling + "…", MapNames.label(title))
+        val whole = "a".repeat(22) + seedling
+        assertEquals("23 code points, 24 chars, kept whole", whole, MapNames.label(whole))
+        val cut = MapNames.label("a".repeat(21) + seedling.repeat(4))
+        assertFalse("no lone surrogate: $cut", Character.isHighSurrogate(cut[cut.length - 2]))
+    }
 }

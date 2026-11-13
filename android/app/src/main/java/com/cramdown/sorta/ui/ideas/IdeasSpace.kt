@@ -27,7 +27,6 @@ import androidx.compose.material.icons.rounded.Hive
 import androidx.compose.material.icons.rounded.HorizontalRule
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.RadioButtonChecked
@@ -47,6 +46,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -101,6 +104,9 @@ import com.cramdown.sorta.map.LabelRgb
 import com.cramdown.sorta.map.NoteLike
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.SyntheticGraph
+import com.cramdown.sorta.map.PerfInput
+import com.cramdown.sorta.map.PerfMap
+import com.cramdown.sorta.map.PerfSynthetic
 import com.cramdown.sorta.ui.map.Map3DView
 import com.cramdown.sorta.ui.map.MapEase
 import com.cramdown.sorta.ui.map.MapFlyTo
@@ -110,9 +116,11 @@ import com.cramdown.sorta.ui.sources.ReaderDoneButton
 import com.cramdown.sorta.ui.sources.ReaderNavBar
 import com.cramdown.sorta.ui.LocalWardLook
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
@@ -149,12 +157,13 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
  * The 3D map of [book]. [open] reads an idea; [openFolder] a folder, or To sort (null) for the
  * home; [choose] files an idea (Choose folder) and [delete] deletes one, with Undo, both on the
  * caller's side. [top] is what the chrome covers above the map, from the window's top, which the
- * no-folder hint keeps under.
+ * no-folder hint keeps under. [version] is the book's (IdeasModel.version): the book changes in
+ * place, so a change (an Undo, an edit in the Sort pane beside the map) reaches the map by it.
  */
 @Composable fun IdeasSpace(
     book: IdeaBook, settings: IdeasSettings, covered: Boolean, hidden: Dp,
     open: (String) -> Unit, openFolder: (String?) -> Unit,
-    choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp,
+    choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
 ) {
     val theme = GraphTheme.stored(settings.theme)
     // the demo maps are a developer's, as on iOS, where only the readout offers them
@@ -191,6 +200,10 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     // Space's Universe: the folder Fly in last flew to, with a serial so the same folder flies again (S05h)
     var flyTo by remember(theme) { mutableStateOf<MapFlyTo?>(null) }
     LaunchedEffect(recenter) { openPath = emptyList(); flyTo = null }
+    // the peek card's bounds and this space's place, both in the window's pixels, while the card is
+    // open: the map's tests keep their spot off the card (Map3DView's peek)
+    var peekBounds by remember { mutableStateOf<Rect?>(null) }
+    var spaceAt by remember { mutableStateOf(Offset.Zero) }
     // the filter (S05i): held while the page is, never stored, as iOS's @State (Graph3DView.swift:94)
     var filter by remember { mutableStateOf<MapFilter>(MapFilter.All) }
     // Space's Universe: its galaxies' ids, which the filter offers in its place of the top folders
@@ -278,7 +291,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     val outer = LocalWardLook.current
     var shown by remember { mutableStateOf(false) }
     SortaTheme(dark = shown || outer.dark, section = outer.section) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onGloballyPositioned { spaceAt = it.positionInRoot() }) {
             when {
                 demo != null -> DemoMap(demo, recenter, settings.readout) { shown = it }
                 book.notes.isEmpty() -> Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)).padding(bottom = hidden), contentAlignment = Alignment.Center) {
@@ -297,7 +310,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
                     chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
-                    onHome = { flyTo = null }, shown = shown) { shown = it }
+                    onHome = { flyTo = null }, peek = peekBounds?.translate(-spaceAt), shown = shown, version = version) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -336,6 +349,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 if (held == null && peek != null) {
                     val (body, content) = peek
                     androidx.compose.runtime.key(body.id) {
+                        DisposableEffect(Unit) { onDispose { peekBounds = null } }
                         MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { react(MapSelectionEvent.OpenCard, body) },
                             flyIn = {
                                 if (theme == GraphTheme.NEURONS) cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it }
@@ -343,7 +357,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                             },
                             chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
                             option = { pick(it, body) },
-                            linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) })
+                            linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) },
+                            modifier = Modifier.onGloballyPositioned { peekBounds = it.boundsInRoot() })
                     }
                 }
             }
@@ -381,15 +396,15 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
         val folder = book.folders.firstOrNull { body.kind == ThemeBodyKind.FOLDER && it.id.equals(body.id, ignoreCase = true) }
         when {
             note != null -> NameSheet(stringResource(R.string.map_rename_idea_title), stringResource(R.string.map_rename_idea_field), note.title,
-                stringResource(R.string.name_rename), onDismiss = { renaming = null }) { book.update(note.copy(title = it.trim())) }
+                stringResource(R.string.name_rename), onDismiss = { renaming = null }, overMap = shown) { book.update(note.copy(title = it.trim())) }
             folder != null -> NameSheet(stringResource(R.string.name_rename_title), stringResource(R.string.name_field), folder.name,
-                stringResource(R.string.name_rename), onDismiss = { renaming = null }) { book.renameFolder(folder.id, it) }
+                stringResource(R.string.name_rename), onDismiss = { renaming = null }, overMap = shown) { book.renameFolder(folder.id, it) }
             else -> renaming = null
         }
     }
     // Add folder on the no-folder hint: the naming sheet, then the folder (as Sort's New folder)
     if (addingFolder) NameSheet(stringResource(R.string.name_new_title), stringResource(R.string.name_field), "", stringResource(R.string.name_create),
-        onDismiss = { addingFolder = false }) { book.createFolder(it) }
+        onDismiss = { addingFolder = false }, overMap = shown) { book.createFolder(it) }
     // a folder's Delete confirms with S05's words, as the Sort screen's (IdeasView.kt)
     deletingFolder?.let { folder ->
         val parent = book.folder(folder.parentId)?.name ?: stringResource(R.string.chooser_to_sort)
@@ -420,21 +435,23 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
  * first view fits what the chrome leaves: under [top] and above [hidden], as the 2D board's.
  * [onShown] hears that the map is drawn, once its first frame is; until [shown] comes back, with the
  * screen's night look and tools, the wait covers the map, so the two come in the same frame.
+ * [version] is the book's: the map is rebuilt when it moves, whatever else is the same.
  */
 @Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, openPath: List<String>,
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
-                                  onHome: () -> Unit, shown: Boolean, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
+                                  onHome: () -> Unit, peek: Rect?,
+                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
                                   onHidden: (String) -> Unit = {}, onShown: (Boolean) -> Unit) {
     val notes = book.notes
-    val edges = remember(notes) { book.allEdges() }
+    val edges = remember(notes, version) { book.allEdges() }
     val main = settings.nodeStyle
     val folderRaw = settings.folderStyles
     // the Neurons' cell states: a change builds the cells again (Graph3DView.swift:909-912, :1072)
     val cells = settings.cells
-    val built by produceState<BuiltMap?>(null, notes, theme, main, folderRaw, openPath, linkLength, cells) {
+    val built by produceState<BuiltMap?>(null, notes, theme, main, folderRaw, openPath, linkLength, version, cells) {
         value = builtOffMain {
             val pageIds = notes.filter { it.noteKind == NoteKind.PAGE }.map { it.id.uppercase() }.toHashSet()
             val noteFolder = notes.associate { it.id.uppercase() to it.folderId }
@@ -459,23 +476,28 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 // (Graph3DView.swift:861-862, galaxyOf from GraphThemeScene.swift:191): a note in a closed cell counts for no folder
                 return@builtOffMain BuiltMap(neurons, roles, null, bodies, stored = stored(plan?.let { MapFilterNotes.drawnIn(it) } ?: emptyMap()))
             }
+            if (theme == GraphTheme.PERFORMANCE) {
+                // Performance (S05i2; iOS's GraphPerfAdapter.input and GraphPerfScene): the folder layout,
+                // each note in its folder's ball round the folder's hub, settled by the force on the GL thread
+                val input = perfInput(book, edges, linkLength)
+                val layout = PerfMap.build(input) { !isActive } ?: throw kotlinx.coroutines.CancellationException()
+                val scene = MapScene.performance(layout, input)
+                // what the filter reads (P2): notes then hubs, a hub showing while any note under it does
+                val bodies = MapFilterBodies.performance(layout.graph, scene.links)
+                return@builtOffMain BuiltMap(scene, emptyMap(), null, bodies, stored = stored())
+            }
             val out = HashMap<String, MutableList<String>>()
             for ((a, b) in edges) out.getOrPut(a) { ArrayList() }.add(b)
-            val performance = theme == GraphTheme.PERFORMANCE
-            val nodes = notes.map { note ->
-                NoteNode(note.id, note.title.ifEmpty { "Untitled" }, out[note.id] ?: emptyList(),
-                    if (performance) listOfNotNull(book.rootFolder(note.folderId)) else emptyList())
-            }
+            val nodes = notes.map { note -> NoteNode(note.id, note.title.ifEmpty { "Untitled" }, out[note.id] ?: emptyList(), emptyList()) }
             // the Link length is the links' rest length (A5)
             val graph = MapGraph.fromNotes(nodes, rest = MapGraph.REST * linkLength.toFloat())
-            // the single looks and Performance: every body a note, its root its top-level folder
+            // the single looks: every body a note, its root its top-level folder
             val noteById = notes.associateBy { it.id }
             fun plain(scene: MapScene) = MapFilterBodies(Array(graph.nodeCount) { ThemeBodyKind.NOTE },
                 BooleanArray(graph.nodeCount) { graph.ids[it].uppercase() in pageIds },
                 Array(graph.nodeCount) { noteById[graph.ids[it]]?.let { n -> book.rootFolder(n.folderId) } },
                 IntArray(graph.nodeCount) { -1 }, scene.links)
-            if (performance) MapScene.of(graph, theme = MapTheme.PLAIN).let { BuiltMap(it, emptyMap(), null, plain(it), stored = stored()) }
-            else {
+            run {
                 val degree = IntArray(graph.nodeCount)
                 for (k in graph.edges.indices) degree[graph.edges[k]]++
                 val styles = GraphStyleChoice.codes(book, graph.ids, degree, main, folderRaw)
@@ -549,6 +571,10 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                     UniverseRole.GALAXY, UniverseRole.STAR -> ThemeBodyKind.FOLDER
                     else -> ThemeBodyKind.NOTE
                 }, star.role.raw)
+                // a Performance hub stands for its folder (S05i2): its card is a folder's, with Fly in
+                map.scene.perf != null && index >= map.scene.perf.graph.noteCount -> map.scene.ids.getOrNull(index)?.let { id ->
+                    MapBody(id, ThemeBodyKind.FOLDER, MapPeek.HUB)
+                }
                 else -> map.scene.ids.getOrNull(index)?.let { id ->
                     MapBody(id, ThemeBodyKind.NOTE, map.styles?.getOrNull(index)?.let { MapPeek.spaceRole(SpaceStyle.of(it.toInt())) } ?: "")
                 }
@@ -569,7 +595,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, filter = view)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view)
         // no idea passes: say so, over Space and the Neurons only (Graph3DView.swift:308-313); nothing to touch
         if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(R.string.map_filter_empty),
             Modifier.align(Alignment.Center).padding(horizontal = WardSpace.xl.wardDp).testTag(MapPanelTags.FILTER_EMPTY),
@@ -590,6 +616,18 @@ internal fun cellsOpenedBy(kind: ThemeBodyKind, id: String, book: IdeaBook): Lis
         book.path(folder.id).map { it.id.uppercase() }
     }
     ThemeBodyKind.NOTE -> null
+}
+
+/**
+ * Performance's input from the book (S05i2; iOS's GraphPerfAdapter.input): the notes, the folders and
+ * the links, as the map lays them out; the emulator's test lays out the same to find a folder's ball.
+ */
+internal fun perfInput(book: IdeaBook, edges: List<Pair<String, String>>, linkScale: Double): PerfInput {
+    val notes = book.notes
+    return PerfInput.of(notes.map { it.id }, BooleanArray(notes.size) { notes[it].noteKind == NoteKind.PAGE },
+        notes.map { it.folderId }, book.folders.map { it.id }, book.folders.map { it.parentId }, edges,
+        linkScale = linkScale.toFloat(), noteTitles = notes.map { it.title.ifEmpty { "Untitled" } },
+        folderNames = book.folders.map { it.name })
 }
 
 /**
@@ -668,6 +706,27 @@ private suspend fun <T> builtOffMain(build: () -> T): T =
     if (ready == null) { Building(size); return }
     Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(size)} made-up ideas, not your ideas",
         continuous = true, autoOrbit = true, showReadout = readout, showControls = false, recenter = recenter, corner = 0.dp)
+}
+
+/**
+ * The proof tour's map (S05i2; iOS's -graphPreviewPerfTour): the synthetic vault, 100,000 made-up ideas in
+ * 24 top-level folders, laid out as Performance lays out the book, flying PerfTour's path by itself and
+ * logging its frames. Only MainActivity's tour extra beside the "performance" preview opens it; no screen a
+ * person reaches does.
+ */
+@Composable internal fun TourMap(onShown: (Boolean) -> Unit = {}) {
+    val spec = remember { PerfSynthetic.Spec() }
+    val scene by produceState<MapScene?>(null, spec) {
+        value = builtOffMain {
+            val input = PerfSynthetic.make(spec)
+            PerfMap.build(input) { !isActive }?.let { MapScene.performance(it, input) } ?: throw kotlinx.coroutines.CancellationException()
+        }
+    }
+    val ready = scene
+    MapShown(ready != null, onShown)
+    if (ready == null) { Building(spec.notes); return }
+    Map3DView(ready, Modifier.fillMaxSize(), description = "${GraphTheme.PERFORMANCE.mapLabel}: demo of ${grouped(spec.notes)} made-up ideas, not your ideas",
+        showControls = false, corner = 0.dp, tour = true)
 }
 
 /** Tells [onShown] whether the map is drawn, not waiting on its layout, and that it isn't once it goes. */
@@ -827,7 +886,12 @@ internal val MapFilterGlyph get() = Icons.Rounded.FilterList
 @Composable internal fun LegendSheet(theme: GraphTheme, readout: Boolean, onDone: () -> Unit) {
     val content = MapLegend.of(theme, readout)
     val wide = currentWindowShape().width >= WindowShape.compactMax
+    // the sheet's top, its handle and Done below the status bar on every window, the dimmed map behind
+    // the bar, as iOS's sheets (S05j item 2, 8d); on a wide window full height at Material3's 640 dp, the
+    // iPad's page sheet's width not measured here (the plan's default)
     ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = wide),
+        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars), sheetMaxWidth = BottomSheetDefaults.SheetMaxWidth,
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal) },
         containerColor = wardColor(WardToken.background)) {
         LightIconsOverTheMap()
         ReaderNavBar(theme.legendTitle, trailing = { ReaderDoneButton(onClick = onDone) })
@@ -915,7 +979,7 @@ internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
     "sparkle" -> Icons.Rounded.Flare
     // the Cell states row's (GraphLegend.swift:302), the app's sparkles
     "sparkles" -> Icons.Rounded.AutoAwesome
-    "point.3.connected.trianglepath.dotted" -> Icons.Rounded.Link
+    "point.3.connected.trianglepath.dotted" -> SHOW_LINKS_GLYPH
     "circle.hexagongrid.fill" -> Icons.Rounded.Hive
     "smallcircle.filled.circle" -> Icons.Rounded.RadioButtonChecked
     "circle.fill" -> Icons.Rounded.Circle
@@ -936,7 +1000,9 @@ internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
  * dark map with the legend up (S05f's renders check). The sheet sets them once, as its window is
  * made, so they are set again here, on that window, from inside its content.
  */
-@Composable private fun LightIconsOverTheMap() {
+@Composable internal fun LightIconsOverTheMap() {
+    // on two panes the bar's row is the page's, and its icons follow the page (S05j item 1)
+    if (!LocalSortaBars.current) return
     val view = LocalView.current
     SideEffect {
         var at: Any? = view

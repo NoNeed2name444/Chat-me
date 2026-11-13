@@ -12,7 +12,7 @@
 name: iOS
 on:
   push:
-    branches: [sorta, sorta-b, sorta-e]
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
 permissions:
   contents: read
 concurrency:
@@ -242,7 +242,8 @@ jobs:
   # touched, its legend and look menu, bodies dying, and the depth fade, with
   # testDepthGlide), one at a time on an iPhone, beside the build job. Their
   # normal time is set by the first green run; until then, the limit is
-  # about twice a guess of an hour for 30 tests and the build.
+  # about twice a guess of an hour for 33 tests and the build (S05l split
+  # testDepthMeasure's 35 takes into four tests).
   maps:
     runs-on: macos-latest
     timeout-minutes: 120

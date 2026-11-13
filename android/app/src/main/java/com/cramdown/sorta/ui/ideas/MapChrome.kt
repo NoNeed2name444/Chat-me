@@ -124,12 +124,14 @@ object MapTags {
 @Composable internal fun MapListSheet(
     book: IdeaBook, version: Int, banner: SnackbarHostState, folderId: String?, setFolder: (String?) -> Unit, onDone: () -> Unit,
     open: (String) -> Unit, choose: (String) -> Unit, delete: (String) -> Unit,
-    name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit,
+    name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit, overMap: Boolean = true,
 ) {
     val level = rememberIdeasListLevel(book, version, folderId)
     val inset = WardSpace.s.wardDp
     ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // the 3D looks are night in light mode too, so the status icons over them stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         ReaderNavBar(stringResource(R.string.sort_title), trailing = {
             Box(Modifier.semantics { testTag = MapTags.LIST_DONE }) { ReaderDoneButton(onClick = onDone) }
         })

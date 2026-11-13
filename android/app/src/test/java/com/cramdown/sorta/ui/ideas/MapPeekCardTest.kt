@@ -1,10 +1,15 @@
 package com.cramdown.sorta.ui.ideas
 
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.onRoot
+import androidx.activity.compose.setContent
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.ideas.rawValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
@@ -160,6 +165,57 @@ class MapPeekCardTest {
         cardFor(gate.title)
     }
 
+    // S05j 7c: Show links draws Material's Hub, a node graph as iOS's point.3.connected.trianglepath.dotted,
+    // not Link's chain; the legend's Links row draws the same
+    @Test fun showLinksDrawsTheNodeGraph() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        val hub = androidx.compose.material.icons.Icons.Rounded.Hub
+        assertEquals("Rounded.Hub", hub.name)
+        compose.onNode(hasTestTag(MapPanelTags.glyph(hub)), useUnmergedTree = true).assertExists()
+        assertTrue("no chain", compose.onAllNodes(hasTestTag("glyph:Rounded.Link"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertSame(hub, legendGlyph("point.3.connected.trianglepath.dotted"))
+    }
+
+    // S05j 8b: the link chips' row reaches WardSpace.s into the card's margin each side, its chips padded
+    // back, so the last chip scrolls whole to the row's end, not cut at the card's padding (iOS's
+    // GraphMapPanels.swift:121-147)
+    @Test fun theChipRowReachesIntoTheCardsMargin() {
+        val links = (1..6).map { "id$it" to "A linked idea number $it" }
+        val scenario = androidx.test.core.app.ActivityScenario.launch(androidx.activity.ComponentActivity::class.java)
+        try {
+            scenario.onActivity { activity ->
+                val peekWords = mapPeekWords(activity.resources)
+                activity.setContent {
+                    com.cramdown.sorta.ui.SortaTheme(dark = true) {
+                        MapPeekCard(com.cramdown.sorta.ideas.MapPeek.content(com.cramdown.sorta.ideas.MapPeekInput("space", "gasGiant",
+                            folder = false, title = "Oil the gate", body = "A line.", links = links), peekWords),
+                            folder = false, words = peekWords, open = {}, flyIn = {}, chip = {}, option = {})
+                    }
+                }
+            }
+            compose.waitForIdle()
+            val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+            val s = com.cramdown.sorta.ui.ward.WardSpace.s.toFloat() * density
+            val pad = com.cramdown.sorta.ui.ward.WardFaceMetrics.cardPadding.toFloat() * density
+            val card = compose.onNode(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNode().boundsInRoot
+            val row = compose.onNode(hasTestTag(MapPanelTags.PEEK_CHIPS), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals("the row's start, s into the margin", card.left + pad - s, row.left, 1.5f)
+            assertEquals("the row's end, s into the margin", card.right - pad + s, row.right, 1.5f)
+            val first = compose.onNode(hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK_CHIPS)) and androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 1")), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals("the first chip padded back to the card's padding", card.left + pad, first.left, 1.5f)
+            compose.onNode(hasTestTag(MapPanelTags.PEEK_CHIPS), useUnmergedTree = true).performScrollToNode(androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 6")))
+            compose.waitForIdle()
+            val last = compose.onNode(hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK_CHIPS)) and androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 6")), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("the last chip whole: ${last.left}..${last.right} in ${row.left}..${row.right}",
+                last.left >= row.left - 0.5f && last.right <= row.right + 0.5f)
+            assertTrue("and inside the card", last.right <= card.right + 0.5f)
+        } finally {
+            scenario.close()
+        }
+    }
+
     @Test fun itsDeleteDeletesTheIdeaFromTheStore() {
         launchOnSpace()
         tapBody(gate.id)
@@ -302,6 +358,33 @@ class MapPeekCardTest {
         assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
+    @Test fun aPerformanceHubsCardIsItsFoldersAndFliesIn() {
+        // S05i2: in Performance each folder has a hub on the map (GraphPerfScene), picked as its folder
+        // (GraphPerfTheme.swift:344-346): its card a folder's, Open folder and Fly in, no Show links; Fly in
+        // keeps the card; an idea's card there has Show links and never Fly in
+        IdeasSettings(run.context).setLook(MapLook.PERFORMANCE)
+        IdeaStore(run.store).replaceIdeas(listOf(gate), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        // laid out off the main thread, then its panels up; Performance has no first-run card
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true && shown(MapPanelTags.FILTER_TOOL) }
+        assertFalse("Performance shows no first-run card", shown(MapPanelTags.HINT))
+        val ids = checkNotNull(tapper()).ids
+        assertEquals("the idea, then the folder's hub", listOf(gate.id.uppercase(), garden.id.uppercase()), ids.map { it.uppercase() })
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a hub's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_OPEN)).assert(hasText(words.openFolder))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        compose.waitForIdle()
+        cardFor(garden.name)
+        tapBody(gate.id)
+        cardFor(gate.title)
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks))
+        assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
+    }
+
     @Test fun underOneSingleStyleNoCardFliesIn() {
         // Look › Bodies › one style: today's Space, one body per idea and no folder bodies, so no card has Fly in
         IdeasSettings(run.context).setNodeStyle(SpaceStyle.SUN.rawValue)
@@ -327,7 +410,8 @@ class MapPeekCardTest {
         compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
         run.until { drawn().homes == 1 }
         val home = drawn().pose
-        assertEquals("the first view's turn", listOf(0.6f, 0.7f), home.drop(4))
+        // S05j item 3: Space's first view is iOS's, from yaw 0 looking down at GraphTilt's 45 degrees
+        assertEquals("the first view's turn", listOf(0f, (45.0 * Math.PI / 180.0).toFloat()), home.drop(4))
         // a turn of the camera on empty space, then one tap there: no return home
         compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, height * 0.3f), Offset(centerX + width * 0.3f, height * 0.3f)) }
         compose.waitForIdle()

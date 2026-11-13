@@ -35,7 +35,7 @@ object MapLegend {
     fun of(theme: GraphTheme, readout: Boolean = false): LegendContent = when (theme) {
         GraphTheme.SPACE -> LegendContent(spaceRungs, "Bigger bodies hold more.", "Size ladder: top folder, folder, page, idea, detail", spaceRows, touchHelp(theme))
         GraphTheme.NEURONS -> LegendContent(neuronRungs, "Bigger cells hold more.", "Size ladder: cell, part, page, idea", neuronRows, touchHelp(theme))
-        GraphTheme.PERFORMANCE -> LegendContent(performanceRungs, "Nearer things show more detail.", "Size ladder: glow, idea, far idea",
+        GraphTheme.PERFORMANCE -> LegendContent(performanceRungs, "Nearer things show more detail.", "Size ladder: glow, folder, idea, far idea",
             performanceRows.filter { it.name != "Speed" || readout }, touchHelp(theme))
     }
 
@@ -174,8 +174,9 @@ object MapLegend {
             amber, LINK_IDEAS),
     )
 
-    // Performance: every idea and page one point in its top-level folder's colour, far chunks one
-    // glow, links coloured by their ends (MapTheme.PLAIN); no hubs, no larger page points, no folder lines yet
+    // Performance: every idea and page one point in its top-level folder's colour round its folder's
+    // hub, far chunks one glow, links coloured by their ends, and a line in the hubs' colours from each
+    // folder's hub to its parent's (S05i2); no larger page points yet
 
     private val hubWhite = LegendTint(0.86, 0.9, 1.0)
     private val pointBlue = LegendTint(0.36, 0.61, 1.0)
@@ -184,17 +185,24 @@ object MapLegend {
 
     private val performanceRungs = listOf(
         LegendRung("Glow", 30, glowAmber.opacity(0.35)),
+        // a folder's hub (S05i2; GraphLegend.swift:325)
+        LegendRung("Folder", 22, hubWhite),
         LegendRung("Idea", 11, pointBlue),
         LegendRung("Far idea", 5, lineGrey),
     )
 
     private val performanceRows = listOf(
-        LegendRow("circle.hexagongrid.fill", "Folder", "Everything in a top-level folder is drawn in one colour.", hubWhite, MAKE_FOLDER),
+        // iOS's first sentence (GraphLegend.swift:333); its lighter shade a folder down is not drawn here
+        LegendRow("circle.hexagongrid.fill", "Folder",
+            "A bright hub with its ideas round it in a ball. Everything in a top-level folder is drawn in one colour.", hubWhite, MAKE_FOLDER),
         LegendRow("smallcircle.filled.circle", "Idea", "A point in its folder’s colour. A page is a point too.", pointBlue, ADD_IDEA),
         LegendRow("sun.min.fill", "Glow",
             "Ideas too far away to show one by one share one soft light. Links into it end at its middle. Come closer and it opens into its points.",
             glowAmber),
-        LegendRow("line.diagonal", "Lines", "Links, coloured by the ideas at their ends, fainter in the distance.", lineGrey, LINK_IDEAS),
+        // a folder line is drawn in its hubs' colours, not iOS's words' thin grey (GraphPerfShaders.swift:223)
+        LegendRow("line.diagonal", "Lines",
+            "Links, coloured by the ideas at their ends, fainter in the distance. Lines in the folders’ colours join each folder’s hub to the hub of the one it sits in.",
+            lineGrey, LINK_IDEAS),
         LegendRow("speedometer", "Speed", "The readout at the top left counts the ideas, the links and the frames a second.", lineGrey),
     )
 }

@@ -30,6 +30,11 @@ struct GraphPerfSpace: View {
     var linksFor: UUID? = nil
     var touch = GraphTouchHandlers()
     var bold: Bool = false
+    /// The glass over the map, measured as the other themes' is
+    /// (Graph3DView.mapInsets): the reader's own safe area reads 0 inside
+    /// `.ignoresSafeArea()`, so without it the first view ran under the
+    /// strip (S05j 6b). Nil (the design preview's own) reads the safe area.
+    var mapInsets: ((GeometryProxy) -> GraphInsets)? = nil
     @AppStorage(GraphPerfDemo.key) private var demo: Int = 0
     @State private var stats = GraphPerfStats()
     /// The engine's reports so far (the design preview's drawn check).
@@ -41,7 +46,7 @@ struct GraphPerfSpace: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             GeometryReader { geo in
-                map(insets: geo.safeAreaInsets)
+                map(insets: edges(geo))
             }
             .ignoresSafeArea()
             // the design preview only: what the frames drew, for the render
@@ -64,6 +69,14 @@ struct GraphPerfSpace: View {
                     .padding(.top, 8)
             }
         }
+    }
+
+    /// The glass on each edge, left and right as on screen.
+    private func edges(_ geo: GeometryProxy) -> EdgeInsets {
+        guard let mapInsets else { return geo.safeAreaInsets }
+        let glass: GraphInsets = mapInsets(geo)
+        return EdgeInsets(top: CGFloat(glass.top), leading: CGFloat(glass.left),
+                          bottom: CGFloat(glass.bottom), trailing: CGFloat(glass.right))
     }
 
     @ViewBuilder

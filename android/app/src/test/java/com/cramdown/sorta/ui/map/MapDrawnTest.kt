@@ -295,6 +295,130 @@ class MapDrawnTest {
         assertEquals(9_000L, again.pressTakenAtMs)
     }
 
+    @Test fun deathsKeepTheSameRecordWhenNothingChangedAndTheTotalsAreKept() {
+        // S05h2: a death playing, its links drawing back, then over
+        val d = MapDrawn()
+        assertEquals(0, d.dying + d.dyingLinks + d.diedTotal + d.dyingLinksTotal)
+        val playing = d.dying(1, 3, 0.4949f, 1, 3)
+        assertEquals(1, playing.dying); assertEquals(3, playing.dyingLinks); assertEquals(0.49f, playing.dyingReach)
+        assertEquals(1, playing.diedTotal); assertEquals(3, playing.dyingLinksTotal)
+        // the reach to a hundredth: a frame that moves it less is the same record
+        assertSame(playing, playing.dying(1, 3, 0.4901f, 1, 3))
+        // over: nothing dying now, the totals kept
+        val over = playing.dying(0, 0, 0f, 1, 3)
+        assertEquals(0, over.dying); assertEquals(0, over.dyingLinks); assertEquals(1, over.diedTotal); assertEquals(3, over.dyingLinksTotal)
+        assertSame(over, over.dying(0, 0, 0f, 1, 3))
+        assertEquals("the rest of the record left alone", d.copy(diedTotal = 1, dyingLinksTotal = 3), over)
+    }
+
+    @Test fun theDyingBodyDrawnIsHandedOnWithItsPlaceOnTheScreen() {
+        // S05h2 repair 6: the dying bodies drawn whole, and the biggest's centre and size, rounded
+        val d = MapDrawn()
+        assertEquals(0, d.dyingDrawn); assertEquals(emptyList<Float>(), d.dyingAt)
+        val seen = d.dying(1, 3, 0.5f, 1, 3, 1, listOf(812.4f, 877.6f, 40.26f))
+        assertEquals(1, seen.dyingDrawn)
+        assertEquals(listOf(812f, 878f, 40.3f), seen.dyingAt)
+        // moved by less than the rounding: the same record
+        assertSame(seen, seen.dying(1, 3, 0.5f, 1, 3, 1, listOf(812.3f, 877.7f, 40.31f)))
+        // moved: handed on
+        assertEquals(listOf(820f, 878f, 40.3f), seen.dying(1, 3, 0.5f, 1, 3, 1, listOf(820f, 878f, 40.3f)).dyingAt)
+        // none drawn (or too short a place): empty
+        val none = seen.dying(1, 3, 0.5f, 1, 3, 0, emptyList())
+        assertEquals(0, none.dyingDrawn); assertEquals(emptyList<Float>(), none.dyingAt)
+        assertEquals(emptyList<Float>(), d.dying(1, 3, 0.5f, 1, 3, 1, listOf(1f, 2f)).dyingAt)
+        // the callers that hand on no drawing leave both at none
+        assertEquals(0, d.dying(1, 3, 0.5f, 1, 3).dyingDrawn)
+    }
+
+    @Test fun theDeathsOwnClockIsHandedOnUnrounded() {
+        // S05h2 repair 7: the deaths' clock (MapDeathStage.elapsed), −1 with none playing
+        val d = MapDrawn()
+        assertEquals(-1.0, d.dyingSeconds, 0.0)
+        val held = d.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35)
+        assertEquals(0.35, held.dyingSeconds, 0.0)
+        assertSame(held, held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35))
+        // a step of the clock alone of a tenth or more is a new record, unrounded
+        val on = held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35 + 0.1001)
+        assertEquals(0.4501, on.dyingSeconds, 1e-12)
+        assertEquals("the rest of the record left alone", held.copy(dyingSeconds = on.dyingSeconds), on)
+        // the callers that hand on no clock leave it at none
+        assertEquals(-1.0, held.dying(1, 3, 0.5f, 1, 3).dyingSeconds, 0.0)
+        assertEquals(-1.0, on.dying(1, 3, 0.5f, 1, 3).dyingSeconds, 0.0)
+    }
+
+    @Test fun theDeathsClockAloneIsNoNewRecordEveryFrame() {
+        // S05h2 repair 8: a death stepped at 60 frames a second, nothing else changing, is handed on about
+        // ten times a second of its clock, not every frame; each record's clock unrounded and within a tenth
+        assertEquals(0.1, MapDrawn.DYING_CLOCK_STEP, 0.0)
+        var r = MapDrawn().dying(1, 3, 0.5f, 1, 3, secondsNow = 0.0)
+        var records = 1
+        var t = 0.0
+        repeat(120) {
+            t += 1.0 / 60
+            val next = r.dying(1, 3, 0.5f, 1, 3, secondsNow = t)
+            if (next !== r) { records++; assertEquals("unrounded", t, next.dyingSeconds, 0.0) }
+            r = next
+            assertTrue("at most a tenth behind at $t: ${r.dyingSeconds}", t - r.dyingSeconds < 0.1 && r.dyingSeconds <= t)
+        }
+        assertTrue("about ten a second over 2 s, not 120: $records", records in 15..25)
+        // anything else changing is a new record with the clock as it is now, unrounded
+        val other = r.dying(0, 3, 0.5f, 1, 3, secondsNow = t + 0.01)
+        assertEquals(t + 0.01, other.dyingSeconds, 0.0)
+        // the death's end (−1) is always a new record
+        assertEquals(-1.0, r.dying(1, 3, 0.5f, 1, 3, secondsNow = -1.0).dyingSeconds, 0.0)
+    }
+
+    @Test fun theDeathsClockCarriesTheStartOfTheFrameItWasTakenAt() {
+        // S05h2 repair 9, CI's dark tablet: frames under the test clock's hold, the orbit stepping on, made
+        // records two orbit steps apart with the clock at the hold in both; read only after the let-go, they
+        // passed for a clock stalled after it. Each record carries the start of the frame its clock is from
+        val hold = 0.35
+        val at = listOf(896f, 964f, 41.8f)
+        fun frame(r: MapDrawn, seconds: Double, startMs: Long, reach: Float = 0.5f) =
+            r.stepped().dying(1, 4, reach, 1, 4, 1, at, secondsNow = seconds, frameAtMsNow = startMs)
+        val first = frame(MapDrawn(), hold, 10_000L)
+        assertEquals(10_000L, first.dyingClockAtMs)
+        // two more frames held: a new record (the orbit stepped), the same clock, and still its own frame's start
+        val later = frame(frame(first, hold, 10_480L), hold, 10_960L)
+        assertEquals(first.orbitSteps + 2, later.orbitSteps)
+        assertFalse(first == later)
+        assertEquals(hold, later.dyingSeconds, 0.0)
+        assertEquals("taken in the first held frame, not a later one", 10_000L, later.dyingClockAtMs)
+        // let go at 11_200: the frame begun after it steps a quarter, its links drawn back; handed on with its start
+        val released = 11_200L
+        assertTrue("both held clocks were taken before the release", first.dyingClockAtMs <= released && later.dyingClockAtMs <= released)
+        val on = frame(later, hold + 0.25, 11_440L, reach = 0.06f)
+        assertEquals(hold + 0.25, on.dyingSeconds, 0.0)
+        assertEquals(11_440L, on.dyingClockAtMs)
+        assertTrue(on.dyingClockAtMs > released && on.dyingSeconds > later.dyingSeconds)
+        // a step under a tenth with nothing else of the death changed: the clock and its frame kept as a pair
+        val small = frame(on, hold + 0.3, 11_500L, reach = 0.06f)
+        assertEquals(on.orbitSteps + 1, small.orbitSteps)
+        assertEquals(on.dyingSeconds, small.dyingSeconds, 0.0)
+        assertEquals(11_440L, small.dyingClockAtMs)
+        // anything else of the death changing hands on the clock now with this frame's start
+        val moved = frame(small, hold + 0.3, 11_560L, reach = 0.03f)
+        assertEquals(hold + 0.3, moved.dyingSeconds, 0.0)
+        assertEquals(11_560L, moved.dyingClockAtMs)
+        // the frame's start alone is no change; callers that hand on no frame leave it at none
+        assertSame(on, on.dying(1, 4, 0.06f, 1, 4, 1, at, secondsNow = hold + 0.25, frameAtMsNow = 99_999L))
+        assertEquals(-1L, MapDrawn().dyingClockAtMs)
+        assertEquals(-1L, MapDrawn().dying(1, 3, 0.5f, 1, 3, secondsNow = hold).dyingClockAtMs)
+    }
+
+    @Test fun sparksRoundUpToTensAndNoneStaysNone() {
+        val d = MapDrawn()
+        assertSame(d, d.sparking(0, 0L))
+        val one = d.sparking(1, 1L)
+        assertEquals(10, one.sparks); assertEquals(1L, one.sparksTotal)
+        assertEquals(10, d.sparking(10, 10L).sparks)
+        assertEquals(20, d.sparking(11, 11L).sparks)
+        // more alive within the same ten, none thrown since: the same record
+        assertSame(one, one.sparking(7, 1L))
+        val gone = one.sparking(0, 40L)
+        assertEquals(0, gone.sparks); assertEquals(40L, gone.sparksTotal)
+    }
+
     @Test fun theFiltersFieldsAreHandedOnWhenTheyChange() {
         // S05i: no filter at first, and the record says so
         val start = MapDrawn(build = 5)
@@ -401,5 +525,25 @@ class MapDrawnTest {
         assertEquals(0.53f, cut.detail, 0f)
         val open = cut.detailing(0.53f, 3, 1, 9)
         assertEquals(1, open.openChunks); assertEquals(3, open.chunks); assertEquals(9, open.summaries)
+    }
+    @Test fun performancesHubsFolderLinesForceAndTourAreHandedOnWhenTheyChange() {
+        // S05i2: the hubs and folder lines drawn, whether the force has settled, and the tour's phase
+        val start = MapDrawn(build = 7)
+        assertEquals(0, start.hubs); assertEquals(0, start.folderLines)
+        assertTrue("settled where there is no force", start.settled)
+        assertEquals("no tour", "", start.tourPhase)
+        val drawn = start.performing(5, 3, settledNow = false)
+        assertEquals(5, drawn.hubs); assertEquals(3, drawn.folderLines); assertFalse(drawn.settled)
+        assertEquals("the rest of the record kept", start, drawn.copy(hubs = 0, folderLines = 0, settled = true))
+        assertSame("nothing changed: the same record", drawn, drawn.performing(5, 3, false))
+        val settled = drawn.performing(5, 3, true)
+        assertTrue(settled.settled)
+        // the tour's phase is kept unless a new one is given, and each new one is handed on
+        val warm = settled.performing(5, 3, true, "warm")
+        assertEquals("warm", warm.tourPhase)
+        assertSame(warm, warm.performing(5, 3, true))
+        val measure = warm.performing(5, 3, true, "measure")
+        assertEquals("measure", measure.tourPhase)
+        assertEquals("a filter's fewer hubs and lines", listOf(2, 1), measure.performing(2, 1, true).let { listOf(it.hubs, it.folderLines) })
     }
 }

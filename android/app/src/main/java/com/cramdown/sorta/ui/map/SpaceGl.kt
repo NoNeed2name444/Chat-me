@@ -25,12 +25,22 @@ import kotlin.math.min
  * before them, each one strip of [samples] + 1 vertex pairs along its curve (LinkStrips), drawn
  * as NeuronGl draws its bridges: one buffer, one strip per link. A style whose shader does not
  * build on this device is left as points. The chosen body's orbit ring (S05g) is one more quad,
- * its far half drawn before the bodies and its near half after them.
+ * its far half drawn before the bodies and its near half after them. The dying bodies' links
+ * (S05h2) are drawn after the rest, faded with their set in a still space, and the sparks (S05h2)
+ * last of all: one additive point sprite each, iOS's spark computed in the shader.
  */
 internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40) {
     private val programs = IntArray(6)
     private var linkProgram = 0
     private var orbitProgram = 0
+    private var sparkProgram = 0
+    private var sparkVao = 0
+    private var sparkVbo = 0
+    private var sparkBuffer: FloatBuffer = floats(256 * 7)
+    /** Sparks drawn in the latest frame. */
+    var sparksDrawn = 0; private set
+    /** Dying links drawn in the latest frame (S05h2). */
+    var dyingLinksDrawn = 0; private set
     private var ringVao = 0
     private var quadVbo = 0
     private var bodyVbo = 0
@@ -60,6 +70,17 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
             .onFailure { Log.w("SpaceGl", "links: ${it.message}") }.getOrDefault(0)
         orbitProgram = runCatching { buildProgram(SpaceShaders.orbitVertex, SpaceShaders.orbit) }
             .onFailure { Log.w("SpaceGl", "orbit: ${it.message}") }.getOrDefault(0)
+        sparkProgram = runCatching { buildProgram(SpaceShaders.sparkVertex, SpaceShaders.spark) }
+            .onFailure { Log.w("SpaceGl", "sparks: ${it.message}") }.getOrDefault(0)
+        // the sparks: per point its place and size, then its colour
+        val sparkIds = IntArray(1)
+        GLES30.glGenBuffers(1, sparkIds, 0); sparkVbo = sparkIds[0]
+        GLES30.glGenVertexArrays(1, sparkIds, 0); sparkVao = sparkIds[0]
+        GLES30.glBindVertexArray(sparkVao)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, sparkVbo)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 4, GLES30.GL_FLOAT, false, 28, 0)
+        GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 28, 16)
+        GLES30.glBindVertexArray(0)
         val ids = IntArray(3)
         GLES30.glGenBuffers(3, ids, 0)
         quadVbo = ids[0]; bodyVbo = ids[1]; beamVbo = ids[2]
@@ -104,25 +125,34 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
      * setting; [lively] false stills the links' motion (rpMotion 0, motion off), and [contrast]
      * (Increase Contrast) makes them bolder (rpEnergy 1.5, rpSolid 1), as iOS's link material
      * (GraphNodeFactory.link). [ring] is the chosen body's orbit ring (MapMark.orbitModel), null for
-     * none, at view depth [ringDepth] and brightness [ringGlow] (the pop's bloom).
+     * none, at view depth [ringDepth] and brightness [ringGlow] (the pop's bloom). [dyingFade] is the
+     * dying links' set's opacity (S05h2), and [sparks] the sparks to draw ([sparkCount] of
+     * SpaceTrails.OUT_STRIDE floats each), at most [maxPoint] pixels across.
      */
     fun draw(bodies: SpaceBodies, viewProj: FloatArray, eye: FloatArray, right: FloatArray, up: FloatArray, focal: Float, clock: Float, shaderDetail: Float,
              fade: FloatArray = FloatArray(4), focalDp: Float = 0f, forward: FloatArray = FloatArray(3),
              straight: Boolean = false, lively: Boolean = true, contrast: Boolean = false,
-             ring: FloatArray? = null, ringDepth: Float = 0f, ringGlow: Float = 1f) {
+             ring: FloatArray? = null, ringDepth: Float = 0f, ringGlow: Float = 1f,
+             dyingFade: Float = 1f, sparks: FloatArray? = null, sparkCount: Int = 0, maxPoint: Float = 64f) {
         if (!earthReady) uploadEarth()
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         linksDrawn = 0
+        dyingLinksDrawn = 0
         ringDrawn = false
         if (bodies.beamCount > 0 && linkProgram != 0) {
             // the Universe (S05h): fine beams (UniverseBeams.HALF_WIDTH, in note radii here), the near
-            // set at full brightness, then the far set at 0.55 (0.825 bold) in a draw of its own
+            // set at full brightness, then the far set at 0.55 (0.825 bold) in a draw of its own; the
+            // dying links (S05h2) last, at their set's opacity
             val universe = bodies.linkKinds != null
             val half = if (universe) UniverseBeams.HALF_WIDTH / max(bodies.nodeRadius, 1e-6f) else 0.18f
             val energy = if (contrast) 1.5f else 1f
-            for (set in if (universe) intArrayOf(0, 1) else intArrayOf(-1)) {
+            val sets = if (universe) intArrayOf(0, 1, DYING) else intArrayOf(-1, DYING)
+            for (set in sets) {
                 if (set == 1 && bodies.farBeams == 0) continue
-                strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight, bodies.beamCentres, set)
+                val dying = set == DYING
+                if (dying && (bodies.dyingBeams == 0 || dyingFade <= 0f)) continue
+                if (dying) strips.write(bodies.beams, bodies.beamCount, bodies.nodeRadius, straight, bodies.beamCentres, -1, bodies.dyingBeamStart)
+                else strips.write(bodies.beams, bodies.dyingBeamStart, bodies.nodeRadius, straight, bodies.beamCentres, set)
                 if (strips.count == 0) continue
                 val floatsUsed = strips.vertices * LinkStrips.STRIDE
                 stripBuffer = ensure(stripBuffer, floatsUsed)
@@ -138,14 +168,14 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
                 GLES30.glUniform1f(loc(p, "uFocal"), focal)
                 GLES30.glUniform1f(loc(p, "rpClock"), clock)
                 GLES30.glUniform1f(loc(p, "rpMotion"), if (lively) 1f else 0f)
-                GLES30.glUniform1f(loc(p, "rpEnergy"), if (set == 1) UniverseBeams.farEnergy(contrast) else energy)
+                GLES30.glUniform1f(loc(p, "rpEnergy"), (if (set == 1) UniverseBeams.farEnergy(contrast) else energy) * (if (dying) dyingFade else 1f))
                 GLES30.glUniform1f(loc(p, "rpSolid"), if (contrast) 1f else 0f)
                 GLES30.glUniform1f(loc(p, "rpReach"), 0.75f)
                 GLES30.glUniform4fv(loc(p, "rpFade"), 1, fade, 0)
                 GLES30.glBindVertexArray(beamVao)
                 val perLink = strips.perLink
                 for (k in 0 until strips.count) GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, k * perLink, perLink)
-                linksDrawn += strips.count
+                if (dying) dyingLinksDrawn += strips.count else linksDrawn += strips.count
             }
         }
         // the ring's far half, which the bodies then cover
@@ -200,6 +230,24 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
         }
         // and its near half, over them
         if (ring != null) drawRing(ring, viewProj, clock, lively, fade, ringDepth, ringGlow, -1f)
+        // the sparks, last and additive, as iOS's emitters draw late (renderingOrder 7); the map has no depth to test them by
+        sparksDrawn = 0
+        if (sparks != null && sparkCount > 0 && sparkProgram != 0) {
+            GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+            val used = sparkCount * 7
+            sparkBuffer = ensure(sparkBuffer, used)
+            sparkBuffer.put(sparks, 0, used).flip()
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, sparkVbo)
+            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, used * 4, sparkBuffer, GLES30.GL_STREAM_DRAW)
+            val p = sparkProgram
+            GLES30.glUseProgram(p)
+            GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
+            GLES30.glUniform1f(loc(p, "uFocal"), focal)
+            GLES30.glUniform1f(loc(p, "uMaxPoint"), maxPoint)
+            GLES30.glBindVertexArray(sparkVao)
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, sparkCount)
+            sparksDrawn = sparkCount
+        }
         GLES30.glBindVertexArray(0)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
     }
@@ -256,6 +304,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
     }
 
     companion object {
+        /** The dying links' draw (S05h2), after the near and far sets. */
+        private const val DYING = 2
         private const val ANISOTROPY = 0x84FE
         private const val MAX_ANISOTROPY = 0x84FF
 
