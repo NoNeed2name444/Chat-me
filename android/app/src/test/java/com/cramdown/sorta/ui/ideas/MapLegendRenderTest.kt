@@ -22,6 +22,12 @@ import com.cramdown.sorta.ui.ward.checks
 import com.cramdown.sorta.ui.ward.hx
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureScreenRoboImage
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Circle
+import androidx.compose.material.icons.rounded.DarkMode
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -129,6 +135,18 @@ class MapLegendRenderTest {
 
     @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
     @Test fun tabletDark() = render("tablet", dark = true)
+
+    // S05h repair 7: each row's iOS symbol has a stand-in of its own; Space's Moon (moon.fill) a moon,
+    // and only the one row whose symbol is iOS's circle.fill (Neurons' Vesicle) the plain circle
+    @Config(sdk = [35])
+    @Test fun everyRowHasAGlyphOfItsOwn() {
+        assertSame(Icons.Rounded.DarkMode, legendGlyph("moon.fill"))
+        val symbols = GraphTheme.entries.flatMap { t -> MapLegend.of(t, readout = true).rows.map { it.symbol } }.distinct()
+        assertTrue("moon.fill is a row's", "moon.fill" in symbols)
+        for (symbol in symbols) if (symbol != "circle.fill") {
+            assertNotSame("$symbol falls back to the plain circle", Icons.Rounded.Circle, legendGlyph(symbol))
+        }
+    }
 
     // ---- S05j item 2, 8c, 8d: the sheet below the status bar, at Material3's width on a wide window ----
 

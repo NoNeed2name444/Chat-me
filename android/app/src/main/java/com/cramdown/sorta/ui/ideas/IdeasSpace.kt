@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.Grain
 import androidx.compose.material.icons.rounded.Hive
@@ -264,7 +265,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
                     chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
-                    peek = peekBounds?.translate(-spaceAt), shown = shown) { shown = it }
+                    onHome = { flyTo = null }, peek = peekBounds?.translate(-spaceAt), shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -389,7 +390,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
-                                  peek: Rect?,
+                                  onHome: () -> Unit, peek: Rect?,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -476,7 +477,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, peek = peek)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek)
         if (!shown) Building(null)
     }
 }
@@ -749,6 +750,7 @@ internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
     "sun.max.fill" -> Icons.Rounded.WbSunny
     "circle.lefthalf.filled" -> Icons.Rounded.Contrast
     "globe.europe.africa.fill" -> Icons.Rounded.Public
+    "moon.fill" -> Icons.Rounded.DarkMode
     "dot.radiowaves.left.and.right" -> Icons.Rounded.Sensors
     "sparkle" -> Icons.Rounded.Flare
     "point.3.connected.trianglepath.dotted" -> SHOW_LINKS_GLYPH

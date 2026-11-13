@@ -379,6 +379,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     ease: MapEase? = null,
     /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
     flyTo: MapFlyTo? = null,
+    /** Two taps on empty space brought back the first view and ended any Fly in (S05h plan, Q5): the page forgets [flyTo]. */
+    onHome: () -> Unit = {},
     /**
      * The peek card over the map, in the map's own pixels, null while none is open: the tests' spot
      * keeps off it (MapSpot), so a finger put there lands on a body, not on the card.
@@ -457,7 +459,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     val shownBuild by rememberUpdatedState(scene.build)
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { renderer.leaveFlight(); loop.touched(); synchronized(camera) { home.restore(camera) } }
+        if (recenter != 0) { renderer.goHome(home); loop.touched() }
     }
     // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
     LaunchedEffect(renderer, flyTo) {
@@ -661,6 +663,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         val holdScale = MapTouchRules.holdScale(LocalViewConfiguration.current.longPressTimeoutMillis)
         val latestTap by rememberUpdatedState(onTap)
         val latestDouble by rememberUpdatedState(onDoubleTap)
+        val latestHome by rememberUpdatedState(onHome)
         val latestHold by rememberUpdatedState(onHold)
         // the last still lift: when, where and on what, for a double tap
         val lastLift = remember(scene) { LastLift() }
@@ -828,10 +831,12 @@ data class MapFlyTo(val id: String, val serial: Int)
                     MapTouchKind.DOUBLE_TAP -> { lastLift.clear(); latestDouble?.invoke(checkNotNull(hit)) ?: latestTap?.invoke(hit) }
                     MapTouchKind.TAP -> {
                         latestTap?.invoke(hit)
-                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS)
+                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS),
+                        // and a Fly in under way ends there, as Recentre ends it (S05h plan, Q5)
                         if (hit == null && paired && lastLift.hit == null) {
                             lastLift.clear()
-                            synchronized(camera) { home.restore(camera) }
+                            renderer.goHome(home)
+                            latestHome()
                             loop.moved()
                         } else lastLift.set(liftedAt, down.position, hit)
                     }
@@ -947,7 +952,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
             IconButton(onClick = {
                 loop.touched()
-                synchronized(camera) { home.restore(camera) }
+                renderer.goHome(home)
             }) { Icon(Icons.Rounded.RadioButtonChecked, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }

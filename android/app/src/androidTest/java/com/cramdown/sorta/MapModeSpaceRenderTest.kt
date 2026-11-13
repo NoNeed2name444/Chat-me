@@ -57,6 +57,7 @@ import com.cramdown.sorta.ui.ideas.SortaMode
 import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
+import com.cramdown.sorta.ui.map.MapScene
 import com.cramdown.sorta.ui.map.MapTapKey
 import com.cramdown.sorta.ui.ward.WardPalette
 import com.cramdown.sorta.ui.ward.WardSpace
@@ -315,8 +316,10 @@ class MapModeSpaceRenderTest {
     /**
      * S05j items 3 and 4: Space's first view, the card up. Every drawn body lies between the strip's foot
      * and the card's top (requireClearOfTheCard); on the phone the bodies' box is centred in that band: its
-     * middle within 4% of the view's height of the band's middle, the gaps above and below it within 8% of
-     * the band. A still, mapmode-first-view-<light|dark>-<device>.png.
+     * middle within 4% of the view's height of the band's middle, at rest and as the map runs, and the gaps
+     * above and below the box the bodies fill as the map runs within 8% of the band (repair 4: the first
+     * view frames every place the Universe's bodies reach, not one instant of their orbits). A still,
+     * mapmode-first-view-<light|dark>-<device>.png.
      */
     private fun requireFirstView(dark: Boolean, later: MutableList<String>) {
         val name = "mapmode-first-view-${if (dark) "dark" else "light"}-$device"
@@ -325,14 +328,55 @@ class MapModeSpaceRenderTest {
         val card = compose.onNode(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNode().boundsInRoot
         val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
         val map = checkNotNull(mapNode()).boundsInRoot
-        val box = checkNotNull(mapDrawn()).box
+        val drawn = checkNotNull(mapDrawn())
+        val box = drawn.box
         val top = map.top + box[1]; val bottom = map.top + box[3]
         val band = card.top - strip.bottom
         val off = abs((top + bottom) / 2 - (strip.bottom + card.top) / 2)
         val gaps = abs((top - strip.bottom) - (card.top - bottom))
         android.util.Log.i("MapModeSpaceRenderTest", "$name: box $top-$bottom in the band ${strip.bottom}-${card.top}: off $off, gaps differ by $gaps")
         if (off > 0.04f * map.height) later.add("The first view's box is off the band's middle by $off px for $name (4% is ${0.04f * map.height})")
-        if (gaps > 0.08f * band) later.add("The first view's gaps differ by $gaps px for $name (8% of the band is ${0.08f * band})")
+        // S05j repair 4: the Universe turns, and its first view frames every place its bodies reach (iOS's
+        // envelope, GraphUniverse.swift:1475-1480; UniversePlan.kt:809-811), the To sort comets' long
+        // orbits too. With animations off the orbit clock stays at 0, where those comets sit at their homes
+        // low in the map, so the box above is one instant of a map that moves (here 519-1233 px in the band
+        // 275-1328, 74 px low). The gaps are measured on the box the bodies fill as the map runs: each
+        // body over ten minutes of its orbit, drawn as the renderer draws it (the scene's node radius
+        // round it), seen from the first view's pose. The test's plan is first matched to the map's:
+        // its bodies at the clock's 0, so drawn, give the box the map reports.
+        val book = IdeaBook(notes, folders)
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        val radius = MapScene.universe(plan).nodeRadius
+        val pose = drawn.pose
+        check(pose.size == 6) { "No camera pose for $name: $drawn" }
+        val camera = OrbitCamera(Vec3(pose[0], pose[1], pose[2]), pose[3], pose[4], pose[5],
+            MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), MapFirstView.roll(map.width, map.height))
+        val focal = camera.focalPixels(map.height)
+        fun reach(seconds: Double): FloatArray {
+            val r = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+            for (i in plan.bodies.indices) {
+                val p = plan.position(i, seconds)
+                val (x, y) = camera.project(p, map.width, map.height) ?: continue
+                val half = radius * focal / camera.depthOf(p)
+                if (half * 2 <= 2f) continue
+                r[0] = minOf(r[0], x - half); r[1] = minOf(r[1], y - half); r[2] = maxOf(r[2], x + half); r[3] = maxOf(r[3], y + half)
+            }
+            return r
+        }
+        val rest = reach(0.0)
+        check(box.indices.all { abs(rest[it] - box[it]) <= 2f }) {
+            "The test's Universe plan, seen from the map's pose, is not what the map drew for $name: ${rest.toList()} against $box"
+        }
+        var high = Float.MAX_VALUE; var low = -Float.MAX_VALUE
+        var seconds = 0.0
+        while (seconds <= 600.0) { val b = reach(seconds); high = minOf(high, b[1]); low = maxOf(low, b[3]); seconds += 1.0 }
+        val runTop = map.top + high; val runBottom = map.top + low
+        val runOff = abs((runTop + runBottom) / 2 - (strip.bottom + card.top) / 2)
+        val runGaps = abs((runTop - strip.bottom) - (card.top - runBottom))
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: over ten minutes $runTop-$runBottom: off $runOff, gaps differ by $runGaps")
+        if (runTop < strip.bottom - 0.5f || runBottom > card.top + 0.5f) later.add("The bodies reach outside the band ${strip.bottom}-${card.top} as the map runs for $name: $runTop-$runBottom")
+        if (runOff > 0.04f * map.height) later.add("The first view's bodies, as the map runs, are off the band's middle by $runOff px for $name (4% is ${0.04f * map.height})")
+        if (runGaps > 0.08f * band) later.add("The first view's gaps, as the map runs, differ by $runGaps px for $name (8% of the band is ${0.08f * band})")
     }
 
     /**

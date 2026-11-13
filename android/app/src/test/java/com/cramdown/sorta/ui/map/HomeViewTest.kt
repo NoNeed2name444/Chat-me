@@ -1,10 +1,16 @@
 package com.cramdown.sorta.ui.map
 
+import com.cramdown.sorta.data.Note
+import com.cramdown.sorta.ideas.IdeaBook
+import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.map.MapFirstView
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.OrbitCamera
+import com.cramdown.sorta.map.UniversePlan
 import com.cramdown.sorta.map.Vec3
+import com.cramdown.sorta.ui.ideas.MapLinkLength
+import com.cramdown.sorta.ui.ideas.universeInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -159,5 +165,59 @@ class HomeViewTest {
         // Performance never rolls: iOS's Metal map has no world turn
         assertTrue(home.fit(camera, 2400, 1080, chrome))
         assertEquals(0f, camera.roll, 0f)
+    }
+
+    // S05j repair 4: the emulator's Space fixture (MapModeSpaceRenderTest's eight ideas in Garden, Kitchen
+    // and To sort) on its phone, 1080 x 2400, the strip's foot at 275 px and the first-run card's top at
+    // 1328. The first view frames every place the Universe's bodies reach (iOS's envelope): over ten
+    // minutes of their orbits the bodies' box is centred in that band within item 4's bars and never
+    // leaves it. At the orbit clock's 0 (the emulator's, animations off) the three To sort comets sit
+    // at their homes low in the map, so that one instant's box is 74 px below the band's middle.
+    @Test fun theUniversesFirstViewCentresWhereItsBodiesGo() {
+        val t = 1_793_000_000_000L
+        fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
+        val garden = NoteFolder(id = id(201), name = "Garden", createdAt = t)
+        val kitchen = NoteFolder(id = id(202), name = "Kitchen", createdAt = t + 1)
+        val hour = 3_600_000L
+        val notes = listOf(
+            Note(id = id(11), title = "Fix the gate latch", createdAt = t + 9 * hour),
+            Note(id = id(12), title = "Buy brushes", createdAt = t + 8 * hour),
+            Note(id = id(13), title = "Paint the shed green", body = "Check [[Fix the gate latch]] first.", folderId = garden.id,
+                links = listOf(id(12)), createdAt = t + 7 * hour),
+            Note(id = id(14), title = "Turn the compost", folderId = garden.id, links = listOf(id(13)), createdAt = t + 6 * hour),
+            Note(id = id(15), title = "Plant tulips before the frost", folderId = garden.id, links = listOf(id(13), id(14)), createdAt = t + 5 * hour),
+            Note(id = id(16), title = "Try the seeded bread", folderId = kitchen.id, createdAt = t + 4 * hour),
+            Note(id = id(17), title = "Order more coffee beans", folderId = kitchen.id, links = listOf(id(16)), createdAt = t + 3 * hour),
+            Note(id = id(18), title = "Plan the weekend walk", createdAt = t + 2 * hour),
+        )
+        val book = IdeaBook(notes, listOf(garden, kitchen))
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        val scene = MapScene.universe(plan)
+        val w = 1080f; val h = 2400f; val foot = 275f; val cardTop = 1328f
+        val pose = HomeView.framer(scene)(w, h, MapInsets(top = foot, bottom = h - cardTop))
+        val camera = OrbitCamera(pose.target, pose.distance, pose.yaw, pose.pitch, MapFirstView.radians(55f), pose.roll)
+        val focal = camera.focalPixels(h)
+        fun box(seconds: Double): FloatArray {
+            val r = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+            for (i in plan.bodies.indices) {
+                val p = plan.position(i, seconds)
+                val (x, y) = checkNotNull(camera.project(p, w, h))
+                val half = scene.nodeRadius * focal / camera.depthOf(p)
+                r[0] = minOf(r[0], x - half); r[1] = minOf(r[1], y - half); r[2] = maxOf(r[2], x + half); r[3] = maxOf(r[3], y + half)
+            }
+            return r
+        }
+        val band = cardTop - foot
+        val rest = box(0.0)
+        // the emulator's run 43383283733 drew this box at the clock's 0: 519.414-1232.5205
+        assertEquals(519.414f, rest[1], 1f); assertEquals(1232.52f, rest[3], 1f)
+        var top = Float.MAX_VALUE; var bottom = -Float.MAX_VALUE
+        var seconds = 0.0
+        while (seconds <= 600.0) { val b = box(seconds); top = minOf(top, b[1]); bottom = maxOf(bottom, b[3]); seconds += 1.0 }
+        assertTrue("inside the band as the map runs: $top-$bottom", top >= foot && bottom <= cardTop)
+        val off = kotlin.math.abs((top + bottom) / 2 - (foot + cardTop) / 2)
+        val gaps = kotlin.math.abs((top - foot) - (cardTop - bottom))
+        assertTrue("off the band's middle by $off ($top-$bottom)", off <= 0.04f * h)
+        assertTrue("gaps differ by $gaps, 8% of the band ${0.08f * band} ($top-$bottom)", gaps <= 0.08f * band)
     }
 }
