@@ -65,11 +65,12 @@ import java.util.UUID
  * A finger held on that planet drops the orbit rate (MapDrawn.orbitRate) below 0.05 within 0.5 s of
  * the finger, on the device's uptime: its record reaches the test through Compose's state, on the
  * test's frame clock, late, so the test times nothing by when the record arrives. The renderer notes
- * the uptime of the frame that first took the press (MapDrawn.pressTakenAtMs), and the press's own
- * seconds until the rate fell under 0.05 (MapDrawn.pressSlowedSeconds); the uptime noted just before
- * the finger came down, the touch's way to the renderer plus that ease must be 0.5 s at most, and the
- * rate under 0.05 once 0.5 s of the press has stepped. 5 s and 10 s are only guards against a hang
- * while waiting. The frames drawn over the 3 s (the clock's steps) are logged, a first look at A7's
+ * the uptime of the frame that first took the press (MapDrawn.pressTakenAtMs) and of the frame where
+ * the rate first fell under 0.05 (MapDrawn.pressSlowedAtMs); with the uptime noted just before the
+ * finger came down, the slow-down must come 500 ms after it at most. The hold is not polled, since a
+ * semantics read takes the main thread that also paces the map's frames: the test thread sleeps
+ * HOLD_MS, then reads the record, with 10 s only a guard against a hang. The frames drawn over the
+ * 3 s (the clock's steps) are logged, a first look at A7's
  * frame budget.
  */
 @RunWith(AndroidJUnit4::class)
@@ -159,46 +160,37 @@ class MapSpaceLivelyTest {
         val at = checkNotNull(named(planet)) { "The chosen planet $planet shows no name to put a finger on for $name" }
         val origin = checkNotNull(mapNode()).positionOnScreen
         val x = origin.x + at.x; val y = origin.y + at.y
-        val p0 = checkNotNull(drawn()).pressedSeconds
         // the uptime read before the down is injected: the earliest bound at or before the real down, so
-        // the touch's way to the renderer (pressTakenAtMs − down) can only be counted long, never short
+        // the touch's way to the slow-down (pressSlowedAtMs − down) can only be counted long, never short
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, down, x, y)
         try {
             // iOS's rule (GraphMotion.swift:1750-1757, MapDrag.advanceClock): while a body is pressed the rate
-            // eases to 0 with tau 0.1 s, each frame stepping the clock by its interval (at most 0.25 s,
-            // GlMapRenderer's dt), so after 0.3 s of steps it is under 0.05. The map takes the press from the
-            // touch itself (Map3DView's gestures), at its next frame (MapDrawn.pressTakenAtMs); 5 s is only a
-            // guard against a hang while waiting for the record
-            try { compose.waitUntil(5_000) { drawn()?.let { it.pressTakenAtMs >= 0 && it.pressedSeconds > p0 } == true } } catch (_: ComposeTimeoutException) {}
-            val taken = checkNotNull(drawn())
-            check(taken.pressTakenAtMs >= 0 && taken.pressedSeconds > p0) {
-                "A finger held on planet $planet at ($x, $y) was not taken as a press within 5 s " +
-                    "(${SystemClock.uptimeMillis() - down} ms) for $name: $taken"
-            }
-            val takenAt = taken.pressTakenAtMs
-            // then judged once 0.5 s of the press has stepped on the map's clock, 10 s at most against a hang
-            try { compose.waitUntil(10_000) { drawn()?.let { it.pressTakenAtMs == takenAt && it.pressedSeconds - p0 >= 0.5f } == true } } catch (_: ComposeTimeoutException) {}
-            val held = checkNotNull(drawn())
-            val pressed = held.pressedSeconds - p0
+            // eases to 0 with tau 0.1 s, so after 0.3 s of steps it is under 0.05. The map takes the press from
+            // the touch itself (Map3DView's gestures) and notes the uptime of the frame where the rate first
+            // fell under 0.05 (MapDrawn.pressSlowedAtMs). The hold is not polled: reading the semantics takes
+            // the main thread, which also paces the map's frames, so polling would slow the frames it judges.
+            // The test thread only sleeps, a bounded HOLD_MS, then reads the record
+            SystemClock.sleep(HOLD_MS)
+            // the read: Compose's test clock brings the latest record into the semantics; 10 s at most
+            // against a hang. The times it judges were stamped by the renderer, so a late read changes nothing
+            try { compose.waitUntil(10_000) { drawn()?.let { it.pressSlowedAtMs >= 0 } == true } } catch (_: ComposeTimeoutException) {}
+            val held = checkNotNull(drawn()) { "No map record to read after the hold for $name" }
             val took = SystemClock.uptimeMillis() - down
-            check(held.pressTakenAtMs == takenAt) {
-                "A finger held on planet $planet at ($x, $y): the press taken at uptime $takenAt ms ended or was taken again " +
-                    "(${held.pressTakenAtMs}) before 0.5 s of it stepped, after $took ms for $name: $held"
-            }
-            check(pressed >= 0.5f) {
-                "A finger held on planet $planet at ($x, $y) was pressed only $pressed s on the map's clock after $took ms for $name: $held"
+            val times = "down at uptime $down ms, press taken at ${held.pressTakenAtMs} ms, rate under 0.05 at " +
+                "${held.pressSlowedAtMs} ms (−1: not taken, or not slowed), frames ${held.frameMs} ms apart, read $took ms after the down"
+            check(held.pressTakenAtMs >= down && held.pressSlowedAtMs >= held.pressTakenAtMs) {
+                "A finger held on planet $planet at ($x, $y) was not taken as one press that slowed the orbits " +
+                    "and is still held: $times for $name: $held"
             }
             check(held.orbitRate < 0.05f) {
-                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate} after $pressed s of the press " +
-                    "on the map's clock ($took ms), not below 0.05 for $name: $held"
+                "A finger held on planet $planet at ($x, $y) left the orbit rate at ${held.orbitRate}, not below 0.05: " +
+                    "$times for $name: $held"
             }
-            // within 0.5 s of the finger, both on the device's uptime: the touch's way to the renderer, then the ease
-            val reached = (takenAt - down) / 1000f
-            check(held.pressSlowedSeconds >= 0f && reached >= 0f && reached + held.pressSlowedSeconds <= 0.5f) {
-                "A finger held on planet $planet at ($x, $y): the press was taken ${reached} s after the down (uptime $down to $takenAt ms) " +
-                    "and the orbit rate fell under 0.05 after ${held.pressSlowedSeconds} s more of it (−1: not yet), " +
-                    "${reached + held.pressSlowedSeconds} s in all, not within 0.5 s of the finger for $name: $held"
+            // within 0.5 s of the finger, on the device's uptime: the touch's dispatch, the press, the ease
+            check(held.pressSlowedAtMs - down <= 500) {
+                "A finger held on planet $planet at ($x, $y) slowed the orbits under 0.05 only " +
+                    "${held.pressSlowedAtMs - down} ms after the down, not within 500 ms: $times for $name: $held"
             }
         } finally {
             touch(MotionEvent.ACTION_UP, down, x, y)
@@ -286,6 +278,8 @@ class MapSpaceLivelyTest {
 
     private companion object {
         const val DIRECTORY = "/sdcard/Download/sorta-renders"
+        /** How long A3's finger is held before the record is read, the test thread asleep: the 0.5 s bar and room. */
+        const val HOLD_MS = 1_500L
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 
