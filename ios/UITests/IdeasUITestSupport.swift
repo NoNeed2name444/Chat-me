@@ -45,17 +45,20 @@ enum IdeasText {
 /// started again at each launch let each of them re-tap twice and pass. So
 /// every class that calls `launchIdeas` calls `reset()` in its `setUp`.
 /// `row` counts the same way for a tap on an idea's row made again
-/// (`openEditor`), and `intro` for a tap on the slide-to-type card's
-/// Continue made again (`clearSlideToTypeIntro`).
+/// (`openEditor`), `intro` for a tap on the slide-to-type card's
+/// Continue made again (`clearSlideToTypeIntro`), and `retype` for an idea
+/// typed into capture once more (`captureIdea`).
 enum Retaps {
     static var caret = 0
     static var row = 0
     static var intro = 0
+    static var retype = 0
 
     static func reset() {
         caret = 0
         row = 0
         intro = 0
+        retype = 0
     }
 }
 
@@ -188,14 +191,42 @@ extension XCUIApplication {
     /// stalled runner the first tap after a launch can be lost: in run
     /// 41812442710 the app was busy 27 s after it and never took the caret.
     /// So a tap that brings no caret in 5 s is made once more; the well must
-    /// still have the caret, empty, before a key is typed.
+    /// still have the caret, empty, before a key is typed. If, 10 s after
+    /// Return, the well is not ready, is empty and no row holds the idea,
+    /// the idea was lost on its way in, and it is typed once more, as its
+    /// own activity, with the same checks; the well must then be ready in
+    /// 10 s. It may happen once in a test: a second time fails, so a well
+    /// that keeps losing ideas is still caught.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
         typeDraft(text, file: file, line: line)
         takeCaretBack(capture, file: file, line: line)
         capture.typeText("\n")
+        let message = "capture took the caret back, empty, after \"\(text)\""
+        let first = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
+                                   timeout: 10)
+        guard first != .completed else { return }
+        guard captureIsEmpty, !ideaRow(text).exists else {
+            XCTAssertEqual(first, .completed, message, file: file, line: line)
+            return
+        }
+        Retaps.retype += 1
+        XCTAssertLessThanOrEqual(Retaps.retype, 1,
+                                 "an idea typed into capture was lost more than once in this test",
+                                 file: file, line: line)
+        XCTContext.runActivity(named: "capture is empty and no row holds \"\(text)\"; type it again") { _ in
+            typeDraft(text, file: file, line: line)
+            takeCaretBack(capture, file: file, line: line)
+            capture.typeText("\n")
+        }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
                                       timeout: 10),
-                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
+                       .completed, message, file: file, line: line)
+    }
+
+    /// The well holds nothing: no words, or only its prompt.
+    private var captureIsEmpty: Bool {
+        let held = capture.value as? String ?? ""
+        return held.isEmpty || held == capture.placeholderValue
     }
 
     /// iOS's slide-to-type introduction ("Speed up your typing by sliding

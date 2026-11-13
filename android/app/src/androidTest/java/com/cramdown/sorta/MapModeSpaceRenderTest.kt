@@ -21,9 +21,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -34,19 +37,36 @@ import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.GraphLineStyle
 import com.cramdown.sorta.ideas.GraphTheme
+import com.cramdown.sorta.ideas.IdeaBook
+import com.cramdown.sorta.ideas.MapLegend
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ideas.NoteFolder
+import com.cramdown.sorta.map.MapFirstView
 import com.cramdown.sorta.map.MapNameShow
 import com.cramdown.sorta.map.MapTouchRules
+import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.SpaceStyle
+import com.cramdown.sorta.map.UniversePlan
+import com.cramdown.sorta.map.UniverseRole
+import com.cramdown.sorta.map.Vec3
+import com.cramdown.sorta.ui.ideas.FOLDER_CHOOSER_TAG
 import com.cramdown.sorta.ui.ideas.IdeasSettings
 import com.cramdown.sorta.ui.ideas.IdeasTags
+import com.cramdown.sorta.ui.ideas.MapLinkLength
 import com.cramdown.sorta.ui.ideas.MapPanelTags
+import com.cramdown.sorta.ui.ideas.MapTags
+import com.cramdown.sorta.map.MapFilter
+import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.ui.ideas.SortaMode
+import com.cramdown.sorta.ui.ideas.universeInput
 import com.cramdown.sorta.ui.map.MapDrawn
+import com.cramdown.sorta.ui.map.MapDrawnCell
 import com.cramdown.sorta.ui.map.MapDrawnKey
+import com.cramdown.sorta.ui.map.MapScene
 import com.cramdown.sorta.ui.map.MapTapKey
+import com.cramdown.sorta.ui.ward.WardPalette
 import com.cramdown.sorta.ui.ward.WardSpace
+import com.cramdown.sorta.ui.ward.WardToken
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -57,6 +77,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -107,6 +128,27 @@ import kotlin.math.sqrt
  * with its down, before the pick-up, turns the camera and moves no body; in Performance a hold that
  * moves still turns it. requireNames' press: a quick move takes the name away, a held one keeps it
  * on the body it carries.
+ *
+ * S05h A3: Space's default look is iOS's Universe, so every check above from the first view to
+ * requireSun's Suns runs on it. requireUniverse then checks the Universe itself: its bodies by role as
+ * UniversePlan gives them for the fixture, no moon link drawn and arched and far links both drawn
+ * (mapmode-universe-...); Fly in on the Garden black hole, its system inside the window
+ * (mapmode-fly-space-...); still flown in, the black hole moved, carrying at least its planets, a planet
+ * chosen inside it within 10 % of its move (mapmode-drag-star-space-...); and Recentre back to the
+ * first view. Space's legend,
+ * opened at its top, shows the ladder, and its Moon row is there (mapmode-legend-top-space-...).
+ *
+ * S05h2 A3: after requireUniverse, with animations off, a fling throws no sparks and the most linked
+ * idea, deleted from its options, dies once with its links and is gone within 2 s; Undo brings it
+ * back (requireStillDeath, no still).
+ *
+ * S05i A3 and A6: the Filter tool in each theme (requireFilter), with a still of its menu and of the
+ * map under Pages and under Garden alone (mapmode-filtered-<pages|garden>-<theme>-...); in Neurons,
+ * its first-run card put away first, the cell states (requireCells): the Look menu with its Cells
+ * group (mapmode-cells-menu-neurons-...), the Cell by cell sheet (mapmode-cells-sheet-neurons-...),
+ * Cell by cell's Engulfing over the map (mapmode-cells-neurons-...), and a close-up of one of the open
+ * Garden cell's ideas and its halo under each of the six states, chosen in Look › Cells
+ * (mapmode-cells-<state>-neurons-...), each told from resting's by numbers and by pixels.
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -137,7 +179,10 @@ class MapModeSpaceRenderTest {
         val context = instrumentation.targetContext
         val dir = File(context.cacheDir, "mapmode-" + UUID.randomUUID()).also { it.mkdirs() }
         IdeaStore(dir).replaceIdeas(notes, folders)
-        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
+        // Undo's notice kept up till it is tapped (S05h2 repair 3): its timer runs on the test clock,
+        // which a slow device's waits run past before the death check's Undo
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path)
+            .putExtra(MainActivity.UNDO_STAYS, true))
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(IdeasTags.TITLE)).fetchSemanticsNodes().isNotEmpty() }
         // a phone's switch; a tablet's map is beside Sort already
         if (compose.onAllNodes(hasTestTag(SortaMode.MAP.identifier)).fetchSemanticsNodes().isNotEmpty()) {
@@ -146,12 +191,18 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(MapLook.CHIP)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasTestTag(MapLook.CHIP)).assert(hasContentDescription(context.getString(R.string.look_chip_spoken, context.getString(R.string.look_space))))
         try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
+        // S05j: checks whose failure should not cost the stills after them, checked at the end
+        val later = ArrayList<String>()
+        // S05j item 1: on the tablet's two panes the bar's row is the page's colour across the window
+        if (device == "tablet") requirePanesBar(dark, later)
         val name = "mapmode-space-${if (dark) "dark" else "light"}-$device"
         shot(name) // kept even when the check below fails, to see why
         requireMapDrawn(name)
         // S05d: at first run the card shows in its one form, every body of the first view is drawn
         // above it, and Got it puts it away without moving the camera
         requireClearOfTheCard(name)
+        // S05j items 3 and 4: the first view fills the band between the strip and the card, centred in it
+        requireFirstView(dark, later)
         // S05g A3: a first run's card shows Space's steps too, every body still above it
         check(shown(MapPanelTags.HINT_STEPS)) { "The first-run card shows no steps for $name" }
         shot("mapmode-card-steps-${if (dark) "dark" else "light"}-$device")
@@ -166,11 +217,11 @@ class MapModeSpaceRenderTest {
         }
         // S05g: Space's first view with the card put away (S05d item 2), as Recentre frames it before
         // any choice or ease: the reference the double tap on empty space must come back to
-        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
-        compose.waitForIdle()
-        SystemClock.sleep(500)
-        val spaceHome = checkNotNull(mapDrawn()).pose
+        val spaceHome = recentred(name)
         check(spaceHome.size == 6) { "No camera pose after Recentre for $name: ${mapDrawn()}" }
+        // S05j item 6a: the list sheet (the phone's: two panes have none) and the folder chooser over Space,
+        // with their status icons
+        shotSheets(dark)
         // S05e: Space's first view draws its links, each a strip of 40 samples, curved
         try { compose.waitUntil(30_000) { (mapDrawn()?.links ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
         val curved = checkNotNull(mapDrawn())
@@ -195,6 +246,12 @@ class MapModeSpaceRenderTest {
         requireChoice("space", dark, spaceChosen, spaceBefore, home = spaceHome)
         // S05g A6: a chosen sun, its mark and its links' plasma
         requireSun(dark)
+        // S05h A3: the Universe at rest, Fly in and a moved black hole
+        requireUniverse(dark)
+        // S05h2: with animations off, a fling throws no sparks and a deleted idea fades at once, its links counted
+        requireStillDeath(dark)
+        // S05i A3: the filter in Space's Universe
+        requireFilter(GraphTheme.SPACE, dark)
         // Neurons, chosen after Space's Got it: the card is kept per look, so it shows there again
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.NEURON.identifier)).fetchSemanticsNodes().isNotEmpty() }
@@ -211,6 +268,11 @@ class MapModeSpaceRenderTest {
         requireMapDrawn(neurons)
         requireClearOfTheCard(neurons)
         val neuronsHome = checkNotNull(mapDrawn()).pose
+        // S05j item 5: the Look menu's Lines row with Straight on, then Neurons drawn with it, and Curved again
+        chooseLines(GraphLineStyle.STRAIGHT, GraphTheme.NEURONS, still = "mapmode-look-lines-${if (dark) "dark" else "light"}-$device")
+        SystemClock.sleep(1_000)
+        shot("mapmode-straight-neurons-${if (dark) "dark" else "light"}-$device")
+        chooseLines(GraphLineStyle.CURVED, GraphTheme.NEURONS)
         // S05f A6: Neuron's legend, kept for the renders check
         shotLegend(GraphTheme.NEURONS, dark)
         // S05f: Neuron's names, at rest and for a chosen body
@@ -220,6 +282,12 @@ class MapModeSpaceRenderTest {
         requireNeuronLinks(dark, neuronsChosen)
         // S05g A6: a chosen cell with bridges, its lit bridges, and Show links on its idea that bridges out
         requireNeuronBridges(dark)
+        // S05i A6: the Neurons' first-run card put away by its Got it, so the filtered map and the cells read whole
+        putCardAway(neurons)
+        // S05i A3: the filter in Neurons, the cell states chosen, and the legend's Cell states row
+        requireFilter(GraphTheme.NEURONS, dark)
+        requireCells(dark)
+        shotLegendCells(dark)
         // S05g A3: Performance, chosen after Neurons, shows no first-run card; a tap on a point
         // chooses it, and the same marks, Show links, hold and double tap as the other looks
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
@@ -228,8 +296,9 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(30_000) {
             mapNode()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.any { it.startsWith(GraphTheme.PERFORMANCE.mapLabel) } == true
         }
-        // its scene is built off the main thread too: it is Performance's once the camera looks down at Space's angle again
-        compose.waitUntil(30_000) { mapDrawn()?.pose?.getOrNull(5)?.let { abs(it - pose[5]) <= 1e-3f } == true }
+        // its scene is built off the main thread too: it is Performance's once the camera looks down at its own
+        // angle, 0.32 (S05j item 3; before, Space's and Performance's were one)
+        compose.waitUntil(30_000) { mapDrawn()?.pose?.getOrNull(5)?.let { abs(it - MapFirstView.FAST_PITCH) <= 1e-3f } == true }
         // Performance draws points, no Space bodies, so its frames count without them
         try { compose.waitUntil(60_000) { mapDrawn()?.let { it.frames >= MapDrawn.ENOUGH && it.box.size == 4 } == true } } catch (_: ComposeTimeoutException) {}
         val performance = "mapmode-chosen-performance-${if (dark) "dark" else "light"}-$device"
@@ -247,6 +316,569 @@ class MapModeSpaceRenderTest {
         try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
         check(shown(MapPanelTags.PEEK)) { "A tap on a point brought up no card for $performance" }
         requireChoice("performance", dark, performanceChosen, performanceHome, home = performanceHome)
+        // S05i A3: the filter in Performance, at once, no camera move, no empty line, the choice kept
+        requireFilter(GraphTheme.PERFORMANCE, dark)
+        check(later.isEmpty()) { later.joinToString("\n") }
+    }
+
+    /**
+     * S05j item 1 (tablet): two panes start the map below the status bar, so the bar's row shows the page
+     * across the window, the map pane's half too; its icons follow the page. A still,
+     * mapmode-panes-bar-<light|dark>-tablet.png.
+     */
+    private fun requirePanesBar(dark: Boolean, later: MutableList<String>) {
+        val name = "mapmode-panes-bar-${if (dark) "dark" else "light"}-$device"
+        shot(name)
+        val res = instrumentation.targetContext.resources
+        val id = res.getIdentifier("status_bar_height", "dimen", "android")
+        val bar = if (id != 0) res.getDimensionPixelSize(id) else 0
+        val screen = checkNotNull(instrumentation.uiAutomation.takeScreenshot()) { "No screenshot for $name" }
+        val page = WardPalette.hex(WardToken.background, dark)
+        // the map pane's half of the row, clear of the clock (start) and the icons (end)
+        val x = (screen.width * 0.62f).toInt(); val y = (bar / 2).coerceAtLeast(1)
+        val c = screen.getPixel(x, y) and 0xFFFFFF
+        val near = listOf(16, 8, 0).all { abs(((c shr it) and 255) - ((page shr it) and 255)) <= 6 }
+        if (!near) later.add("The status bar's row over the map pane is not the page for $name: #%06X at $x, $y against #%06X".format(c, page))
+        val map = mapNode()?.boundsInRoot
+        if (map == null || map.top < bar - 1f) later.add("The map pane starts under the status bar for $name: $map, the bar $bar px")
+    }
+
+    /**
+     * S05j items 3 and 4: Space's first view, the card up. Every drawn body lies between the strip's foot
+     * and the card's top (requireClearOfTheCard); on the phone the bodies' box is centred in that band: its
+     * middle within 4% of the view's height of the band's middle, at rest and as the map runs, and the gaps
+     * above and below the box the bodies fill as the map runs within 8% of the band (repair 4: the first
+     * view frames every place the Universe's bodies reach, not one instant of their orbits). A still,
+     * mapmode-first-view-<light|dark>-<device>.png.
+     */
+    private fun requireFirstView(dark: Boolean, later: MutableList<String>) {
+        val name = "mapmode-first-view-${if (dark) "dark" else "light"}-$device"
+        shot(name)
+        if (device != "phone") return
+        val card = compose.onNode(hasTestTag(MapPanelTags.HINT)).fetchSemanticsNode().boundsInRoot
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        val map = checkNotNull(mapNode()).boundsInRoot
+        val drawn = checkNotNull(mapDrawn())
+        val box = drawn.box
+        val top = map.top + box[1]; val bottom = map.top + box[3]
+        val band = card.top - strip.bottom
+        val off = abs((top + bottom) / 2 - (strip.bottom + card.top) / 2)
+        val gaps = abs((top - strip.bottom) - (card.top - bottom))
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: box $top-$bottom in the band ${strip.bottom}-${card.top}: off $off, gaps differ by $gaps")
+        if (off > 0.04f * map.height) later.add("The first view's box is off the band's middle by $off px for $name (4% is ${0.04f * map.height})")
+        // S05j repair 4: the Universe turns, and its first view frames every place its bodies reach (iOS's
+        // envelope, GraphUniverse.swift:1475-1480; UniversePlan.kt:809-811), the To sort comets' long
+        // orbits too. With animations off the orbit clock stays at 0, where those comets sit at their homes
+        // low in the map, so the box above is one instant of a map that moves (here 519-1233 px in the band
+        // 275-1328, 74 px low). The gaps are measured on the box the bodies fill as the map runs: each
+        // body over ten minutes of its orbit, drawn as the renderer draws it (the scene's node radius
+        // round it), seen from the first view's pose. The test's plan is first matched to the map's:
+        // its bodies at the clock's 0, so drawn, give the box the map reports.
+        val book = IdeaBook(notes, folders)
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        val radius = MapScene.universe(plan).nodeRadius
+        val pose = drawn.pose
+        check(pose.size == 6) { "No camera pose for $name: $drawn" }
+        val camera = OrbitCamera(Vec3(pose[0], pose[1], pose[2]), pose[3], pose[4], pose[5],
+            MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), MapFirstView.roll(map.width, map.height))
+        val focal = camera.focalPixels(map.height)
+        fun reach(seconds: Double): FloatArray {
+            val r = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+            for (i in plan.bodies.indices) {
+                val p = plan.position(i, seconds)
+                val (x, y) = camera.project(p, map.width, map.height) ?: continue
+                val half = radius * focal / camera.depthOf(p)
+                if (half * 2 <= 2f) continue
+                r[0] = minOf(r[0], x - half); r[1] = minOf(r[1], y - half); r[2] = maxOf(r[2], x + half); r[3] = maxOf(r[3], y + half)
+            }
+            return r
+        }
+        val rest = reach(0.0)
+        check(box.indices.all { abs(rest[it] - box[it]) <= 2f }) {
+            "The test's Universe plan, seen from the map's pose, is not what the map drew for $name: ${rest.toList()} against $box"
+        }
+        var high = Float.MAX_VALUE; var low = -Float.MAX_VALUE
+        var seconds = 0.0
+        while (seconds <= 600.0) { val b = reach(seconds); high = minOf(high, b[1]); low = maxOf(low, b[3]); seconds += 1.0 }
+        val runTop = map.top + high; val runBottom = map.top + low
+        val runOff = abs((runTop + runBottom) / 2 - (strip.bottom + card.top) / 2)
+        val runGaps = abs((runTop - strip.bottom) - (card.top - runBottom))
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: over ten minutes $runTop-$runBottom: off $runOff, gaps differ by $runGaps")
+        if (runTop < strip.bottom - 0.5f || runBottom > card.top + 0.5f) later.add("The bodies reach outside the band ${strip.bottom}-${card.top} as the map runs for $name: $runTop-$runBottom")
+        if (runOff > 0.04f * map.height) later.add("The first view's bodies, as the map runs, are off the band's middle by $runOff px for $name (4% is ${0.04f * map.height})")
+        if (runGaps > 0.08f * band) later.add("The first view's gaps, as the map runs, differ by $runGaps px for $name (8% of the band is ${0.08f * band})")
+    }
+
+    /**
+     * S05j item 6a, stills with their status icons: on the phone the list sheet over Space
+     * (mapmode-list-sheet-<light|dark>-phone.png), then a row's Choose folder, the folder chooser over it;
+     * on the tablet's two panes, which have no list sheet (IdeasView's panes: no list chip), the Sort
+     * pane's row opens the chooser beside Space. Either way, mapmode-chooser-sheet-<light|dark>-<device>.png.
+     */
+    private fun shotSheets(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val idea = notes.first { it.folderId == null }.title
+        val choose = hasContentDescription(instrumentation.targetContext.getString(R.string.row_choose_folder_spoken, idea)) and hasClickAction()
+        val sheet = device == "phone"
+        if (sheet) {
+            compose.onNode(hasTestTag(MapTags.LIST_CHIP)).performClick()
+            compose.waitUntil(10_000) { shown(MapTags.LIST) }
+            SystemClock.sleep(1_000) // the sheet comes to rest
+            shot("mapmode-list-sheet-$mode-$device")
+        }
+        compose.onNode(if (sheet) choose and hasAnyAncestor(hasTestTag(MapTags.LIST)) else choose).performClick()
+        compose.waitUntil(10_000) { shown(FOLDER_CHOOSER_TAG) }
+        SystemClock.sleep(1_000) // the chooser comes to rest
+        shot("mapmode-chooser-sheet-$mode-$device")
+        ui.pressBack()
+        compose.waitUntil(10_000) { !shown(FOLDER_CHOOSER_TAG) }
+        if (sheet) {
+            ui.pressBack()
+            compose.waitUntil(10_000) { !shown(MapTags.LIST) }
+        }
+        compose.waitForIdle()
+    }
+
+    /** A click as a person's, by the node's own action: the card may sit over the tools on a phone. */
+    private fun press(matcher: SemanticsMatcher) {
+        compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(matcher).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
+
+    /** The first-run card put away by its Got it, as a person would, where it shows (none is up after it). */
+    private fun putCardAway(name: String) {
+        if (!shown(MapPanelTags.HINT)) { android.util.Log.i("MapModeSpaceRenderTest", "$name: no first-run card to put away"); return }
+        press(hasText(instrumentation.targetContext.getString(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT)))
+        compose.waitUntil(10_000) { !shown(MapPanelTags.HINT) }
+        SystemClock.sleep(1_000)
+        compose.waitForIdle()
+    }
+
+    private fun chooseFilter(filter: MapFilter) {
+        press(hasTestTag(MapPanelTags.FILTER_TOOL))
+        press(hasTestTag(MapPanelTags.filterRow(filter)))
+    }
+
+    /** No card, the map at its first view; the pose it rests in. */
+    private fun atHome(name: String): List<Float> {
+        if (shown(MapPanelTags.PEEK)) {
+            compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
+            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        }
+        press(hasContentDescription("Recentre") and hasClickAction())
+        SystemClock.sleep(1_500)
+        compose.waitForIdle()
+        return checkNotNull(mapDrawn()).pose
+    }
+
+    /**
+     * S05i A3, read from MapDrawn, in [theme]: the Filter's menu open (a still,
+     * mapmode-filter-<theme>-<light|dark>-<device>.png); a body chosen, then Pages, of which the fixture
+     * has none, so nothing shows, no link, "Nothing here for this filter." over Space and Neurons, and
+     * the card let go (kept in Performance, as iOS); Garden alone, its bodies only, the camera flying
+     * to it in the Universe and Neurons and still in Performance; Linked ideas hiding the unlinked;
+     * Everything bringing all back, and the first view where it flew. In Neurons, first with every
+     * cell closed: Garden hides each closed cell, as iOS's (a closed cell holds no idea,
+     * GraphNeurons.swift:430), and the empty line shows, as iOS counts each idea by the cell it is
+     * drawn in (Graph3DView.swift:861-862); then Garden opened
+     * for the rest, and still open after Everything, which only frames the map again.
+     */
+    private fun requireFilter(theme: GraphTheme, dark: Boolean) {
+        val look = theme.rawValue
+        val name = "mapmode-filter-$look-${if (dark) "dark" else "light"}-$device"
+        val perf = theme == GraphTheme.PERFORMANCE
+        val neurons = theme == GraphTheme.NEURONS
+        var home = atHome(name)
+        try { compose.waitUntil(30_000) { framed(mapDrawn()) || (perf && (mapDrawn()?.frames ?: 0) >= MapDrawn.ENOUGH) } } catch (_: ComposeTimeoutException) {}
+        if (neurons) {
+            val closed = checkNotNull(mapDrawn())
+            chooseFilter(MapFilter.Folder(garden.id))
+            try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.hidden == closed.shown } == true } } catch (_: ComposeTimeoutException) {}
+            val closedGarden = checkNotNull(mapDrawn())
+            check(closedGarden.filtered && closedGarden.shown == 0 && closedGarden.hidden == closed.shown) {
+                "Garden, every cell closed, did not hide each closed cell as iOS's for $name: $closedGarden (before $closed)"
+            }
+            // iOS counts each note by the cell the plan draws it in (Graph3DView.swift:861-862), so no idea passes
+            try { compose.waitUntil(10_000) { shown(MapPanelTags.FILTER_EMPTY) } } catch (_: ComposeTimeoutException) {}
+            check(shown(MapPanelTags.FILTER_EMPTY)) { "Garden, its cell closed, showed no empty line as iOS's for $name" }
+            chooseFilter(MapFilter.All)
+            try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hidden == 0 } == true } } catch (_: ComposeTimeoutException) {}
+            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
+            check(same(home, checkNotNull(mapDrawn()).pose)) { "Everything, cells closed, did not bring back the first view for $name: ${mapDrawn()?.pose}, home $home" }
+            openGarden(name)
+            home = checkNotNull(mapDrawn()).pose
+        }
+        val all = checkNotNull(mapDrawn())
+        check(!all.filtered && all.hidden == 0 && all.shown > 0) { "The map is filtered before any filter for $name: $all" }
+        // a body chosen, as a person would
+        val (_, at) = spot(name)
+        compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(at) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK)) { "A tap on the spot brought up no card for $name" }
+        // the menu open, Everything checked
+        press(hasTestTag(MapPanelTags.FILTER_TOOL))
+        compose.waitUntil(10_000) { shown(MapPanelTags.filterRow(MapFilter.Pages)) }
+        shot(name)
+        press(hasTestTag(MapPanelTags.filterRow(MapFilter.Pages)))
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown == 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val pages = checkNotNull(mapDrawn())
+        check(pages.filtered && pages.shown == 0 && pages.hidden == all.shown && pages.filterLinks == 0) {
+            "Pages, of which there are none, left something on the map for $name: $pages (before $all)"
+        }
+        check(shown(MapPanelTags.FILTER_EMPTY) == !perf) { "The empty line is ${if (perf) "over" else "missing from"} $name" }
+        if (perf) check(shown(MapPanelTags.PEEK)) { "Performance let go of its choice under a filter for $name" }
+        else {
+            try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
+            check(!shown(MapPanelTags.PEEK)) { "The chosen body, filtered away, kept its card for $name" }
+        }
+        // S05i A6: the map under Pages, empty, its line "Nothing here for this filter." over Space and Neurons
+        shot("mapmode-filtered-pages-$look-${if (dark) "dark" else "light"}-$device")
+        // one folder: Garden's bodies only, the camera flying to it where iOS's does
+        chooseFilter(MapFilter.Folder(garden.id))
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val others = notes.count { it.folderId != garden.id }
+        val inGarden = checkNotNull(mapDrawn())
+        check(inGarden.filtered && inGarden.shown > 0 && inGarden.hidden > 0 && !shown(MapPanelTags.FILTER_EMPTY)) { "Garden alone for $name: $inGarden" }
+        if (perf) check(inGarden.shown == notes.size - others && inGarden.hidden == others) { "Performance's Garden is not its three ideas for $name: $inGarden" }
+        if (theme == GraphTheme.SPACE) check(inGarden.hidden >= others) { "Space's Garden keeps another folder's idea for $name: $inGarden" }
+        if (perf) {
+            SystemClock.sleep(1_500)
+            check(same(home, checkNotNull(mapDrawn()).pose)) { "Performance's camera moved for a folder filter for $name: ${mapDrawn()?.pose}" }
+        } else {
+            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { !same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
+            check(!same(home, checkNotNull(mapDrawn()).pose)) { "The camera did not fly to Garden for $name" }
+        }
+        // S05i A6: the map under Garden alone, flown to where iOS's flies
+        shot("mapmode-filtered-garden-$look-${if (dark) "dark" else "light"}-$device")
+        // Linked ideas: the unlinked go (the closed Neurons draw no idea, so only Space and Performance can show it)
+        chooseFilter(MapFilter.Linked)
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 && it.shown != inGarden.shown } == true } } catch (_: ComposeTimeoutException) {}
+        val linked = checkNotNull(mapDrawn())
+        val unlinked = notes.count { n -> n.links.isEmpty() && notes.none { n.id in it.links } && !notes.any { it.body.contains("[[" + n.title + "]]") } }
+        check(linked.filtered && linked.shown > 0) { "Linked ideas showed nothing for $name: $linked" }
+        if (theme != GraphTheme.NEURONS) check(linked.hidden >= unlinked && unlinked > 0) { "Linked ideas kept an unlinked idea for $name: $linked, $unlinked unlinked" }
+        // Everything: all back, and the first view where the folder filter flew
+        chooseFilter(MapFilter.All)
+        try { compose.waitUntil(30_000) { mapDrawn()?.let { !it.filtered && it.hidden == 0 } == true } } catch (_: ComposeTimeoutException) {}
+        val back = checkNotNull(mapDrawn())
+        check(!back.filtered && back.hidden == 0 && back.shown == all.shown && back.filterLinks == all.filterLinks) { "Everything did not bring all back for $name: $back (before $all)" }
+        if (neurons) check(back.build == all.build && gardenOpen()) { "Everything after a filter closed Garden's cell for $name: $back (before $all)" }
+        if (!perf) {
+            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
+            check(same(home, checkNotNull(mapDrawn()).pose)) { "Everything after a filter did not bring back the first view for $name: ${mapDrawn()?.pose}, home $home" }
+        }
+        if (shown(MapPanelTags.PEEK)) atHome(name)
+    }
+
+    /** Whether the Neurons' Garden cell is open: its first idea is a body on the map. */
+    private fun gardenOpen(): Boolean {
+        val first = notes.first { it.folderId == garden.id }
+        return mapNode()?.config?.getOrNull(MapTapKey)?.ids?.any { it.equals(first.id, ignoreCase = true) } == true
+    }
+
+    /** Neurons, every cell closed: Garden chosen and flown into, its ideas drawn, then its card put away. */
+    private fun openGarden(name: String) {
+        val res = instrumentation.targetContext.resources
+        val ideas = notes.count { it.folderId == garden.id }
+        val closed = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        val cell = closed.ids.indexOfFirst { it.equals(garden.id, ignoreCase = true) }
+        check(cell >= 0) { "No Garden cell for $name" }
+        compose.runOnIdle { closed.tap(cell) }
+        compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) }
+        compose.onNode(hasText(res.getString(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
+        compose.waitUntil(30_000) { gardenOpen() }
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && mapDrawn()?.states?.sum() == ideas } } catch (_: ComposeTimeoutException) {}
+        if (shown(MapPanelTags.PEEK)) {
+            compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(emptySpot(name)) }
+            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun openLook(theme: GraphTheme) =
+        press(hasContentDescription("Look") and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, theme.title))
+
+    /** The Neurons' ideas drawn, by state, once a new scene has drawn them all. */
+    private fun statesAfter(build: Int, want: (List<Int>) -> Boolean): List<Int> {
+        try { compose.waitUntil(60_000) { mapDrawn()?.let { it.build != build && framed(it) && want(it.states) } == true } } catch (_: ComposeTimeoutException) {}
+        return checkNotNull(mapDrawn()).states
+    }
+
+    /**
+     * S05i A3 in Neurons: Garden opened, its three ideas drawn resting; Look › Cells › Firing draws
+     * each firing; Cell by cell gives Garden Engulfing, which wins inside it (a still,
+     * mapmode-cells-neurons-<light|dark>-<device>.png); Same as all and Resting, none firing. A6: the
+     * Look menu with its Cells group (mapmode-cells-menu-neurons-...) and the Cell by cell sheet
+     * (mapmode-cells-sheet-neurons-...), as iOS's testNeuronsLookMenu shows the menu; then each of the
+     * six states chosen in Look › Cells draws all of Garden's ideas in it, seen close up
+     * (closeUpOnIdea; mapmode-cells-<state>-neurons-...), one idea framed with its halo, each still told
+     * from resting's by MapDrawn.halos and by its pixels round the idea. The choices are left natural.
+     */
+    private fun requireCells(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-cells-neurons-$mode-$device"
+        val res = instrumentation.targetContext.resources
+        atHome(name)
+        val ideas = notes.count { it.folderId == garden.id }
+        openGarden(name)
+        val natural = checkNotNull(mapDrawn())
+        check(natural.states.size == 6 && natural.states[NeuronState.RESTING.code] == ideas && natural.states.sum() == ideas) {
+            "Garden's $ideas ideas do not rest, left alone, for $name: ${natural.states}"
+        }
+        // Firing for every idea, the menu kept as a still with its Cells group first
+        openLook(GraphTheme.NEURONS)
+        compose.waitUntil(10_000) { shown("lookCell-" + NeuronState.FIRING.rawValue) }
+        check(NeuronState.menuOrder.all { shown("lookCell-" + it.rawValue) } && shown(MapPanelTags.LOOK_CELL_BY_CELL)) {
+            "The Look menu does not show the six cell states and Cell by cell for $name"
+        }
+        SystemClock.sleep(500) // the menu comes to rest
+        shot("mapmode-cells-menu-neurons-$mode-$device")
+        press(hasTestTag("lookCell-" + NeuronState.FIRING.rawValue))
+        val firing = statesAfter(natural.build) { it.getOrNull(NeuronState.FIRING.code) == ideas }
+        check(firing.getOrNull(NeuronState.FIRING.code) == ideas && firing.sum() == ideas) { "Look › Cells › Firing does not draw every idea firing for $name: $firing" }
+        // Cell by cell: Garden Engulfing, which wins inside it; the sheet kept as a still
+        val firingBuild = checkNotNull(mapDrawn()).build
+        openLook(GraphTheme.NEURONS)
+        press(hasTestTag(MapPanelTags.LOOK_CELL_BY_CELL))
+        compose.waitUntil(10_000) { shown(MapPanelTags.CELL_BY_CELL) }
+        SystemClock.sleep(800) // the sheet comes to rest
+        check(folders.all { shown("cellByCell-" + it.id) }) { "The Cell by cell sheet has no row for each top-level folder for $name" }
+        shot("mapmode-cells-sheet-neurons-$mode-$device")
+        press(hasTestTag("cellByCell-" + garden.id))
+        press(hasText(NeuronState.ENGULFING.title) and hasClickAction())
+        ui.pressBack()
+        compose.waitUntil(10_000) { !shown(MapPanelTags.CELL_BY_CELL) }
+        val engulfing = statesAfter(firingBuild) { it.getOrNull(NeuronState.ENGULFING.code) == ideas }
+        shot(name)
+        check(engulfing.getOrNull(NeuronState.ENGULFING.code) == ideas && engulfing.sum() == ideas) { "Cell by cell's Engulfing does not win in Garden for $name: $engulfing" }
+        // Same as all, then Resting: none firing
+        val engulfBuild = checkNotNull(mapDrawn()).build
+        openLook(GraphTheme.NEURONS)
+        press(hasTestTag(MapPanelTags.LOOK_CELL_BY_CELL))
+        compose.waitUntil(10_000) { shown(MapPanelTags.CELL_BY_CELL) }
+        SystemClock.sleep(800)
+        press(hasTestTag("cellByCell-" + garden.id))
+        press(hasText(res.getString(R.string.map_same_as_all)) and hasClickAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text)
+            and SemanticsMatcher("not the row") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("cellByCell-") != true })
+        ui.pressBack()
+        compose.waitUntil(10_000) { !shown(MapPanelTags.CELL_BY_CELL) }
+        val sameAsAll = statesAfter(engulfBuild) { it.getOrNull(NeuronState.FIRING.code) == ideas }
+        check(sameAsAll.getOrNull(NeuronState.FIRING.code) == ideas && sameAsAll.getOrNull(NeuronState.ENGULFING.code) == 0 && sameAsAll.sum() == ideas) {
+            "Same as all did not give Garden back to Cells' Firing for $name: $sameAsAll"
+        }
+        val sameBuild = checkNotNull(mapDrawn()).build
+        openLook(GraphTheme.NEURONS)
+        press(hasTestTag("lookCell-" + NeuronState.RESTING.rawValue))
+        val resting = statesAfter(sameBuild) { it.getOrNull(NeuronState.RESTING.code) == ideas }
+        check(resting.getOrNull(NeuronState.RESTING.code) == ideas && resting.getOrNull(NeuronState.FIRING.code) == 0) { "Resting left an idea firing for $name: $resting" }
+        // A6: each state close up, Resting last, so every choice builds the cells again and the choice ends
+        // natural. Each still is framed on one of Garden's ideas, its body and its own halo, where its state
+        // is drawn (closeUpOnIdea); each still is told from resting's by MapDrawn's numbers and by its pixels
+        val subject = checkNotNull(notes.firstOrNull { it.folderId == garden.id }) { "Garden has no idea for $name" }
+        var plan: CloseUp? = null
+        val crops = LinkedHashMap<NeuronState, IdeaCrop>()
+        for (state in NeuronState.menuOrder.filter { it != NeuronState.RESTING } + NeuronState.RESTING) {
+            val still = "mapmode-cells-${state.rawValue}-neurons-$mode-$device"
+            val build = checkNotNull(mapDrawn()).build
+            openLook(GraphTheme.NEURONS)
+            press(hasTestTag("lookCell-" + state.rawValue))
+            val drawn = statesAfter(build) { it.getOrNull(state.code) == ideas }
+            check(drawn.getOrNull(state.code) == ideas && drawn.sum() == ideas) { "Look › Cells › ${state.title} does not draw every idea in it for $still: $drawn" }
+            plan = closeUpOnIdea(still, subject.id, plan)
+            // the state's own halo: every other state keeps one for each idea, resting none (GraphNeuronLook.swift:340)
+            val halos = if (state == NeuronState.RESTING) 0 else ideas
+            try { compose.waitUntil(10_000) { mapDrawn()?.halos?.let { it.getOrNull(state.code) == halos && it.sum() == halos } == true } } catch (_: ComposeTimeoutException) {}
+            val close = checkNotNull(mapDrawn())
+            check(close.states.getOrNull(state.code) == ideas && close.states.sum() == ideas && gardenOpen()) {
+                "Garden, close up, does not draw its $ideas ideas ${state.title} for $still: $close"
+            }
+            check(close.halos.getOrNull(state.code) == halos && close.halos.sum() == halos) {
+                "Garden's ideas, close up, do not draw ${state.title}'s halos ($halos, each in its state) for $still: ${close.halos}"
+            }
+            val cell = requireCloseUp(still, subject.id, close)
+            check(cell.state == state.code) { "${subject.title}, close up, is not drawn ${state.title} for $still: $cell" }
+            shot(still)
+            crops[state] = ideaCrop(cell)
+        }
+        // each state's still differs from resting's round the idea, where its halo and soma are drawn
+        val restingCrop = checkNotNull(crops[NeuronState.RESTING])
+        for ((state, crop) in crops) {
+            if (state == NeuronState.RESTING) continue
+            val share = crop.differs(restingCrop)
+            android.util.Log.i("MapModeSpaceRenderTest", "mapmode-cells-${state.rawValue}-neurons-$mode-$device: ${"%.3f".format(share)} of the pixels round ${subject.title} differ from resting's")
+            check(share >= IdeaCrop.DIFFERENT) {
+                "mapmode-cells-${state.rawValue}-neurons-$mode-$device looks like resting's round ${subject.title}: only $share of its pixels differ, under ${IdeaCrop.DIFFERENT}"
+            }
+        }
+        atHome(name)
+    }
+
+    /** The two-finger moves that brought an idea close, and the camera they left: the same scene from its first view takes them again. */
+    private class CloseUp(val moves: List<FloatArray>, val pose: List<Float>)
+
+    /**
+     * S05i A6 (repair 6): one of Garden's ideas, [id], brought to the middle of the map and close, as a
+     * person would with two fingers (moved together to pan, spread to zoom; Map3DView's own rule), so its
+     * state reads in a still: its body about [CLOSE_DP] across and its own halo, 2.5 times that, where each
+     * state's process is drawn (NeuronGl.drawHalo; GraphNeuronShaders.swift:543-605). Where the idea is
+     * drawn, and how big, is read from MapDrawn.cells, so nothing is chosen. It is panned to the middle,
+     * then zoomed and panned in turn until it lies near the middle at about that size (it lies off the
+     * camera's focal plane, so a zoom moves it). A new scene starts from the same first view, so [last]'s
+     * moves, taken again, leave the camera where they did; where they do not, the close-up is measured
+     * afresh from there (Recentre would close the cell). As CI runs it, with animations off, a tap moves no camera.
+     */
+    private fun closeUpOnIdea(name: String, id: String, last: CloseUp?): CloseUp {
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val size = checkNotNull(mapNode()).size
+        val w = size.width.toFloat(); val h = size.height.toFloat()
+        val middle = Offset(w / 2, h / 2)
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val apart = 40f * density
+        val widest = w / 2 - 24f * density
+        val want = CLOSE_DP * density
+        val moves = ArrayList<FloatArray>()
+        fun fingers(from: Offset, to: Offset, near: Float, far: Float) {
+            compose.onNode(map).performTouchInput {
+                pinch(from - Offset(near, 0f), to - Offset(far, 0f), from + Offset(near, 0f), to + Offset(far, 0f), 600)
+            }
+            compose.waitForIdle()
+            SystemClock.sleep(500)
+            moves += floatArrayOf(from.x, from.y, to.x, to.y, near, far)
+        }
+        if (last != null) {
+            for (m in last.moves) fingers(Offset(m[0], m[1]), Offset(m[2], m[3]), m[4], m[5])
+            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(last.pose, it) } == true } } catch (_: ComposeTimeoutException) {}
+            if (same(last.pose, checkNotNull(mapDrawn()).pose)) return last
+            android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${mapDrawn()?.pose}, not ${last.pose}; measured afresh")
+            moves.clear()
+        }
+        val index = ideaIndex(name, id)
+        fun cell(): MapDrawnCell {
+            try { compose.waitUntil(10_000) { mapDrawn()?.cells?.any { it.index == index } == true } } catch (_: ComposeTimeoutException) {}
+            return checkNotNull(mapDrawn()?.cells?.firstOrNull { it.index == index }) { "$id is not on the map for $name: ${mapDrawn()?.cells}" }
+        }
+        val before = cell()
+        repeat(2) { fingers(cell().let { Offset(it.x, it.y) }, middle, apart, apart) }
+        val most = widest / apart
+        for (step in 0 until 12) {
+            val c = cell()
+            val off = (Offset(c.x, c.y) - middle).getDistance()
+            val zoom = want / max(c.across, 1f)
+            if (off > 0.06f * min(w, h)) fingers(Offset(c.x, c.y), middle, apart, apart)
+            else if (zoom > 1.15f) fingers(middle, middle, apart, apart * min(zoom, most))
+            else if (zoom < 0.87f) fingers(middle, middle, apart * min(1f / zoom, most), apart)
+            else break
+        }
+        val close = cell()
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: $id is ${close.across} px across close up at (${close.x}, ${close.y}), ${before.across} px before; ${moves.size} moves")
+        return CloseUp(moves, checkNotNull(mapDrawn()).pose)
+    }
+
+    /** The scene index of the idea [id], from the map's taps (MapTap.ids, ignoring case). */
+    private fun ideaIndex(name: String, id: String): Int {
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map takes no taps for $name" }
+        val i = tap.ids.indexOfFirst { it.equals(id, ignoreCase = true) }
+        check(i >= 0) { "$id is not on the map for $name" }
+        return i
+    }
+
+    /**
+     * S05i A6 (repair 6): the idea [id] in [drawn], close up: at least [LEAST_DP] across, and its whole
+     * halo (2.5 times that across, MapDrawnCell.HALO_ACROSS) inside the map, so the state drawn there is
+     * in the still. No body is chosen, so no hot halo stands in for the state's own.
+     */
+    private fun requireCloseUp(name: String, id: String, drawn: MapDrawn): MapDrawnCell {
+        val size = checkNotNull(mapNode()).size
+        val w = size.width.toFloat(); val h = size.height.toFloat()
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val index = ideaIndex(name, id)
+        val cell = checkNotNull(drawn.cells.firstOrNull { it.index == index }) { "$id is not on the map close up for $name: ${drawn.cells}" }
+        check(cell.across >= LEAST_DP * density) {
+            "$id is not close for $name: ${cell.across} px across, under ${LEAST_DP * density} ($LEAST_DP dp), in $w x $h"
+        }
+        val half = cell.across * MapDrawnCell.HALO_ACROSS / 2
+        check(cell.x - half >= 0f && cell.x + half <= w && cell.y - half >= 0f && cell.y + half <= h) {
+            "$id's halo is not all on the map for $name: $cell, its halo $half px each side, in $w x $h"
+        }
+        check(drawn.chosen == -1 && !drawn.marked) { "A body is chosen in the close-up of $id for $name: ${drawn.chosen}" }
+        return cell
+    }
+
+    /** The screen round an idea, its halo's square, as the latest still shows it. */
+    private class IdeaCrop(val width: Int, val height: Int, val pixels: IntArray) {
+        /**
+         * The share of the pixels where a channel differs from [other]'s by more than [STEP], over the
+         * square both hold round the idea (the smaller, centred on each); 0 when either is empty.
+         */
+        fun differs(other: IdeaCrop): Float {
+            val cw = min(width, other.width); val ch = min(height, other.height)
+            if (cw <= 0 || ch <= 0) return 0f
+            val ax = (width - cw) / 2; val ay = (height - ch) / 2
+            val bx = (other.width - cw) / 2; val by = (other.height - ch) / 2
+            var count = 0
+            for (y in 0 until ch) for (x in 0 until cw) {
+                val a = pixels[(ay + y) * width + ax + x]; val b = other.pixels[(by + y) * other.width + bx + x]
+                val dr = abs(((a shr 16) and 0xFF) - ((b shr 16) and 0xFF))
+                val dg = abs(((a shr 8) and 0xFF) - ((b shr 8) and 0xFF))
+                val db = abs((a and 0xFF) - (b and 0xFF))
+                if (max(dr, max(dg, db)) > STEP) count++
+            }
+            return count.toFloat() / (cw * ch)
+        }
+
+        companion object {
+            /** A channel's step, out of 255, that counts a pixel as different. */
+            const val STEP = 8
+            /**
+             * The least share that tells a state's still from resting's. A halo's ring at its body's edge
+             * alone, a resting idea's having none inside a cell, covers about 7% of the square.
+             */
+            const val DIFFERENT = 0.02f
+        }
+    }
+
+    /** The screen round [cell], its halo's square, now: from the device's own screenshot, in the map's place on screen. */
+    private fun ideaCrop(cell: MapDrawnCell): IdeaCrop {
+        val at = checkNotNull(mapNode()).positionOnScreen
+        val shot = checkNotNull(instrumentation.uiAutomation.takeScreenshot()) { "No screenshot for the crop" }
+        try {
+            val half = (cell.across * MapDrawnCell.HALO_ACROSS / 2).toInt()
+            val left = (at.x + cell.x).toInt() - half
+            val top = (at.y + cell.y).toInt() - half
+            val l = left.coerceIn(0, shot.width); val t = top.coerceIn(0, shot.height)
+            val r = (left + 2 * half).coerceIn(l, shot.width); val b = (top + 2 * half).coerceIn(t, shot.height)
+            val pixels = IntArray((r - l) * (b - t))
+            if (pixels.isNotEmpty()) shot.getPixels(pixels, 0, r - l, l, t, r - l, b - t)
+            return IdeaCrop(r - l, b - t, pixels)
+        } finally {
+            shot.recycle()
+        }
+    }
+
+    /** S05i A6: Neurons' legend at its Cell states row (a still, mapmode-legend-cells-neurons-<light|dark>-<device>.png). */
+    private fun shotLegendCells(dark: Boolean) {
+        val theme = GraphTheme.NEURONS
+        openLook(theme)
+        press(hasText(theme.legendTitle) and hasClickAction())
+        val sheet = MapPanelTags.legend(theme)
+        compose.waitUntil(10_000) { shown(sheet) }
+        SystemClock.sleep(1_000)
+        compose.onNode(hasTestTag(sheet)).performTouchInput { swipeUp() }
+        SystemClock.sleep(800)
+        // a legend row is one item, its words its spoken description (LegendRowTile), as requireLegendTop finds Moon
+        val name = "mapmode-legend-cells-neurons-${if (dark) "dark" else "light"}-$device"
+        val cells = checkNotNull(MapLegend.of(theme).rows.firstOrNull { it.name == "Cell states" }) { "Neurons' legend has no Cell states row for $name" }
+        val row = hasContentDescription(MapLegend.spoken(cells))
+        check(compose.onAllNodes(row).fetchSemanticsNodes().size == 1) { "Neurons' legend shows no Cell states row, one item, for $name" }
+        compose.onNode(row).performScrollTo()
+        compose.waitForIdle()
+        SystemClock.sleep(800)
+        shot(name)
+        ui.pressBack()
+        try { compose.waitUntil(3_000) { !shown(sheet) } } catch (_: ComposeTimeoutException) { ui.pressBack() }
+        compose.waitUntil(10_000) { !shown(sheet) }
+        compose.waitForIdle()
     }
 
     /**
@@ -396,20 +1028,22 @@ class MapModeSpaceRenderTest {
         check(quickly.grabbed == -1 && quickly.moving == 0) { "A quick move moved a body for $name: $quickly" }
         // empty space: a tap lets it go, two bring back the first view, the one Recentre frames: the
         // first-run card's cover while it is up, the view without it once it is put away (S05d item 2)
-        val turned = checkNotNull(mapDrawn()).pose
+        val turnedDrawn = checkNotNull(mapDrawn())
+        val turned = turnedDrawn.pose
         val empty = emptySpot(name)
         compose.onNode(map).performTouchInput { doubleClick(empty) }
-        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && !same(turned, checkNotNull(mapDrawn()).pose) } } catch (_: ComposeTimeoutException) {}
+        try {
+            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && checkNotNull(mapDrawn()).let { it.homes > turnedDrawn.homes && !same(turned, it.pose) } }
+        } catch (_: ComposeTimeoutException) {}
         check(!shown(MapPanelTags.PEEK)) { "A tap on empty space left the card up for $name" }
         SystemClock.sleep(500)
         compose.waitForIdle()
-        val doubled = checkNotNull(mapDrawn()).pose
+        val doubledDrawn = checkNotNull(mapDrawn())
+        check(doubledDrawn.homes > turnedDrawn.homes) { "A double tap on empty space did not put the camera back at its first view for $name: $doubledDrawn" }
+        val doubled = doubledDrawn.pose
         check(!same(turned, doubled)) { "A double tap on empty space left the turned camera where it was for $name: $turned" }
         check(same(home, doubled)) { "A double tap on empty space did not bring back the first view for $name: $home, now $doubled" }
-        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
-        compose.waitForIdle()
-        SystemClock.sleep(500)
-        val recentred = checkNotNull(mapDrawn()).pose
+        val recentred = recentred(name)
         check(same(doubled, recentred)) { "A double tap on empty space did not bring back Recentre's first view for $name: $doubled, Recentre $recentred" }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
@@ -428,8 +1062,11 @@ class MapModeSpaceRenderTest {
      * and the choice as they were, nothing off home within the frames iOS's spring needs ([requireHome]),
      * and with [homes] (Space, or Neurons
      * with animations off, where a home stays put) the body within 1 dp of where it was picked up.
+     * [carriedAtLeast]: how many bodies [carries] wants moved with it (S05h: a black hole's planets);
+     * [members], each off its home in the world within 10 % of the held body's (MapDrawn.memberOffsets).
      */
-    private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true) {
+    private fun requireDrag(index: Int, still: String, carries: Boolean = false, member: Int? = null, at: Offset? = null, homes: Boolean = true,
+                            carriedAtLeast: Int = 1, members: List<Int> = emptyList()) {
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
         val density = instrumentation.targetContext.resources.displayMetrics.density
         val slop = ViewConfiguration.get(instrumentation.targetContext).scaledTouchSlop.toFloat()
@@ -439,7 +1076,14 @@ class MapModeSpaceRenderTest {
         val memberFrom = member?.let { m -> checkNotNull(named(m)) { "The member $m shows no name to find it by for $still: ${mapDrawn()}" } }
         val before = checkNotNull(mapDrawn())
         val card = shown(MapPanelTags.PEEK)
-        val width = checkNotNull(mapNode()).boundsInRoot.width
+        val mapBounds = checkNotNull(mapNode()).boundsInRoot
+        // a press on the card reaches the card, never the map: a body under it cannot be picked up
+        val cardBounds = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val fromInRoot = from + mapBounds.topLeft
+        check(cardBounds == null || !cardBounds.contains(fromInRoot)) {
+            "Body $index at $from (in the window $fromInRoot) lies under the card ($cardBounds), where a press reaches the card, not the map, for $still"
+        }
+        val width = mapBounds.width
         val way = if (from.x > width / 2) -1f else 1f
         val steps = 8
         val tolerance = 2f * density
@@ -466,7 +1110,7 @@ class MapModeSpaceRenderTest {
             val over = moved.names.filter { it.index != index && crosses(it.box, heldPill.box) }
             check(over.isEmpty()) { "A name lies over held body $index's (${heldPill.box}) for $still: $over" }
             if (member != null) check(moved.names.none { it.index == member }) { "The chosen member $member kept its name while the cell was held for $still: ${moved.names}" }
-            if (carries) check(moved.carried >= 1) { "Body $index pulled or carried nothing for $still: $moved" }
+            if (carries) check(moved.carried >= carriedAtLeast) { "Body $index pulled or carried ${moved.carried}, not $carriedAtLeast or more, for $still: $moved" }
             // the carry in the world, each body's own offset from its home, so neither's depth on screen counts
             if (member != null) {
                 check(moved.chosen == member) { "The member $member is not the chosen body mid-drag for $still: $moved" }
@@ -476,6 +1120,20 @@ class MapModeSpaceRenderTest {
                 val own = sqrt(cell.sumOf { (it * it).toDouble() })
                 check(own > 0.0 && gap <= 0.1 * own) {
                     "The member $member is off home by $inside while the cell is by $cell (within 10 % wanted) for $still"
+                }
+            }
+            // S05h: every member of the held body moves with it, each by its own offset in the world
+            if (members.isNotEmpty()) {
+                val held = moved.heldOffset
+                check(held.size == 3) { "No offset for held body $index mid-drag for $still: $moved" }
+                val own = sqrt(held.sumOf { (it * it).toDouble() })
+                val offsets = moved.memberOffsets.chunked(4).associate { it[0].toInt() to it.drop(1) }
+                for (m in members) {
+                    val its = checkNotNull(offsets[m]) { "Member $m of held body $index is not among its members mid-drag for $still: ${moved.memberOffsets}" }
+                    val gap = sqrt(held.indices.sumOf { ((its[it] - held[it]) * (its[it] - held[it])).toDouble() })
+                    check(own > 0.0 && gap <= 0.1 * own) {
+                        "Member $m is off home by $its while held body $index is by $held (within 10 % wanted) for $still"
+                    }
                 }
             }
             shot(still)
@@ -667,6 +1325,214 @@ class MapModeSpaceRenderTest {
     }
 
     /**
+     * S05h A3: the Universe, Space's default look, read from MapDrawn with animations off. At rest its
+     * bodies by role are UniversePlan's for the fixture (as IdeasSpace builds it: every note, folder and
+     * link, the standard Link length), no moon's link to its planet is drawn (near and far links at most
+     * the plan's links of other kinds) and arched and far links are both drawn: a still,
+     * mapmode-universe-<light|dark>-<device>.png. The fixture's Garden folder is a black hole (no folder
+     * here has a subfolder, so it has no star; iOS's sample flies into its Inguinal star): chosen, then
+     * Fly in on its card, it is flown in to, every body of its system drawn inside the map below the top
+     * strip (mapmode-fly-space-...). Still flown in, with a planet inside it chosen, the black hole held
+     * 300 ms and moved 8 slops carries at least its planets, each planet off home within 10 % of the black
+     * hole's move (requireDrag's members, and the chosen one as its member; mapmode-drag-star-space-...),
+     * and it is still flown in to. Fly in frames the system above the foot, clear of the card; the first
+     * view, iOS's tilted fit, can put the black hole under the chosen planet's card, which a press there
+     * reaches instead of the map. Then Recentre brings back the first view, nothing flown in to, and a tap
+     * on empty space lets it go, the map as Neurons finds it.
+     */
+    private fun requireUniverse(dark: Boolean) {
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-universe-$mode-$device"
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val book = IdeaBook(notes, folders)
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        try { compose.waitUntil(60_000) { framed(mapDrawn()) && (mapDrawn()?.roles?.size ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
+        val rest = checkNotNull(mapDrawn())
+        val home = rest.pose
+        val roles = UniverseRole.values().map { r -> plan.bodies.count { it.role == r } }
+        check(rest.roles == roles) { "The map's bodies by role (${rest.roles}) are not UniversePlan's ($roles, in ${UniverseRole.values().toList()}) for $name: $rest" }
+        val drawable = plan.links.count { it.kind != 3 }
+        check(rest.nearLinks + rest.farLinks <= drawable) {
+            "More links drawn (${rest.nearLinks} near, ${rest.farLinks} far) than the plan has other than a moon's to its planet ($drawable) for $name: $rest"
+        }
+        check(rest.archedLinks > 0 && rest.farLinks > 0) { "No arched or no far link drawn for $name: $rest" }
+        check(home.size == 6) { "No camera pose for $name: $rest" }
+        shot(name)
+        // Fly in on the Garden black hole, chosen as the map's hit test hands it on
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+        val g = tap.ids.indexOfFirst { it.equals(garden.id, ignoreCase = true) }
+        check(g >= 0 && plan.bodies.getOrNull(g)?.id.equals(garden.id, ignoreCase = true) && plan.bodies[g].role == UniverseRole.GALAXY) {
+            "The Garden folder is not the plan's black hole $g on the map for $name: ${tap.ids}"
+        }
+        val planets = plan.bodies.indices.filter { plan.bodies[it].parent == g }
+        check(planets.isNotEmpty()) { "The Garden black hole has no planets in the plan for $name" }
+        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
+        compose.runOnIdle { tap.tap(g) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == g) { "The Garden black hole ($g) is not chosen with its card for $name: ${mapDrawn()}" }
+        val fly = "mapmode-fly-space-$mode-$device"
+        val flyIn = instrumentation.targetContext.resources.getString(R.string.map_peek_fly_in)
+        compose.onNode(hasText(flyIn) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.flown == g } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_500) // the flight's 0.8 s, or at once with animations off
+        val flown = checkNotNull(mapDrawn())
+        check(flown.flown == g) { "Fly in on the Garden black hole ($g) did not fly in to it for $fly: $flown" }
+        val pose = flown.pose
+        check(pose.size == 6 && !same(home, pose)) { "Fly in did not move the camera for $fly: $home, then $pose" }
+        val bounds = checkNotNull(mapNode()).boundsInRoot
+        val stripBottom = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot.bottom - bounds.top
+        // Space's field and, on a wide map, its quarter turn (S05j item 3): the pose carries neither
+        val camera = OrbitCamera(Vec3(pose[0], pose[1], pose[2]), pose[3], pose[4], pose[5],
+            MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), MapFirstView.roll(bounds.width, bounds.height))
+        val centre = plan.bodies[g].home
+        val outside = plan.systems[g].mapNotNull { p ->
+            val at = camera.project(centre + p, bounds.width, bounds.height)
+            if (at == null || at.first !in 0f..bounds.width || at.second !in stripBottom..bounds.height) (p to at) else null
+        }
+        check(plan.systems[g].isNotEmpty() && outside.isEmpty()) {
+            "Bodies of the Garden black hole's system are drawn outside the map (${bounds.width}x${bounds.height}, the strip's bottom $stripBottom) for $fly: $outside"
+        }
+        shot(fly)
+        // the black hole moved while flown in, a planet inside it chosen: found by their names, as Neurons'
+        // cell and its idea are
+        val drag = "mapmode-drag-star-space-$mode-$device"
+        // still chosen after Fly in: a second tap on the chosen body would open its folder,
+        // which on a phone takes the map's place (MapSelection, as iOS)
+        if (mapDrawn()?.chosen != g) compose.runOnIdle { tap.tap(g) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        val holeAt = checkNotNull(named(g)) { "The Garden black hole ($g) shows no name to find it by for $drag: ${mapDrawn()}" }
+        val planet = planets.maxBy { i -> named(i)?.let { (it - holeAt).getDistance() } ?: 0f }
+        compose.runOnIdle { tap.tap(planet) }
+        try { compose.waitUntil(10_000) { mapDrawn()?.chosen == planet && named(planet) != null } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(1_000)
+        check(mapDrawn()?.chosen == planet) { "The planet $planet inside the Garden black hole is not chosen for $drag: ${mapDrawn()}" }
+        check(mapDrawn()?.flown == g) { "Choosing the planet $planet left the Garden black hole ($g) not flown in to for $drag: ${mapDrawn()}" }
+        requireDrag(g, drag, carries = true, member = planet, at = holeAt, homes = !ValueAnimator.areAnimatorsEnabled(),
+            carriedAtLeast = planets.size, members = planets)
+        check(mapDrawn()?.flown == g) { "The drag left the Garden black hole ($g) not flown in to for $drag: ${mapDrawn()}" }
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.flown == -1 && same(home, it.pose) } == true } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(500)
+        val back = checkNotNull(mapDrawn())
+        check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
+        // the pose comes home at once, the bodies' box only with the next frame drawn (the tablet's came
+        // 800 ms apart): the test thread sleeps, so the map can draw, until the box lies inside the map
+        val homeBy = SystemClock.uptimeMillis() + 10_000
+        while (SystemClock.uptimeMillis() < homeBy && mapDrawn()?.let { boxInside(it) } != true) SystemClock.sleep(250)
+        check(mapDrawn()?.let { boxInside(it) } == true) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
+        compose.onNode(map).performTouchInput { click(emptySpot(drag)) }
+        compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+    }
+
+    /**
+     * S05h2 A3, with animations off as on CI: under the Universe a fling on empty space throws no
+     * sparks (MapDrawn.sparksTotal stays 0). The fixture's idea with the most links in UniversePlan
+     * (kinds 0-2; a moon's link to its planet is not drawn), chosen through the map's hit test and
+     * deleted from its options, dies once (diedTotal up by 1) with each of those links
+     * (dyingLinksTotal up by their count), and no body is dying within 2 s. Undo brings it back, so
+     * the checks after this one find the fixture whole. It takes no still.
+     */
+    private fun requireStillDeath(dark: Boolean) {
+        val name = "mapmode-death-${if (dark) "dark" else "light"}-$device"
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val res = instrumentation.targetContext.resources
+        val book = IdeaBook(notes, folders)
+        val plan = UniversePlan.of(universeInput(book, book.allEdges(), MapLinkLength.STANDARD))
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        try { compose.waitUntil(30_000) { framed(mapDrawn()) && mapDrawn()?.box?.size == 4 } } catch (_: ComposeTimeoutException) {}
+        val before = checkNotNull(mapDrawn())
+        check(before.sparksTotal == 0L && before.sparks == 0) { "Sparks were thrown with animations off before the fling for $name: $before" }
+        // a fling across empty space, turning the camera fast
+        val from = emptySpot(name)
+        val width = checkNotNull(mapNode()).boundsInRoot.width
+        val to = Offset(if (from.x > width / 2) from.x - width * 0.4f else from.x + width * 0.4f, from.y)
+        compose.onNode(map).performTouchInput { swipe(from, to, 120) }
+        compose.waitForIdle()
+        SystemClock.sleep(1_000)
+        val flung = checkNotNull(mapDrawn())
+        check(flung.sparksTotal == 0L && flung.sparks == 0) { "A fling threw sparks with animations off for $name: $flung" }
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        SystemClock.sleep(500)
+        // the idea with the most links the map draws
+        fun linksOf(i: Int) = plan.links.count { it.kind != 3 && (it.a == i || it.b == i) }
+        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map hands on no hit test for $name" }
+        val ideas = notes.mapNotNull { n -> tap.ids.indexOfFirst { it.equals(n.id, ignoreCase = true) }.takeIf { it >= 0 } }
+        val idea = checkNotNull(ideas.maxByOrNull(::linksOf)) { "No idea of the fixture is on the map for $name: ${tap.ids}" }
+        val ideaId = tap.ids[idea]
+        check(plan.bodies.getOrNull(idea)?.id.equals(ideaId, ignoreCase = true)) { "Body $idea on the map ($ideaId) is not the plan's ${plan.bodies.getOrNull(idea)?.id} for $name" }
+        val links = linksOf(idea)
+        check(links > 0) { "The fixture's most linked idea $ideaId has no link the map draws for $name: ${plan.links}" }
+        compose.runOnIdle { tap.tap(idea) }
+        try { compose.waitUntil(10_000) { shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == idea } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == idea) { "The idea $idea ($ideaId) is not chosen with its card for $name: ${mapDrawn()}" }
+        SystemClock.sleep(1_000) // the ease's 0.45 s, done
+        // its options, from its card's More, then Delete
+        compose.onNode(hasContentDescription(res.getString(R.string.map_peek_more)) and hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))).performClick()
+        try { compose.waitUntil(5_000) { shown(MapPanelTags.MENU) } } catch (_: ComposeTimeoutException) {}
+        check(shown(MapPanelTags.MENU)) { "More on idea $idea's card ($ideaId) opened no options for $name: ${mapDrawn()}" }
+        val totals = checkNotNull(mapDrawn())
+        val delete = hasText(res.getString(R.string.map_menu_delete)) and hasAnyAncestor(hasTestTag(MapPanelTags.MENU))
+        compose.onNode(delete).performClick()
+        try { compose.waitUntil(30_000) { (mapDrawn()?.diedTotal ?: 0) > totals.diedTotal } } catch (_: ComposeTimeoutException) {}
+        val seen = SystemClock.uptimeMillis()
+        val died = checkNotNull(mapDrawn())
+        check(died.diedTotal == totals.diedTotal + 1 && died.dyingLinksTotal == totals.dyingLinksTotal + links) {
+            "Deleting idea $ideaId counted ${died.diedTotal - totals.diedTotal} deaths and ${died.dyingLinksTotal - totals.dyingLinksTotal} dying links, " +
+                "not 1 and its $links links in the plan, for $name: before $totals, then $died"
+        }
+        try { compose.waitUntil(2_000) { mapDrawn()?.dying == 0 } } catch (_: ComposeTimeoutException) {}
+        val after = checkNotNull(mapDrawn())
+        check(after.dying == 0) { "A body was still dying ${SystemClock.uptimeMillis() - seen} ms after the death was counted, animations off, for $name: $after" }
+        check(after.sparksTotal == 0L) { "The death threw sparks with animations off for $name: $after" }
+        // Undo: the banner shows it (kept up by the launch's UNDO_STAYS), and it brings the idea back, on the map again
+        val undo = hasText(res.getString(R.string.undo_action)) and hasClickAction()
+        try { compose.waitUntil(5_000) { compose.onAllNodes(undo).fetchSemanticsNodes().size == 1 } } catch (_: ComposeTimeoutException) {}
+        check(compose.onAllNodes(undo).fetchSemanticsNodes().size == 1) { "The banner shows no Undo after idea $ideaId was deleted for $name" }
+        compose.onNode(undo).performClick()
+        try {
+            compose.waitUntil(30_000) { mapNode()?.config?.getOrNull(MapTapKey)?.ids?.any { it.equals(ideaId, ignoreCase = true) } == true && framed(mapDrawn()) }
+        } catch (_: ComposeTimeoutException) {}
+        check(mapNode()?.config?.getOrNull(MapTapKey)?.ids?.any { it.equals(ideaId, ignoreCase = true) } == true) { "Undo did not bring idea $ideaId back to the map for $name" }
+        if (shown(MapPanelTags.PEEK)) {
+            compose.onNode(map).performTouchInput { click(emptySpot(name)) }
+            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        }
+    }
+
+    /**
+     * S05h A3: Space's legend at its top, as it opens: the ladder, one item, drawn whole on the screen
+     * inside the sheet (mapmode-legend-top-space-<light|dark>-<device>.png); its Moon row is there and,
+     * scrolled to, inside the sheet too.
+     */
+    private fun requireLegendTop(dark: Boolean) {
+        val name = "mapmode-legend-top-space-${if (dark) "dark" else "light"}-$device"
+        val content = MapLegend.of(GraphTheme.SPACE)
+        val sheet = compose.onNode(hasTestTag(MapPanelTags.legend(GraphTheme.SPACE))).fetchSemanticsNode().boundsInRoot
+        val ladders = compose.onAllNodes(hasContentDescription(content.ladderLabel)).fetchSemanticsNodes()
+        check(content.ladderLabel.isNotEmpty() && ladders.size == 1) { "Space's legend shows ${ladders.size} ladders, not one, for $name" }
+        val ladder = ladders.single().boundsInRoot
+        val screen = instrumentation.targetContext.resources.displayMetrics
+        check(ladder.top >= sheet.top && ladder.bottom <= minOf(sheet.bottom, screen.heightPixels.toFloat()) && ladder.left >= 0f && ladder.right <= screen.widthPixels) {
+            "Space's ladder ($ladder) is not whole on the screen inside its sheet ($sheet) at the legend's top for $name"
+        }
+        shot(name)
+        val moon = checkNotNull(content.rows.firstOrNull { it.name == "Moon" }) { "Space's legend has no Moon row for $name" }
+        val row = hasContentDescription(MapLegend.spoken(moon))
+        check(compose.onAllNodes(row).fetchSemanticsNodes().size == 1) { "Space's legend shows no Moon row, one item, for $name" }
+        compose.onNode(row).performScrollTo()
+        compose.waitForIdle()
+        val at = compose.onNode(row).fetchSemanticsNode().boundsInRoot
+        val now = compose.onNode(hasTestTag(MapPanelTags.legend(GraphTheme.SPACE))).fetchSemanticsNode().boundsInRoot
+        check(at.top >= now.top - 1f && at.bottom <= now.bottom + 1f) { "Space's Moon row ($at) is not inside its sheet ($now), scrolled to, for $name" }
+    }
+
+    /**
      * Look's main style set to [label] in Space's Look menu, as a person would; the map builds its
      * scene again (a new MapDrawn.build) and draws it.
      */
@@ -739,6 +1605,28 @@ class MapModeSpaceRenderTest {
     /** Two camera poses alike, each value within a thousandth of its size (at least 1). */
     private fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
 
+    /** The drawn bodies' box lies inside the map: a frame drawn at the first view, not flown in. */
+    private fun boxInside(drawn: MapDrawn) = drawn.box.size == 4 && drawn.box[0] >= 0f && drawn.box[1] >= 0f &&
+        drawn.box[2] <= drawn.width && drawn.box[3] <= drawn.height
+
+    /**
+     * Recentre pressed, and the camera's pose once the map's node shows it at its first view (S05i
+     * repair 5): MapDrawn.homes counts each return home after the camera has moved, so the pose read
+     * with the new count is the camera's there. A pose read at a set time after the press could be the
+     * node's last record from before it, where the GL's next frame had not yet reached the page (the
+     * tablet, at a few frames a second, read Space's first view with the card's cover so).
+     */
+    private fun recentred(name: String): List<Float> {
+        val before = checkNotNull(mapDrawn()).homes
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        try { compose.waitUntil(10_000) { (mapDrawn()?.homes ?: before) > before } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(500)
+        compose.waitForIdle()
+        val drawn = checkNotNull(mapDrawn())
+        check(drawn.homes > before) { "Recentre did not put the camera back at its first view for $name: $drawn" }
+        return drawn.pose
+    }
+
     /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
     private fun emptySpot(name: String): Offset {
         val drawn = checkNotNull(mapDrawn())
@@ -773,6 +1661,17 @@ class MapModeSpaceRenderTest {
         compose.waitUntil(10_000) { shown(sheet) }
         SystemClock.sleep(1_000) // the sheet comes to rest
         shot("mapmode-legend-${theme.rawValue}-${if (dark) "dark" else "light"}-$device")
+        if (theme == GraphTheme.SPACE) {
+            // S05j item 2: the sheet whole, its top and Done below the status bar
+            val name = "mapmode-legend-sheet-${if (dark) "dark" else "light"}-$device"
+            shot(name)
+            val res = instrumentation.targetContext.resources
+            val id = res.getIdentifier("status_bar_height", "dimen", "android")
+            val bar = if (id != 0) res.getDimensionPixelSize(id).toFloat() else 0f
+            val top = compose.onNode(hasTestTag(sheet)).fetchSemanticsNode().boundsInRoot.top
+            check(top >= bar - 1f) { "The legend's sheet starts under the status bar for $name: $top, the bar $bar" }
+            requireLegendTop(dark)
+        }
         requireLegendFoot(theme, dark)
         ui.pressBack()
         // a phone's sheet, taken full by requireLegendFoot's swipe, steps back to its half height at the
@@ -870,16 +1769,17 @@ class MapModeSpaceRenderTest {
      * Lines set to [style] in Space's Look menu (its Look tool, which names the theme), as a person
      * would while the map is open (S05e A3); then the menu is put away.
      */
-    private fun chooseLines(style: GraphLineStyle) {
-        // IdeaToolButton's label and value, the Space map's own Look tool (the board's names its lines)
+    private fun chooseLines(style: GraphLineStyle, theme: GraphTheme = GraphTheme.SPACE, still: String? = null) {
+        // IdeaToolButton's label and value, the map's own Look tool, which names its theme (the board's names its lines)
         val look = hasContentDescription("Look") and hasClickAction() and
-            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, GraphTheme.SPACE.title)
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, theme.title)
         compose.onNode(look).performClick()
         // IdeaLinesPicker's segment words; the segment itself merges them
         val segment = hasTestTag("lookLines-" + style.rawValue)
         compose.waitUntil(10_000) { compose.onAllNodes(segment, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(segment, useUnmergedTree = true).performClick()
         compose.waitForIdle()
+        if (still != null) shot(still)
         ui.pressBack()
         compose.waitUntil(10_000) { compose.onAllNodes(segment, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
     }
@@ -927,6 +1827,9 @@ class MapModeSpaceRenderTest {
 
     private companion object {
         const val DIRECTORY = "/sdcard/Download/sorta-renders"
+        /** S05i A6 (repair 6): an idea's size across in a cell state's close-up, and the least it may be, in dp. */
+        const val CLOSE_DP = 48f
+        const val LEAST_DP = 36f
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 

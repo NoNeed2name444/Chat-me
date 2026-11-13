@@ -226,8 +226,17 @@ object LabelChooser {
         return 1.0
     }
 
-    /** The style for a name over [back], on a body of colour [tint]; [preferDark] holds the words' kind (the tracker's). */
-    fun choose(back: LabelBackdrop, tint: LabelRgb, settings: LabelSettings, preferDark: Boolean? = null): LabelLook {
+    /** The usual rim (iOS's GraphLabelNode.rimFill, Graph3DView.swift:1565). */
+    val RIM_FILL = LabelRgb(0.40, 0.43, 0.55)
+
+    /** A name's rim in a galaxy of [tone] (S05h): the usual rim mixed half with the tone, as iOS's rim(tone:) (GraphUniverseScene.swift:333-339). */
+    fun rim(tone: LabelRgb): LabelRgb = LabelRgb((tone.r + RIM_FILL.r) / 2, (tone.g + RIM_FILL.g) / 2, (tone.b + RIM_FILL.b) / 2)
+
+    /**
+     * The style for a name over [back], on a body of colour [tint]; [preferDark] holds the words' kind (the tracker's).
+     * In a Universe galaxy of [tone] the rim is [rim] of it, but for Increase Contrast's white and a marginal name's outline.
+     */
+    fun choose(back: LabelBackdrop, tint: LabelRgb, settings: LabelSettings, preferDark: Boolean? = null, tone: LabelRgb? = null): LabelLook {
         if (settings.increaseContrast) {
             // always the strongest: black pill, white words, white rim
             return LabelLook(false, LabelRgb.WHITE, LabelRgb.BLACK, 1.0, LabelRgb.WHITE, true, 0.6, LabelContrast.ratio(LIGHT_TEXT, LabelRgb.BLACK))
@@ -256,7 +265,11 @@ object LabelChooser {
         val gets = worstContrast(text, pill, alpha, back)
         val marginal = gets < 7
         val rimBase = if (dark) LabelRgb(0.35, 0.37, 0.45) else LabelRgb(0.40, 0.43, 0.55)
-        val rim = if (marginal) (if (dark) LabelRgb(0.1, 0.1, 0.14) else LabelRgb(0.85, 0.87, 0.95)) else rimBase.mixed(tint, 0.35)
+        val rim = when {
+            marginal -> if (dark) LabelRgb(0.1, 0.1, 0.14) else LabelRgb(0.85, 0.87, 0.95)
+            tone != null -> rim(tone)
+            else -> rimBase.mixed(tint, 0.35)
+        }
         val shadow = if (marginal) 0.45 else 0.15 + 0.2 * back.busy
         return LabelLook(dark, text, pill, alpha, rim, marginal, min(shadow, 0.6), gets)
     }
@@ -267,7 +280,7 @@ object LabelChooser {
  * light or dark, only when the other kind has been clearly better for [HOLD] seconds in a row
  * (past a band either side of the flip); everything else eases to the new measure over [EASE] seconds.
  */
-class LabelTracker(look: LabelLook) {
+class LabelTracker(look: LabelLook, private val tone: LabelRgb? = null) {
     var target: LabelLook = look; private set
     var shown: LabelLook = look; private set
     private var from: LabelLook = look
@@ -279,9 +292,9 @@ class LabelTracker(look: LabelLook) {
 
     /** A new measure, [elapsed] seconds after the last one. */
     fun measure(back: LabelBackdrop, tint: LabelRgb, settings: LabelSettings, elapsed: Double) {
-        var next = LabelChooser.choose(back, tint, settings, preferDark = target.darkText)
+        var next = LabelChooser.choose(back, tint, settings, preferDark = target.darkText, tone = tone)
         if (!settings.increaseContrast) {
-            val free = LabelChooser.choose(back, tint, settings)
+            val free = LabelChooser.choose(back, tint, settings, tone = tone)
             val light = back.mean.luminance
             val clear = if (target.darkText) light <= DARK_BELOW else light >= PALE_ABOVE
             if (free.darkText != target.darkText && clear) {

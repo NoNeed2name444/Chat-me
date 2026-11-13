@@ -1134,5 +1134,19 @@ told = []
 for _ in 0..<GraphPerfDrawWatch.limit { if let t = drawWatch.frame(.noMap(0)) { told.append(t) } }
 check("P16 and a later run is told again", told == [.noMap(GraphPerfDrawWatch.limit)], "\(told)")
 
+// S05j 7a: under Show links, a name outside the focused point's own links
+// dims to the links' 0.15; its own and its neighbours' stay whole; all whole
+// with no focus (GraphPerfMapView.updateLabels applies it)
+let nameLinks: ArraySlice<Int32> = [2, 5]
+check("P17 with no focus every name is whole",
+      (0..<6).allSatisfy { GraphPerfLOD.nameAlpha(body: $0, focus: nil, neighbours: []) == 1 })
+check("P17 the focused point's own name is whole", GraphPerfLOD.nameAlpha(body: 3, focus: 3, neighbours: nameLinks) == 1)
+check("P17 its neighbours' names are whole",
+      GraphPerfLOD.nameAlpha(body: 2, focus: 3, neighbours: nameLinks) == 1
+      && GraphPerfLOD.nameAlpha(body: 5, focus: 3, neighbours: nameLinks) == 1)
+check("P17 a name outside its links dims to 0.15, as the links do",
+      GraphPerfLOD.nameAlpha(body: 4, focus: 3, neighbours: nameLinks) == 0.15
+      && GraphPerfLOD.nameAlpha(body: 0, focus: 3, neighbours: nameLinks) == 0.15)
+
 print(failures.isEmpty ? "ALL PASSED" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

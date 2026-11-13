@@ -12,7 +12,7 @@
 name: iOS
 on:
   push:
-    branches: [sorta]
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
 permissions:
   contents: read
 concurrency:
@@ -48,6 +48,23 @@ jobs:
         run: |
           set -o pipefail
           python3 tools/swift_suites.py --platform linux --release -j 4 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The Universe dump
+        # S05h: iOS's planner on the inputs Android's UniversePlanTest reads, held
+        # to the dump Android commits (numbers within 1e-5, the planner's hash);
+        # with none committed it fails, asking for the uploaded one
+        run: |
+          set -o pipefail
+          mkdir -p build/universe
+          swiftc -O -parse-as-library tools/universe_dump.swift ios/Sorta/Maps/GraphUniverse.swift ios/Sorta/Maps/GraphTilt.swift ios/Sorta/Maps/GraphTheme.swift -o build/universe/dump
+          build/universe/dump android/app/src/test/resources/universe/inputs ios-dump.json
+          python3 tools/universe_dump_check.py ios-dump.json android/app/src/test/resources/universe/ios-dump.json ios/Sorta/Maps/GraphUniverse.swift | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: universe-dump
+          path: ios-dump.json
+          if-no-files-found: warn
+          retention-days: 7
   build:
     runs-on: macos-latest
     # each simulator now runs five tests, not two; about twice the 16 minutes

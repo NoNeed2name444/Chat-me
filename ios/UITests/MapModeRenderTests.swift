@@ -81,6 +81,17 @@ final class MapModeRenderTests: XCTestCase {
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "Space at first run: the first-run card")
         assertClear(app, of: hint.frame, "Space")
         assertBelowStrip(app, "Space")
+        // S05j item 4: the card within a third of the iPhone's height, and the
+        // first view centred in the band between the strip's foot and the card
+        keepShot("mapmode-first-run-card")
+        if !paned {
+            XCTAssertLessThanOrEqual(hint.frame.height, window.height / 3 + 0.5,
+                                     "the first-run card within a third of the iPhone: \(hint.frame) in \(window)")
+        }
+        keepShot("mapmode-first-view")
+        if !paned { assertCentred(app, above: hint.frame, window, "Space") }
+        // S05j item 1: the iPad's two panes with the status bar, for the renders check
+        if paned { keepShot("mapmode-panes-bar") }
 
         if !paned {
             let chip = app.descendants(matching: .any)["map-list-chip"].firstMatch
@@ -124,8 +135,40 @@ final class MapModeRenderTests: XCTestCase {
         assertClear(app, of: hint.frame, "Neurons")
         assertBelowStrip(app, "Neurons")
         keepShot("mapmode-4-neurons")
+        // S05j 6b: Performance's first view, framed below the strip with the
+        // glass Graph3DView measures (mapInsets)
+        app.chooseLook("look-performance")
+        let fast = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Performance map of ideas"),
+                                             object: app.descendants(matching: .any)["graph3D"].firstMatch)
+        _ = XCTWaiter().wait(for: [fast], timeout: 30)
+        sleep(3)
+        keepShot("mapmode-perf-first-view")
         app.chooseLook("look-space")
         // Space: the look as the other tests find it
+    }
+
+    /// The bodies' box (their centres) lies in the middle of the band between
+    /// the top strip's foot and the first-run card's top: its middle within 4%
+    /// of the window's height of the band's, the gaps above and below it
+    /// within 8% of the band (S05j item 4).
+    private func assertCentred(_ app: XCUIApplication, above card: CGRect, _ window: CGRect, _ name: String,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
+        var foot: CGFloat = look.frame.maxY
+        let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
+        if list.exists { foot = max(foot, list.frame.maxY) }
+        let bodies: [CGRect] = bodyFrames(app)
+        guard let top = bodies.map(\.midY).min(), let bottom = bodies.map(\.midY).max() else {
+            XCTFail("\(name): no bodies to centre", file: file, line: line)
+            return
+        }
+        let band: CGFloat = card.minY - foot
+        let off: CGFloat = abs((top + bottom) / 2 - (foot + card.minY) / 2)
+        let gaps: CGFloat = abs((top - foot) - (card.minY - bottom))
+        XCTAssertLessThanOrEqual(off, window.height * 0.04,
+                                 "\(name): the box \(top)-\(bottom) off the band \(foot)-\(card.minY) by \(off)", file: file, line: line)
+        XCTAssertLessThanOrEqual(gaps, band * 0.08,
+                                 "\(name): the gaps above and below the box differ by \(gaps) in a band of \(band)", file: file, line: line)
     }
 
     /// Every body the 3D map shows, where it is drawn (its VoiceOver
@@ -273,6 +316,16 @@ final class MapModeRenderTests: XCTestCase {
                        .completed, "the list sheet closed")
         // Space: the look as the other tests find it
         app.chooseLook("look-space")
+        // S05j 8f: the first-run card at the largest size the map takes (AX1):
+        // its top below the strip, its buttons whole and at least 44 points
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 60), "Space at first run: the first-run card")
+        sleep(2)
+        keepShot("mapmode-ax5-5-first-run-card")
+        XCTAssertGreaterThanOrEqual(hint.frame.minY, look.frame.maxY, "the card below the strip: \(hint.frame)")
+        assertInside(hint.buttons["Full list"], window, "the card's Full list")
+        assertInside(hint.buttons["Got it"], window, "the card's Got it")
+        XCTAssertLessThanOrEqual(hint.buttons["Got it"].frame.maxY, hint.frame.maxY + 0.5, "Got it whole inside the card")
     }
 
     /// Each 3D look's legend, and Space's and Neurons' first-run cards, name
@@ -291,7 +344,7 @@ final class MapModeRenderTests: XCTestCase {
         let looks: [(look: String, title: String, last: String)] = [
             ("look-space", "How your universe is built", "Links: "),
             ("look-neuron", "How your network is built", "Axons and synapses: "),
-            ("look-performance", "How the Performance map is built", "Lines: "),
+            ("look-performance", "How Performance is built", "Lines: "),
         ]
         for (look, title, last) in looks {
             app.chooseLook(look)

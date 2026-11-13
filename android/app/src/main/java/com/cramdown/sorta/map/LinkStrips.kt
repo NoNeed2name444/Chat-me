@@ -67,17 +67,36 @@ class LinkStrips(val samples: Int) {
     /**
      * Writes every beam of [beams] (SpaceBodies' beams, [SpaceBodies.BEAM_STRIDE] floats each, [beamCount]
      * of them) as a strip, after clearing; [unit] is a note's radius, [straight] the Lines setting.
-     * It runs every frame, so it makes no garbage.
+     * The Universe (S05h): [set] picks the near beams (0: kinds 0 and 1) or the far ones (1: kind 2),
+     * −1 all; an arched beam bows its bow (beam float 24) times its length away from its centre
+     * ([centres], three floats a beam; GraphRibbons.swift:480-482), and Straight drops the arch.
+     * It runs every frame, so it makes no garbage beyond an arched beam's direction. Only the beams
+     * from [from] are written (S05h2: the dying links, after the rest, are drawn apart).
      */
-    fun write(beams: FloatArray, beamCount: Int, unit: Float, straight: Boolean) {
+    fun write(beams: FloatArray, beamCount: Int, unit: Float, straight: Boolean, centres: FloatArray? = null, set: Int = -1, from: Int = 0) {
         clear()
-        for (k in 0 until beamCount) {
+        for (k in from until beamCount) {
             val o = k * SpaceBodies.BEAM_STRIDE
+            val far = UniverseBeams.far(beams[o + 23].toInt())
+            if (set == 0 && far || set == 1 && !far) continue
             val sa = beams[o + 3].toInt(); val sb = beams[o + 7].toInt()
+            val bow = beams[o + 24]
+            if (bow > 0f && !straight) {
+                // from the bodies' centres, as iOS's path (pa, pb untrimmed)
+                val pa = Vec3(beams[o + 11], beams[o + 12], beams[o + 13])
+                val pb = Vec3(beams[o + 17], beams[o + 18], beams[o + 19])
+                val delta = pb - pa
+                val length = delta.length()
+                val dir = if (length > 0.0001f) delta * (1f / length) else Vec3(1f, 0f, 0f)
+                val c = k * 3
+                val centre = if (centres != null && c + 2 < centres.size) Vec3(centres[c], centres[c + 1], centres[c + 2]) else Vec3.ZERO
+                path.arch = LinkCurve.archDirection(pa, pb, centre, dir)
+                path.archSize = bow * length
+            } else { path.arch = Vec3.ZERO; path.archSize = 0f }
             add(beams[o], beams[o + 1], beams[o + 2], beams[o + 4], beams[o + 5], beams[o + 6], sa, sb,
                 beams[o + 8], beams[o + 9], beams[o + 10],
                 scratchA.set(sa, beams, o + 11), scratchB.set(sb, beams, o + 17),
-                unit, straight)
+                unit, straight, keepArch = true)
         }
     }
 
@@ -87,11 +106,14 @@ class LinkStrips(val samples: Int) {
      */
     fun add(start: Vec3, end: Vec3, styleA: Int, styleB: Int, seed: Float, lit: Float, grow: Float,
             bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean) =
-        add(start.x, start.y, start.z, end.x, end.y, end.z, styleA, styleB, seed, lit, grow, bendA, bendB, unit, straight)
+        add(start.x, start.y, start.z, end.x, end.y, end.z, styleA, styleB, seed, lit, grow, bendA, bendB, unit, straight, false)
 
     /** The same with the ends as floats ([sx], [sy], [sz] to [ex], [ey], [ez]), making no garbage. */
     fun add(sx: Float, sy: Float, sz: Float, ex: Float, ey: Float, ez: Float, styleA: Int, styleB: Int,
-            seed: Float, lit: Float, grow: Float, bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean) {
+            seed: Float, lit: Float, grow: Float, bendA: LinkBend?, bendB: LinkBend?, unit: Float, straight: Boolean,
+            keepArch: Boolean = false) {
+        // only [write] sets an arch, from the beam's bow; any other link is unarched
+        if (!keepArch) { path.arch = Vec3.ZERO; path.archSize = 0f }
         val need = (count + 1) * perLink * STRIDE
         if (data.size < need) data = data.copyOf(max(need, data.size * 2))
         val n = samples

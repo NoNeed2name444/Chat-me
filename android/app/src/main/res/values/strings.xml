@@ -249,6 +249,9 @@
     <!-- Each theme's own word for a body -->
     <string name="map_role_black_hole">Black hole</string>
     <string name="map_role_star">Star</string>
+    <string name="map_role_home_star">Home star</string>
+    <string name="map_role_moon">Moon</string>
+    <string name="map_role_oort">Oort comet</string>
     <string name="map_role_gas_giant">Gas giant</string>
     <string name="map_role_rocky">Rocky planet</string>
     <string name="map_role_comet">Comet</string>
@@ -284,4 +287,16 @@
     <string name="map_no_folder_neurons">No folders yet: every idea shares one cell. Add a folder to grow a cell of its own.</string>
     <string name="map_no_folder_performance">No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour.</string>
     <string name="map_add_folder">Add folder</string>
+    <!-- S05i: the Filter tool and its menu (Graph3DView.swift:779, :824-841, :309), and the Neurons' cell states in Look (GraphNodeStyles.swift:224-243) -->
+    <string name="map_filter">Filter</string>
+    <string name="map_filter_show">Show</string>
+    <string name="map_filter_everything">Everything</string>
+    <string name="map_filter_pages">Pages</string>
+    <string name="map_filter_ideas">Ideas</string>
+    <string name="map_filter_linked">Linked ideas</string>
+    <string name="map_filter_folder">Folder</string>
+    <string name="map_filter_empty">Nothing here for this filter.</string>
+    <string name="map_cells">Cells</string>
+    <string name="map_cell_by_cell">Cell by cell</string>
+    <string name="map_same_as_all">Same as all</string>
 </resources>

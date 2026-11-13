@@ -43,11 +43,28 @@ class MapDrag(
     parents: IntArray? = null,
     links: IntArray = IntArray(0),
     lively: Boolean = true,
+    /**
+     * Each body's place in a parents-first order (S05h: the Universe's chunk-order nodes, by their plan
+     * index, every planet after its star); null keeps index order, as iOS's (:1782).
+     */
+    private val rank: IntArray? = null,
 ) {
     @Volatile var lively: Boolean = lively
 
-    // a parent at or after its child is no parent here, as iOS's `hasParent` (:1783)
-    private val parentOf: IntArray? = parents?.let { p -> IntArray(count) { i -> p.getOrElse(i) { -1 }.takeIf { it in 0 until i } ?: -1 } }
+    /** Body [i]'s parent here (−1 for none): the one it moves with. */
+    fun parentOf(i: Int): Int = parentOf?.getOrElse(i) { -1 } ?: -1
+
+    // a parent at or after its child is no parent here, as iOS's `hasParent` (:1783); with a [rank], after in it
+    private val parentOf: IntArray? = parents?.let { p ->
+        IntArray(count) { i ->
+            val q = p.getOrElse(i) { -1 }
+            val r = rank
+            val before = if (r != null) q in 0 until count && r[q] < r[i] else q in 0 until i
+            if (before) q else -1
+        }
+    }
+    // the bodies in rank order (rank's inverse), for the parents-first sort
+    private val byRank: IntArray? = rank?.let { r -> IntArray(count).also { inv -> for (i in 0 until count) inv[r[i]] = i } }
     // each body's children (orbit path) or neighbours with their rest lengths (link path), as CSR
     private val childStart: IntArray
     private val childList: IntArray
@@ -246,15 +263,65 @@ class MapDrag(
     /** How many pieces a frame of [frameDt] seconds is split into. */
     fun piecesFor(frameDt: Float): Int = max(1, ceil(frameDt.coerceIn(MIN_DT, MAX_DT) / MAX_SUBSTEP - 1e-4f).toInt())
 
-    // the orbit clock eases to a stop while a body is held and back after (advanceOrbits, :1750-1765);
-    // still, the plan's own picture, time 0
+    /** A body under a finger that has not moved yet (iOS pressedNote), −1 for none (S05h): the orbit clock eases to a stop. */
+    @Volatile var pressed: Int = -1
+    /** A body under a pointer with no button down (iOS hovered), −1 for none (S05h): the same. */
+    @Volatile var hovered: Int = -1
+
+    /**
+     * The device's uptime when the current press reached the map (S05h repair 7), −1 with no finger on
+     * a body: set by [press], kept while the same finger stays down, so a test can show the press was
+     * taken at the first frame after it arrived (MapDrawn.pressArrivedAtMs).
+     */
+    @Volatile var pressArrivedAtMs: Long = -1; private set
+
+    /**
+     * A finger down on body [index] (−1: lifted, or on no body), reaching the map at uptime [atMs]: the
+     * arrival is noted before the body is, so a frame that sees the press also sees when it came.
+     */
+    fun press(index: Int, atMs: Long) {
+        if (index < 0) pressArrivedAtMs = -1 else if (pressed < 0) pressArrivedAtMs = atMs
+        pressed = index
+    }
+
+    /**
+     * The seconds the orbit clock has stepped while a body was pressed, every press together, never
+     * capped (MapDrawn.pressedSeconds); and for the latest press, the seconds of it stepped until the
+     * rate was under [SLOW] (−1 till then): the map's own time, whenever its record reaches a test.
+     */
+    @Volatile var pressedTime: Double = 0.0; private set
+    @Volatile var pressSlowedAfter: Double = -1.0; private set
+    private var pressStart = -1.0
+
+    /**
+     * Whether the latest step of the orbit clock took a press (S05h repair 5): true from the first
+     * step that saw a body pressed until the first that saw none. The renderer notes the device's
+     * uptime at the frame where it turns true (MapDrawn.pressTakenAtMs).
+     */
+    val pressTaken: Boolean get() = pressStart >= 0
+
+    /**
+     * Whether the current press has slowed the orbit rate under [SLOW] (S05h repair 6): true from the
+     * first step of a taken press whose rate is under it until the press ends. The renderer notes the
+     * device's uptime at the frame where it turns true (MapDrawn.pressSlowedAtMs).
+     */
+    val pressSlowed: Boolean get() = pressStart >= 0 && pressSlowedAfter >= 0
+
+    // the orbit clock eases to a stop within about 0.3 s while a body is pressed, hovered or held,
+    // so it never slides from under the finger, and back over about 1.5 s after (advanceOrbits,
+    // :1750-1765); still, the plan's own picture, time 0
     private fun advanceClock(dt: Float) {
         if (!lively) { orbitTime = 0.0; return }
-        val busy = grabbed >= 0
+        val press = pressed >= 0
+        val busy = grabbed >= 0 || press || hovered >= 0
         val tau = if (busy) TAU_BUSY else TAU_FREE
         val goal = if (busy) 0f else 1f
         orbitRate += (goal - orbitRate) * (1f - exp(-dt / tau))
         orbitTime += (dt * orbitRate).toDouble()
+        if (!press) { pressStart = -1.0; return }
+        if (pressStart < 0) { pressStart = pressedTime; pressSlowedAfter = -1.0 }
+        pressedTime += dt
+        if (pressSlowedAfter < 0 && orbitRate < SLOW) pressSlowedAfter = pressedTime - pressStart
     }
 
     private fun activate(i: Int) {
@@ -285,7 +352,12 @@ class MapDrag(
                 for (e in linkStart[i] until linkStart[i + 1]) { val j = linkOther[e]; activate(j); pulled[j] = true }
             }
         }
-        active.sort(0, activeCount)
+        val r = rank; val inv = byRank
+        if (r != null && inv != null) {
+            for (a in 0 until activeCount) active[a] = r[active[a]]
+            active.sort(0, activeCount)
+            for (a in 0 until activeCount) active[a] = inv[active[a]]
+        } else active.sort(0, activeCount)
     }
 
     // one semi-implicit Euler piece on the link path (integrate, :1703-1741): forces first, the held body skipped
@@ -340,7 +412,7 @@ class MapDrag(
                 continue
             }
             val p = parents?.get(i) ?: -1
-            val hasParent = p in 0 until i
+            val hasParent = p >= 0
             for (x in 0 until 3) {
                 val carry = if (hasParent) moved[3 * p + x] * keep else 0f
                 offset[o + x] += carry
@@ -419,6 +491,8 @@ class MapDrag(
         /** The orbit clock's ease to a stop while a body is held, and back (:1755-1756). */
         const val TAU_BUSY = 0.1f
         const val TAU_FREE = 0.5f
+        /** The rate a held finger's orbits are under within 0.5 s (S05h A3; exp(−0.5 / [TAU_BUSY]) ≈ 0.007). */
+        const val SLOW = 0.05f
         /**
          * How far off home, in note radii, a body pulls its neighbours into the run (Android's own: iOS
          * steps every body, :1703-1741). A link of 4 against a home spring of 6 hands a neighbour at

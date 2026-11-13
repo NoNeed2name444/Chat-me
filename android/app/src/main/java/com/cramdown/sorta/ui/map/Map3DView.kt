@@ -42,11 +42,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -76,6 +78,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cramdown.sorta.map.DisplayModeInfo
 import com.cramdown.sorta.map.LabelBackdrop
+import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.LabelEstimate
 import com.cramdown.sorta.map.LabelGlow
 import com.cramdown.sorta.map.LabelLook
@@ -99,6 +102,9 @@ import com.cramdown.sorta.map.MapTouchKind
 import com.cramdown.sorta.map.MapTouchRules
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.MapInsets
+import com.cramdown.sorta.map.MapFirstView
+import com.cramdown.sorta.map.MapPose
+import com.cramdown.sorta.map.GraphTilt
 import com.cramdown.sorta.map.NeuronLookPlan
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
@@ -107,6 +113,13 @@ import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Vec3
+import com.cramdown.sorta.map.UniverseBeams
+import com.cramdown.sorta.map.UniversePlan
+import com.cramdown.sorta.map.UniverseRole
+import com.cramdown.sorta.map.MapFly
+import com.cramdown.sorta.map.MapFocus
+import com.cramdown.sorta.map.MapMark
+import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.grouped
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
@@ -119,6 +132,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.first
 import kotlin.math.cbrt
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** A map ready to draw: its octree, how big a node is, and the notes behind the nodes. */
 /** [viewRadius] holds 95% of the nodes: the home view frames those, not a few far outliers. */
@@ -133,7 +147,20 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 * so a held body springs home with no link pulling; false under one single style, where its links
                 * pull its neighbours.
                 */
-               val universe: Boolean = true) {
+               val universe: Boolean = true,
+               /**
+                * Space's Universe (S05h): the plan its bodies come from, one node a body (folders, the home and
+                * notes), the tree holding their homes; null under one single style and in the other themes.
+                */
+               val universePlan: UniversePlan? = null,
+               /** Each Universe galaxy's tone, by its body index, for its names' rims (S05h). */
+               val galaxyTones: Map<Int, LabelRgb> = emptyMap(),
+               /**
+                * How close the camera may come to its target: four node radii; in the Neurons four of the
+                * smallest body's (S05i repair 6), so an idea in an open cell, a twentieth of the cell, can be
+                * brought close as on iOS, whose pinch has no floor (allowsCameraControl, Graph3DView.swift:1650).
+                */
+               val closest: Float = nodeRadius * 4) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -160,10 +187,42 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             val tree = Octree.build(graph, 4096)
             val sizes = bodies.map { it.sphere }.sorted()
             val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
+            val smallest = (sizes.firstOrNull() ?: 0.35f).coerceIn(0.002f, 2f)
             // the bridges' half width: the wider of a tract's and a fibre's (NeuronGl.drawBridges)
             return MapScene(tree, radius, graph.titles, graph.ids, viewRadius(tree), MapTheme.NEURONS, scene,
-                edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE))
+                edges, max(NeuronLookPlan.FAR_BRIDGE, NeuronLookPlan.NEAR_BRIDGE), closest = smallest * 4)
         }
+
+        /**
+         * Space's Universe (S05h; iOS's GraphUniverseScene): node i is the plan's body i at its home, its
+         * group the body's style (a galaxy a black hole, a star and the home suns, a gas giant, a rocky
+         * planet and a moon rocky, a pulsar, a comet and a resting comet comets). A moon's link to its own
+         * planet (kind 3) is left out, as iOS never draws it (GraphMotion.swift:1827). [ids] and
+         * [titles] by body, its labels the names shown.
+         */
+        fun universe(plan: UniversePlan, tones: Map<Int, LabelRgb> = emptyMap(), leafCapacity: Int = 4096): MapScene {
+            val bodies = plan.bodies
+            val positions = FloatArray(bodies.size * 3)
+            for ((i, body) in bodies.withIndex()) {
+                positions[3 * i] = body.home.x; positions[3 * i + 1] = body.home.y; positions[3 * i + 2] = body.home.z
+            }
+            val codes = ByteArray(bodies.size) { universeStyle(bodies[it].role).code.toByte() }
+            val drawn = plan.links.filter { UniverseBeams.drawn(it.kind) }
+            val edges = IntArray(drawn.size * 2)
+            for ((k, link) in drawn.withIndex()) { edges[2 * k] = link.a; edges[2 * k + 1] = link.b }
+            val graph = MapGraph(positions, codes, edges, bodies.map { it.label }, bodies.map { it.id })
+            val tree = Octree.build(graph, leafCapacity, palette = SpacePalette.rgb)
+            val sizes = bodies.map { it.sphere }.sorted()
+            val radius = (sizes.getOrNull(sizes.size / 2) ?: 0.35f).coerceIn(0.01f, 2f)
+            // the first view holds the plan's envelope, every place a body can reach (GraphUniverse.swift:1475-1480)
+            val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
+            val reach = plan.envelope.maxOfOrNull { (it - centre).length() } ?: 0f
+            return MapScene(tree, radius, graph.titles, graph.ids, if (reach > 1e-3f) reach else viewRadius(tree), MapTheme.SPACE,
+                links = edges, linkHalf = UniverseBeams.HALF_WIDTH, universe = true, universePlan = plan, galaxyTones = tones)
+        }
+
+        /** A Universe body's Space style (S05h): what it is drawn as. */
+        fun universeStyle(role: UniverseRole): SpaceStyle = UniverseBeams.style(role)
 
         fun viewRadius(tree: Octree): Float {
             val n = tree.nodeCount
@@ -204,8 +263,35 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
     }
 }
 
+/**
+ * Which kind of scene [scene] is for its deaths (S05h2): "universe" or "look" in Space, as iOS keys its
+ * memory (GraphUniverseScene.swift:214-218, Graph3DView.swift:1393-1397), so changing between the
+ * Universe and a single style kills nothing; null in the other themes.
+ */
+internal fun deathKey(scene: MapScene): String? = when {
+    scene.theme != MapTheme.SPACE -> null
+    scene.universePlan != null -> "universe"
+    else -> "look"
+}
+
 /** The Neurons map's camera pitch: 35 degrees down (GraphTilt.angle for Neurons). */
 private const val NEURONS_PITCH = (35.0 * Math.PI / 180.0).toFloat()
+/** Space's (GraphTilt.spaceDegrees, 45). */
+private const val SPACE_PITCH = (45.0 * Math.PI / 180.0).toFloat()
+
+/**
+ * iOS's camera per theme (S05j item 3), looking at [target]: Space and Neurons look down at GraphTilt's
+ * 45 and 35 degrees from yaw 0 with a 55 degree field (GraphTilt.swift:116-119); Performance from yaw
+ * 0.55 and pitch 0.32 with a 60 degree one (GraphPerfMapView.swift:106-107, GraphPerfCamera.swift:85).
+ */
+internal fun firstCamera(theme: MapTheme, target: Vec3): OrbitCamera = when (theme) {
+    MapTheme.NEURONS -> OrbitCamera(target = target, yaw = 0f, pitch = NEURONS_PITCH,
+        fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
+    MapTheme.SPACE -> OrbitCamera(target = target, yaw = 0f, pitch = SPACE_PITCH,
+        fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
+    else -> OrbitCamera(target = target, yaw = MapFirstView.FAST_YAW, pitch = MapFirstView.FAST_PITCH,
+        fovY = MapFirstView.radians(MapFirstView.FAST_FIELD_DEGREES))
+}
 
 /** True when this device can run the OpenGL ES 3.0 map. */
 fun supportsGles3(context: Context): Boolean {
@@ -230,7 +316,8 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
 /**
  * The map's onTap on its node, for tests, with the ids its body indices stand for ([MapScene.ids]):
- * a tap on body i is tap(i), as the map's own hit test hands it on. Robolectric can't draw GL, so no
+ * a tap on body i is tap(i), as the map's own hit test hands it on, and tap(-1) a tap on empty space,
+ * which lets the chosen body go wherever the bodies lie on screen. Robolectric can't draw GL, so no
  * body is on screen to hit, and MapPeekCardTest taps through this. A key of its own, as
  * [MapDrawnKey]: accessibility services do not read it.
  */
@@ -244,6 +331,9 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
  * asks again for the same body.
  */
 data class MapEase(val id: String, val glide: Boolean, val serial: Int)
+
+/** Fly in to the Universe folder [id] (S05h): each new [serial] flies again. */
+data class MapFlyTo(val id: String, val serial: Int)
 
 /**
  * The 3D map on screen. Frames follow Choreographer's vsync; the window asks for the
@@ -308,6 +398,20 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     linksId: String? = null,
     /** The camera's move for a choice (S05g), null for none. */
     ease: MapEase? = null,
+    /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
+    flyTo: MapFlyTo? = null,
+    /** Two taps on empty space brought back the first view and ended any Fly in (S05h plan, Q5): the page forgets [flyTo]. */
+    onHome: () -> Unit = {},
+    /**
+     * The peek card over the map, in the map's own pixels, null while none is open: the tests' spot
+     * keeps off it (MapSpot), so a finger put there lands on a body, not on the card.
+     */
+    peek: Rect? = null,
+    /**
+     * The filter (S05i), null for everything: the bodies and links it shows, by the scene's index. A
+     * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
+     */
+    filter: MapFilterView? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -325,19 +429,20 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
     val named = remember(scene) { HashMap<Int, Int>() }
     var drawn by remember(scene) { mutableStateOf(MapDrawn()) }
+    // how many times the camera was put back at its first view (MapDrawn.homes): counted after the move,
+    // so the record the map's node carries next reads the camera there
+    var homes by remember { mutableIntStateOf(0) }
     val hz = remember { floatArrayOf(display?.refreshRate ?: 60f) }
     val tree = scene.tree
     val camera = remember(scene) {
         // the whole map in view on a portrait screen (about 3:4), with room for the readout, until
         // the view's own shape is known (HomeView.fit)
-        // the Neurons map looks down at 35 degrees (GraphTilt's Neurons angle)
-        val pitch = if (scene.theme == MapTheme.NEURONS) NEURONS_PITCH else 0.7f
-        OrbitCamera(target = Vec3(tree.cx[0], tree.cy[0], tree.cz[0]), pitch = pitch).apply {
+        firstCamera(scene.theme, Vec3(tree.cx[0], tree.cy[0], tree.cz[0])).apply {
             distance = max(fitDistance(scene.viewRadius, aspect = 0.75f), 4f)
-            minDistance = scene.nodeRadius * 4; maxDistance = max(tree.radius[0], 1f) * 80
+            minDistance = scene.closest; maxDistance = max(tree.radius[0], 1f) * 80
         }
     }
-    val home = remember(scene) { HomeView(camera, scene.viewRadius) }
+    val home = remember(scene) { HomeView(camera, HomeView.framer(scene)) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
     val cover = with(density) { card.toPx() }
@@ -348,10 +453,14 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     // the choice's tick, pop and ease, once per Select: kept over every scene this map shows, so a
     // map built again with the same choice replays none of them (S05g)
     val cue = remember { MapChoiceCue(ease?.serial ?: 0) }
+    // what the map counts over its life, across its scenes (S05h2); and whether the test clocks may be read
+    val totals = remember { MapTotals() }
+    val testHooks = remember(context) { context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
     val renderer = remember(scene) {
         val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
-        // only the links new since the scene on screen grow in; every link when there is none (LinkMemory)
-        val recall = if (scene.theme == MapTheme.PLAIN) LinkRecall.EVERYTHING else LinkMemory.recall(scene.ids, scene.links, lively)
+        // only the links new since the scene on screen grow in; every link when there is none (LinkMemory);
+        // in Space, the bodies it had and this scene lacks die where they were (S05h2)
+        val recall = if (scene.theme == MapTheme.PLAIN) LinkRecall.EVERYTHING else LinkMemory.recall(scene.ids, scene.links, lively, deathKey(scene))
         GlMapRenderer(
             scene.tree, camera, scene.nodeRadius, displayHz = { hz[0] }, displayMaxHz = maxHz,
             onReadout = { r -> mainHandler.post { readout = r } },
@@ -362,7 +471,8 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
-            universe = scene.universe,
+            universe = scene.universe, universePlan = scene.universePlan,
+            departures = recall.departures, testHooks = testHooks, totals = totals,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
@@ -375,7 +485,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     // plain theme draws no growing links, so it leaves nothing to compare with
     DisposableEffect(scene) {
         if (scene.theme == MapTheme.PLAIN) LinkMemory.clear()
-        else LinkMemory.remember(scene.build, scene.ids, scene.links)
+        else LinkMemory.remember(scene.build, scene.ids, scene.links, deathKey(scene), if (deathKey(scene) != null) renderer::departures else null)
         onDispose {}
     }
     // and once the map leaves the screen, a map opened again grows every link, as iOS's; a turn or
@@ -383,11 +493,29 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     val shownBuild by rememberUpdatedState(scene.build)
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { loop.touched(); synchronized(camera) { home.restore(camera) } }
+        if (recenter != 0) { renderer.goHome(home); homes++; loop.touched() }
+    }
+    // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
+    LaunchedEffect(renderer, flyTo) {
+        val wanted = flyTo ?: return@LaunchedEffect
+        val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
+    }
+    // the filter reaches the renderer as it changes; the next frame applies it (S05i)
+    // a map built again under a filter starts filtered, with no pop (its first one is set at once)
+    val filterSet = remember(renderer) { booleanArrayOf(false) }
+    LaunchedEffect(renderer, filter) {
+        val next = if (!filterSet[0]) filter?.at(instantNow = true) else filter
+        filterSet[0] = true
+        if (renderer.filter !== next) { renderer.filter = next; loop.moved() }
     }
     // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
     val linksShown = linksId != null && chosenIndex >= 0
+    // Performance's names under Show links: the chosen point's neighbourhood, whose names stay whole (S05j 7a)
+    val nearNames = remember(scene, chosenIndex, linksShown) {
+        if (linksShown) MapFocus.neighbourhood(chosenIndex, scene.ids.size, scene.links) else null
+    }
     val hostView = LocalView.current
     val serial = ease?.serial ?: 0
     LaunchedEffect(renderer, chosenIndex, linksShown, serial) {
@@ -451,9 +579,12 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val drawnNow = drawn
+    val homesNow = homes
     val latestDrawn by rememberUpdatedState(onDrawn)
     val firstDrawn = !gles3 || drawnNow.frames >= 1
     val box = remember(screenNodes) { drawnBox(screenNodes) }
+    // the Neurons' ideas on screen with their cell states (MapDrawn.cells, S05i repair 6)
+    val cells = remember(scene, screenNodes) { MapDrawnCell.of(scene.neurons, screenNodes) }
     LaunchedEffect(firstDrawn) { if (firstDrawn) latestDrawn() }
 
     // The names (S05f): in Space and Neurons only the hovered, pressed, held and chosen bodies have
@@ -465,8 +596,16 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     var pressedName by remember(scene) { mutableStateOf<Int?>(null) }
     var hoveredName by remember(scene) { mutableStateOf<Int?>(null) }
     var nameClock by remember(scene) { mutableLongStateOf(0L) }
-    val board = remember(scene) { MapNameShow.Board() }
+    // in the Universe a name's rim takes its galaxy's tone (S05h, GraphUniverseScene.swift:111)
+    val board = remember(scene) {
+        val plan = scene.universePlan
+        if (plan == null || scene.galaxyTones.isEmpty()) MapNameShow.Board()
+        else MapNameShow.Board { i -> plan.bodies.getOrNull(i)?.galaxy?.let { scene.galaxyTones[it] } }
+    }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
+    // a body hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752); a body
+    // pressed does too, handed to the renderer by the touch itself (the gestures below), as iOS's is
+    LaunchedEffect(renderer, hoveredName) { renderer.hover(hoveredName ?: -1) }
     // the held slot: the body whose options are open, else the one a finger holds to move (S05g2), which
     // the page never learns of (GraphMotion's wantLabel(grabbed), :2183); the options take it back
     var grabbedName by remember(scene) { mutableStateOf<Int?>(null) }
@@ -549,15 +688,9 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
     // every theme (Performance's too, S05g). Only the tests read it, so it is found where the
     // semantics are, in one pass with no lists made
     fun spot(): List<Float> {
-        val margin = with(density) { 48.dp.toPx() }
-        val right = viewSize.width - margin
-        val high = insets.top + margin
-        val low = viewSize.height - insets.bottom - cover - margin
-        var best: ScreenNode? = null
-        for (n in screenNodes) {
-            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < high || n.y > low) continue
-            if (best == null || n.pixels > best.pixels) best = n
-        }
+        val margin = with(density) { MapSpot.MARGIN_DP.dp.toPx() }
+        val best = MapSpot.pick(screenNodes, viewSize.width.toFloat(), viewSize.height.toFloat(),
+            high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
@@ -565,9 +698,9 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
+        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow, cells = cells)
         val tapped = onTap
-        if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it) }, scene.build, cue)
+        if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it.takeIf { i -> i >= 0 }) }, scene.build, cue)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
         val slop = LocalViewConfiguration.current.touchSlop
@@ -575,6 +708,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
         val holdScale = MapTouchRules.holdScale(LocalViewConfiguration.current.longPressTimeoutMillis)
         val latestTap by rememberUpdatedState(onTap)
         val latestDouble by rememberUpdatedState(onDoubleTap)
+        val latestHome by rememberUpdatedState(onHome)
         val latestHold by rememberUpdatedState(onHold)
         // the last still lift: when, where and on what, for a double tap
         val lastLift = remember(scene) { LastLift() }
@@ -631,12 +765,14 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                     grabbedName = null
                     loop.moved()
                 }
-                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
+                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed.
+                // The renderer takes the press at once, from the touch, as iOS's at touch-down
+                // (Graph3DView.swift:2922-2931): its orbit clock eases from this frame, not a recomposition later
                 val press = MapNameShow.Press(slop)
-                if (pills) {
-                    press.down(hit)
-                    pressedName = press.pressed
-                }
+                press.down(hit)
+                var pressedNow = press.pressed ?: -1
+                renderer.press(pressedNow)
+                if (pills) pressedName = press.pressed
                 try {
                     var now = down.uptimeMillis
                     while (true) {
@@ -715,6 +851,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                                 synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
                             }
                         }
+                        if ((press.pressed ?: -1) != pressedNow) { pressedNow = press.pressed ?: -1; renderer.press(pressedNow) }
                         if (pills && pressedName != press.pressed) pressedName = press.pressed
                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
@@ -722,6 +859,7 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                     // lifted, or the gesture cancelled: the press is over either way, and a body held is let
                     // go, with the finger's speed if it moved (release, GraphMotion.swift:1269-1283)
                     press.up()
+                    renderer.press(-1)
                     if (pressedName != null) pressedName = null
                     letGo(still = !dragging)
                 }
@@ -738,10 +876,13 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                     MapTouchKind.DOUBLE_TAP -> { lastLift.clear(); latestDouble?.invoke(checkNotNull(hit)) ?: latestTap?.invoke(hit) }
                     MapTouchKind.TAP -> {
                         latestTap?.invoke(hit)
-                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS)
+                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS),
+                        // and a Fly in under way ends there, as Recentre ends it (S05h plan, Q5)
                         if (hit == null && paired && lastLift.hit == null) {
                             lastLift.clear()
-                            synchronized(camera) { home.restore(camera) }
+                            renderer.goHome(home)
+                            homes++
+                            latestHome()
                             loop.moved()
                         } else lastLift.set(liftedAt, down.position, hit)
                     }
@@ -846,6 +987,8 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
                 for (name in names) {
                     named[name.index] = name.spot
                     paint.textSize = name.textSize
+                    // Show links: a name outside the chosen point's own links dims to 0.15 (S05j 7a)
+                    paint.alpha = (255 * MapMark.nameAlpha(name.index, nearNames)).roundToInt()
                     canvas.nativeCanvas.drawText(name.label, name.box.x, name.baseline(metrics), paint)
                 }
             }
@@ -855,7 +998,8 @@ data class MapEase(val id: String, val glide: Boolean, val serial: Int)
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
             IconButton(onClick = {
                 loop.touched()
-                synchronized(camera) { home.restore(camera) }
+                renderer.goHome(home)
+                homes++
             }) { Icon(Icons.Rounded.RadioButtonChecked, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }
@@ -907,28 +1051,27 @@ private class PaintMetrics(private val paint: android.graphics.Paint) : NameMetr
 }
 
 /**
- * The camera's first view, which Recentre goes back to. [fit] sizes it to the view's own shape and
- * what the chrome leaves of it ([MapInsets]) once those are known, and again when they change (a
- * turn, a fold, the strip's height): the map's [radius] round its centre in view across the narrower
- * side of that window, its centre in the window's middle (OrbitCamera.fitWindow, as iOS's framing).
- * Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's map off at the sides and left a
- * tablet's small, and fitted the whole view, so what the bottom bar hides was never in its sum.
+ * The camera's first view, which Recentre and the double tap go back to. [fit] sizes it to the view's
+ * own shape and what the chrome leaves of it ([MapInsets]) once those are known, and again when they
+ * change (a turn, a fold, the strip's height), by [framer]: the theme's own first view (S05j item 3,
+ * [MapFirstView]), or, given a radius, the map's ball round its centre across the narrower side of that
+ * window (OrbitCamera.fitWindow). Sorta's: the reference kept a 3:4 portrait fit, which cut a phone's
+ * map off at the sides and left a tablet's small, and fitted the whole view, so what the bottom bar
+ * hides was never in its sum.
  */
-internal class HomeView(camera: OrbitCamera, private val radius: Float) {
-    private val centre = camera.target
-    private var target = camera.target
-    private var distance = camera.distance
-    private val yaw = camera.yaw
-    private val pitch = camera.pitch
-    private val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = camera.fovY)
+internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, height: Float, insets: MapInsets) -> MapPose) {
+    /** The old sphere fit, from the camera's own yaw and pitch, round its target. */
+    constructor(camera: OrbitCamera, radius: Float) : this(camera, sphere(camera, radius))
+
+    private var pose = MapPose(camera.target, camera.distance, camera.yaw, camera.pitch, camera.roll)
     // where a camera still at its first view was left when the home moved without it (the card put
     // away): it is still the first view, so the next change of the chrome takes it, as iOS's untouched
-    private var left: Pair<Vec3, Float>? = null
+    private var left: MapPose? = null
 
-    fun restore(camera: OrbitCamera) { camera.target = target; camera.distance = distance; camera.yaw = yaw; camera.pitch = pitch }
+    /** The first view as last fitted. */
+    val view: MapPose get() = pose
 
-    private fun at(camera: OrbitCamera, target: Vec3, distance: Float) =
-        camera.target == target && camera.distance == distance && camera.yaw == yaw && camera.pitch == pitch
+    fun restore(camera: OrbitCamera) = pose.applyTo(camera)
 
     /**
      * Fits to a [width] x [height] view under [insets]; a camera still at its first view moves with
@@ -937,13 +1080,60 @@ internal class HomeView(camera: OrbitCamera, private val radius: Float) {
      */
     fun fit(camera: OrbitCamera, width: Int, height: Int, insets: MapInsets, follow: Boolean = true): Boolean {
         if (width <= 0 || height <= 0) return false
-        val first = at(camera, target, distance) || left?.let { at(camera, it.first, it.second) } == true
-        left = if (first && !follow) camera.target to camera.distance else null
-        val fit = lens.fitWindow(centre, radius, width.toFloat(), height.toFloat(), insets)
-        distance = fit.distance; target = fit.target
+        val first = pose.isAt(camera) || left?.isAt(camera) == true
+        left = if (first && !follow) MapPose(camera.target, camera.distance, camera.yaw, camera.pitch, camera.roll) else null
+        pose = framer(width.toFloat(), height.toFloat(), insets)
         val there = first && follow
         if (there) restore(camera)
         return there
+    }
+
+    companion object {
+        private fun sphere(camera: OrbitCamera, radius: Float): (Float, Float, MapInsets) -> MapPose {
+            val centre = camera.target
+            val yaw = camera.yaw
+            val pitch = camera.pitch
+            val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = camera.fovY)
+            return { w, h, insets -> lens.fitWindow(centre, radius, w, h, insets).let { MapPose(it.target, it.distance, yaw, pitch) } }
+        }
+
+        /**
+         * [scene]'s first view (S05j item 3): Space's and Neurons' tilted fit on the plan's envelope
+         * (Space under one single style: every body, at the plain fit), Performance's framing on its
+         * bodies or its ball.
+         */
+        fun framer(scene: MapScene): (Float, Float, MapInsets) -> MapPose {
+            val tree = scene.tree
+            fun bodies(): List<Vec3> = List(tree.nodeCount) { i ->
+                Vec3(tree.positions[3 * i], tree.positions[3 * i + 1], tree.positions[3 * i + 2])
+            }
+            return when (scene.theme) {
+                MapTheme.NEURONS -> {
+                    val envelope = scene.neurons?.plan?.envelope?.takeIf { it.isNotEmpty() } ?: bodies()
+                    val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets -> MapFirstView.tilted(envelope, MapFirstView.PAD, 1.0f, 0.35f, NEURONS_PITCH, w, h, insets) }
+                    first
+                }
+                MapTheme.SPACE -> {
+                    val plan = scene.universePlan
+                    // GraphFit.of: the Universe at 0.88 of the window; one single style at the plain fit, 0.8,
+                    // every body padded by its size (Android's Space has no envelope then)
+                    val points = plan?.envelope?.takeIf { it.isNotEmpty() } ?: bodies()
+                    val pad = if (plan != null) MapFirstView.PAD else scene.nodeRadius
+                    val fill = if (plan != null) GraphTilt.CANONICAL_FILL else 0.8f
+                    val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets -> MapFirstView.tilted(points, pad, fill, 1f, SPACE_PITCH, w, h, insets) }
+                    first
+                }
+                else -> {
+                    val points = if (tree.nodeCount <= MapFirstView.FAST_LIMIT) bodies() else emptyList()
+                    // the scene's spacing estimate: a node is about 0.3 of it (MapScene.of)
+                    val margin = scene.nodeRadius / 0.3f * MapFirstView.FAST_MARGIN
+                    val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
+                    val radius = tree.radius[Octree.ROOT]
+                    val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets -> MapFirstView.framing(points, margin, w, h, insets) ?: MapFirstView.framing(centre, radius, w, h, insets) }
+                    first
+                }
+            }
+        }
     }
 }
 
@@ -981,6 +1171,30 @@ private class FrameLoop(
         if (continuous || !FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)) {
             Choreographer.getInstance().postFrameCallback(this)
         } else running = false
+    }
+}
+
+/**
+ * The tests' spot (Map3DView's spot): the biggest crisp body at least [MARGIN_DP] inside the map's
+ * sides, below [high] pixels of chrome at its top and above [low] at its foot, and as far outside
+ * the open peek card ([peek], the map's own pixels), so a finger put there reaches the map. Null
+ * when no body is so placed.
+ */
+internal object MapSpot {
+    const val MARGIN_DP = 48f
+
+    fun pick(nodes: List<ScreenNode>, width: Float, height: Float, high: Float, low: Float, margin: Float, peek: Rect?): ScreenNode? {
+        val right = width - margin
+        val top = high + margin
+        val bottom = height - low - margin
+        val card = peek?.inflate(margin)
+        var best: ScreenNode? = null
+        for (n in nodes) {
+            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < top || n.y > bottom) continue
+            if (card != null && card.contains(Offset(n.x, n.y))) continue
+            if (best == null || n.pixels > best.pixels) best = n
+        }
+        return best
     }
 }
 

@@ -11,25 +11,56 @@ import org.junit.Test
 // help the map's hint repeats.
 class MapLegendTest {
     private val everyLine: List<String>
-        get() = GraphTheme.entries.flatMap { theme ->
-            val c = MapLegend.of(theme, readout = true)
-            c.rows.flatMap { listOf(it.name, it.text, it.how) } + c.rungs.map { it.caption } + listOf(c.ladderCaption, c.ladderLabel, c.touch) + theme.cardSteps
-        }
+        get() = GraphTheme.entries.flatMap(::linesOf)
 
-    @Test fun spaceHasNoLadderAndItsSixLooksAndLinks() {
+    /** Every line [theme]'s legend and card show. */
+    private fun linesOf(theme: GraphTheme): List<String> {
+        val c = MapLegend.of(theme, readout = true)
+        return c.rows.flatMap { listOf(it.name, it.text, it.how) } + c.rungs.map { it.caption } + listOf(c.ladderCaption, c.ladderLabel, c.touch) + theme.cardSteps
+    }
+
+    /** Space's rows (S05h), pinned word for word: iOS's (GraphLegend.swift:228-252), the how-lines in Android's words. */
+    private val spacePinned = listOf(
+        LegendRow("circle.circle.fill", "Black hole",
+            "A top-level folder: the heart of a galaxy. Ideas filed straight in it orbit close; its folders shine round it as stars. Bigger holds more ideas.",
+            LegendTint(1.0, 0.68, 0.28), MapLegend.MAKE_FOLDER),
+        LegendRow("sun.max.fill", "Star",
+            "A folder inside a folder: yellow, orange one level deeper, red deeper still. Bigger holds more; a folder is always drawn a little smaller than the one it sits in. An empty folder is a dark star.",
+            LegendTint(1.0, 0.8, 0.0), MapLegend.FOLDER_INSIDE),
+        LegendRow("circle.lefthalf.filled", "Gas giant", "A page. Bigger is longer; rings mean over 250 words.", LegendTint(0.86, 0.70, 0.48)),
+        LegendRow("globe.europe.africa.fill", "Rocky planet", "An idea. Brighter means more links.", LegendTint(0.35, 0.6, 1.0), MapLegend.ADD_IDEA),
+        LegendRow("moon.fill", "Moon", "A short idea linked only to the one it circles.", LegendTint(0.7, 0.7, 0.7), "Link a short idea to one other idea."),
+        LegendRow("dot.radiowaves.left.and.right", "Pulsar", "An idea linking ideas in two or more other folders. Its links pulse together.",
+            LegendTint(0.7, 0.8, 1.0), "Link an idea to ideas in two other folders."),
+        LegendRow("sparkle", "Comet",
+            "An idea in no folder. It swings past the folder it links to most; file it and it settles into orbit. Older ones wait in the far cloud.",
+            LegendTint(0.55, 1.0, 0.9), "Move an idea out of its folder: Choose folder › To sort."),
+        LegendRow("point.3.connected.trianglepath.dotted", "Links",
+            "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.", LegendTint(1.0, 0.78, 0.5), MapLegend.LINK_IDEAS),
+    )
+
+    /** Space's touch help (S05h), pinned word for word: Fly in, Recentre, the planets following, inner orbits. */
+    private val spaceTouch = "Tap a body to preview it on a card. Tap again or Open to read an idea, or Open folder for a folder. " +
+        "On a star’s or black hole’s card, Fly in takes you into its system. Recentre brings back the whole map. " +
+        "Show links on an idea’s card keeps only that idea’s links and dims the rest. All links brings everything back. " +
+        "Hold a body, then drag to move it. Move a star and its planets follow. Let go and it springs back. " +
+        "Hold a body still to see its options. Tap empty space to close the card, or twice for the whole map. " +
+        "Inner orbits turn faster. Drag to turn, two fingers to slide, pinch to zoom."
+
+    @Test fun spaceHasIosLadderAndRowsWithTheMoon() {
         val c = MapLegend.of(GraphTheme.SPACE)
-        assertTrue("no folder or page bodies, so no ladder", c.rungs.isEmpty() && c.ladderCaption.isEmpty() && c.ladderLabel.isEmpty())
-        // iOS's order, less the Moon (not drawn)
-        assertEquals(listOf("Black hole", "Star", "Gas giant", "Rocky planet", "Pulsar", "Comet", "Links"), c.rows.map { it.name })
-        assertEquals(listOf("circle.circle.fill", "sun.max.fill", "circle.lefthalf.filled", "globe.europe.africa.fill",
-            "dot.radiowaves.left.and.right", "sparkle", "point.3.connected.trianglepath.dotted"), c.rows.map { it.symbol })
-        assertEquals(LegendTint(1.0, 0.68, 0.28), c.rows[0].tint)
-        assertEquals(LegendTint(0.35, 0.6, 1.0), c.rows[3].tint)
-        assertEquals(LegendTint(1.0, 0.78, 0.5), c.rows[6].tint)
-        // each look's line is its link count, as the card says (GraphStyleChoice.codes)
-        assertEquals(listOf("eight links or more", "five to seven links", "three or four links", "two links", "one link", "no links"),
-            c.rows.take(6).map { it.text.removePrefix("An idea with ").removeSuffix(".") })
-        assertEquals("only Links says how", listOf(MapLegend.LINK_IDEAS), c.rows.map { it.how }.filter { it.isNotEmpty() })
+        // iOS's five rungs (GraphLegend.swift:220-226), caption and label (:257-258)
+        assertEquals(listOf("Top folder" to 30, "Folder" to 24, "Page" to 18, "Idea" to 13, "Detail" to 8), c.rungs.map { it.caption to it.size })
+        assertEquals(listOf(LegendTint(0.0, 0.0, 0.0), LegendTint(1.0, 0.95, 0.78), LegendTint(0.82, 0.66, 0.46), LegendTint(0.25, 0.48, 0.85),
+            LegendTint(0.62, 0.62, 0.62)), c.rungs.map { it.fill })
+        assertEquals(listOf(LegendTint(1.0, 0.68, 0.28), null, LegendTint(0.95, 0.86, 0.66), null, null), c.rungs.map { it.ring })
+        assertEquals(listOf(true, false, false, false, false), c.rungs.map { it.halo })
+        assertEquals(listOf(false, false, true, false, false), c.rungs.map { it.ringed })
+        assertEquals("Bigger bodies hold more.", c.ladderCaption)
+        assertEquals("Size ladder: top folder, folder, page, idea, detail", c.ladderLabel)
+        // iOS's eight rows, the Moon among them, each word for word
+        assertEquals(spacePinned, c.rows)
+        assertEquals(spaceTouch, c.touch)
     }
 
     @Test fun neuronsHasIosLadderAndRows() {
@@ -39,11 +70,11 @@ class MapLegendTest {
         assertEquals("Bigger cells hold more.", c.ladderCaption)
         assertEquals("Size ladder: cell, part, page, idea", c.ladderLabel)
         assertEquals(LegendTint(0.35, 1.0, 0.5, 0.22), c.rungs[0].fill)
-        assertEquals(listOf("Cell", "Cell part", "Vesicle", "Granule", "To sort", "Opening a cell", "Axons and synapses"), c.rows.map { it.name })
+        assertEquals(listOf("Cell", "Cell part", "Vesicle", "Granule", "To sort", "Opening a cell", "Cell states", "Axons and synapses"), c.rows.map { it.name })
         assertEquals(listOf("circle.hexagongrid.fill", "smallcircle.filled.circle", "circle.fill", "aqi.medium", "tray.fill",
-            "arrow.up.left.and.arrow.down.right", "bolt.horizontal.fill"), c.rows.map { it.symbol })
+            "arrow.up.left.and.arrow.down.right", "sparkles", "bolt.horizontal.fill"), c.rows.map { it.symbol })
         assertEquals(listOf(MapLegend.MAKE_FOLDER, MapLegend.FOLDER_INSIDE, "", MapLegend.ADD_IDEA, "Choose folder › To sort.",
-            "Tap a cell, then Fly in on its card.", MapLegend.LINK_IDEAS), c.rows.map { it.how })
+            "Tap a cell, then Fly in on its card.", CELL_STATES_HOW, MapLegend.LINK_IDEAS), c.rows.map { it.how })
     }
 
     @Test fun performanceHasTheRungsAndRowsAndroidDraws() {
@@ -59,16 +90,42 @@ class MapLegendTest {
     }
 
     @Test fun noneAboutWorkStillToCome() {
-        val all = everyLine.joinToString("\n").lowercase()
+        // every line but Space's pinned rows and touch help (S05h's Moon, ladder, planets following and
+        // inner orbits), which are checked word for word below; taken out of Space's lines only, so a line
+        // another look shares is still checked there
+        val space = MapLegend.of(GraphTheme.SPACE)
+        val pinned = (space.rows.flatMap { listOf(it.name, it.text, it.how) } + space.touch).toSet()
+        val all = GraphTheme.entries.flatMap { theme -> linesOf(theme).let { if (theme == GraphTheme.SPACE) it - pinned else it } }
+            .joinToString("\n").lowercase()
         // S05g brought Show links and the empty double tap, S05g2 the move (theTouchHelpIsTheHint); the
-        // rest waits, a moved star's planets (S05h) among it
-        for (later in listOf("moon", "cell states", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
-            "breathing", "orbits")) {
+        // rest waits
+        // S05i brought the cell states: "cell states" and "breathing" left this list for the exact check of
+        // Neurons' Cell states row below
+        for (later in listOf("moon", "its planets", "planets follow", "folder lines", "thin grey lines", "hub with", "tour",
+            "orbits")) {
             assertFalse("\"$later\" waits for later work", all.contains(later))
         }
-        // and no row says what Android does not draw: no page body in Space, no larger page point in Performance
+        // Neurons' rows run …, Opening a cell, Cell states, Axons and synapses, the Cell states row iOS's word for word
+        val neurons = MapLegend.of(GraphTheme.NEURONS).rows
+        assertEquals(listOf("Opening a cell", "Cell states", "Axons and synapses"), neurons.map { it.name }.takeLast(3))
+        val cells = neurons.single { it.name == "Cell states" }
+        assertEquals(CELL_STATES_TEXT, cells.text)
+        assertEquals(CELL_STATES_HOW, cells.how)
+        assertEquals("sparkles", cells.symbol)
+        assertEquals(LegendTint(0.82, 0.36, 1.0), cells.tint)
+        // and only there: no other line of any look names a cell state's breathing
+        val cellsPinned = setOf(cells.name, cells.text, cells.how)
+        assertFalse("breathing only in the Cell states row", GraphTheme.entries.flatMap { linesOf(it) }.filter { it !in cellsPinned }
+            .any { it.lowercase().contains("breathing") || it.lowercase().contains("cell states") })
+        // the four allowed in Space only where pinned: every pinned Space row and the touch help exactly
+        assertEquals(spacePinned, space.rows)
+        assertEquals(spaceTouch, space.touch)
+        // and no row says what Android does not draw: no larger page point in Performance
         assertFalse(MapLegend.of(GraphTheme.PERFORMANCE, true).rows.any { it.name == "Page" })
-        assertFalse(MapLegend.of(GraphTheme.SPACE).rows.any { it.text.contains("folder") || it.text.contains("page") })
+        // nothing of S05h2's or S05i's (deaths, sparks, cell states, the Look filter)
+        // (Neurons' Cell states row, S05i's own, is pinned above and left out here)
+        val words = everyLine.filter { it !in cellsPinned }.joinToString("\n").lowercase()
+        for (later in listOf("death", "spark", "cell state", "look filter", "ghost")) assertFalse("\"$later\" is S05h2's or S05i's", words.contains(later))
     }
 
     @Test fun noLineNamesAPlusMenuOrTheBar() {
@@ -103,9 +160,13 @@ class MapLegendTest {
         val move = "Hold a body, then drag to move it. "
         val back = "Let go and it springs back. "
         val still = "Hold a body still to see its options."
-        assertTrue(MapLegend.touchHelp(GraphTheme.SPACE).contains(move + back + still))
+        // S05h: in Space a moved star's planets follow, as a moved cell's insides do
+        assertTrue(MapLegend.touchHelp(GraphTheme.SPACE).contains(move + "Move a star and its planets follow. " + back + still))
         assertTrue(MapLegend.touchHelp(GraphTheme.NEURONS).contains(move + "Move a cell and everything inside it follows. " + back + still))
-        assertFalse("a Space body carries nothing yet", MapLegend.touchHelp(GraphTheme.SPACE).contains("inside it"))
+        // S05h: Fly in on a folder's card and Recentre, as the code does; never two taps to fly (iOS's footer, GraphLegend.swift:254)
+        val space = MapLegend.touchHelp(GraphTheme.SPACE)
+        assertTrue(space.contains("On a star’s or black hole’s card, Fly in takes you into its system. Recentre brings back the whole map."))
+        assertFalse("no two taps to fly", space.contains("twice to fly") || space.contains("Tap a star"))
         for (theme in GraphTheme.entries) assertEquals("$theme: one move sentence", if (theme == GraphTheme.PERFORMANCE) 0 else 1,
             Regex("drag to move it").findAll(theme.hint).count())
         val perf = MapLegend.touchHelp(GraphTheme.PERFORMANCE)
@@ -122,7 +183,42 @@ class MapLegendTest {
         val toSort = MapLegend.of(GraphTheme.NEURONS).rows[4]
         assertEquals("To sort: the ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins " +
             "that folder’s cell. Choose folder › To sort.", MapLegend.spoken(toSort))
-        val comet = MapLegend.of(GraphTheme.SPACE).rows[5]
-        assertEquals("Comet: an idea with no links.", MapLegend.spoken(comet))
+        val comet = MapLegend.of(GraphTheme.SPACE).rows[6]
+        assertEquals("Comet: an idea in no folder. It swings past the folder it links to most; file it and it settles into orbit. " +
+            "Older ones wait in the far cloud. Move an idea out of its folder: Choose folder › To sort.", MapLegend.spoken(comet))
+    }
+
+    // S05j 7d: each [[ step says what to do and what it makes, with no colon joining two clauses;
+    // the same words as iOS's (GraphTheme.swift:143, :147, :151; MapLookTests.swift)
+    @Test fun theLinkStepsJoinNoClausesWithAColon() {
+        assertEquals("Type [[ and another idea’s title in an idea to join them with a link.", GraphTheme.SPACE.cardSteps.last())
+        assertEquals("Type [[ and another idea’s title in an idea to join them with an axon.", GraphTheme.NEURONS.cardSteps.last())
+        assertEquals("Type [[ and another idea’s title in an idea to join them with a line.", GraphTheme.PERFORMANCE.cardSteps.last())
+        for (theme in GraphTheme.entries) {
+            val step = theme.cardSteps.single { it.contains("[[") }
+            assertFalse("$theme: no colon in \"$step\"", step.contains(":"))
+            // a colon after a control path stays
+            for (other in theme.cardSteps - step) assertTrue("$theme: \"$other\"", other.indexOf(':') < 0 || other.startsWith("Hold an idea › Choose folder › New folder:") || other.startsWith("Type an idea in"))
+        }
+    }
+
+    // S05j 7e: Space's touch help follows iOS's hint (GraphTheme.swift:97-99) where the two maps do the
+    // same, and says more only where Android's map does: Fly in, Show links, the double tap, two fingers
+    @Test fun spacesTouchHelpFollowsIosWords() {
+        val space = MapLegend.touchHelp(GraphTheme.SPACE)
+        assertTrue(space.startsWith("Tap a body to preview it on a card. "))
+        assertFalse("iOS's words: preview it, not its idea", space.contains("preview its idea"))
+        // iOS: "Hold a body to move it, or hold it still for its options." Android splits it, one idea a
+        // sentence, and says what letting go does (S05g's ux-writing finding)
+        assertTrue(space.contains("Hold a body, then drag to move it. "))
+        assertTrue(space.contains("Hold a body still to see its options. "))
+        assertTrue("iOS's last clause, the same", space.endsWith("pinch to zoom."))
+        assertEquals("one text", space, GraphTheme.SPACE.hint)
+    }
+
+    private companion object {
+        /** Neurons' Cell states row, iOS's words (GraphLegend.swift:302-304). */
+        const val CELL_STATES_TEXT = "Each idea shows a state, as the space’s bodies have styles: resting, slowly breathing; firing, a burst of spikes with calcium waves spreading; releasing, a cloud of transmitter drifting out; pacemaker, a steady beat with two lobes sweeping round; migrating, crawling on behind its growth cone; engulfing, drawing debris into a dark phagosome. Left alone, every idea rests."
+        const val CELL_STATES_HOW = "Look › Cells: one state for every idea, or Cell by cell for one folder."
     }
 }

@@ -365,7 +365,7 @@ struct Graph3DView: View {
     private var perfSpace: some View {
         GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
-                       touch: touchHandlers, bold: bold)
+                       touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
                 bottomPanels(nil)
             }

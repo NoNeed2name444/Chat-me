@@ -53,16 +53,19 @@ class MapModeRenderTest {
 
     /** A screen: its name in the file, whether its store is filled, and what is opened over the map. */
     private enum class Over { NONE, LOOKS, LIST }
-    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE, val stacked: Boolean = false)
+    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE, val stacked: Boolean = false,
+                       val straight: Boolean = false)
 
     // "stacked": the board with S05c's places (IdeasFixture.stacked), cards on one place and at (0, 0)
     private val shots = listOf(Shot("board", true), Shot("empty", false), Shot("looks", true, Over.LOOKS), Shot("list", true, Over.LIST),
-        Shot("stacked", true, stacked = true))
+        Shot("stacked", true, stacked = true),
+        // S05j item 5: the Board with Lines: Straight, beside iOS's 49-1-board-straight-lines
+        Shot("board_straight", true, straight = true))
 
     private var which by mutableIntStateOf(0)
 
     @OptIn(ExperimentalRoborazziApi::class)
-    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty", "stacked"), scale: Float = 1f) = checks {
+    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty", "stacked", "board_straight"), scale: Float = 1f) = checks {
         val list = shots.filter { it.name in names }
         val models = list.map {
             IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, it.filled, if (it.stacked) IdeasFixture.stacked else IdeasFixture.notes))
@@ -77,8 +80,9 @@ class MapModeRenderTest {
             }
         }
         for (i in list.indices) {
-            which = i
             val shot = list[i]
+            IdeasSettings(compose.activity).setStraightLines(shot.straight)
+            which = i
             val name = "mapmode_${shot.name}_${window}_${if (dark) "dark" else "light"}"
             open(this, name, shot)
             val file = File("build/outputs/roborazzi/$name.png")

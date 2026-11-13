@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A theme's legend ("How your universe is built", "How your network is
-/// built", "How the fast map is built"), from the Look menu or the
+/// built", "How Performance is built"), from the Look menu or the
 /// first-run card: a size ladder across the top, then one row per kind of
 /// body - what it is, and how to make one with the app's own controls
 /// (Choose folder's New folder, a folder's hold menu in Sort, an idea typed
@@ -373,7 +373,8 @@ struct GraphUniverseHint: View {
     var theme: GraphTheme = .space
     /// The theme's three ways to add (the first time in a theme).
     var steps: Bool = true
-    /// How to touch the map (GraphPeek.coachLines), once per theme.
+    /// How to touch the map (GraphPeek.coachLines), once per theme, shown
+    /// only on a card without the steps.
     var touch: Bool = true
     let more: () -> Void
     let done: () -> Void
@@ -384,7 +385,12 @@ struct GraphUniverseHint: View {
         VStack(alignment: .leading, spacing: WardSpace.m) {
             Text(steps ? theme.cardTitle : "Touching the map")
                 .wardFont(.headline)
-            if touch {
+            // at most a third of the phone's height (S05j item 4): with the
+            // theme's steps the touch lines are left out, and putting the
+            // card away marks them seen too (markCardSeen), so a new user
+            // finds them in the legend's Full list; the same on Android
+            // (MapTouchCard)
+            if touch && !steps {
                 VStack(alignment: .leading, spacing: WardSpace.s) {
                     ForEach(Array(GraphPeek.coachLines.enumerated()), id: \.offset) { k, line in
                         Label(line, systemImage: Self.touchSymbols[k % Self.touchSymbols.count])

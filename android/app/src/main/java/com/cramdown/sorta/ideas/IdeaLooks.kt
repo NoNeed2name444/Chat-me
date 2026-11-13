@@ -22,7 +22,9 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     val legendTitle: String get() = when (this) {
         SPACE -> "How your universe is built"
         NEURONS -> "How your network is built"
-        PERFORMANCE -> "How the Performance map is built"
+        // S05j 8c: the old "How the Performance map is built" was cut beside Done on a 360 dp phone even
+        // with the bar's leading room; it now names the look as the Look menu does, on both platforms
+        PERFORMANCE -> "How Performance is built"
     }
 
     /** What TalkBack calls the map. */
@@ -44,10 +46,10 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         PERFORMANCE -> "Your ideas, built for speed"
     }
 
-    /** What the map is made of on Android: Space's bodies come from links (the Universe is not ported, GraphStyleChoice.codes). */
+    /** What the map is made of: Space's default look is iOS's Universe (S05h; GraphTheme.swift:118-122). */
     val cardText: String get() = when (this) {
-        SPACE -> "Every idea is a body, and its links choose which: a comet has none, a pulsar one, " +
-            "a rocky planet two, a gas giant three or four, a sun five to seven and a black hole eight or more."
+        SPACE -> "Top-level folders are black holes, folders are stars, pages are gas giants " +
+            "and ideas are rocky planets. Bigger holds more."
         NEURONS -> "Top-level folders are cells, folders are the parts inside them, " +
             "pages are vesicles and ideas granules. Ideas in no folder share one cell. " +
             "Links grow out of the cells as axons carrying impulses."
@@ -56,17 +58,20 @@ enum class GraphTheme(val rawValue: String, val title: String) {
     }
 
     val cardSteps: List<String> get() = when (this) {
-        SPACE -> listOf("Type [[ and another idea’s title in an idea: a link joins them. Each idea’s links choose its body.",
-            "Look › Bodies: one body for every idea, or Folder looks for one folder’s ideas.")
+        // Space: iOS's three (GraphTheme.swift:136-141). The [[ step says what to do and what it makes
+        // with no colon joining two clauses (S05j 7d); a colon after a control path stays
+        SPACE -> listOf("Hold an idea › Choose folder › New folder: a new galaxy round its black hole.",
+            "Type an idea in a folder in Sort: a new rocky planet.",
+            "Type [[ and another idea’s title in an idea to join them with a link.")
         // Map mode has no + menu and no bar (S05f item 4): a top-level folder comes from Choose
         // folder on an idea held on the map (in a folder in Sort it would make one inside), an
         // idea from Sort, and nothing in Sorta makes a page
         NEURONS -> listOf("Hold an idea › Choose folder › New folder: a new cell.",
             "Type an idea in Sort: a new granule.",
-            "Type [[ and another idea’s title in an idea: an axon joins them.")
+            "Type [[ and another idea’s title in an idea to join them with an axon.")
         PERFORMANCE -> listOf("Hold an idea › Choose folder › New folder: a folder of points in one colour.",
             "Type an idea in Sort: a new point.",
-            "Type [[ and another idea’s title in an idea: a line joins them.")
+            "Type [[ and another idea’s title in an idea to join them with a line.")
     }
 
     companion object {

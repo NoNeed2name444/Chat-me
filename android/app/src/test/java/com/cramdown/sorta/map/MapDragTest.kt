@@ -285,6 +285,171 @@ class MapDragTest {
         assertEquals(0.0, still.orbitTime, 0.0)
     }
 
+    @Test fun aPressedOrHoveredBodyStopsTheOrbitClockToo() {
+        // S05h: iOS's busy is pressedNote, hovered or grabbed (advanceOrbits, GraphMotion.swift:1752)
+        for (how in listOf("pressed", "hovered")) {
+            val drag = run()
+            repeat(60) { drag.step(frame) }
+            if (how == "pressed") drag.pressed = 0 else drag.hovered = 0
+            repeat(18) { drag.step(frame) }
+            assertTrue("$how: within 5 % of 0 by 0.3 s, ${drag.orbitRate}", drag.orbitRate < 0.05f)
+            if (how == "pressed") drag.pressed = -1 else drag.hovered = -1
+            repeat(150) { drag.step(frame) }
+            assertTrue("$how: within 5 % of 1 by 2.5 s after, ${drag.orbitRate}", drag.orbitRate > 0.95f)
+        }
+        val still = run(lively = false)
+        still.pressed = 0
+        still.hovered = 0
+        repeat(60) { still.step(frame) }
+        still.pressed = -1
+        still.hovered = -1
+        repeat(60) { still.step(frame) }
+        assertEquals("animations off: the clock stays at 0", 0.0, still.orbitTime, 0.0)
+    }
+
+    @Test fun aPressIsTimedOnTheOrbitClock() {
+        // S05h repair 4: the seconds stepped while pressed, every press together, and for the latest when
+        // its ease got under SLOW (MapDrawn.pressedSeconds, .pressSlowedSeconds)
+        val drag = run()
+        repeat(60) { drag.step(frame) }
+        assertEquals(0.0, drag.pressedTime, 0.0)
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        drag.hovered = 0
+        repeat(30) { drag.step(frame) }
+        assertEquals("a hover is no press", 0.0, drag.pressedTime, 0.0)
+        drag.hovered = -1
+        repeat(150) { drag.step(frame) }
+        drag.pressed = 0
+        repeat(17) { drag.step(frame) }
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        repeat(13) { drag.step(frame) }
+        assertEquals(0.5, drag.pressedTime, 1e-5)
+        // under 0.05 after ln 20 × τ ≈ 0.2996 s: the 18th frame of 1/60 s
+        assertEquals(0.3, drag.pressSlowedAfter, 1e-5)
+        assertTrue(drag.orbitRate < MapDrag.SLOW)
+        drag.pressed = -1
+        repeat(150) { drag.step(frame) }
+        assertEquals("no press, no seconds", 0.5, drag.pressedTime, 1e-5)
+        assertEquals("the latest press's ease kept", 0.3, drag.pressSlowedAfter, 1e-5)
+        // a second press on long frames: its own ease, its seconds added to the first's
+        drag.pressed = 0
+        drag.step(0.25f)
+        assertEquals(-1.0, drag.pressSlowedAfter, 0.0)
+        drag.step(0.25f)
+        assertEquals(1.0, drag.pressedTime, 1e-5)
+        assertEquals(0.5, drag.pressSlowedAfter, 1e-5)
+        // with animations off nothing steps
+        val still = run(lively = false)
+        still.pressed = 0
+        repeat(60) { still.step(frame) }
+        assertEquals(0.0, still.pressedTime, 0.0)
+        assertEquals(-1.0, still.pressSlowedAfter, 0.0)
+    }
+
+    @Test fun aPressIsTakenAtItsFirstStepAndEndsAtTheFirstWithout() {
+        // S05h repair 5: MapDrag.pressTaken, which the renderer turns into MapDrawn.pressTakenAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertFalse("no press yet", drag.pressTaken)
+        drag.pressed = 0
+        assertFalse("not till a step sees it", drag.pressTaken)
+        drag.step(frame)
+        assertTrue("taken at the first pressed step", drag.pressTaken)
+        repeat(30) { drag.step(frame) }
+        assertTrue("still taken while pressed", drag.pressTaken)
+        drag.pressed = -1
+        assertTrue("held till a step sees the lift", drag.pressTaken)
+        drag.step(frame)
+        assertFalse("ended at the first step without", drag.pressTaken)
+        drag.hovered = 0
+        repeat(10) { drag.step(frame) }
+        assertFalse("a hover is no press", drag.pressTaken)
+    }
+
+    @Test fun aPressNotesWhenItReachedTheMapTillTheFingerLifts() {
+        // S05h repair 7: MapDrag.pressArrivedAtMs, which the renderer hands on as MapDrawn.pressArrivedAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertEquals("no press yet", -1L, drag.pressArrivedAtMs)
+        drag.press(0, 5_000L)
+        assertEquals("noted as it comes, before any step", 5_000L, drag.pressArrivedAtMs)
+        assertEquals(0, drag.pressed)
+        assertFalse("not taken till a step sees it", drag.pressTaken)
+        drag.step(frame)
+        assertTrue(drag.pressTaken)
+        // the same finger handed on again while it stays down: still the one press, its arrival kept
+        drag.press(0, 5_300L)
+        repeat(10) { drag.step(frame) }
+        assertEquals("kept while the finger stays down", 5_000L, drag.pressArrivedAtMs)
+        drag.press(-1, 6_000L)
+        assertEquals("gone with the lift", -1L, drag.pressArrivedAtMs)
+        assertEquals(-1, drag.pressed)
+        drag.step(frame)
+        assertFalse(drag.pressTaken)
+        drag.press(0, 7_000L)
+        assertEquals("a new press its own arrival", 7_000L, drag.pressArrivedAtMs)
+    }
+
+    @Test fun aPressIsSlowedFromItsFirstStepUnderTheBarTillItEnds() {
+        // S05h repair 6: MapDrag.pressSlowed, which the renderer turns into MapDrawn.pressSlowedAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertFalse("no press yet", drag.pressSlowed)
+        drag.hovered = 0
+        repeat(60) { drag.step(frame) }
+        assertTrue("a hover slows the clock", drag.orbitRate < 0.05f)
+        assertFalse("but a hover is no press", drag.pressSlowed)
+        drag.hovered = -1
+        repeat(240) { drag.step(frame) }
+        assertTrue("running again", drag.orbitRate > 0.9f)
+        drag.pressed = 0
+        var steps = 0
+        while (!drag.pressSlowed && steps < 120) {
+            assertTrue("not slowed while the rate is 0.05 or more", drag.orbitRate >= 0.05f)
+            drag.step(frame); steps++
+        }
+        assertTrue("slowed at the first step under 0.05", drag.pressSlowed && drag.orbitRate < 0.05f)
+        assertTrue("within 0.3 s of 1/60 s frames ($steps)", steps * frame <= 0.3f + 1e-4f)
+        repeat(30) { drag.step(frame) }
+        assertTrue("kept while pressed", drag.pressSlowed)
+        drag.pressed = -1
+        drag.step(frame)
+        assertFalse("ended with the press", drag.pressSlowed)
+        drag.pressed = 0
+        drag.step(frame)
+        assertTrue("a new press on a still clock is slowed at its first step", drag.pressTaken && drag.pressSlowed)
+    }
+
+    @Test fun aHeldStarCarriesItsPlanetsAndMoons() {
+        // a star (0), its planet (1) and the planet's moon (2): held at d, each settles at d within
+        // 2 %, never above 1.05 d (S05h A2)
+        for (lively in listOf(true, false)) {
+            val drag = run(3, lively = lively, parents = intArrayOf(-1, 0, 1))
+            val d = 3f
+            drag.grab(0)
+            drag.drag(drag.homeOf(0) + Vec3(d, 0f, 0f))
+            var most = 0f
+            repeat((4f / frame).toInt()) {
+                drag.step(frame)
+                most = max(most, max(drag.offset(1, 0), drag.offset(2, 0)))
+            }
+            for (i in 1..2) assertEquals("lively $lively: body $i settles at d", d, drag.offset(i, 0), d * 0.02f)
+            assertTrue("lively $lively: never above 1.05 d, $most", most <= 1.05f * d)
+        }
+        // the same family out of index order (the Universe's chunk order): the moon 0, the star 1 and the
+        // planet 2, ranked star, planet, moon, carry as above; without the rank the moon carries nothing
+        for (ranked in listOf(true, false)) {
+            val drag = MapDrag(3, MapDragPath.ORBITS, 1f, line(3), intArrayOf(2, -1, 1), rank = if (ranked) intArrayOf(2, 0, 1) else null)
+            val d = 3f
+            drag.grab(1)
+            drag.drag(drag.homeOf(1) + Vec3(d, 0f, 0f))
+            repeat((4f / frame).toInt()) { drag.step(frame) }
+            assertEquals("ranked $ranked: the planet follows", d, drag.offset(2, 0), d * 0.02f)
+            if (ranked) assertEquals("the moon follows its planet", d, drag.offset(0, 0), d * 0.02f)
+            else assertEquals("unranked, a parent after its child carries nothing", 0f, drag.offset(0, 0), 0f)
+        }
+    }
+
     @Test fun atRestItDoesNoWork() {
         val drag = run(1000, MapDragPath.LINKS, links = IntArray(998) { it / 2 + it % 2 })
         repeat(120) { drag.step(frame) }

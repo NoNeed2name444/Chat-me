@@ -1,5 +1,7 @@
 package com.cramdown.sorta.ui.ideas
 
+import com.cramdown.sorta.map.NeuronState
+import com.cramdown.sorta.map.NeuronStateChoice
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,8 +25,10 @@ import com.cramdown.sorta.ui.wardColor
  * iOS's GraphPreviewRoot is: [look] is "space", "neurons" or "performance" for the 3D map, or
  * "board" for the flat board. MainActivity shows it only under its map-preview extra; no
  * screen a user reaches opens it. Until step 4 brings the editor, opening an idea does nothing.
+ * [cells] is the Neurons' state for every idea, as iOS's -graphPreviewCells (GraphPreview.swift:146-154):
+ * one of the six, else natural.
  */
-@Composable fun MapPreview(look: String) {
+@Composable fun MapPreview(look: String, cells: String? = null) {
     val context = LocalContext.current
     val model = remember { SampleIdeas.book().let { IdeasModel(it.notes, it.folders) } }
     val settings = remember { IdeasSettings(context) }
@@ -40,6 +44,8 @@ import com.cramdown.sorta.ui.wardColor
         } else {
             val theme = GraphTheme.entries.firstOrNull { it.rawValue == look } ?: GraphTheme.SPACE
             if (settings.theme != theme.rawValue) settings.setTheme(theme.rawValue)
+            val state = cells?.takeIf { NeuronState.raw(it) != null } ?: NeuronStateChoice.NATURAL_VALUE
+            if (settings.cellState != state) settings.setCellState(state)
             IdeasSpace(model.book, settings, covered = false, hidden = hidden, open = {}, openFolder = {})
         }
     }

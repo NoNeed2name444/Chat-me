@@ -187,4 +187,26 @@ class LabelContrastTest {
         assertEquals(0.5, LabelLook(false, LabelRgb.WHITE, LabelRgb.BLACK, 0.3, LabelRgb.WHITE, false, 0.2, 21.0).rimAlpha, 1e-9)
         assertEquals(LabelRgb.WHITE.mixed(LabelRgb.BLACK, 0.18), LabelLook(false, LabelRgb.WHITE, LabelRgb.BLACK, 1.0, LabelRgb.WHITE, true, 0.6, 21.0).rimShade)
     }
+
+    // S05h: a name in a Universe galaxy takes its tone, half and half with the usual rim (GraphUniverseScene.swift:333-339)
+    @Test fun aGalaxyTonesItsNamesRim() {
+        val tone = LabelRgb(0.9, 0.3, 0.1)
+        val base = LabelChooser.RIM_FILL
+        assertEquals(LabelRgb(0.40, 0.43, 0.55), base)
+        val rim = LabelChooser.rim(tone)
+        assertEquals((tone.r + base.r) / 2, rim.r, 1e-6)
+        assertEquals((tone.g + base.g) / 2, rim.g, 1e-6)
+        assertEquals((tone.b + base.b) / 2, rim.b, 1e-6)
+        val look = LabelChooser.choose(LabelBackdrop.flat(space), LabelRgb.WHITE, plain, tone = tone)
+        assertFalse(look.outline)
+        assertEquals(rim, look.rim)
+        // nothing else changes with the tone
+        assertEquals(nightLook.copy(rim = rim), look)
+        // Increase Contrast keeps its white rim
+        assertEquals(LabelRgb.WHITE, LabelChooser.choose(LabelBackdrop.flat(space), LabelRgb.WHITE, LabelSettings(increaseContrast = true), tone = tone).rim)
+        // and the tracker keeps the tone through a new measure
+        val tracker = LabelTracker(look, tone)
+        tracker.measure(LabelBackdrop.flat(space), LabelRgb.WHITE, plain, 0.4)
+        assertEquals(rim, tracker.target.rim)
+    }
 }
