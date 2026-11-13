@@ -64,7 +64,7 @@ import kotlin.math.max
 private const val CARD_WIDTH = IdeaBoardDrop.CARD_WIDTH
 private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
 
-@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp) {
+@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp, version: Int = 0) {
     val density = LocalDensity.current
     var size by remember { mutableStateOf(IntSize.Zero) }
     var zoom by remember { mutableDoubleStateOf(1.0) }
@@ -77,8 +77,10 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
     var dragX by remember { mutableDoubleStateOf(0.0) }
     var dragY by remember { mutableDoubleStateOf(0.0) }
     var adding by remember { mutableStateOf<BoardPoint?>(null) }
+    // [version] is the book's (IdeasModel.version): the book changes in place, so a change reaches the
+    // board by it, and its cards (a folder renamed beside them) with it
     val notes = book.notes
-    val edges = remember(notes) { book.allEdges() }
+    val edges = remember(notes, version) { book.allEdges() }
     val style = settings.lineStyle
     val hiddenDp = hidden.value.toDouble()
 
@@ -193,7 +195,7 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
         Layout(content = {
             notes.forEach { note ->
                 key(note.id) {
-                    BoardCard(book, note, chosen = note.id == source, lifted = note.id == dragging, zoom = zoom, chosenInk = chosenInk,
+                    BoardCard(book, version, note, chosen = note.id == source, lifted = note.id == dragging, zoom = zoom, chosenInk = chosenInk,
                         modifier = Modifier.layoutId(note.id)
                             // its size before the board's zoom (BoardCard's graphicsLayer), in px
                             .onSizeChanged { sizes[note.id] = it }
@@ -297,8 +299,11 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
     }
 }
 
-/** One card: its kind and folder in small type, the title, washed in its folder's colour. */
-@Composable private fun BoardCard(book: IdeaBook, note: Note, chosen: Boolean, lifted: Boolean, zoom: Double,
+/**
+ * One card: its kind and folder in small type, the title, washed in its folder's colour. [version] is
+ * the book's, read by no line here: a folder renamed in place reaches the card by it.
+ */
+@Composable private fun BoardCard(book: IdeaBook, @Suppress("UNUSED_PARAMETER") version: Int, note: Note, chosen: Boolean, lifted: Boolean, zoom: Double,
                                   chosenInk: androidx.compose.ui.graphics.Color, modifier: Modifier) {
     val shape = RoundedCornerShape(WardRadius.card.wardDp)
     val tone = toneColor(note.folderId, book)

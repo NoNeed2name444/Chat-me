@@ -201,6 +201,13 @@ data class MapDrawn(
      */
     val pressTakenAtMs: Long = -1,
     /**
+     * The device's uptime (SystemClock.uptimeMillis) at the renderer frame where the orbit rate first
+     * fell under 0.05 during the current press (S05h repair 6), −1 until then; reset when the press
+     * ends. With a test's uptime noted before its finger comes down, the touch's whole way to the
+     * slow-down is one difference on one clock, however late the record reaches the test.
+     */
+    val pressSlowedAtMs: Long = -1,
+    /**
      * Deaths (S05h2): the dying bodies before their own plan's end and the dying links drawn, both this
      * frame, the largest reach those links were drawn at (to a hundredth); and, kept for the map's life
      * (MapTotals), the bodies that began to die and their links, each counted once when its death
@@ -219,15 +226,23 @@ data class MapDrawn(
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
 
     /**
-     * This record with the press's seconds as the latest frame stepped them, and, when [takenNow]
-     * (MapDrag.pressTaken), the uptime the press was first taken: kept from an earlier frame of the
-     * same press, else [nowMs] read once, at this frame; −1 when no press is taken. The same record
-     * when nothing changed.
+     * This record with the press's seconds as the latest frame stepped them; when [takenNow]
+     * (MapDrag.pressTaken), the uptime the press was first taken; and when [slowNow] too
+     * (MapDrag.pressSlowed), the uptime its rate first fell under 0.05. Each is kept from an earlier
+     * frame of the same press, else [nowMs], read at most once, at this frame; −1 when no press is
+     * taken (and, for the slow-down, until it comes). The same record when nothing changed.
      */
-    fun pressing(secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, nowMs: () -> Long = { -1L }): MapDrawn {
-        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else nowMs()
-        return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt) this
-        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt)
+    fun pressing(
+        secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, slowNow: Boolean = false,
+        nowMs: () -> Long = { -1L },
+    ): MapDrawn {
+        var clock = -1L
+        val now = { if (clock < 0) clock = nowMs(); clock }
+        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else now()
+        val slowedAt = if (!takenNow || !slowNow) -1L else if (pressSlowedAtMs >= 0) pressSlowedAtMs else now()
+        return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt &&
+            pressSlowedAtMs == slowedAt) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt, pressSlowedAtMs = slowedAt)
     }
 
     /** This record with the deaths as the latest frame drew them; the same record when nothing changed. */
@@ -956,7 +971,7 @@ class GlMapRenderer(
             record = record.flying(flown)
             val d = drag
             if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat(),
-                d.pressTaken) { SystemClock.uptimeMillis() }
+                d.pressTaken, d.pressSlowed) { SystemClock.uptimeMillis() }
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }

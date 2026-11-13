@@ -276,7 +276,7 @@ internal object IdeasBanner {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop)
+            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version)
         // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),

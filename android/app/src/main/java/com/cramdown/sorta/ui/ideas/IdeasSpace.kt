@@ -139,12 +139,13 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
  * The 3D map of [book]. [open] reads an idea; [openFolder] a folder, or To sort (null) for the
  * home; [choose] files an idea (Choose folder) and [delete] deletes one, with Undo, both on the
  * caller's side. [top] is what the chrome covers above the map, from the window's top, which the
- * no-folder hint keeps under.
+ * no-folder hint keeps under. [version] is the book's (IdeasModel.version): the book changes in
+ * place, so a change (an Undo, an edit in the Sort pane beside the map) reaches the map by it.
  */
 @Composable fun IdeasSpace(
     book: IdeaBook, settings: IdeasSettings, covered: Boolean, hidden: Dp,
     open: (String) -> Unit, openFolder: (String?) -> Unit,
-    choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp,
+    choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
 ) {
     val theme = GraphTheme.stored(settings.theme)
     // the demo maps are a developer's, as on iOS, where only the readout offers them
@@ -255,7 +256,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
-                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown) { shown = it }
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown,
+                    version = version) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -372,18 +374,19 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
  * first view fits what the chrome leaves: under [top] and above [hidden], as the 2D board's.
  * [onShown] hears that the map is drawn, once its first frame is; until [shown] comes back, with the
  * screen's night look and tools, the wait covers the map, so the two come in the same frame.
+ * [version] is the book's: the map is rebuilt when it moves, whatever else is the same.
  */
 @Composable private fun NotesMap(book: IdeaBook, settings: IdeasSettings, theme: GraphTheme, recenter: Int, openPath: List<String>,
                                   linkLength: Double, onRoles: (Map<String, String>) -> Unit, top: Dp, hidden: Dp,
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
-                                  shown: Boolean, onShown: (Boolean) -> Unit) {
+                                  shown: Boolean, version: Int, onShown: (Boolean) -> Unit) {
     val notes = book.notes
-    val edges = remember(notes) { book.allEdges() }
+    val edges = remember(notes, version) { book.allEdges() }
     val main = settings.nodeStyle
     val folderRaw = settings.folderStyles
-    val built by produceState<BuiltMap?>(null, notes, theme, main, folderRaw, openPath, linkLength) {
+    val built by produceState<BuiltMap?>(null, notes, theme, main, folderRaw, openPath, linkLength, version) {
         value = builtOffMain {
             if (theme == GraphTheme.NEURONS) {
                 val neurons = MapScene.neurons(NeuronScene.of(neuronsInput(book, edges, openPath, linkLength)))

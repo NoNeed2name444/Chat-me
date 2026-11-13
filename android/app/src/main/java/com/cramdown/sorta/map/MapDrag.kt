@@ -284,6 +284,13 @@ class MapDrag(
      */
     val pressTaken: Boolean get() = pressStart >= 0
 
+    /**
+     * Whether the current press has slowed the orbit rate under [SLOW] (S05h repair 6): true from the
+     * first step of a taken press whose rate is under it until the press ends. The renderer notes the
+     * device's uptime at the frame where it turns true (MapDrawn.pressSlowedAtMs).
+     */
+    val pressSlowed: Boolean get() = pressStart >= 0 && pressSlowedAfter >= 0
+
     // the orbit clock eases to a stop within about 0.3 s while a body is pressed, hovered or held,
     // so it never slides from under the finger, and back over about 1.5 s after (advanceOrbits,
     // :1750-1765); still, the plan's own picture, time 0
