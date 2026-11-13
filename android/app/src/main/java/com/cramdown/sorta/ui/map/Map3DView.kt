@@ -47,6 +47,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -378,6 +379,11 @@ data class MapFlyTo(val id: String, val serial: Int)
     ease: MapEase? = null,
     /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
     flyTo: MapFlyTo? = null,
+    /**
+     * The peek card over the map, in the map's own pixels, null while none is open: the tests' spot
+     * keeps off it (MapSpot), so a finger put there lands on a body, not on the card.
+     */
+    peek: Rect? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -635,15 +641,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // every theme (Performance's too, S05g). Only the tests read it, so it is found where the
     // semantics are, in one pass with no lists made
     fun spot(): List<Float> {
-        val margin = with(density) { 48.dp.toPx() }
-        val right = viewSize.width - margin
-        val high = insets.top + margin
-        val low = viewSize.height - insets.bottom - cover - margin
-        var best: ScreenNode? = null
-        for (n in screenNodes) {
-            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < high || n.y > low) continue
-            if (best == null || n.pixels > best.pixels) best = n
-        }
+        val margin = with(density) { MapSpot.MARGIN_DP.dp.toPx() }
+        val best = MapSpot.pick(screenNodes, viewSize.width.toFloat(), viewSize.height.toFloat(),
+            high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
     Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
@@ -1119,6 +1119,30 @@ private class FrameLoop(
         if (continuous || !FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)) {
             Choreographer.getInstance().postFrameCallback(this)
         } else running = false
+    }
+}
+
+/**
+ * The tests' spot (Map3DView's spot): the biggest crisp body at least [MARGIN_DP] inside the map's
+ * sides, below [high] pixels of chrome at its top and above [low] at its foot, and as far outside
+ * the open peek card ([peek], the map's own pixels), so a finger put there reaches the map. Null
+ * when no body is so placed.
+ */
+internal object MapSpot {
+    const val MARGIN_DP = 48f
+
+    fun pick(nodes: List<ScreenNode>, width: Float, height: Float, high: Float, low: Float, margin: Float, peek: Rect?): ScreenNode? {
+        val right = width - margin
+        val top = high + margin
+        val bottom = height - low - margin
+        val card = peek?.inflate(margin)
+        var best: ScreenNode? = null
+        for (n in nodes) {
+            if (!n.crisp || n.pixels <= 2f || n.x < margin || n.x > right || n.y < top || n.y > bottom) continue
+            if (card != null && card.contains(Offset(n.x, n.y))) continue
+            if (best == null || n.pixels > best.pixels) best = n
+        }
+        return best
     }
 }
 

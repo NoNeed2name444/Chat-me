@@ -44,6 +44,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -179,6 +183,10 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     // Space's Universe: the folder Fly in last flew to, with a serial so the same folder flies again (S05h)
     var flyTo by remember(theme) { mutableStateOf<MapFlyTo?>(null) }
     LaunchedEffect(recenter) { openPath = emptyList(); flyTo = null }
+    // the peek card's bounds and this space's place, both in the window's pixels, while the card is
+    // open: the map's tests keep their spot off the card (Map3DView's peek)
+    var peekBounds by remember { mutableStateOf<Rect?>(null) }
+    var spaceAt by remember { mutableStateOf(Offset.Zero) }
 
     fun openBody(body: MapBody) {
         held = null
@@ -238,7 +246,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     val outer = LocalWardLook.current
     var shown by remember { mutableStateOf(false) }
     SortaTheme(dark = shown || outer.dark, section = outer.section) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onGloballyPositioned { spaceAt = it.positionInRoot() }) {
             when {
                 demo != null -> DemoMap(demo, recenter, settings.readout) { shown = it }
                 book.notes.isEmpty() -> Box(Modifier.fillMaxSize().background(wardColor(WardToken.background)).padding(bottom = hidden), contentAlignment = Alignment.Center) {
@@ -255,7 +263,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
-                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown) { shown = it }
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
+                    peek = peekBounds?.translate(-spaceAt), shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -294,6 +303,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 if (held == null && peek != null) {
                     val (body, content) = peek
                     androidx.compose.runtime.key(body.id) {
+                        DisposableEffect(Unit) { onDispose { peekBounds = null } }
                         MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { react(MapSelectionEvent.OpenCard, body) },
                             flyIn = {
                                 if (theme == GraphTheme.NEURONS) cellsOpenedBy(body.kind, body.id, book)?.let { openPath = it }
@@ -301,7 +311,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                             },
                             chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
                             option = { pick(it, body) },
-                            linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) })
+                            linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) },
+                            modifier = Modifier.onGloballyPositioned { peekBounds = it.boundsInRoot() })
                     }
                 }
             }
@@ -378,6 +389,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
+                                  peek: Rect?,
                                   shown: Boolean, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -464,7 +476,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, peek = peek)
         if (!shown) Building(null)
     }
 }

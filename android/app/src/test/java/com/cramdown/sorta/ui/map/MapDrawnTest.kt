@@ -184,27 +184,70 @@ class MapDrawnTest {
         var clock = 1_000L
         var reads = 0
         val now = { reads++; clock }
-        var d = MapDrawn().after(5, 16).stepped().pressing(0f, -1f, false, now)
+        var d = MapDrawn().after(5, 16).stepped().pressing(0f, -1f, false, nowMs = now)
         assertEquals("none before a press", -1L, d.pressTakenAtMs)
         assertEquals("the clock is not read without a press", 0, reads)
-        d = d.stepped().pressing(1f / 60, -1f, true, now)
+        d = d.stepped().pressing(1f / 60, -1f, true, nowMs = now)
         assertEquals(1_000L, d.pressTakenAtMs)
         repeat(30) {
             clock += 16
-            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, if (it >= 16) 0.3f else -1f, true, now)
+            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, if (it >= 16) 0.3f else -1f, true, nowMs = now)
         }
         assertEquals("kept from the first pressed frame", 1_000L, d.pressTakenAtMs)
         assertEquals("the clock read once, at that frame", 1, reads)
         // unchanged: the same record
-        assertSame(d, d.pressing(d.pressedSeconds, d.pressSlowedSeconds, true, now))
+        assertSame(d, d.pressing(d.pressedSeconds, d.pressSlowedSeconds, true, nowMs = now))
         // the lift: −1, nothing else changed
-        val lifted = d.pressing(d.pressedSeconds, d.pressSlowedSeconds, false, now)
+        val lifted = d.pressing(d.pressedSeconds, d.pressSlowedSeconds, false, nowMs = now)
         assertEquals(-1L, lifted.pressTakenAtMs)
         assertEquals(d, lifted.copy(pressTakenAtMs = 1_000L))
         // a new press takes the uptime of its own first frame
         clock = 9_000L
-        val again = lifted.pressing(lifted.pressedSeconds + 1f / 60, -1f, true, now)
+        val again = lifted.pressing(lifted.pressedSeconds + 1f / 60, -1f, true, nowMs = now)
         assertEquals(9_000L, again.pressTakenAtMs)
         assertEquals(2, reads)
+    }
+
+    // S05h repair 6: the uptime of the frame where the press first slowed the rate under 0.05, kept while
+    // the press lasts, −1 before that and after it
+    @Test fun thePressSlowedAtIsTheFirstSlowFramesUptime() {
+        var clock = 1_000L
+        var reads = 0
+        val now = { reads++; clock }
+        var d = MapDrawn().after(5, 16).stepped().pressing(0f, -1f, takenNow = false, slowNow = true, nowMs = now)
+        assertEquals("none without a press, whatever the rate", -1L, d.pressSlowedAtMs)
+        assertEquals(0, reads)
+        d = d.stepped().pressing(1f / 60, -1f, takenNow = true, slowNow = false, nowMs = now)
+        assertEquals(1_000L, d.pressTakenAtMs)
+        assertEquals("not slowed yet", -1L, d.pressSlowedAtMs)
+        repeat(17) {
+            clock += 16
+            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, -1f, takenNow = true, slowNow = false, nowMs = now)
+        }
+        assertEquals(-1L, d.pressSlowedAtMs)
+        assertEquals("the clock read only when the press was taken", 1, reads)
+        clock += 16
+        d = d.stepped().pressing(d.pressedSeconds + 1f / 60, 0.3f, takenNow = true, slowNow = true, nowMs = now)
+        assertEquals("the first slow frame's uptime", 1_288L, d.pressSlowedAtMs)
+        assertEquals("the press's own time kept", 1_000L, d.pressTakenAtMs)
+        assertEquals(2, reads)
+        repeat(30) {
+            clock += 16
+            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, 0.3f, takenNow = true, slowNow = true, nowMs = now)
+        }
+        assertEquals("kept from the first slow frame", 1_288L, d.pressSlowedAtMs)
+        assertEquals("the clock read once for it", 2, reads)
+        assertSame(d, d.pressing(d.pressedSeconds, d.pressSlowedSeconds, takenNow = true, slowNow = true, nowMs = now))
+        // the lift: both −1, nothing else changed
+        val lifted = d.pressing(d.pressedSeconds, d.pressSlowedSeconds, takenNow = false, slowNow = false, nowMs = now)
+        assertEquals(-1L, lifted.pressSlowedAtMs)
+        assertEquals(-1L, lifted.pressTakenAtMs)
+        assertEquals(d, lifted.copy(pressTakenAtMs = 1_000L, pressSlowedAtMs = 1_288L))
+        // a press taken and slowed at one frame reads the clock once for both
+        clock = 9_000L
+        val both = lifted.pressing(lifted.pressedSeconds + 0.25f, 0.25f, takenNow = true, slowNow = true, nowMs = now)
+        assertEquals(9_000L, both.pressTakenAtMs)
+        assertEquals(9_000L, both.pressSlowedAtMs)
+        assertEquals(3, reads)
     }
 }

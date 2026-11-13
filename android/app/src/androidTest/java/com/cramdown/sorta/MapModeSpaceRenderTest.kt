@@ -901,6 +901,11 @@ class MapModeSpaceRenderTest {
         SystemClock.sleep(500)
         val back = checkNotNull(mapDrawn())
         check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
+        // the pose comes home at once, the bodies' box only with the next frame drawn (the tablet's came
+        // 800 ms apart): the test thread sleeps, so the map can draw, until the box lies inside the map
+        val homeBy = SystemClock.uptimeMillis() + 10_000
+        while (SystemClock.uptimeMillis() < homeBy && mapDrawn()?.let { boxInside(it) } != true) SystemClock.sleep(250)
+        check(mapDrawn()?.let { boxInside(it) } == true) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
         compose.onNode(map).performTouchInput { click(emptySpot(drag)) }
         compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
     }
@@ -1004,6 +1009,10 @@ class MapModeSpaceRenderTest {
 
     /** Two camera poses alike, each value within a thousandth of its size (at least 1). */
     private fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
+
+    /** The drawn bodies' box lies inside the map: a frame drawn at the first view, not flown in. */
+    private fun boxInside(drawn: MapDrawn) = drawn.box.size == 4 && drawn.box[0] >= 0f && drawn.box[1] >= 0f &&
+        drawn.box[2] <= drawn.width && drawn.box[3] <= drawn.height
 
     /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
     private fun emptySpot(name: String): Offset {

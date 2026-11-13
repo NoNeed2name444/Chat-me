@@ -366,6 +366,36 @@ class MapDragTest {
         assertFalse("a hover is no press", drag.pressTaken)
     }
 
+    @Test fun aPressIsSlowedFromItsFirstStepUnderTheBarTillItEnds() {
+        // S05h repair 6: MapDrag.pressSlowed, which the renderer turns into MapDrawn.pressSlowedAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertFalse("no press yet", drag.pressSlowed)
+        drag.hovered = 0
+        repeat(60) { drag.step(frame) }
+        assertTrue("a hover slows the clock", drag.orbitRate < 0.05f)
+        assertFalse("but a hover is no press", drag.pressSlowed)
+        drag.hovered = -1
+        repeat(240) { drag.step(frame) }
+        assertTrue("running again", drag.orbitRate > 0.9f)
+        drag.pressed = 0
+        var steps = 0
+        while (!drag.pressSlowed && steps < 120) {
+            assertTrue("not slowed while the rate is 0.05 or more", drag.orbitRate >= 0.05f)
+            drag.step(frame); steps++
+        }
+        assertTrue("slowed at the first step under 0.05", drag.pressSlowed && drag.orbitRate < 0.05f)
+        assertTrue("within 0.3 s of 1/60 s frames ($steps)", steps * frame <= 0.3f + 1e-4f)
+        repeat(30) { drag.step(frame) }
+        assertTrue("kept while pressed", drag.pressSlowed)
+        drag.pressed = -1
+        drag.step(frame)
+        assertFalse("ended with the press", drag.pressSlowed)
+        drag.pressed = 0
+        drag.step(frame)
+        assertTrue("a new press on a still clock is slowed at its first step", drag.pressTaken && drag.pressSlowed)
+    }
+
     @Test fun aHeldStarCarriesItsPlanetsAndMoons() {
         // a star (0), its planet (1) and the planet's moon (2): held at d, each settles at d within
         // 2 %, never above 1.05 d (S05h A2)
