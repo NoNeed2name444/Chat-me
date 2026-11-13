@@ -1922,10 +1922,19 @@ class MapModeSpaceRenderTest {
         val gap = 56f * density
         val middle = (drawn.box[1] + drawn.box[3]) / 2
         val stripBottom = strip.bottom - map.top
+        // below the bodies too, down to the highest of the chosen body's card and the mode switch: on
+        // Chat-me copy 03eb608's phone the dragged Garden black hole left the bodies from y 40 to 1296 of
+        // 2400 and from x 17 to 1022 of 1080, so no room beside or above them, and over 800 px below
+        val chrome = listOf(MapPanelTags.PEEK, SortaMode.MAP.identifier, SortaMode.SORT.identifier, SortaMode.TOGGLE)
+            .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() }
+            .map { it.boundsInRoot.top - map.top }
+            .filter { it > drawn.box[3] }
+        val floor = chrome.minOrNull() ?: map.height
         val choices = listOf(
             Offset(drawn.box[0] / 2, middle) to drawn.box[0],
             Offset((drawn.box[2] + map.width) / 2, middle) to (map.width - drawn.box[2]),
             Offset(map.width / 2, (stripBottom + drawn.box[1]) / 2) to (drawn.box[1] - stripBottom),
+            Offset(map.width / 2, (drawn.box[3] + floor) / 2) to (floor - drawn.box[3]),
         )
         val (point, room) = choices.maxBy { it.second }
         check(room >= gap) { "No empty space ${gap / density} dp wide beside the bodies for $name: $drawn" }
