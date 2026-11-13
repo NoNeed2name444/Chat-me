@@ -3,11 +3,15 @@ package com.cramdown.sorta
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -109,6 +113,19 @@ class MapModeBoardRenderTest {
         compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(MapLook.TWO_D.identifier)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasTestTag(MapLook.TWO_D.identifier)).performClick()
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(BOARD_CARD_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        if (device == "phone") {
+            // a phone's first view leaves the top-trailing corner, where the menu opens, bare; by day a
+            // card's shadow reached it, by night nothing did (CI, 1ec2bf4). The board is dragged up from
+            // the bare ground under its lowest card, so cards lie under the menu's place before it opens
+            // and the check below can see a missing surface
+            val lowest = compose.onAllNodes(hasTestTag(BOARD_CARD_TAG)).fetchSemanticsNodes().maxOf { it.boundsInRoot.bottom }
+            val px = context.resources.displayMetrics.density
+            compose.onRoot().performTouchInput {
+                val from = Offset(width * 0.2f, lowest + 24 * px)
+                swipe(from, from - Offset(0f, 200 * px), 800)
+            }
+            compose.waitForIdle()
+        }
         val before = screen("the board")
 
         compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
