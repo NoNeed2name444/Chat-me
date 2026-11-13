@@ -3,6 +3,7 @@ package com.cramdown.sorta.ui.map
 import android.content.res.AssetManager
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
@@ -183,6 +184,22 @@ data class MapDrawn(
      */
     val orbitSteps: Int = 0,
     /**
+     * The Universe's press (S05h), on the map's own clock: the seconds the lively orbit clock has
+     * stepped while a body was pressed, every press together, never capped (MapDrag.pressedTime); and
+     * for the latest press, the seconds of it stepped until the orbit rate was under 0.05, unrounded
+     * (−1 till then; MapDrag.pressSlowedAfter). So a test judges a held finger's ease by the map's time
+     * however late the record reaches it. They move only while a finger is on a body.
+     */
+    val pressedSeconds: Float = 0f,
+    val pressSlowedSeconds: Float = -1f,
+    /**
+     * The device's uptime (SystemClock.uptimeMillis) at the renderer frame that first took the
+     * current press (S05h repair 5), −1 while no press is taken; reset when the press ends. A test
+     * notes the uptime before its finger comes down, so the touch's way to the renderer is timed on
+     * the same clock as the press's ease, however late the record reaches it.
+     */
+    val pressTakenAtMs: Long = -1,
+    /**
      * The filter (S05i): whether one is in force; the bodies the latest frame drew and those it hid
      * (a body on its way out counts as drawn until it is gone; in the Neurons the hidden are counted as
      * drawn, elsewhere as the filter has them); the links the filter lets through; and in the Neurons
@@ -193,7 +210,25 @@ data class MapDrawn(
     val hidden: Int = 0,
     val filterLinks: Int = 0,
     val states: List<Int> = emptyList(),
+    /**
+     * The level of detail the latest frame chose (S05i repair 3), so a view drawn without bodies says
+     * why: the frame budget's [detail] (FrameBudget.detail, to 0.01), the chunks drawn node by node
+     * ([chunks]), those of them fully open, where a Space body may be drawn ([openChunks],
+     * SpaceBodies.OPEN), and the [summaries] drawn for the rest. They change as the budget steps or
+     * a chunk opens or closes, never on a still map's frames.
+     */
+    val detail: Float = 0f,
+    val chunks: Int = 0,
+    val openChunks: Int = 0,
+    val summaries: Int = 0,
 ) {
+    /** This record with the latest frame's level of detail, [detailNow] to 0.01; the same record when nothing changed. */
+    fun detailing(detailNow: Float, chunksNow: Int, openNow: Int, summariesNow: Int): MapDrawn {
+        val rounded = Math.round(detailNow * 100f) / 100f
+        return if (detail == rounded && chunks == chunksNow && openChunks == openNow && summaries == summariesNow) this
+        else copy(detail = rounded, chunks = chunksNow, openChunks = openNow, summaries = summariesNow)
+    }
+
     /** This record with the filter's counts as the latest frame had them; the same record when nothing changed. */
     fun filtering(filteredNow: Boolean, shownNow: Int, hiddenNow: Int, filterLinksNow: Int, statesNow: List<Int>): MapDrawn =
         if (filtered == filteredNow && shown == shownNow && hidden == hiddenNow && filterLinks == filterLinksNow && states == statesNow) this
@@ -201,6 +236,18 @@ data class MapDrawn(
 
     /** This record after one more step of the lively orbit clock ([orbitSteps]). */
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
+
+    /**
+     * This record with the press's seconds as the latest frame stepped them, and, when [takenNow]
+     * (MapDrag.pressTaken), the uptime the press was first taken: kept from an earlier frame of the
+     * same press, else [nowMs] read once, at this frame; −1 when no press is taken. The same record
+     * when nothing changed.
+     */
+    fun pressing(secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, nowMs: () -> Long = { -1L }): MapDrawn {
+        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else nowMs()
+        return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt)
+    }
 
     /** This record with the Universe as the latest frame drew it; the same record when nothing changed. */
     fun universe(rolesNow: List<Int>, nearNow: Int, archedNow: Int, farNow: Int, secondsNow: Int, rateNow: Float): MapDrawn =
@@ -873,10 +920,12 @@ class GlMapRenderer(
         }
         record = record.after(bodyCount, (System.nanoTime() - surfaceNanos) / 1_000_000, linksNow,
             if (space) samples else 0, space && straightNow)
+        record = record.detailing(budget.detail, plan.detailLeaves.size, openLeaves(plan), plan.summaryCount)
         if (uplan != null && bodies != null) {
             record = record.flying(flown)
             val d = drag
-            if (lively && d != null) record = record.stepped()
+            if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat(),
+                d.pressTaken) { SystemClock.uptimeMillis() }
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }
@@ -948,6 +997,13 @@ class GlMapRenderer(
     }
 
     /** The chosen body's own links in the chunks drawn this frame (their pages streamed in). */
+    /** The chunks this frame drew fully open (MapDrawn.openChunks): where a Space body may be drawn. */
+    private fun openLeaves(plan: FramePlan): Int {
+        var open = 0
+        for (k in 0 until plan.detailLeaves.size) if (plan.leafState[plan.detailLeaves[k] * 4 + 3] >= SpaceBodies.OPEN) open++
+        return open
+    }
+
     private fun ownLinksDrawn(plan: FramePlan): Int {
         if (ownByLeaf.isEmpty()) return 0
         var n = 0
@@ -1025,6 +1081,7 @@ class GlMapRenderer(
         }
         // the bridges ignore Lines, as iOS's (fillBridge returns before it reads straight)
         record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.linksDrawn, gl.samples, false)
+        record = record.detailing(budget.detail, 0, 0, 0)
         val focusOn = gl.focus != null
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
         record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn)
