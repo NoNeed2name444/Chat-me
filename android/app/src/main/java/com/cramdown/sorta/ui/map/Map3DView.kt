@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -382,6 +383,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
     val named = remember(scene) { HashMap<Int, Int>() }
     var drawn by remember(scene) { mutableStateOf(MapDrawn()) }
+    // how many times the camera was put back at its first view (MapDrawn.homes): counted after the move,
+    // so the record the map's node carries next reads the camera there
+    var homes by remember { mutableIntStateOf(0) }
     val hz = remember { floatArrayOf(display?.refreshRate ?: 60f) }
     val tree = scene.tree
     val camera = remember(scene) {
@@ -440,7 +444,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     val shownBuild by rememberUpdatedState(scene.build)
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { renderer.goHome(home); loop.touched() }
+        if (recenter != 0) { renderer.goHome(home); homes++; loop.touched() }
     }
     // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
     LaunchedEffect(renderer, flyTo) {
@@ -522,6 +526,7 @@ data class MapFlyTo(val id: String, val serial: Int)
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val drawnNow = drawn
+    val homesNow = homes
     val latestDrawn by rememberUpdatedState(onDrawn)
     val firstDrawn = !gles3 || drawnNow.frames >= 1
     val box = remember(screenNodes) { drawnBox(screenNodes) }
@@ -644,7 +649,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
+        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow)
         val tapped = onTap
         if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it.takeIf { i -> i >= 0 }) }, scene.build, cue)
     }
@@ -827,6 +832,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                         if (hit == null && paired && lastLift.hit == null) {
                             lastLift.clear()
                             renderer.goHome(home)
+                            homes++
                             latestHome()
                             loop.moved()
                         } else lastLift.set(liftedAt, down.position, hit)
@@ -942,6 +948,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             IconButton(onClick = {
                 loop.touched()
                 renderer.goHome(home)
+                homes++
             }) { Icon(Icons.Rounded.RadioButtonChecked, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }

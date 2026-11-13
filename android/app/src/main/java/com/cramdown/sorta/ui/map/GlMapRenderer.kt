@@ -236,6 +236,13 @@ data class MapDrawn(
     val chunks: Int = 0,
     val openChunks: Int = 0,
     val summaries: Int = 0,
+    /**
+     * Added by Map3DView (S05i repair 5): how many times the camera was put back at its first view
+     * (Recentre, two taps on empty space). The record goes on the map's node when the map is composed,
+     * and a jump home moves the camera between two of the GL's records, so [pose] reads it only once
+     * this count shows it: a test waits for the count, then reads the pose.
+     */
+    val homes: Int = 0,
 ) {
     /** This record with the latest frame's level of detail, [detailNow] to 0.01; the same record when nothing changed. */
     fun detailing(detailNow: Float, chunksNow: Int, openNow: Int, summariesNow: Int): MapDrawn {

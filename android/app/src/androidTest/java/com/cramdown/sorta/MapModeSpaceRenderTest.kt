@@ -194,10 +194,7 @@ class MapModeSpaceRenderTest {
         }
         // S05g: Space's first view with the card put away (S05d item 2), as Recentre frames it before
         // any choice or ease: the reference the double tap on empty space must come back to
-        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
-        compose.waitForIdle()
-        SystemClock.sleep(500)
-        val spaceHome = checkNotNull(mapDrawn()).pose
+        val spaceHome = recentred(name)
         check(spaceHome.size == 6) { "No camera pose after Recentre for $name: ${mapDrawn()}" }
         // S05e: Space's first view draws its links, each a strip of 40 samples, curved
         try { compose.waitUntil(30_000) { (mapDrawn()?.links ?: 0) > 0 } } catch (_: ComposeTimeoutException) {}
@@ -786,20 +783,22 @@ class MapModeSpaceRenderTest {
         check(quickly.grabbed == -1 && quickly.moving == 0) { "A quick move moved a body for $name: $quickly" }
         // empty space: a tap lets it go, two bring back the first view, the one Recentre frames: the
         // first-run card's cover while it is up, the view without it once it is put away (S05d item 2)
-        val turned = checkNotNull(mapDrawn()).pose
+        val turnedDrawn = checkNotNull(mapDrawn())
+        val turned = turnedDrawn.pose
         val empty = emptySpot(name)
         compose.onNode(map).performTouchInput { doubleClick(empty) }
-        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && !same(turned, checkNotNull(mapDrawn()).pose) } } catch (_: ComposeTimeoutException) {}
+        try {
+            compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && checkNotNull(mapDrawn()).let { it.homes > turnedDrawn.homes && !same(turned, it.pose) } }
+        } catch (_: ComposeTimeoutException) {}
         check(!shown(MapPanelTags.PEEK)) { "A tap on empty space left the card up for $name" }
         SystemClock.sleep(500)
         compose.waitForIdle()
-        val doubled = checkNotNull(mapDrawn()).pose
+        val doubledDrawn = checkNotNull(mapDrawn())
+        check(doubledDrawn.homes > turnedDrawn.homes) { "A double tap on empty space did not put the camera back at its first view for $name: $doubledDrawn" }
+        val doubled = doubledDrawn.pose
         check(!same(turned, doubled)) { "A double tap on empty space left the turned camera where it was for $name: $turned" }
         check(same(home, doubled)) { "A double tap on empty space did not bring back the first view for $name: $home, now $doubled" }
-        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
-        compose.waitForIdle()
-        SystemClock.sleep(500)
-        val recentred = checkNotNull(mapDrawn()).pose
+        val recentred = recentred(name)
         check(same(doubled, recentred)) { "A double tap on empty space did not bring back Recentre's first view for $name: $doubled, Recentre $recentred" }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.chosen == -1) { "The body is still marked after the empty tap for $name: ${mapDrawn()}" }
@@ -1263,6 +1262,24 @@ class MapModeSpaceRenderTest {
 
     /** Two camera poses alike, each value within a thousandth of its size (at least 1). */
     private fun same(a: List<Float>, b: List<Float>) = a.size == 6 && b.size == 6 && a.indices.all { abs(a[it] - b[it]) <= 1e-3f * max(1f, abs(a[it])) }
+
+    /**
+     * Recentre pressed, and the camera's pose once the map's node shows it at its first view (S05i
+     * repair 5): MapDrawn.homes counts each return home after the camera has moved, so the pose read
+     * with the new count is the camera's there. A pose read at a set time after the press could be the
+     * node's last record from before it, where the GL's next frame had not yet reached the page (the
+     * tablet, at a few frames a second, read Space's first view with the card's cover so).
+     */
+    private fun recentred(name: String): List<Float> {
+        val before = checkNotNull(mapDrawn()).homes
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        try { compose.waitUntil(10_000) { (mapDrawn()?.homes ?: before) > before } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(500)
+        compose.waitForIdle()
+        val drawn = checkNotNull(mapDrawn())
+        check(drawn.homes > before) { "Recentre did not put the camera back at its first view for $name: $drawn" }
+        return drawn.pose
+    }
 
     /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
     private fun emptySpot(name: String): Offset {

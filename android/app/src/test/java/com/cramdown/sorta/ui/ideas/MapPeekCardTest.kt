@@ -8,6 +8,8 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -17,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.MapLook
@@ -310,6 +313,38 @@ class MapPeekCardTest {
         assertFalse("no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
-    private fun drawnPose(): List<Float> =
-        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
+    @Test fun recentreAndTwoEmptyTapsEachCountAReturnHomeAndOneTapDoesNot() {
+        // S05i repair 5: the map's record counts each return to the first view (MapDrawn.homes), so a
+        // test reads the pose once the record shows the camera there; Recentre and two taps on empty
+        // space each count one, a single empty tap none, and the pose with each count is the first view.
+        // With no GL here, no frame recomposes the map, so the pose read before any count is the camera's
+        // at the map's last composition, not the first view fitted after it: what the counts are for
+        launchOnSpace()
+        // the first-run card put away by its Got it, as the device's test does, so empty space is free to tap
+        compose.onNode(hasText(s(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT))).performClick()
+        run.until { !shown(MapPanelTags.HINT) }
+        assertEquals("no return home yet", 0, drawn().homes)
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        run.until { drawn().homes == 1 }
+        val home = drawn().pose
+        assertEquals("the first view's turn", listOf(0.6f, 0.7f), home.drop(4))
+        // a turn of the camera on empty space, then one tap there: no return home
+        compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, height * 0.3f), Offset(centerX + width * 0.3f, height * 0.3f)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("one tap on empty space is no return home", 1, drawn().homes)
+        compose.onNode(mapNode).performTouchInput { doubleClick(Offset(centerX, height * 0.3f)) }
+        run.until { drawn().homes == 2 }
+        assertEquals("two taps' pose is Recentre's first view", home, drawn().pose)
+    }
+
+    private fun drawn() =
+        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey))
+
+    private fun drawnPose(): List<Float> = drawn().pose
 }
