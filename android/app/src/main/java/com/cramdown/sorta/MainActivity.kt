@@ -1,6 +1,7 @@
 package com.cramdown.sorta
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.ideas.IdeasBanner
 import com.cramdown.sorta.ui.ideas.IdeasModel
 import com.cramdown.sorta.ui.ideas.IdeasView
 import com.cramdown.sorta.ui.ideas.MapPreview
@@ -30,7 +32,10 @@ class MainActivity : ComponentActivity() {
         // the store, opened at launch: ideas.json in the files directory, or the tests' own
         val store = IdeaStore(testPath(this, STORE_DIR) ?: filesDir)
         val testImport = testPath(this, IMPORT_FILE)
-        setContent { SortaRoot(store, testImport) }
+        // the tests' Undo notices kept up till acted on (S05h2 repair 3); a release build ignores the extra
+        val undoStays = IdeasBanner.undoStays(intent?.getBooleanExtra(UNDO_STAYS, false) == true,
+            applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+        setContent { SortaRoot(store, testImport, undoStays) }
     }
 
     companion object {
@@ -44,6 +49,11 @@ class MainActivity : ComponentActivity() {
          */
         const val STORE_DIR = "sortaStoreDir"
         const val IMPORT_FILE = "sortaImportFile"
+        /**
+         * The tests' launch extra that keeps a notice with Undo up until it is acted on or dismissed
+         * (IdeasBanner), so a slow device's test clock never runs past it; heeded only in a debuggable build.
+         */
+        const val UNDO_STAYS = "sortaUndoStays"
 
         /** The extra [name] as a path, only if it lies inside the app's cache directory. */
         fun testPath(activity: ComponentActivity, name: String): File? {
@@ -61,11 +71,11 @@ class MainActivity : ComponentActivity() {
 
 /** The first screen: the Sort screen on the store, in the window's shape and the system's light or dark. */
 @Composable
-fun SortaRoot(store: IdeaStore, testImport: File? = null) {
+fun SortaRoot(store: IdeaStore, testImport: File? = null, undoStays: Boolean = false) {
     SortaTheme(dark = isSystemInDarkTheme()) {
         WindowShapeHost {
             val model = remember(store) { IdeasModel.open(store) }
-            IdeasView(model, testImport)
+            IdeasView(model, testImport, undoStays = undoStays)
         }
     }
 }

@@ -3,6 +3,7 @@ package com.cramdown.sorta.ui.map
 import android.content.res.AssetManager
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
@@ -184,6 +185,22 @@ data class MapDrawn(
      */
     val orbitSteps: Int = 0,
     /**
+     * The Universe's press (S05h), on the map's own clock: the seconds the lively orbit clock has
+     * stepped while a body was pressed, every press together, never capped (MapDrag.pressedTime); and
+     * for the latest press, the seconds of it stepped until the orbit rate was under 0.05, unrounded
+     * (−1 till then; MapDrag.pressSlowedAfter). So a test judges a held finger's ease by the map's time
+     * however late the record reaches it. They move only while a finger is on a body.
+     */
+    val pressedSeconds: Float = 0f,
+    val pressSlowedSeconds: Float = -1f,
+    /**
+     * The device's uptime (SystemClock.uptimeMillis) at the renderer frame that first took the
+     * current press (S05h repair 5), −1 while no press is taken; reset when the press ends. A test
+     * notes the uptime before its finger comes down, so the touch's way to the renderer is timed on
+     * the same clock as the press's ease, however late the record reaches it.
+     */
+    val pressTakenAtMs: Long = -1,
+    /**
      * Deaths (S05h2): the dying bodies before their own plan's end and the dying links drawn, both this
      * frame, the largest reach those links were drawn at (to a hundredth); and, kept for the map's life
      * (MapTotals), the bodies that began to die and their links, each counted once when its death
@@ -200,6 +217,18 @@ data class MapDrawn(
 ) {
     /** This record after one more step of the lively orbit clock ([orbitSteps]). */
     fun stepped(): MapDrawn = copy(orbitSteps = orbitSteps + 1)
+
+    /**
+     * This record with the press's seconds as the latest frame stepped them, and, when [takenNow]
+     * (MapDrag.pressTaken), the uptime the press was first taken: kept from an earlier frame of the
+     * same press, else [nowMs] read once, at this frame; −1 when no press is taken. The same record
+     * when nothing changed.
+     */
+    fun pressing(secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, nowMs: () -> Long = { -1L }): MapDrawn {
+        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else nowMs()
+        return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt)
+    }
 
     /** This record with the deaths as the latest frame drew them; the same record when nothing changed. */
     fun dying(dyingNow: Int, linksNow: Int, reachNow: Float, diedTotalNow: Int, linksTotalNow: Int): MapDrawn {
@@ -926,7 +955,8 @@ class GlMapRenderer(
         if (uplan != null && bodies != null) {
             record = record.flying(flown)
             val d = drag
-            if (lively && d != null) record = record.stepped()
+            if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat(),
+                d.pressTaken) { SystemClock.uptimeMillis() }
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }

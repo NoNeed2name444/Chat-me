@@ -148,10 +148,25 @@ internal sealed class FolderPrompt {
 }
 
 /**
- * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
- * launch extra): it goes to the same call the system picker's result does, once.
+ * How long the banner keeps a notice (S05h2 repair 3). A notice with Undo stays for
+ * SnackbarDuration.Long, or, when the tests ask ([undoStays]), until it is acted on or dismissed,
+ * as iOS keeps an Undo notice up when the tests ask (IdeasNoticeHost.stays, IdeasKit.swift:325-337);
+ * a new notice still replaces it. A notice without Undo is never kept.
  */
-@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart()) {
+internal object IdeasBanner {
+    fun duration(undo: Boolean, undoStays: Boolean): SnackbarDuration =
+        if (undo && undoStays) SnackbarDuration.Indefinite else SnackbarDuration.Long
+
+    /** Whether a launch that asks for Undo notices to stay is heeded: only in a debuggable build, so a release build ignores it. */
+    fun undoStays(asked: Boolean, debuggable: Boolean): Boolean = asked && debuggable
+}
+
+/**
+ * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
+ * launch extra): it goes to the same call the system picker's result does, once. [undoStays]: the
+ * tests' launch extra that keeps Undo notices up (IdeasBanner), false in a release build.
+ */
+@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart(), undoStays: Boolean = false) {
     val context = LocalContext.current
     val res = context.resources
     val settings = remember(context) { IdeasSettings(context) }
@@ -182,7 +197,7 @@ internal sealed class FolderPrompt {
         scope.launch {
             banner.currentSnackbarData?.dismiss()
             val label = if (undo != null) res.getString(R.string.undo_action) else action
-            val result = banner.showSnackbar(message, actionLabel = label, duration = SnackbarDuration.Long)
+            val result = banner.showSnackbar(message, actionLabel = label, duration = IdeasBanner.duration(undo != null, undoStays))
             if (result == SnackbarResult.ActionPerformed) undo?.invoke()
         }
     }

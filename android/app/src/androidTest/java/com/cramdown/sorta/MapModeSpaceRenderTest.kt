@@ -159,7 +159,10 @@ class MapModeSpaceRenderTest {
         val context = instrumentation.targetContext
         val dir = File(context.cacheDir, "mapmode-" + UUID.randomUUID()).also { it.mkdirs() }
         IdeaStore(dir).replaceIdeas(notes, folders)
-        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
+        // Undo's notice kept up till it is tapped (S05h2 repair 3): its timer runs on the test clock,
+        // which a slow device's waits run past before the death check's Undo
+        scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path)
+            .putExtra(MainActivity.UNDO_STAYS, true))
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(IdeasTags.TITLE)).fetchSemanticsNodes().isNotEmpty() }
         // a phone's switch; a tablet's map is beside Sort already
         if (compose.onAllNodes(hasTestTag(SortaMode.MAP.identifier)).fetchSemanticsNodes().isNotEmpty()) {
@@ -862,8 +865,11 @@ class MapModeSpaceRenderTest {
         val after = checkNotNull(mapDrawn())
         check(after.dying == 0) { "A body was still dying ${SystemClock.uptimeMillis() - seen} ms after the death was counted, animations off, for $name: $after" }
         check(after.sparksTotal == 0L) { "The death threw sparks with animations off for $name: $after" }
-        // Undo: the idea back, on the map again
-        compose.onNode(hasText(res.getString(R.string.undo_action)) and hasClickAction()).performClick()
+        // Undo: the banner shows it (kept up by the launch's UNDO_STAYS), and it brings the idea back, on the map again
+        val undo = hasText(res.getString(R.string.undo_action)) and hasClickAction()
+        try { compose.waitUntil(5_000) { compose.onAllNodes(undo).fetchSemanticsNodes().size == 1 } } catch (_: ComposeTimeoutException) {}
+        check(compose.onAllNodes(undo).fetchSemanticsNodes().size == 1) { "The banner shows no Undo after idea $ideaId was deleted for $name" }
+        compose.onNode(undo).performClick()
         try {
             compose.waitUntil(30_000) { mapNode()?.config?.getOrNull(MapTapKey)?.ids?.any { it.equals(ideaId, ignoreCase = true) } == true && framed(mapDrawn()) }
         } catch (_: ComposeTimeoutException) {}

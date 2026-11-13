@@ -542,8 +542,8 @@ data class MapFlyTo(val id: String, val serial: Int)
         else MapNameShow.Board { i -> plan.bodies.getOrNull(i)?.galaxy?.let { scene.galaxyTones[it] } }
     }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
-    // a body pressed or hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752)
-    LaunchedEffect(renderer, pressedName) { renderer.press(pressedName ?: -1) }
+    // a body hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752); a body
+    // pressed does too, handed to the renderer by the touch itself (the gestures below), as iOS's is
     LaunchedEffect(renderer, hoveredName) { renderer.hover(hoveredName ?: -1) }
     // the held slot: the body whose options are open, else the one a finger holds to move (S05g2), which
     // the page never learns of (GraphMotion's wantLabel(grabbed), :2183); the options take it back
@@ -709,12 +709,14 @@ data class MapFlyTo(val id: String, val serial: Int)
                     grabbedName = null
                     loop.moved()
                 }
-                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed
+                // the pressed body keeps its name up while the finger stays on it (S05f); read, never consumed.
+                // The renderer takes the press at once, from the touch, as iOS's at touch-down
+                // (Graph3DView.swift:2922-2931): its orbit clock eases from this frame, not a recomposition later
                 val press = MapNameShow.Press(slop)
-                if (pills) {
-                    press.down(hit)
-                    pressedName = press.pressed
-                }
+                press.down(hit)
+                var pressedNow = press.pressed ?: -1
+                renderer.press(pressedNow)
+                if (pills) pressedName = press.pressed
                 try {
                     var now = down.uptimeMillis
                     while (true) {
@@ -793,6 +795,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                                 synchronized(camera) { camera.orbit(-delta.x / size.width * 3.2f, delta.y / size.height * 2.4f) }
                             }
                         }
+                        if ((press.pressed ?: -1) != pressedNow) { pressedNow = press.pressed ?: -1; renderer.press(pressedNow) }
                         if (pills && pressedName != press.pressed) pressedName = press.pressed
                         event.changes.forEach { if (it.positionChanged()) it.consume() }
                     }
@@ -800,6 +803,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                     // lifted, or the gesture cancelled: the press is over either way, and a body held is let
                     // go, with the finger's speed if it moved (release, GraphMotion.swift:1269-1283)
                     press.up()
+                    renderer.press(-1)
                     if (pressedName != null) pressedName = null
                     letGo(still = !dragging)
                 }
