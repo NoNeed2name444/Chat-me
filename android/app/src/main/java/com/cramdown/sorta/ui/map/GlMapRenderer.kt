@@ -233,6 +233,15 @@ data class MapDrawn(
      */
     val dyingDrawn: Int = 0,
     val dyingAt: List<Float> = emptyList(),
+    /**
+     * The deaths' own clock (S05h2 repair 7): the seconds the death playing has stepped
+     * (MapDeathStage.elapsed), unrounded; −1 when none plays. It is the map's own clock, not the wall's:
+     * each frame steps it by the frame's interval, the first at most 1/30 s and every later one at most
+     * 0.25 s (MapDeath.FIRST_STEP, MAX_STEP; GlMapRenderer's dt), and the test clock (MapDeath.testHold)
+     * holds it. So a test judges when a death ends on the clock the death runs on, however slow the frames
+     * or late the record. No words.
+     */
+    val dyingSeconds: Double = -1.0,
     /** Sparks (S05h2): those alive this frame, rounded up to tens (0 stays 0), and those thrown in the map's life. No words. */
     val sparks: Int = 0,
     val sparksTotal: Long = 0L,
@@ -268,17 +277,18 @@ data class MapDrawn(
 
     /**
      * This record with the deaths as the latest frame drew them, [drawnNow] dying bodies drawn whole and
-     * the biggest at [atNow] (x, y, pixels across; rounded here); the same record when nothing changed.
+     * the biggest at [atNow] (x, y, pixels across; rounded here), and the deaths' clock at [secondsNow]
+     * (−1 for none); the same record when nothing changed.
      */
     fun dying(dyingNow: Int, linksNow: Int, reachNow: Float, diedTotalNow: Int, linksTotalNow: Int,
-              drawnNow: Int = 0, atNow: List<Float> = emptyList()): MapDrawn {
+              drawnNow: Int = 0, atNow: List<Float> = emptyList(), secondsNow: Double = -1.0): MapDrawn {
         val reach = Math.round(reachNow * 100) / 100f
         val at = if (atNow.size < 3) emptyList()
             else listOf(Math.round(atNow[0]).toFloat(), Math.round(atNow[1]).toFloat(), Math.round(atNow[2] * 10) / 10f)
         return if (dying == dyingNow && dyingLinks == linksNow && dyingReach == reach && diedTotal == diedTotalNow &&
-            dyingLinksTotal == linksTotalNow && dyingDrawn == drawnNow && dyingAt == at) this
+            dyingLinksTotal == linksTotalNow && dyingDrawn == drawnNow && dyingAt == at && dyingSeconds == secondsNow) this
         else copy(dying = dyingNow, dyingLinks = linksNow, dyingReach = reach, diedTotal = diedTotalNow, dyingLinksTotal = linksTotalNow,
-            dyingDrawn = drawnNow, dyingAt = at)
+            dyingDrawn = drawnNow, dyingAt = at, dyingSeconds = secondsNow)
     }
 
     /** This record with [liveNow] sparks alive (rounded up to tens) and [totalNow] thrown; the same record when nothing changed. */
@@ -1032,7 +1042,7 @@ class GlMapRenderer(
         // deaths and sparks (S05h2), the totals the map's own
         if (space) {
             record = record.dying(death?.aliveCount() ?: 0, dyingLinksNow, if (dyingLinksNow > 0) bodies?.dyingReach ?: 0f else 0f,
-                totals.died, totals.dyingLinks, bodies?.dyingDrawn ?: 0, dyingOnScreen())
+                totals.died, totals.dyingLinks, bodies?.dyingDrawn ?: 0, dyingOnScreen(), death?.elapsed ?: -1.0)
             record = record.sparking(sparkCount, totals.sparks)
         }
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }

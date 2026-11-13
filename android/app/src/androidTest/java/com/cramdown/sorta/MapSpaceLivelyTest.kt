@@ -55,7 +55,6 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
 import kotlin.math.abs
-import kotlin.math.ceil
 
 /**
  * S05h A3: Space's Universe with animations on, on the emulator, by day and by night. CI turns
@@ -90,7 +89,8 @@ import kotlin.math.ceil
  * under the Universe and from an idea under Look › Comets, each frozen for a still
  * (mapmode-lively-plasma-... and mapmode-lively-dust-...), and the most linked idea deleted with the
  * death's clock held half way through its links drawing back (mapmode-lively-death-...), then gone
- * within its plan's length + 0.5 s once let go. The test clocks are reset after every test.
+ * within its plan's length + 0.5 s of its own clock once let go (MapDrawn.dyingSeconds, the map's own
+ * clock, not the wall's). The test clocks are reset after every test.
  */
 @RunWith(AndroidJUnit4::class)
 class MapSpaceLivelyTest {
@@ -264,7 +264,7 @@ class MapSpaceLivelyTest {
      * repair 6: Space's first-run card is seen before the map opens, the idea's galaxy is flown in to
      * before the deletion, and the still is taken once the death is drawn whole, a body's size at least,
      * in the uncovered window (deathInView); each spark still once its held body is at rest with its
-     * name on it (heldAtRest). Released, none is dying within the plan's length + 0.5 s of steps. Dust: Look › Comets, an idea
+     * name on it (heldAtRest). Released, none is dying once the death's own clock has run the plan's length + 0.5 s. Dust: Look › Comets, an idea
      * dragged fast throws sparks, frozen for mapmode-lively-dust-.... The frames a second at rest,
      * over the plasma fling and over the death are logged; the dust fling's are not, as Comets has
      * no orbit clock.
@@ -352,20 +352,25 @@ class MapSpaceLivelyTest {
             abs(inView.dyingAt[0] - framedDeath.dyingAt[0]) <= 2f && abs(inView.dyingAt[1] - framedDeath.dyingAt[1]) <= 2f) {
             "The death moved on or out of the window while its still was taken for $death: before $framedDeath, after $inView"
         }
-        // released: gone within the plan's length + 0.5 s, judged by the orbit clock's steps (MapDrawn.orbitSteps,
-        // never capped; the lively Universe steps it every frame, each step at most 0.25 s)
+        // released: gone once the death's own clock has run the plan's length + 0.5 s past the hold (S05h2
+        // repair 7, the owner's 13 Nov word: sub-second timing on the map's own clock). The death steps by the
+        // map's frame step, at most 0.25 s a frame (MapDeath.MAX_STEP), so on frames slower than that its
+        // clock runs slower than the wall's; MapDrawn.dyingSeconds is that clock, in the same record as
+        // dying. A map that stalls still fails: 20 s of the wall at most
         val left = dies.duration - hold + 0.5
-        val f0 = held.orbitSteps
+        val atLet = checkNotNull(drawn())
         val let = SystemClock.uptimeMillis()
         MapDeath.testHold = null
-        fun stepped(d: MapDrawn) = SystemClock.uptimeMillis() - let >= left * 1000 && d.orbitSteps - f0 >= ceil(left / 0.25).toInt()
-        try { compose.waitUntil(20_000) { drawn()?.let { it.dying == 0 || stepped(it) } == true } } catch (_: ComposeTimeoutException) {}
+        fun run(d: MapDrawn) = d.dyingSeconds - hold
+        try { compose.waitUntil(20_000) { drawn()?.let { it.dying == 0 || run(it) >= left } == true } } catch (_: ComposeTimeoutException) {}
         val gone = checkNotNull(drawn())
         check(gone.dying == 0) {
-            "A body was still dying ${SystemClock.uptimeMillis() - let} ms and ${gone.orbitSteps - f0} steps of the orbit clock after the clock was let go " +
-                "(the plan's ${dies.duration} s from $hold s, + 0.5 s) for $death: $gone"
+            "A body was still dying with the death's own clock ${"%.3f".format(run(gone))} s past the hold at $hold s " +
+                "(the plan's ${dies.duration} s, so gone by ${"%.3f".format(left)} s), ${SystemClock.uptimeMillis() - let} ms and " +
+                "${gone.orbitSteps - atLet.orbitSteps} steps of the orbit clock after the clock was let go" +
+                (if (run(gone) < left) " (the clock stalled: the wall's 20 s ran out first)" else "") + " for $death: $gone"
         }
-        val dying = rate(held, gone, let)
+        val dying = rate(atLet, gone, let)
         // dust: Look › Comets, an idea dragged fast
         val dust = "mapmode-lively-dust-$mode-$device"
         chooseStyle(SpaceStyle.COMET.label, idle = false)

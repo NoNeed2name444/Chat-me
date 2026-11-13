@@ -238,6 +238,37 @@ class MapDeathTest {
         assertEquals(1.0 / 30 + 0.1, again.elapsed, 1e-12)
     }
 
+    /**
+     * Repair 7, CI's emulators at about 0.3-0.5 s a frame: a death let go from the test clock runs on the
+     * map's own clock, each frame's step at most MapDeath.MAX_STEP (GlMapRenderer's dt), so on frames
+     * slower than that it is not over by the wall's plan length + 0.5 s; it is over once its own clock has
+     * run the plan's length past the hold, and never before.
+     */
+    @Test fun aDeathLetGoRunsOnTheMapsOwnClockEachStepAtMostAQuarter() {
+        val stage = MapDeathStage.make(listOf(departure("a", 2, DeathKind.GAS_GIANT, 0.4f, "x")), lively = true, smooth = false)!!
+        stage.resolve { if (it == "x") 1 else -1 }
+        val plan = stage.plans[0]
+        val hold = plan.linksGone * 0.5
+        repeat(3) { stage.frame(0.4, shown = true, hold = hold) }
+        assertEquals("held", hold, stage.elapsed, 0.0)
+        assertEquals(1, stage.aliveCount())
+        // let go: frames 0.4 s apart on the wall, each a quarter of a second on the map's clock
+        var wall = 0.0
+        while (wall < plan.duration - hold + 0.5 - 1e-9) {
+            val before = stage.elapsed
+            stage.frame(0.4, shown = true)
+            wall += 0.4
+            if (!stage.finished) assertEquals("a step of ${stage.elapsed - before} s at $wall s", MapDeath.MAX_STEP, stage.elapsed - before, 1e-12)
+        }
+        assertTrue("by the wall, the plan's length + 0.5 s on, it plays on: ${stage.elapsed} s of ${plan.duration} s", stage.aliveCount() == 1)
+        // by its own clock: alive until the plan's length past the hold, gone at the first step past it
+        while (stage.aliveCount() > 0) {
+            assertTrue("alive at ${stage.elapsed} s of ${plan.duration} s", stage.elapsed < plan.duration)
+            stage.frame(0.4, shown = true)
+        }
+        assertTrue("gone at ${stage.elapsed} s", stage.elapsed >= plan.duration && stage.elapsed - hold < plan.duration - hold + 0.5)
+    }
+
     @Test fun theTestClockIsOffByDefault() {
         assertNull(MapDeath.testHold)
         assertNull(SpaceTrails.testFrozen)

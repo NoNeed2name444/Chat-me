@@ -322,6 +322,21 @@ class MapDrawnTest {
         assertEquals(0, d.dying(1, 3, 0.5f, 1, 3).dyingDrawn)
     }
 
+    @Test fun theDeathsOwnClockIsHandedOnUnrounded() {
+        // S05h2 repair 7: the deaths' clock (MapDeathStage.elapsed), −1 with none playing
+        val d = MapDrawn()
+        assertEquals(-1.0, d.dyingSeconds, 0.0)
+        val held = d.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35)
+        assertEquals(0.35, held.dyingSeconds, 0.0)
+        assertSame(held, held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35))
+        // a step of the clock alone is a new record, unrounded
+        val on = held.dying(1, 3, 0.5f, 1, 3, secondsNow = 0.35 + 0.0001)
+        assertEquals(0.3501, on.dyingSeconds, 1e-12)
+        assertEquals("the rest of the record left alone", held.copy(dyingSeconds = on.dyingSeconds), on)
+        // the callers that hand on no clock leave it at none
+        assertEquals(-1.0, held.dying(1, 3, 0.5f, 1, 3).dyingSeconds, 0.0)
+    }
+
     @Test fun sparksRoundUpToTensAndNoneStaysNone() {
         val d = MapDrawn()
         assertSame(d, d.sparking(0, 0L))
