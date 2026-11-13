@@ -168,6 +168,9 @@ struct IdeaBoardView: View {
             let lineWidth: CGFloat = max(1, 1.5 * scale)
             let style: GraphLineStyle = GraphLineStyle.inForce(straightLines)
             let lanes: [(lane: Int, lanes: Int)] = Self.lanes(edges)
+            // a board of one kind keeps each card's symbol but drops the kind's
+            // word (S05m item 4); worked out once a pass, not once a card
+            let oneKind: Bool = Set(notes.notes.map(\.kind)).count <= 1
             ZStack {
                 // the board itself: moved by dragging, added to by double-tap
                 Color.clear
@@ -192,7 +195,7 @@ struct IdeaBoardView: View {
                     // a lifted card is drawn over the flat ones it passes
                     let lifted: Bool = dragged == note.id || source == note.id
                     let layer: Double = lifted ? 1 : 0
-                    card(note)
+                    card(note, oneKind: oneKind)
                         // its size before the board's zoom, in board points
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { sizes[note.id] = $0 }
                         .scaleEffect(scale)
@@ -262,16 +265,14 @@ struct IdeaBoardView: View {
 
     // MARK: cards
 
-    private func card(_ note: Note) -> some View {
+    private func card(_ note: Note, oneKind: Bool) -> some View {
         let tone = NoteTone.color(for: note.folderId, in: notes)
         let chosen: Bool = source == note.id
         // a card being dragged or starting a connection rises off the board
         let lifted: Bool = dragged == note.id || chosen
         let grow: CGFloat = lifted && !reduceMotion ? 1.04 : 1
         let wash: Color = tone.opacity(0.14)
-        // a board of one kind keeps each card's symbol but drops the kind's
-        // word; a folder's name where it has one (S05m item 4)
-        let oneKind: Bool = Set(notes.notes.map(\.kind)).count <= 1
+        // a board of one kind (oneKind) drops the kind's word; a folder's name where it has one (S05m item 4)
         let folder: String? = notes.folder(note.folderId)?.name
         let place: String? = folder ?? (oneKind ? nil : note.kind.label)
         let title: String = note.title.isEmpty ? "Untitled" : note.title

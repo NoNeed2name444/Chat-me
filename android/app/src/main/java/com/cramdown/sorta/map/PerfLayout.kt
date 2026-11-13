@@ -570,6 +570,17 @@ object PerfLines {
         if (shown != null && (a !in shown.indices || b !in shown.indices || !shown[a] || !shown[b])) return false
         return inView(a) || inView(b)
     }
+
+    /** The hubs' index list (S05i2): each hub's chunk, in folder order, those with none left out. */
+    fun hubIndices(hubChunks: IntArray): IntArray = hubChunks.filter { it >= 0 }.toIntArray()
+
+    /**
+     * An index buffer's first upload, as bytes and data: [indices] whole, or for none 4 bytes and no
+     * data, as GL wants a store. Android's glBufferData throws when the data holds fewer bytes than
+     * asked for, so the bytes are never more than the data's.
+     */
+    fun indexUpload(indices: IntArray): Pair<Int, IntArray?> =
+        if (indices.isEmpty()) 4 to null else indices.size * 4 to indices
 }
 
 /**

@@ -459,4 +459,13 @@ class LineStyleTest {
             && gap(middle(twoPoints.take(4), twoAt), BoardPoint(0.0, 0.0)) <= 1)
         assertEquals("L9 the same input, the same places", at, IdeaBoardSpread.places(all))
     }
+
+    // v13 review: -0.0 is the point 0.0, as iOS's Key has it (Double's == there)
+    @Test fun l9SpreadTakesMinusZeroAsZero() {
+        val signed = listOf(card(1, 0.0, 0.0), card(2, -0.0, 0.0), card(3, 0.0, -0.0))
+        val at = IdeaBoardSpread.places(signed)
+        assertTrue("L9 cards at 0.0 and -0.0 are one block round the point: $at",
+            noneCover(signed, at) && gap(middle(signed, at), BoardPoint(0.0, 0.0)) <= 1)
+        assertEquals("L9 the same places as three at (0.0, 0.0)", IdeaBoardSpread.places((1..3).map { card(it, 0.0, 0.0) }), at)
+    }
 }

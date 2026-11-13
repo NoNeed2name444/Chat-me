@@ -374,7 +374,10 @@ nonisolated enum IdeaBoardFit {
     static func toolsRect(view: CGSize, hidden: Double, tools: Tools) -> CGRect {
         let seen: Double = max(Double(view.height) - hidden, 0)
         let top: Double = tools.centred ? seen / 2 - tools.height / 2 : seen - tools.height
-        return CGRect(x: Double(view.width) - tools.width, y: top, width: tools.width, height: tools.height)
+        // origin and size, not x/y/width/height: that initialiser is CoreGraphics' overlay, which
+        // the macOS-only backup suite doesn't import (it builds this file with Foundation alone)
+        return CGRect(origin: CGPoint(x: Double(view.width) - tools.width, y: top),
+                      size: CGSize(width: tools.width, height: tools.height))
     }
 
     /// The first view and Recentre (S05m item 1): every card on screen, 16

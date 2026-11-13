@@ -507,9 +507,11 @@ object IdeaBoardSpread {
             return BoardPoint(p.x + r * cos(a), p.y + r * sin(a))
         }
 
-        // the shared points, in the store's order of each one's first card
+        // the shared points, in the store's order of each one's first card; -0.0 + 0.0 is 0.0, so a
+        // point at -0.0 shares 0.0's, as iOS's Key (GraphLineStyle.swift) has it
+        fun key(p: BoardPoint) = (p.x + 0.0) to (p.y + 0.0)
         val byPoint = LinkedHashMap<Pair<Double, Double>, MutableList<Card>>()
-        for (card in cards) byPoint.getOrPut(card.centre.x to card.centre.y) { mutableListOf() }.add(card)
+        for (card in cards) byPoint.getOrPut(key(card.centre)) { mutableListOf() }.add(card)
         for (group in byPoint.values) {
             if (group.size < 2) continue
             val point = group[0].centre
@@ -540,7 +542,7 @@ object IdeaBoardSpread {
         }
 
         for (card in cards) {
-            if (byPoint[card.centre.x to card.centre.y]!!.size >= 2) continue
+            if (byPoint[key(card.centre)]!!.size >= 2) continue
             val p = card.centre
             val hit = hits(p, card.width, card.height)
             if (hit.isEmpty()) { put(card, p, -1); continue }

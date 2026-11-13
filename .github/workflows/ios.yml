@@ -12,7 +12,7 @@
 name: iOS
 on:
   push:
-    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
+    branches: [sorta]
 permissions:
   contents: read
 concurrency:

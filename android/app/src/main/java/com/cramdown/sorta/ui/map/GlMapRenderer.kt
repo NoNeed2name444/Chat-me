@@ -1603,14 +1603,17 @@ class GlMapRenderer(
         if (perf == null) return
         val ids = IntArray(2)
         GLES30.glGenBuffers(2, ids, 0); hubIbo = ids[0]; lineIbo = ids[1]
-        val hubs = ByteBuffer.allocateDirect(max(hubChunks.size, 1) * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
-        for (k in hubChunks) if (k >= 0) hubs.put(k)
-        hubs.flip()
+        // a book with no folders has no hubs: a store with no data, not 4 bytes asked of an empty list
+        val (hubBytes, hubList) = PerfLines.indexUpload(PerfLines.hubIndices(hubChunks))
+        val hubs = hubList?.let { list ->
+            val b = ByteBuffer.allocateDirect(list.size * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+            b.put(list); b.position(0); b
+        }
         GLES30.glGenVertexArrays(1, ids, 0); hubVao = ids[0]
         GLES30.glBindVertexArray(hubVao)
         bindNodeAttributes()
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, hubIbo)
-        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, max(hubs.limit(), 1) * 4, hubs, GLES30.GL_STATIC_DRAW)
+        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, hubBytes, hubs, GLES30.GL_STATIC_DRAW)
         GLES30.glGenVertexArrays(1, ids, 0); lineVao = ids[0]
         GLES30.glBindVertexArray(lineVao)
         bindNodeAttributes()
