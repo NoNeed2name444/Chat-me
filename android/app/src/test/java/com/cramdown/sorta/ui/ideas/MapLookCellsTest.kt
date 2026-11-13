@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +36,7 @@ import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WindowShapeHost
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -148,6 +151,8 @@ class MapLookCellsTest {
                 MapFilterTool(filter, folders) { filter = it; picked = it }
             }
         }
+        // iOS's line.3.horizontal.decrease (Graph3DView.swift:758-760): Material's FilterList, not a funnel
+        assertSame(Icons.Rounded.FilterList, MapFilterGlyph)
         val tool = node(MapPanelTags.FILTER_TOOL)
         assertTrue("the tool is a 48 dp target", tall(MapPanelTags.FILTER_TOOL) >= WardControlSize.target - 0.5)
         assertEquals(false, tool.config.getOrNull(SemanticsProperties.Selected))

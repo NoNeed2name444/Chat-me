@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,6 +69,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -126,6 +128,13 @@ import kotlin.math.sqrt
  * back to the first view (mapmode-fly-space-...); the black hole moved, carrying at least its planets,
  * a planet chosen inside it within 10 % of its move (mapmode-drag-star-space-...). Space's legend,
  * opened at its top, shows the ladder, and its Moon row is there (mapmode-legend-top-space-...).
+ *
+ * S05i A3 and A6: the Filter tool in each theme (requireFilter), with a still of its menu and of the
+ * map under Pages and under Garden alone (mapmode-filtered-<pages|garden>-<theme>-...); in Neurons,
+ * its first-run card put away first, the cell states (requireCells): the Look menu with its Cells
+ * group (mapmode-cells-menu-neurons-...), the Cell by cell sheet (mapmode-cells-sheet-neurons-...),
+ * Cell by cell's Engulfing over the map (mapmode-cells-neurons-...), and a close-up of the open Garden
+ * cell under each of the six states, chosen in Look › Cells (mapmode-cells-<state>-neurons-...).
  */
 @RunWith(AndroidJUnit4::class)
 class MapModeSpaceRenderTest {
@@ -243,6 +252,8 @@ class MapModeSpaceRenderTest {
         requireNeuronLinks(dark, neuronsChosen)
         // S05g A6: a chosen cell with bridges, its lit bridges, and Show links on its idea that bridges out
         requireNeuronBridges(dark)
+        // S05i A6: the Neurons' first-run card put away by its Got it, so the filtered map and the cells read whole
+        putCardAway(neurons)
         // S05i A3: the filter in Neurons, the cell states chosen, and the legend's Cell states row
         requireFilter(GraphTheme.NEURONS, dark)
         requireCells(dark)
@@ -282,6 +293,15 @@ class MapModeSpaceRenderTest {
     private fun press(matcher: SemanticsMatcher) {
         compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(matcher).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
+
+    /** The first-run card put away by its Got it, as a person would, where it shows (none is up after it). */
+    private fun putCardAway(name: String) {
+        if (!shown(MapPanelTags.HINT)) { android.util.Log.i("MapModeSpaceRenderTest", "$name: no first-run card to put away"); return }
+        press(hasText(instrumentation.targetContext.getString(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT)))
+        compose.waitUntil(10_000) { !shown(MapPanelTags.HINT) }
+        SystemClock.sleep(1_000)
         compose.waitForIdle()
     }
 
@@ -362,6 +382,8 @@ class MapModeSpaceRenderTest {
             try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
             check(!shown(MapPanelTags.PEEK)) { "The chosen body, filtered away, kept its card for $name" }
         }
+        // S05i A6: the map under Pages, empty, its line "Nothing here for this filter." over Space and Neurons
+        shot("mapmode-filtered-pages-$look-${if (dark) "dark" else "light"}-$device")
         // one folder: Garden's bodies only, the camera flying to it where iOS's does
         chooseFilter(MapFilter.Folder(garden.id))
         try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 } == true } } catch (_: ComposeTimeoutException) {}
@@ -377,6 +399,8 @@ class MapModeSpaceRenderTest {
             try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { !same(home, it) } == true } } catch (_: ComposeTimeoutException) {}
             check(!same(home, checkNotNull(mapDrawn()).pose)) { "The camera did not fly to Garden for $name" }
         }
+        // S05i A6: the map under Garden alone, flown to where iOS's flies
+        shot("mapmode-filtered-garden-$look-${if (dark) "dark" else "light"}-$device")
         // Linked ideas: the unlinked go (the closed Neurons draw no idea, so only Space and Performance can show it)
         chooseFilter(MapFilter.Linked)
         try { compose.waitUntil(30_000) { mapDrawn()?.let { it.filtered && it.shown > 0 && it.shown != inGarden.shown } == true } } catch (_: ComposeTimeoutException) {}
@@ -434,11 +458,15 @@ class MapModeSpaceRenderTest {
     /**
      * S05i A3 in Neurons: Garden opened, its three ideas drawn resting; Look › Cells › Firing draws
      * each firing; Cell by cell gives Garden Engulfing, which wins inside it (a still,
-     * mapmode-cells-neurons-<light|dark>-<device>.png); Same as all and Resting, none firing. The
-     * choices are left natural.
+     * mapmode-cells-neurons-<light|dark>-<device>.png); Same as all and Resting, none firing. A6: the
+     * Look menu with its Cells group (mapmode-cells-menu-neurons-...) and the Cell by cell sheet
+     * (mapmode-cells-sheet-neurons-...), as iOS's testNeuronsLookMenu shows the menu; then each of the
+     * six states chosen in Look › Cells draws all of Garden's ideas in it, seen close up
+     * (closeUpOnGarden; mapmode-cells-<state>-neurons-...). The choices are left natural.
      */
     private fun requireCells(dark: Boolean) {
-        val name = "mapmode-cells-neurons-${if (dark) "dark" else "light"}-$device"
+        val mode = if (dark) "dark" else "light"
+        val name = "mapmode-cells-neurons-$mode-$device"
         val res = instrumentation.targetContext.resources
         atHome(name)
         val ideas = notes.count { it.folderId == garden.id }
@@ -447,17 +475,25 @@ class MapModeSpaceRenderTest {
         check(natural.states.size == 6 && natural.states[NeuronState.RESTING.code] == ideas && natural.states.sum() == ideas) {
             "Garden's $ideas ideas do not rest, left alone, for $name: ${natural.states}"
         }
-        // Firing for every idea
+        // Firing for every idea, the menu kept as a still with its Cells group first
         openLook(GraphTheme.NEURONS)
+        compose.waitUntil(10_000) { shown("lookCell-" + NeuronState.FIRING.rawValue) }
+        check(NeuronState.menuOrder.all { shown("lookCell-" + it.rawValue) } && shown(MapPanelTags.LOOK_CELL_BY_CELL)) {
+            "The Look menu does not show the six cell states and Cell by cell for $name"
+        }
+        SystemClock.sleep(500) // the menu comes to rest
+        shot("mapmode-cells-menu-neurons-$mode-$device")
         press(hasTestTag("lookCell-" + NeuronState.FIRING.rawValue))
         val firing = statesAfter(natural.build) { it.getOrNull(NeuronState.FIRING.code) == ideas }
         check(firing.getOrNull(NeuronState.FIRING.code) == ideas && firing.sum() == ideas) { "Look › Cells › Firing does not draw every idea firing for $name: $firing" }
-        // Cell by cell: Garden Engulfing, which wins inside it
+        // Cell by cell: Garden Engulfing, which wins inside it; the sheet kept as a still
         val firingBuild = checkNotNull(mapDrawn()).build
         openLook(GraphTheme.NEURONS)
         press(hasTestTag(MapPanelTags.LOOK_CELL_BY_CELL))
         compose.waitUntil(10_000) { shown(MapPanelTags.CELL_BY_CELL) }
         SystemClock.sleep(800) // the sheet comes to rest
+        check(folders.all { shown("cellByCell-" + it.id) }) { "The Cell by cell sheet has no row for each top-level folder for $name" }
+        shot("mapmode-cells-sheet-neurons-$mode-$device")
         press(hasTestTag("cellByCell-" + garden.id))
         press(hasText(NeuronState.ENGULFING.title) and hasClickAction())
         ui.pressBack()
@@ -485,7 +521,97 @@ class MapModeSpaceRenderTest {
         press(hasTestTag("lookCell-" + NeuronState.RESTING.rawValue))
         val resting = statesAfter(sameBuild) { it.getOrNull(NeuronState.RESTING.code) == ideas }
         check(resting.getOrNull(NeuronState.RESTING.code) == ideas && resting.getOrNull(NeuronState.FIRING.code) == 0) { "Resting left an idea firing for $name: $resting" }
+        // A6: each state close up, Resting last, so every choice builds the cells again and the choice ends natural
+        var plan: CloseUp? = null
+        for (state in NeuronState.menuOrder.filter { it != NeuronState.RESTING } + NeuronState.RESTING) {
+            val still = "mapmode-cells-${state.rawValue}-neurons-$mode-$device"
+            val build = checkNotNull(mapDrawn()).build
+            openLook(GraphTheme.NEURONS)
+            press(hasTestTag("lookCell-" + state.rawValue))
+            val drawn = statesAfter(build) { it.getOrNull(state.code) == ideas }
+            check(drawn.getOrNull(state.code) == ideas && drawn.sum() == ideas) { "Look › Cells › ${state.title} does not draw every idea in it for $still: $drawn" }
+            plan = closeUpOnGarden(still, plan)
+            val close = checkNotNull(mapDrawn())
+            check(close.states.getOrNull(state.code) == ideas && close.states.sum() == ideas && gardenOpen()) {
+                "Garden, close up, does not draw its $ideas ideas ${state.title} for $still: $close"
+            }
+            shot(still)
+        }
         atHome(name)
+    }
+
+    /** The two-finger moves that brought Garden close, and the camera they left: the same scene from its first view takes them again. */
+    private class CloseUp(val moves: List<FloatArray>, val pose: List<Float>)
+
+    /**
+     * S05i A6: the open Garden cell brought to the middle of the map and close, as a person would with
+     * two fingers (moved together to pan, spread to zoom; Map3DView's own rule), so the state of each
+     * of its ideas reads in a still. Where a body is drawn is read from its name, on show while it is
+     * chosen (MapDrawn.names); a tap on empty space lets it go. The cell is panned to the middle twice
+     * (it lies off the camera's focal plane), the fingers spread about the middle until Garden's ideas
+     * lie about 0.3 of the map's shorter side from its centre, and the cell panned to the middle once
+     * more. Each of Garden's ideas then lies on the map, the farthest at least 0.15 of that side from
+     * the cell's centre. A new scene starts from the same first view, so [last]'s moves, taken again,
+     * leave the camera where they did; where they do not, the close-up is measured afresh from there
+     * (Recentre would close the cell). As CI runs it, with animations off, a tap moves no camera.
+     */
+    private fun closeUpOnGarden(name: String, last: CloseUp?): CloseUp {
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        val size = checkNotNull(mapNode()).size
+        val w = size.width.toFloat(); val h = size.height.toFloat()
+        val middle = Offset(w / 2, h / 2)
+        val density = instrumentation.targetContext.resources.displayMetrics.density
+        val apart = 40f * density
+        val widest = w / 2 - 24f * density
+        val moves = ArrayList<FloatArray>()
+        fun fingers(from: Offset, to: Offset, near: Float, far: Float) {
+            compose.onNode(map).performTouchInput {
+                pinch(from - Offset(near, 0f), to - Offset(far, 0f), from + Offset(near, 0f), to + Offset(far, 0f), 600)
+            }
+            compose.waitForIdle()
+            SystemClock.sleep(500)
+            moves += floatArrayOf(from.x, from.y, to.x, to.y, near, far)
+        }
+        if (last != null) {
+            for (m in last.moves) fingers(Offset(m[0], m[1]), Offset(m[2], m[3]), m[4], m[5])
+            try { compose.waitUntil(10_000) { mapDrawn()?.pose?.let { same(last.pose, it) } == true } } catch (_: ComposeTimeoutException) {}
+            if (same(last.pose, checkNotNull(mapDrawn()).pose)) return last
+            android.util.Log.i("MapModeSpaceRenderTest", "$name: the close-up's moves left the camera at ${mapDrawn()?.pose}, not ${last.pose}; measured afresh")
+            moves.clear()
+        }
+        fun named(i: Int) = mapDrawn()?.names?.firstOrNull { it.index == i }?.let { Offset(it.body[0], it.body[1]) }
+        fun at(id: String): Offset {
+            val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey))
+            val i = tap.ids.indexOfFirst { it.equals(id, ignoreCase = true) }
+            check(i >= 0) { "$id is not on the map for $name" }
+            compose.runOnIdle { tap.tap(i) }
+            try { compose.waitUntil(10_000) { mapDrawn()?.chosen == i && named(i) != null } } catch (_: ComposeTimeoutException) {}
+            val spot = checkNotNull(named(i)) { "$id shows no name to find it by for $name: ${mapDrawn()}" }
+            compose.runOnIdle { tap.tap(-1) }
+            try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) && mapDrawn()?.chosen == -1 } } catch (_: ComposeTimeoutException) {}
+            check(!shown(MapPanelTags.PEEK)) { "A tap on empty space kept $id's card for $name" }
+            return spot
+        }
+        val inGarden = notes.filter { it.folderId == garden.id }
+        fun spread(): Pair<Float, List<Offset>> {
+            val cell = at(garden.id)
+            val spots = inGarden.map { at(it.id) }
+            return spots.maxOf { (it - cell).getDistance() } to spots
+        }
+        val (before, _) = spread()
+        repeat(2) { fingers(at(garden.id), middle, apart, apart) }
+        var zoom = (0.3f * min(w, h) / max(before, 1f)).coerceIn(1f, 6f)
+        while (zoom > 1.01f) {
+            val step = min(zoom, widest / apart)
+            fingers(middle, middle, apart, apart * step)
+            zoom /= step
+        }
+        fingers(at(garden.id), middle, apart, apart)
+        val (after, spots) = spread()
+        for ((n, spot) in inGarden.zip(spots)) check(spot.x in 0f..w && spot.y in 0f..h) { "${n.title} is off the map close up for $name: $spot in $w x $h" }
+        check(after >= 0.15f * min(w, h)) { "Garden is not close for $name: its ideas lie $after px from its centre, $before px before, in $w x $h" }
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: Garden's ideas lie $after px from its centre close up, $before px before; ${moves.size} moves")
+        return CloseUp(moves, checkNotNull(mapDrawn()).pose)
     }
 
     /** S05i A6: Neurons' legend at its Cell states row (a still, mapmode-legend-cells-neurons-<light|dark>-<device>.png). */

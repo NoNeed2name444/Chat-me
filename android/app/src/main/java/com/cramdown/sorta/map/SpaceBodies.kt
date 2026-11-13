@@ -511,6 +511,20 @@ object UniverseBeams {
     fun kindOf(packed: Long): Int = (packed and 0xFF).toInt()
     fun centreOf(packed: Long): Int = (packed shr 8).toInt() - 1
 
+    /**
+     * Each of [plan]'s links by its chunk-order pair ([chunkOf]: a plan index's node), packed with its
+     * kind and its centre's node: what [SpaceBodies.linkKinds] reads to bow a beam or leave it out.
+     */
+    fun kinds(plan: UniversePlan, chunkOf: IntArray): Map<Long, Long> {
+        val kinds = HashMap<Long, Long>(plan.links.size * 2)
+        for (link in plan.links) {
+            val a = chunkOf.getOrElse(link.a) { -1 }; val b = chunkOf.getOrElse(link.b) { -1 }
+            if (a < 0 || b < 0) continue
+            kinds[key(a, b)] = pack(link.kind, if (link.centre >= 0) chunkOf.getOrElse(link.centre) { -1 } else -1)
+        }
+        return kinds
+    }
+
     /** The Space style a role is drawn in (iOS's dress, GraphUniverseScene.swift:265-305). */
     fun style(role: UniverseRole): SpaceStyle = when (role) {
         UniverseRole.GALAXY -> SpaceStyle.BLACK_HOLE

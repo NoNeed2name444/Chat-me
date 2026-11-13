@@ -6,8 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.FilterAlt
-import androidx.compose.material.icons.filled.FilterAlt as FilterAltFilled
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -21,6 +19,8 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.Grain
 import androidx.compose.material.icons.rounded.Hive
@@ -296,7 +296,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
-                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown) { shown = it }
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
+                    onHome = { flyTo = null }, shown = shown) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -425,7 +426,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
-                                  shown: Boolean, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
+                                  onHome: () -> Unit, shown: Boolean, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
                                   onHidden: (String) -> Unit = {}, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes) { book.allEdges() }
@@ -568,7 +569,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, filter = view)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, filter = view)
         // no idea passes: say so, over Space and the Neurons only (Graph3DView.swift:308-313); nothing to touch
         if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(R.string.map_filter_empty),
             Modifier.align(Alignment.Center).padding(horizontal = WardSpace.xl.wardDp).testTag(MapPanelTags.FILTER_EMPTY),
@@ -763,14 +764,19 @@ internal fun mapTopFolders(book: IdeaBook, galaxies: List<String>?): List<Pair<S
 }
 
 /**
+ * The Filter tool's glyph: iOS's line.3.horizontal.decrease, three lines shortening (Graph3DView.swift:758-760),
+ * Material's FilterList. While a filter is in force the tool is pressed in, as iOS's .circle.fill.
+ */
+internal val MapFilterGlyph get() = Icons.Rounded.FilterList
+
+/**
  * The Filter tool (S05i; iOS's, Graph3DView.swift:772-779, :824-841): pressed in, its glyph filled,
  * while not Everything. Its menu: Show (Everything, Pages, Ideas, Linked ideas), then Folder.
  */
 @Composable internal fun MapFilterTool(filter: MapFilter, folders: List<Pair<String, String>>, choose: (MapFilter) -> Unit) {
     var showing by remember { mutableStateOf(false) }
     Box {
-        // a stand-in for iOS's line.3.horizontal.decrease(.circle.fill)
-        IdeaToolButton(if (filter.isFiltering) Icons.Filled.FilterAltFilled else Icons.Outlined.FilterAlt, stringResource(R.string.map_filter),
+        IdeaToolButton(MapFilterGlyph, stringResource(R.string.map_filter),
             active = filter.isFiltering, modifier = Modifier.testTag(MapPanelTags.FILTER_TOOL), value = mapFilterTitle(filter, folders)) { showing = true }
         DropdownMenu(showing, { showing = false }, containerColor = wardColor(WardToken.background)) {
             MenuHeader(stringResource(R.string.map_filter_show))
@@ -898,11 +904,12 @@ private const val LEGEND_GLYPH_COLUMN = 30
 private fun LegendTint.color() = androidx.compose.ui.graphics.Color(r.toFloat(), g.toFloat(), b.toFloat(), a.toFloat())
 
 /** iOS's SF Symbol for a legend row, as the Material icon the app ships that stands in for it (S05f plan, Q2). */
-private fun legendGlyph(symbol: String): ImageVector = when (symbol) {
+internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
     "circle.circle.fill" -> Icons.Rounded.Adjust
     "sun.max.fill" -> Icons.Rounded.WbSunny
     "circle.lefthalf.filled" -> Icons.Rounded.Contrast
     "globe.europe.africa.fill" -> Icons.Rounded.Public
+    "moon.fill" -> Icons.Rounded.DarkMode
     "dot.radiowaves.left.and.right" -> Icons.Rounded.Sensors
     "sparkle" -> Icons.Rounded.Flare
     // the Cell states row's (GraphLegend.swift:302), the app's sparkles

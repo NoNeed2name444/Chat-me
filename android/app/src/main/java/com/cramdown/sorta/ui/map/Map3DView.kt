@@ -274,7 +274,8 @@ var SemanticsPropertyReceiver.mapDrawn by MapDrawnKey
 
 /**
  * The map's onTap on its node, for tests, with the ids its body indices stand for ([MapScene.ids]):
- * a tap on body i is tap(i), as the map's own hit test hands it on. Robolectric can't draw GL, so no
+ * a tap on body i is tap(i), as the map's own hit test hands it on, and tap(-1) a tap on empty space,
+ * which lets the chosen body go wherever the bodies lie on screen. Robolectric can't draw GL, so no
  * body is on screen to hit, and MapPeekCardTest taps through this. A key of its own, as
  * [MapDrawnKey]: accessibility services do not read it.
  */
@@ -357,6 +358,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     ease: MapEase? = null,
     /** Fly in (S05h): Space's Universe flies the camera in to this folder's system; Recentre comes back. */
     flyTo: MapFlyTo? = null,
+    /** Two taps on empty space brought back the first view and ended any Fly in (S05h plan, Q5): the page forgets [flyTo]. */
+    onHome: () -> Unit = {},
     /**
      * The filter (S05i), null for everything: the bodies and links it shows, by the scene's index. A
      * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
@@ -437,7 +440,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     val shownBuild by rememberUpdatedState(scene.build)
     DisposableEffect(Unit) { onDispose { if (activity?.isChangingConfigurations != true) LinkMemory.forget(shownBuild) } }
     LaunchedEffect(recenter) {
-        if (recenter != 0) { renderer.leaveFlight(); loop.touched(); synchronized(camera) { home.restore(camera) } }
+        if (recenter != 0) { renderer.goHome(home); loop.touched() }
     }
     // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
     LaunchedEffect(renderer, flyTo) {
@@ -643,7 +646,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
         }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot())
         val tapped = onTap
-        if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it) }, scene.build, cue)
+        if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it.takeIf { i -> i >= 0 }) }, scene.build, cue)
     }
         .onSizeChanged { viewSize = it; fitHome(it) }) {
         val slop = LocalViewConfiguration.current.touchSlop
@@ -651,6 +654,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         val holdScale = MapTouchRules.holdScale(LocalViewConfiguration.current.longPressTimeoutMillis)
         val latestTap by rememberUpdatedState(onTap)
         val latestDouble by rememberUpdatedState(onDoubleTap)
+        val latestHome by rememberUpdatedState(onHome)
         val latestHold by rememberUpdatedState(onHold)
         // the last still lift: when, where and on what, for a double tap
         val lastLift = remember(scene) { LastLift() }
@@ -818,10 +822,12 @@ data class MapFlyTo(val id: String, val serial: Int)
                     MapTouchKind.DOUBLE_TAP -> { lastLift.clear(); latestDouble?.invoke(checkNotNull(hit)) ?: latestTap?.invoke(hit) }
                     MapTouchKind.TAP -> {
                         latestTap?.invoke(hit)
-                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS)
+                        // two taps on empty space: the first view again (SceneKit's own double tap on iOS),
+                        // and a Fly in under way ends there, as Recentre ends it (S05h plan, Q5)
                         if (hit == null && paired && lastLift.hit == null) {
                             lastLift.clear()
-                            synchronized(camera) { home.restore(camera) }
+                            renderer.goHome(home)
+                            latestHome()
                             loop.moved()
                         } else lastLift.set(liftedAt, down.position, hit)
                     }
@@ -935,7 +941,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
             IconButton(onClick = {
                 loop.touched()
-                synchronized(camera) { home.restore(camera) }
+                renderer.goHome(home)
             }) { Icon(Icons.Rounded.RadioButtonChecked, "Recentre", tint = Color.White) }
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1.25f) } }) { Icon(Icons.Rounded.Add, "Zoom in", tint = Color.White) }
         }
