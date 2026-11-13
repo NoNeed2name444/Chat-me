@@ -770,8 +770,8 @@ internal fun mapTopFolders(book: IdeaBook, galaxies: List<String>?): List<Pair<S
 internal val MapFilterGlyph get() = Icons.Rounded.FilterList
 
 /**
- * The Filter tool (S05i; iOS's, Graph3DView.swift:772-779, :824-841): pressed in, its glyph filled,
- * while not Everything. Its menu: Show (Everything, Pages, Ideas, Linked ideas), then Folder.
+ * The Filter tool (S05i; iOS's, Graph3DView.swift:772-779, :824-841): pressed in, in the accent, while not
+ * Everything; its glyph stays FilterList (iOS swaps to .circle.fill). Its menu: Show (Everything, Pages, Ideas, Linked ideas), then Folder.
  */
 @Composable internal fun MapFilterTool(filter: MapFilter, folders: List<Pair<String, String>>, choose: (MapFilter) -> Unit) {
     var showing by remember { mutableStateOf(false) }
@@ -789,7 +789,8 @@ internal val MapFilterGlyph get() = Icons.Rounded.FilterList
                 MenuHeader(stringResource(R.string.map_filter_folder))
                 folders.forEach { (id, name) ->
                     val f = MapFilter.Folder(id)
-                    Choice(name, Icons.Outlined.Folder, filter == f, Modifier.testTag(MapPanelTags.filterRow(f))) { choose(f); showing = false }
+                    // the name only, as iOS's Text(folder.name) (Graph3DView.swift:834-838)
+                    Choice(name, null, filter == f, Modifier.testTag(MapPanelTags.filterRow(f))) { choose(f); showing = false }
                 }
             }
         }
@@ -984,6 +985,7 @@ internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun FolderLooksSheet(book: IdeaBook, settings: IdeasSettings, onDone: () -> Unit) {
     val looks = GraphStyleChoice.folders(settings.folderStyles)
+    val same = stringResource(R.string.map_same_as_all)
     fun set(folder: String, style: SpaceStyle?) {
         val next = HashMap(looks)
         if (style == null) next.remove(folder) else next[folder] = style
@@ -999,10 +1001,10 @@ internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
                 Box {
                     DropdownMenuItem({ Text(folder.name, color = wardColor(WardToken.ink)) }, { menu = true },
                         leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = toneColor(folder.id, book)) },
-                        trailingIcon = { Text(chosen?.label ?: "Same as all", style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.primaryInk)) })
+                        trailingIcon = { Text(chosen?.label ?: same, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.primaryInk)) })
                     DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
                         // no glyph, as on iOS: the globe is the rocky planet's
-                        Choice("Same as all", null, chosen == null) { set(folder.id, null); menu = false }
+                        Choice(same, null, chosen == null) { set(folder.id, null); menu = false }
                         SpaceStyle.menuOrder.forEach { s -> Choice(s.label, s.icon, chosen == s) { set(folder.id, s); menu = false } }
                     }
                 }
