@@ -1015,7 +1015,9 @@ data class MapFlyTo(val id: String, val serial: Int)
                 // a word's room beside a name, so two in a row read as two; iOS's 2-point nudge
                 // (GraphPerfLabelRoom.gap), doubled, above and below and round links and bodies
                 val rules = MapNames.Rules(largest = 12.sp.toPx(), gapX = 8.dp.toPx(), gapY = 4.dp.toPx(), line = 1.dp.toPx())
-                val names = MapNames.layout(screenNodes, scene.titles, scene.links, scene.linkHalf, HashMap(named), rules, metrics)
+                // Performance names none past MapNames.LIMIT bodies, as iOS; Space and Neurons have no limit
+                val limit = if (scene.perf != null) MapNames.LIMIT else Int.MAX_VALUE
+                val names = MapNames.layout(screenNodes, scene.titles, scene.links, scene.linkHalf, HashMap(named), rules, metrics, limit)
                 named.clear()
                 for (name in names) {
                     named[name.index] = name.spot

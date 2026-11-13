@@ -29,6 +29,16 @@ object MapNames {
     /** A name past this many characters is cut, with an ellipsis (S03-result.md: one cut rule is step 4's design work). */
     const val CUT = 23
 
+    /**
+     * Performance names only a map of at most this many bodies (iOS's GraphPerfLabelSpots.limit and its
+     * updateLabels, GraphPerfMapView.swift:569-576): past it, the proof tour's 100,000 and any vault as
+     * big, none. A layout weighs every name against every body and link on screen, on the main thread
+     * whenever the bodies move; on the tour's map each main-thread frame took 4 to 16 s on CI's emulator
+     * (S05i2, cde6f9a), so the main thread never idled while the map moved. Space and Neurons have
+     * no such limit on iOS, so none here: they pass no [layout] limit.
+     */
+    const val LIMIT = 2_000
+
     /** The sizes the names keep, in pixels. */
     class Rules(
         /** The largest a name's words grow. */
@@ -49,11 +59,11 @@ object MapNames {
      * The names to draw for [nodes], with [titles] by node index, the scene's [links] (pairs of node
      * indices, each a band [linkHalf] world units each side) and [held], the names drawn last frame
      * by index, with the spot each took: those count [LabelRoom.HOLD] times bigger and try that spot
-     * first, so a name does not hop as the map drifts.
+     * first, so a name does not hop as the map drifts. None on a map of more than [limit] bodies.
      */
     fun layout(nodes: List<ScreenNode>, titles: List<String>, links: IntArray, linkHalf: Float, held: Map<Int, Int>,
-               rules: Rules, metrics: NameMetrics): List<PlacedName> {
-        if (titles.isEmpty() || nodes.isEmpty()) return emptyList()
+               rules: Rules, metrics: NameMetrics, limit: Int = Int.MAX_VALUE): List<PlacedName> {
+        if (titles.isEmpty() || nodes.isEmpty() || titles.size > limit) return emptyList()
         val at = HashMap<Int, ScreenNode>(nodes.size * 2)
         for (n in nodes) at[n.index] = n
         // every link with both ends on screen, as its band there

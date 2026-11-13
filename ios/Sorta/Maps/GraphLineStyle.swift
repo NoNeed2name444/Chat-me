@@ -1,4 +1,10 @@
 import Foundation
+// CGRect's x/y/width/height initialiser and its minX/maxX are CoreGraphics' Swift overlay: the
+// app gets it through SwiftUI, but the macOS-only backup suite builds this file with Foundation
+// alone. Linux's Foundation has them itself.
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 // MARK: - Lines: Curved / Straight
 //

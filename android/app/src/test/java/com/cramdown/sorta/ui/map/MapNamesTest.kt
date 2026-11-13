@@ -23,7 +23,8 @@ class MapNamesTest {
     private val rules = MapNames.Rules(largest = 24f, gapX = 8f, gapY = 4f, line = 1f)
 
     private fun layout(nodes: List<ScreenNode>, titles: List<String>, links: IntArray = IntArray(0), linkHalf: Float = 0f,
-                       held: Map<Int, Int> = emptyMap()) = MapNames.layout(nodes, titles, links, linkHalf, held, rules, metrics)
+                       held: Map<Int, Int> = emptyMap(), limit: Int = Int.MAX_VALUE) =
+        MapNames.layout(nodes, titles, links, linkHalf, held, rules, metrics, limit)
 
     /** No two names placed print over each other, or closer than the room the rules keep. */
     private fun clearOfEachOther(names: List<PlacedName>) {
@@ -111,6 +112,19 @@ class MapNamesTest {
         assertEquals(listOf(2), names.map { it.index })
         assertEquals("Plant tulips before th…", names.single().label)
         assertEquals(MapNames.CUT, names.single().label.length)
+    }
+
+    // iOS's limit (GraphPerfLabelSpots.limit): a Performance map of more bodies than MapNames.LIMIT, the
+    // proof tour's 100,000 among them, names none; Space and Neurons pass no limit and still name it, so no main-thread frame weighs every name against every body and
+    // link (the tour's ran 4 to 16 s on CI's emulator, cde6f9a); a map at the limit is named as before
+    @Test fun aMapPastTheLimitNamesNothing() {
+        val nodes = listOf(ScreenNode(0, 400f, 500f, 28f), ScreenNode(1, 900f, 1400f, 28f))
+        val at = List(MapNames.LIMIT) { "Made-up idea $it" }
+        val perf = MapNames.LIMIT
+        assertEquals("at the limit, both named", setOf(0, 1), layout(nodes, at, limit = perf).map { it.index }.toSet())
+        assertEquals("one body more, none", emptyList<PlacedName>(), layout(nodes, at + "One more", limit = perf))
+        assertEquals("no limit (Space, Neurons), both named", setOf(0, 1), layout(nodes, at + "One more").map { it.index }.toSet())
+        assertEquals(2_000, MapNames.LIMIT)
     }
 
     // S05j 6c: counted and cut by code point, as MapNameShow.cut: an emoji across the cut stays whole
