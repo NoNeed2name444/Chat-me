@@ -124,6 +124,7 @@ import com.cramdown.sorta.map.grouped
 import com.cramdown.sorta.map.PerfForce
 import com.cramdown.sorta.map.PerfInput
 import com.cramdown.sorta.map.PerfLayout
+import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
 import com.cramdown.sorta.ui.ward.WardSpace
@@ -726,7 +727,9 @@ data class MapFlyTo(val id: String, val serial: Int)
             high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek, below = scene.perf?.graph?.noteCount ?: Int.MAX_VALUE)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
-    Box(modifier.background(Color(0xFF0E1B2C), RoundedCornerShape(corner)).semantics {
+    // behind the GL: Performance's sky is iOS's (PerfLook.SKY); the other looks keep theirs
+    val behind = if (scene.theme == MapTheme.PLAIN) Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2]) else Color(0xFF0E1B2C)
+    Box(modifier.background(behind, RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
@@ -1017,7 +1020,11 @@ data class MapFlyTo(val id: String, val serial: Int)
                 val rules = MapNames.Rules(largest = 12.sp.toPx(), gapX = 8.dp.toPx(), gapY = 4.dp.toPx(), line = 1.dp.toPx())
                 // Performance names none past MapNames.LIMIT bodies, as iOS; Space and Neurons have no limit
                 val limit = if (scene.perf != null) MapNames.LIMIT else Int.MAX_VALUE
-                val names = MapNames.layout(screenNodes, scene.titles, scene.links, scene.linkHalf, HashMap(named), rules, metrics, limit)
+                // Performance keeps every name inside the map, 12 points in from either side, as iOS's
+                // GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204); Space and Neurons as before
+                val window = if (scene.theme == MapTheme.PLAIN) size.width else 0f
+                val names = MapNames.layout(screenNodes, scene.titles, scene.links, scene.linkHalf, HashMap(named), rules, metrics, limit,
+                    viewWidth = window, edge = MapNames.EDGE_DP.dp.toPx())
                 named.clear()
                 for (name in names) {
                     named[name.index] = name.spot
@@ -1160,8 +1167,13 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                 }
                 else -> {
                     val points = if (tree.nodeCount <= MapFirstView.FAST_LIMIT) bodies() else emptyList()
-                    // the scene's spacing estimate: a node is about 0.3 of it (MapScene.of)
-                    val margin = scene.nodeRadius / 0.3f * MapFirstView.FAST_MARGIN
+                    // 0.6 of the layout's spacing round each body, iOS's whole.spacing * 0.6
+                    // (GraphPerfMapView.swift:466; the spacing is scene.layout.spacing, GraphPerfRenderer.swift:194).
+                    // A scene from the book has its layout's; the demo map (MapScene.of) only its estimate, a node
+                    // about 0.3 of it. The estimate read from the book's scene, whose node is the layout's note
+                    // radius (0.18 of a 1.0 spacing), gave 0.36: the first view stood too close (v13)
+                    val spacing = scene.perf?.seed?.spacing ?: (scene.nodeRadius / 0.3f)
+                    val margin = spacing * MapFirstView.FAST_MARGIN
                     val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
                     val radius = tree.radius[Octree.ROOT]
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets -> MapFirstView.framing(points, margin, w, h, insets) ?: MapFirstView.framing(centre, radius, w, h, insets) }

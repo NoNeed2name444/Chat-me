@@ -137,4 +137,35 @@ class MapNamesTest {
         val cut = MapNames.label("a".repeat(21) + seedling.repeat(4))
         assertFalse("no lone surrogate: $cut", Character.isHighSurrogate(cut[cut.length - 2]))
     }
+
+    // v13: Performance's names stay inside the map, 12 points in from either side, as iOS's
+    // GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204). On CI's phone stills "Loop diuret…",
+    // "Atrial fibri…" and the chosen idea's "Try the s…" ran off the right edge. A name under its body
+    // slides in along its row; one beside it that would leave the map is not tried.
+    @Test fun performancesNamesStayInsideTheMap() {
+        val width = 1080f; val edge = 30f
+        fun inside(names: List<PlacedName>) = names.all { it.box.x - it.box.width / 2 >= edge - 1e-3f && it.box.x + it.box.width / 2 <= width - edge + 1e-3f }
+        fun framed(nodes: List<ScreenNode>, titles: List<String>) =
+            MapNames.layout(nodes, titles, IntArray(0), 0f, emptyMap(), rules, metrics, viewWidth = width, edge = edge)
+        // at the right edge, alone: under its body, slid in along its row
+        val alone = listOf(ScreenNode(0, 1050f, 1000f, 28f))
+        val titles = listOf("Atrial fibrillation")
+        assertFalse("without the map's width the name leaves it", inside(layout(alone, titles)))
+        val slid = framed(alone, titles).single()
+        assertEquals(0, slid.spot)
+        assertEquals(width - edge - slid.box.width / 2, slid.box.x, 1e-3f)
+        assertEquals(layout(alone, titles).single().box.y, slid.box.y, 1e-3f)
+        // under and above taken by bodies: before it, never after it and off the map
+        val crowd = listOf(ScreenNode(0, 1000f, 1000f, 28f), ScreenNode(1, 1000f, 1040f, 28f), ScreenNode(2, 1000f, 960f, 28f))
+        val crowdTitles = listOf("Loop diuretics", "", "")
+        val loose = layout(crowd, crowdTitles).first { it.index == 0 }
+        assertEquals("unbounded, it goes after its body", 2, loose.spot)
+        assertFalse(inside(listOf(loose)))
+        val kept = framed(crowd, crowdTitles).first { it.index == 0 }
+        assertEquals("bounded, before it", 3, kept.spot)
+        assertTrue(inside(listOf(kept)))
+        // a name well inside is where it always was
+        val middle = listOf(ScreenNode(0, 540f, 1000f, 28f))
+        assertEquals(layout(middle, titles).single(), framed(middle, titles).single())
+    }
 }

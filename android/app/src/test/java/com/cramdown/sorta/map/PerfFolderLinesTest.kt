@@ -96,4 +96,16 @@ class PerfFolderLinesTest {
         assertEquals(2 * (0 until g.folderCount).count { g.folderParent[it] >= 0 }, lines.size)
         for (k in 0 until lines.size / 2) assertEquals(g.folderParent[lines[2 * k] - g.noteCount] + g.noteCount, lines[2 * k + 1])
     }
+
+    // v13: Performance's sky is iOS's, GraphPerfScene.background (GraphPerfScene.swift:189), which clears
+    // and backs its view (GraphPerfMapView.swift:145-155): near-black 5, 7, 12, not Android's navy 14, 27, 44
+    @Test fun theSkyIsIosNearBlack() {
+        var root: java.io.File? = java.io.File(System.getProperty("user.dir")).absoluteFile
+        while (root != null && !java.io.File(root, "ios/Sorta").exists()) root = root.parentFile
+        val swift = java.io.File(checkNotNull(root) { "no repository root above ${System.getProperty("user.dir")}" }, "ios/Sorta/Maps/GraphPerfScene.swift").readText()
+        val ios = checkNotNull(Regex("""static let background = SIMD3<Float>\(([^)]*)\)""").find(swift)) { "iOS's background is not found" }
+            .groupValues[1].split(",").map { it.trim().toFloat() }
+        assertArrayEquals(ios.toFloatArray(), PerfLook.SKY, 0f)
+        assertEquals(listOf(5, 7, 12), PerfLook.SKY.map { Math.round(it * 255) })
+    }
 }

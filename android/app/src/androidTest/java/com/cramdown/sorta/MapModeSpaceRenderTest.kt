@@ -318,6 +318,8 @@ class MapModeSpaceRenderTest {
         }
         check(!shown(MapPanelTags.HINT)) { "Performance shows a first-run card for $performance" }
         val performanceHome = drawnPerformance.pose
+        // v13: Performance's first view, as Space's (requireFirstView): its bodies inside the map's window
+        requirePerformanceFirstView(drawnPerformance, performance, later)
         // S05g A2: Performance's legend, its last line clear of the foot and the bar too
         shotLegend(GraphTheme.PERFORMANCE, dark)
         check(same(performanceHome, checkNotNull(mapDrawn()).pose)) { "The legend moved Performance's camera for $performance: $performanceHome, now ${mapDrawn()?.pose}" }
@@ -507,6 +509,23 @@ class MapModeSpaceRenderTest {
      * view frames every place the Universe's bodies reach, not one instant of their orbits). A still,
      * mapmode-first-view-<light|dark>-<device>.png.
      */
+    /**
+     * v13: Performance's first view frames every body it draws inside the map's window: across the map,
+     * below the strip and above the map's foot. On CI's stills the map's names ran off the phone's right
+     * edge; HomeViewTest's performancesFirstViewFrames... prove iOS's room round each body
+     * (GraphPerfMapView.swift:454-470) on these ideas and the sample without an emulator.
+     */
+    private fun requirePerformanceFirstView(drawn: MapDrawn, name: String, later: MutableList<String>) {
+        val map = checkNotNull(mapNode()).boundsInRoot
+        val stripFoot = compose.onAllNodes(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.bottom ?: map.top
+        val box = drawn.box
+        val top = map.top + box[1]; val bottom = map.top + box[3]
+        android.util.Log.i("MapModeSpaceRenderTest", "$name: Performance's first view drew its bodies in ${box[0]}-${box[2]} across ${map.width}, $top-$bottom below the strip's foot $stripFoot and above ${map.bottom}")
+        if (box[0] < 0f || box[2] > map.width || top < stripFoot || bottom > map.bottom) {
+            later.add("Performance's first view drew bodies outside the map's window for $name: ${box[0]}-${box[2]} across ${map.width}, $top-$bottom in $stripFoot-${map.bottom}")
+        }
+    }
+
     private fun requireFirstView(dark: Boolean, later: MutableList<String>) {
         val name = "mapmode-first-view-${if (dark) "dark" else "light"}-$device"
         shot(name)

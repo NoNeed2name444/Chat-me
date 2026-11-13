@@ -1234,7 +1234,8 @@ class GlMapRenderer(
             // Performance's force settling, and the tour under way (S05i2)
             || settling || (touring && !tourDone)
 
-        if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
+        // Performance's sky is iOS's (PerfLook.SKY), no longer navy (14, 27, 44)
+        if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2], 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         uploadLeafState(plan)
         writeOffsets(orbiting)

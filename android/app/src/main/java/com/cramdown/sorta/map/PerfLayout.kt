@@ -513,6 +513,11 @@ object PerfLook {
     const val FADE_TO = 1.25f
     /** The hub's largest radius, for the node record's one-byte hub code. */
     const val HUB_RADIUS_MAX = 1.2f
+    /**
+     * The sky behind the map, sRGB 0-1: iOS's GraphPerfScene.background (GraphPerfScene.swift:189),
+     * which clears its Metal view and backs it (GraphPerfMapView.swift:145-155); 5, 7, 12 in bytes.
+     */
+    val SKY = floatArrayOf(0.02f, 0.027f, 0.047f)
 
     /** The radius [rho] (dp) is drawn at: never so small it vanishes, never so big one body hides the map. */
     fun drawnRadius(rho: Float, hub: Boolean): Float = if (hub) rho.coerceIn(HUB_MIN, HUB_MAX) else rho.coerceIn(NOTE_MIN, NOTE_MAX)
