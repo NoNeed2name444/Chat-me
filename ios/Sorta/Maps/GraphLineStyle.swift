@@ -411,14 +411,20 @@ nonisolated enum IdeaBoardFit {
         }
         let width: Double = Double(view.width)
         let seen: Double = max(Double(view.height) - hidden, 0)
+        // the tools' edges as Doubles, and the overlap in named parts: the
+        // macOS-only backup suite builds this with Foundation alone, where one
+        // four-part comparison is too slow to type-check
+        let toolsMinX: Double = Double(rect.minX), toolsMaxX: Double = Double(rect.maxX)
+        let toolsMinY: Double = Double(rect.minY), toolsMaxY: Double = Double(rect.maxY)
         func clear(_ cam: Camera) -> Bool {
             for (k, c) in centres.enumerated() {
                 let s: CGSize = k < sizes.count ? sizes[k] : card
                 let x: Double = width / 2 + cam.panX + Double(c.x) * cam.zoom
                 let y: Double = seen / 2 + cam.panY + Double(c.y) * cam.zoom
                 let hw: Double = Double(s.width) * cam.zoom / 2, hh: Double = Double(s.height) * cam.zoom / 2
-                if x + hw > Double(rect.minX) && x - hw < Double(rect.maxX)
-                    && y + hh > Double(rect.minY) && y - hh < Double(rect.maxY) { return false }
+                let acrossTools: Bool = x + hw > toolsMinX && x - hw < toolsMaxX
+                let besideTools: Bool = y + hh > toolsMinY && y - hh < toolsMaxY
+                if acrossTools && besideTools { return false }
             }
             return true
         }
@@ -472,7 +478,12 @@ nonisolated enum IdeaBoardPeek {
         func clampY(_ v: Double) -> Double { max(top + 16, min(v, seen - 16 - height)) }
         var px: Double = clampX(Double(corner.x)), py: Double = clampY(Double(corner.y))
         let r = IdeaBoardFit.toolsRect(view: view, hidden: hidden, tools: tools)
-        let under: Bool = px + width > Double(r.minX) && px < Double(r.maxX) && py + height > Double(r.minY) && py < Double(r.maxY)
+        // in parts, as in IdeaBoardFit.camera: quick to type-check with Foundation alone
+        let rMinX: Double = Double(r.minX), rMaxX: Double = Double(r.maxX)
+        let rMinY: Double = Double(r.minY), rMaxY: Double = Double(r.maxY)
+        let acrossTools: Bool = px + width > rMinX && px < rMaxX
+        let besideTools: Bool = py + height > rMinY && py < rMaxY
+        let under: Bool = acrossTools && besideTools
         if under {
             // to the tools' leading side if it fits there, else above them
             if Double(r.minX) - width >= 16 { px = Double(r.minX) - width } else { py = max(top + 16, Double(r.minY) - height) }
