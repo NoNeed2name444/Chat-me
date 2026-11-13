@@ -45,14 +45,17 @@ enum IdeasText {
 /// started again at each launch let each of them re-tap twice and pass. So
 /// every class that calls `launchIdeas` calls `reset()` in its `setUp`.
 /// `row` counts the same way for a tap on an idea's row made again
-/// (`openEditor`).
+/// (`openEditor`), and `intro` for a tap on the slide-to-type card's
+/// Continue made again (`clearSlideToTypeIntro`).
 enum Retaps {
     static var caret = 0
     static var row = 0
+    static var intro = 0
 
     static func reset() {
         caret = 0
         row = 0
+        intro = 0
     }
 }
 
@@ -205,7 +208,13 @@ extension XCUIApplication {
     /// keyboard warm-up had passed before it. So once the keyboard is up,
     /// a card on show is closed with its Continue and the field tapped to
     /// take the caret back. The card is looked for in the app, which hosts
-    /// the keyboard, and in SpringBoard.
+    /// the keyboard, and in SpringBoard. On a stalled runner the Continue
+    /// tap can be lost: in run 43289469605, attempt 2, the card and its
+    /// Continue stayed on screen 23 s and the tap at 53.86 s did nothing.
+    /// So if the card is still there 5 s after the tap, Continue is tapped
+    /// once more, as its own activity, and the card must go in the other
+    /// 5 s: 10 s of waiting, as before. It may happen once in a test: a
+    /// second time fails, so a card that keeps losing taps is still caught.
     @discardableResult
     func clearSlideToTypeIntro(refocus field: XCUIElement) -> Bool {
         guard keyboards.firstMatch.waitForExistence(timeout: 5) else { return false }
@@ -218,7 +227,16 @@ extension XCUIApplication {
             XCTAssertTrue(go.waitForExistence(timeout: 5), "the slide-to-type card has its Continue")
             go.tap()
             let gone = NSPredicate(format: "exists == false")
-            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 10),
+            if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 5) != .completed,
+               card.exists, go.exists, go.isHittable {
+                Retaps.intro += 1
+                XCTAssertLessThanOrEqual(Retaps.intro, 1,
+                                         "a tap on the slide-to-type card's Continue left the card on show more than once in this test")
+                XCTContext.runActivity(named: "the slide-to-type card's Continue left it on show for 5 s; tap Continue again") { _ in
+                    go.tap()
+                }
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 5),
                            .completed, "the slide-to-type card has gone")
             field.tap()
             let focused = NSPredicate(format: "hasKeyboardFocus == true")
