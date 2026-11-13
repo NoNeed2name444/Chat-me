@@ -125,9 +125,10 @@ import kotlin.math.sqrt
  * S05h A3: Space's default look is iOS's Universe, so every check above from the first view to
  * requireSun's Suns runs on it. requireUniverse then checks the Universe itself: its bodies by role as
  * UniversePlan gives them for the fixture, no moon link drawn and arched and far links both drawn
- * (mapmode-universe-...); Fly in on the Garden black hole, its system inside the window, and Recentre
- * back to the first view (mapmode-fly-space-...); the black hole moved, carrying at least its planets,
- * a planet chosen inside it within 10 % of its move (mapmode-drag-star-space-...). Space's legend,
+ * (mapmode-universe-...); Fly in on the Garden black hole, its system inside the window
+ * (mapmode-fly-space-...); still flown in, the black hole moved, carrying at least its planets, a planet
+ * chosen inside it within 10 % of its move (mapmode-drag-star-space-...); and Recentre back to the
+ * first view. Space's legend,
  * opened at its top, shows the ladder, and its Moon row is there (mapmode-legend-top-space-...).
  */
 @RunWith(AndroidJUnit4::class)
@@ -557,7 +558,14 @@ class MapModeSpaceRenderTest {
         val memberFrom = member?.let { m -> checkNotNull(named(m)) { "The member $m shows no name to find it by for $still: ${mapDrawn()}" } }
         val before = checkNotNull(mapDrawn())
         val card = shown(MapPanelTags.PEEK)
-        val width = checkNotNull(mapNode()).boundsInRoot.width
+        val mapBounds = checkNotNull(mapNode()).boundsInRoot
+        // a press on the card reaches the card, never the map: a body under it cannot be picked up
+        val cardBounds = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val fromInRoot = from + mapBounds.topLeft
+        check(cardBounds == null || !cardBounds.contains(fromInRoot)) {
+            "Body $index at $from (in the window $fromInRoot) lies under the card ($cardBounds), where a press reaches the card, not the map, for $still"
+        }
+        val width = mapBounds.width
         val way = if (from.x > width / 2) -1f else 1f
         val steps = 8
         val tolerance = 2f * density
@@ -806,10 +814,13 @@ class MapModeSpaceRenderTest {
      * mapmode-universe-<light|dark>-<device>.png. The fixture's Garden folder is a black hole (no folder
      * here has a subfolder, so it has no star; iOS's sample flies into its Inguinal star): chosen, then
      * Fly in on its card, it is flown in to, every body of its system drawn inside the map below the top
-     * strip (mapmode-fly-space-...), and Recentre brings back the first view, nothing flown in to. Then,
-     * with a planet inside it chosen, the black hole held 300 ms and moved 8 slops carries at least its
-     * planets, each planet off home within 10 % of the black hole's move (requireDrag's members, and the
-     * chosen one as its member; mapmode-drag-star-space-...). A tap on empty space lets it go, the map as Neurons finds it.
+     * strip (mapmode-fly-space-...). Still flown in, with a planet inside it chosen, the black hole held
+     * 300 ms and moved 8 slops carries at least its planets, each planet off home within 10 % of the black
+     * hole's move (requireDrag's members, and the chosen one as its member; mapmode-drag-star-space-...),
+     * and it is still flown in to. Fly in frames the system above the foot, clear of the card; the first
+     * view, iOS's tilted fit, can put the black hole under the chosen planet's card, which a press there
+     * reaches instead of the map. Then Recentre brings back the first view, nothing flown in to, and a tap
+     * on empty space lets it go, the map as Neurons finds it.
      */
     private fun requireUniverse(dark: Boolean) {
         val mode = if (dark) "dark" else "light"
@@ -867,14 +878,10 @@ class MapModeSpaceRenderTest {
             "Bodies of the Garden black hole's system are drawn outside the map (${bounds.width}x${bounds.height}, the strip's bottom $stripBottom) for $fly: $outside"
         }
         shot(fly)
-        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
-        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.flown == -1 && same(home, it.pose) } == true } } catch (_: ComposeTimeoutException) {}
-        SystemClock.sleep(500)
-        val back = checkNotNull(mapDrawn())
-        check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
-        // the black hole moved, a planet inside it chosen: found by their names, as Neurons' cell and its idea are
+        // the black hole moved while flown in, a planet inside it chosen: found by their names, as Neurons'
+        // cell and its idea are
         val drag = "mapmode-drag-star-space-$mode-$device"
-        // still chosen after Fly in and Recentre: a second tap on the chosen body would open its folder,
+        // still chosen after Fly in: a second tap on the chosen body would open its folder,
         // which on a phone takes the map's place (MapSelection, as iOS)
         if (mapDrawn()?.chosen != g) compose.runOnIdle { tap.tap(g) }
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == g && named(g) != null } } catch (_: ComposeTimeoutException) {}
@@ -885,8 +892,15 @@ class MapModeSpaceRenderTest {
         try { compose.waitUntil(10_000) { mapDrawn()?.chosen == planet && named(planet) != null } } catch (_: ComposeTimeoutException) {}
         SystemClock.sleep(1_000)
         check(mapDrawn()?.chosen == planet) { "The planet $planet inside the Garden black hole is not chosen for $drag: ${mapDrawn()}" }
+        check(mapDrawn()?.flown == g) { "Choosing the planet $planet left the Garden black hole ($g) not flown in to for $drag: ${mapDrawn()}" }
         requireDrag(g, drag, carries = true, member = planet, at = holeAt, homes = !ValueAnimator.areAnimatorsEnabled(),
             carriedAtLeast = planets.size, members = planets)
+        check(mapDrawn()?.flown == g) { "The drag left the Garden black hole ($g) not flown in to for $drag: ${mapDrawn()}" }
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        try { compose.waitUntil(10_000) { mapDrawn()?.let { it.flown == -1 && same(home, it.pose) } == true } } catch (_: ComposeTimeoutException) {}
+        SystemClock.sleep(500)
+        val back = checkNotNull(mapDrawn())
+        check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
         compose.onNode(map).performTouchInput { click(emptySpot(drag)) }
         compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
     }
