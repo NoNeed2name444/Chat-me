@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Circle
 import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.Grain
 import androidx.compose.material.icons.rounded.Hive
@@ -256,8 +257,8 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
-                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo, shown = shown,
-                    version = version) { shown = it }
+                    chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
+                    onHome = { flyTo = null }, shown = shown, version = version) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
@@ -381,7 +382,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   card: Dp,
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
-                                  shown: Boolean, version: Int, onShown: (Boolean) -> Unit) {
+                                  onHome: () -> Unit, shown: Boolean, version: Int, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
     val main = settings.nodeStyle
@@ -467,7 +468,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome)
         if (!shown) Building(null)
     }
 }
@@ -730,11 +731,12 @@ private const val LEGEND_GLYPH_COLUMN = 30
 private fun LegendTint.color() = androidx.compose.ui.graphics.Color(r.toFloat(), g.toFloat(), b.toFloat(), a.toFloat())
 
 /** iOS's SF Symbol for a legend row, as the Material icon the app ships that stands in for it (S05f plan, Q2). */
-private fun legendGlyph(symbol: String): ImageVector = when (symbol) {
+internal fun legendGlyph(symbol: String): ImageVector = when (symbol) {
     "circle.circle.fill" -> Icons.Rounded.Adjust
     "sun.max.fill" -> Icons.Rounded.WbSunny
     "circle.lefthalf.filled" -> Icons.Rounded.Contrast
     "globe.europe.africa.fill" -> Icons.Rounded.Public
+    "moon.fill" -> Icons.Rounded.DarkMode
     "dot.radiowaves.left.and.right" -> Icons.Rounded.Sensors
     "sparkle" -> Icons.Rounded.Flare
     "point.3.connected.trianglepath.dotted" -> Icons.Rounded.Link

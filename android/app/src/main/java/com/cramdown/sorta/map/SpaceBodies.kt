@@ -183,6 +183,16 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val frustum = Frustum(viewProj)
         val limit = min(maxBodies, capacity)
         heapSize = 0
+        // the marked body (the held one, else the chosen one) is always kept, as iOS's depth stage keeps
+        // `grabbed ?? selected` (GraphSpaceDepthStage.swift:151-158, GraphMotion.swift:1561-1563): drawn
+        // whole wherever it is, whatever its size, the band or its chunk's openness, so a frame budget
+        // that leaves its chunk a summary never takes it (nor its sparks, SpaceTrails) away. Only a body
+        // behind the eye, or of a style with no shader here, is not; it keeps a place of the limit
+        val keep = marked.takeIf { it in 0 until tree.nodeCount && tree.groups[it].toInt().let { s -> s in 0..5 && enabled[s] } } ?: -1
+        val keepDepth = if (keep < 0) 0f
+            else viewProj[3] * at(keep, 0) + viewProj[7] * at(keep, 1) + viewProj[11] * at(keep, 2) + viewProj[15]
+        val kept = keep >= 0 && keepDepth > 1e-3f && limit > 0
+        val others = if (kept) limit - 1 else limit
         for (k in 0 until plan.detailLeaves.size) {
             val leaf = plan.detailLeaves[k]
             if (plan.leafState[leaf * 4 + 3] < OPEN) continue
@@ -192,6 +202,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
             val nearest = sqrt(dx * dx + dy * dy + dz * dz) - tree.radius[cell]
             if (nearest > 0f && SpaceLod.pixels(largestReach, focal, nearest) < SpaceLod.BODY_PIXELS * KEEP) continue
             for (i in tree.start[cell] until tree.end[cell]) {
+                if (kept && i == keep) continue
                 val style = tree.groups[i].toInt()
                 if (style !in 0..5 || !enabled[style]) continue
                 val x = at(i, 0); val y = at(i, 1); val z = at(i, 2)
@@ -201,9 +212,10 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 if (level(masked[i], SpaceLod.pixels(reachOf(i), focal, w), band.fade(w)) != SpaceBodyLevel.BODY) continue
                 val reach = max(SpaceDepth.reachOfLook(style), SpaceStyle.of(style).extent)
                 if (!frustum.intersectsSphere(x, y, z, reach * reachOf(i))) continue
-                offer(i, w, limit)
+                offer(i, w, others)
             }
         }
+        if (kept) offer(keep, keepDepth, limit)
         // the dying (S05h2), after the live bodies against the capacity, the biggest plan first
         val dying = chooseDying(viewProj, frustum, focal, band, capacity - heapSize)
         // the chosen, by style, far to near (each style is drawn far to near over what is behind); a
@@ -432,7 +444,8 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     private fun placed(plan: FramePlan, node: Int, out: FloatArray) {
         val leaf = tree.leafOfNode[node]
         val s = leaf * 4
-        val t = plan.leafState[s + 3].coerceIn(0f, 1f)
+        // a body drawn whole is at its own place (a kept body's chunk may be part way to its summary)
+        val t = if (slot[node] >= 0) 1f else plan.leafState[s + 3].coerceIn(0f, 1f)
         for (a in 0 until 3) out[a] = plan.leafState[s + a] + (at(node, a) - plan.leafState[s + a]) * t
     }
 
@@ -630,6 +643,20 @@ object UniverseBeams {
     fun pack(kind: Int, centre: Int): Long = kind.toLong() or ((centre + 1).toLong() shl 8)
     fun kindOf(packed: Long): Int = (packed and 0xFF).toInt()
     fun centreOf(packed: Long): Int = (packed shr 8).toInt() - 1
+
+    /**
+     * Each of [plan]'s links by its chunk-order pair ([chunkOf]: a plan index's node), packed with its
+     * kind and its centre's node: what [SpaceBodies.linkKinds] reads to bow a beam or leave it out.
+     */
+    fun kinds(plan: UniversePlan, chunkOf: IntArray): Map<Long, Long> {
+        val kinds = HashMap<Long, Long>(plan.links.size * 2)
+        for (link in plan.links) {
+            val a = chunkOf.getOrElse(link.a) { -1 }; val b = chunkOf.getOrElse(link.b) { -1 }
+            if (a < 0 || b < 0) continue
+            kinds[key(a, b)] = pack(link.kind, if (link.centre >= 0) chunkOf.getOrElse(link.centre) { -1 } else -1)
+        }
+        return kinds
+    }
 
     /** The Space style a role is drawn in (iOS's dress, GraphUniverseScene.swift:265-305). */
     fun style(role: UniverseRole): SpaceStyle = when (role) {

@@ -251,6 +251,42 @@ class MapDrawnTest {
         assertEquals(3, reads)
     }
 
+    // S05h repair 7: at the frame that takes the press, when it reached the map and when the frame
+    // before began, kept while the press lasts, −1 before and after; no clock read of their own
+    @Test fun thePressArrivalAndTheFrameBeforeAreNotedAtTheTakingFrame() {
+        var clock = 1_000L
+        var reads = 0
+        val now = { reads++; clock }
+        var d = MapDrawn().after(5, 16).stepped().pressing(0f, -1f, takenNow = false, arrivedMs = 980L, prevFrameMs = 960L, nowMs = now)
+        assertEquals("none before the press is taken", -1L, d.pressArrivedAtMs)
+        assertEquals(-1L, d.pressPrevFrameAtMs)
+        d = d.stepped().pressing(1f / 60, -1f, takenNow = true, arrivedMs = 990L, prevFrameMs = 984L, nowMs = now)
+        assertEquals(990L, d.pressArrivedAtMs)
+        assertEquals(984L, d.pressPrevFrameAtMs)
+        assertEquals(1_000L, d.pressTakenAtMs)
+        assertTrue("no frame between the arrival and the taking",
+            d.pressPrevFrameAtMs <= d.pressArrivedAtMs && d.pressArrivedAtMs <= d.pressTakenAtMs)
+        repeat(30) {
+            clock += 16
+            d = d.stepped().pressing(d.pressedSeconds + 1f / 60, -1f, takenNow = true, arrivedMs = 990L, prevFrameMs = clock - 16, nowMs = now)
+        }
+        assertEquals("kept from the taking frame", 990L, d.pressArrivedAtMs)
+        assertEquals(984L, d.pressPrevFrameAtMs)
+        assertEquals("the clock read once, for the taking", 1, reads)
+        assertSame(d, d.pressing(d.pressedSeconds, d.pressSlowedSeconds, takenNow = true, arrivedMs = 990L, prevFrameMs = 5_000L, nowMs = now))
+        // the lift: both −1, nothing else changed
+        val lifted = d.pressing(d.pressedSeconds, d.pressSlowedSeconds, takenNow = false, arrivedMs = -1L, prevFrameMs = 2_000L, nowMs = now)
+        assertEquals(-1L, lifted.pressArrivedAtMs)
+        assertEquals(-1L, lifted.pressPrevFrameAtMs)
+        assertEquals(d, lifted.copy(pressTakenAtMs = 1_000L, pressArrivedAtMs = 990L, pressPrevFrameAtMs = 984L))
+        // a new press: its own arrival and frame before
+        clock = 9_000L
+        val again = lifted.pressing(lifted.pressedSeconds + 1f / 60, -1f, takenNow = true, arrivedMs = 8_950L, prevFrameMs = 8_700L, nowMs = now)
+        assertEquals(8_950L, again.pressArrivedAtMs)
+        assertEquals(8_700L, again.pressPrevFrameAtMs)
+        assertEquals(9_000L, again.pressTakenAtMs)
+    }
+
     @Test fun deathsKeepTheSameRecordWhenNothingChangedAndTheTotalsAreKept() {
         // S05h2: a death playing, its links drawing back, then over
         val d = MapDrawn()

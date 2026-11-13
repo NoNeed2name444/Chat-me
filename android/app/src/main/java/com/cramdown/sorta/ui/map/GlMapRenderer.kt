@@ -208,6 +208,14 @@ data class MapDrawn(
      */
     val pressSlowedAtMs: Long = -1,
     /**
+     * For the current press (S05h repair 7), both on the device's uptime and −1 while no press is
+     * taken: when it reached the map (MapDrag.pressArrivedAtMs, stamped by GlMapRenderer.press), and
+     * when the renderer frame before the one that took it began. A press taken at the first frame
+     * after it arrived has pressPrevFrameAtMs ≤ pressArrivedAtMs ≤ pressTakenAtMs: no frame between.
+     */
+    val pressArrivedAtMs: Long = -1,
+    val pressPrevFrameAtMs: Long = -1,
+    /**
      * Deaths (S05h2): the dying bodies before their own plan's end and the dying links drawn, both this
      * frame, the largest reach those links were drawn at (to a hundredth); and, kept for the map's life
      * (MapTotals), the bodies that began to die and their links, each counted once when its death
@@ -230,19 +238,25 @@ data class MapDrawn(
      * (MapDrag.pressTaken), the uptime the press was first taken; and when [slowNow] too
      * (MapDrag.pressSlowed), the uptime its rate first fell under 0.05. Each is kept from an earlier
      * frame of the same press, else [nowMs], read at most once, at this frame; −1 when no press is
-     * taken (and, for the slow-down, until it comes). The same record when nothing changed.
+     * taken (and, for the slow-down, until it comes). At the frame that takes the press, its arrival
+     * [arrivedMs] and the start of the frame before, [prevFrameMs], kept while it lasts. The same record
+     * when nothing changed.
      */
     fun pressing(
         secondsNow: Float, slowedNow: Float, takenNow: Boolean = false, slowNow: Boolean = false,
-        nowMs: () -> Long = { -1L },
+        arrivedMs: Long = -1L, prevFrameMs: Long = -1L, nowMs: () -> Long = { -1L },
     ): MapDrawn {
         var clock = -1L
         val now = { if (clock < 0) clock = nowMs(); clock }
-        val takenAt = if (!takenNow) -1L else if (pressTakenAtMs >= 0) pressTakenAtMs else now()
+        val firstTaken = takenNow && pressTakenAtMs < 0
+        val takenAt = if (!takenNow) -1L else if (!firstTaken) pressTakenAtMs else now()
         val slowedAt = if (!takenNow || !slowNow) -1L else if (pressSlowedAtMs >= 0) pressSlowedAtMs else now()
+        val arrivedAt = if (!takenNow) -1L else if (!firstTaken) pressArrivedAtMs else arrivedMs
+        val prevFrameAt = if (!takenNow) -1L else if (!firstTaken) pressPrevFrameAtMs else prevFrameMs
         return if (pressedSeconds == secondsNow && pressSlowedSeconds == slowedNow && pressTakenAtMs == takenAt &&
-            pressSlowedAtMs == slowedAt) this
-        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt, pressSlowedAtMs = slowedAt)
+            pressSlowedAtMs == slowedAt && pressArrivedAtMs == arrivedAt && pressPrevFrameAtMs == prevFrameAt) this
+        else copy(pressedSeconds = secondsNow, pressSlowedSeconds = slowedNow, pressTakenAtMs = takenAt, pressSlowedAtMs = slowedAt,
+            pressArrivedAtMs = arrivedAt, pressPrevFrameAtMs = prevFrameAt)
     }
 
     /** This record with the deaths as the latest frame drew them; the same record when nothing changed. */
@@ -476,13 +490,7 @@ class GlMapRenderer(
         it.radii = FloatArray(tree.nodeCount) { k -> UniverseBeams.shaderRadius(plan.bodies[tree.order[k]]) }
         it.reaches = FloatArray(tree.nodeCount) { k -> UniverseBeams.reach(plan.bodies[tree.order[k]]) }
         it.looks = FloatArray(tree.nodeCount) { k -> UniverseLooks.of(plan.bodies[tree.order[k]]) }
-        val kinds = HashMap<Long, Long>(plan.links.size * 2)
-        for (link in plan.links) {
-            val a = chunkOf.getOrElse(link.a) { -1 }; val b = chunkOf.getOrElse(link.b) { -1 }
-            if (a < 0 || b < 0) continue
-            kinds[UniverseBeams.key(a, b)] = UniverseBeams.pack(link.kind, if (link.centre >= 0) chunkOf.getOrElse(link.centre) { -1 } else -1)
-        }
-        it.linkKinds = kinds
+        it.linkKinds = UniverseBeams.kinds(plan, chunkOf)
     } else null
     /**
      * The deaths playing (S05h2): the departures' plans, their links found in this scene by id (chunk
@@ -707,6 +715,9 @@ class GlMapRenderer(
         return if (neuronGl != null) g else tree.order[g]
     }
 
+    /** The latest frame's start on the device's uptime, −1 before the first (MapDrawn.pressPrevFrameAtMs). */
+    private var frameAtMs = -1L
+
     /** Fly in under way (S05h), stepped on the GL thread. */
     @Volatile private var flight: CameraFlight? = null
 
@@ -742,8 +753,25 @@ class GlMapRenderer(
     /** Recentre (or a rebuild): no folder is flown in to, and a flight under way stops. */
     fun leaveFlight() { flight = null; flown = -1 }
 
+    /** Whether a Fly in is still moving the camera. */
+    val flying: Boolean get() = flight != null
+
+    /**
+     * Recentre, or two taps on empty space (S05h plan, Q5): the flight ends, no folder is flown in to,
+     * and the camera is back at [home]'s first view. Under the camera's lock, so a frame stepping the
+     * flight never moves the camera after it is home.
+     */
+    internal fun goHome(home: HomeView) = synchronized(camera) { leaveFlight(); home.restore(camera) }
+
+    /** Moves a flight under way on by [dt] seconds (once a frame, on the GL thread); a finished one ends. */
+    internal fun stepFlight(dt: Float) = synchronized(camera) {
+        val f = flight ?: return@synchronized
+        f.step(camera, dt)
+        if (f.finished) flight = null
+    }
+
     /** A finger down on body [index] (the scene's), −1 for none: the orbit clock eases to a stop meanwhile (GraphMotion.swift:1752). */
-    fun press(index: Int) { drag?.pressed = sceneToDrag(index) }
+    fun press(index: Int) { drag?.press(sceneToDrag(index), SystemClock.uptimeMillis()) }
 
     /** A mouse or stylus over body [index] (the scene's) with no button down, −1 for none; as [press]. */
     fun hover(index: Int) { drag?.hovered = sceneToDrag(index) }
@@ -838,6 +866,9 @@ class GlMapRenderer(
 
     override fun onDrawFrame(gl: GL10?) {
         val start = System.nanoTime()
+        // this frame's start and the one before's, on the device's uptime (MapDrawn.pressPrevFrameAtMs)
+        val prevFrameAtMs = frameAtMs
+        frameAtMs = SystemClock.uptimeMillis()
         val vsync = vsyncNanos.takeIf { it > 0 } ?: start
         val intervalMs = if (lastVsync == 0L) 1000.0 / displayHz() else (vsync - lastVsync).coerceAtLeast(0L) / 1e6
         val dt = (intervalMs / 1000.0).toFloat().coerceIn(0f, 0.25f)
@@ -863,7 +894,7 @@ class GlMapRenderer(
             stage.frame(dt.toDouble(), shown, if (testHooks) MapDeath.testHold else null)?.let { totals.died += it[0]; totals.dyingLinks += it[1] }
         }
         stepChoice(dt)
-        flight?.let { f -> synchronized(camera) { f.step(camera, dt) }; if (f.finished) flight = null }
+        stepFlight(dt)
         // the depth fade follows what the camera looks at: its orbit target
         val focusDepth = SpaceDepth.depth(target, eye, forward)
         if (neuronGl != null) {
@@ -909,7 +940,8 @@ class GlMapRenderer(
         val markChunk = if (grabbedChunk >= 0) grabbedChunk else chosenChunk
         if (space && markChunk >= 0) {
             val leaf = tree.leafOfNode[markChunk]
-            val t = plan.leafState[leaf * 4 + 3]
+            // a marked body is kept whole (SpaceBodies, as iOS): its ring at its own place, its chunk's openness aside
+            val t = if (bodies?.isBody(markChunk) == true) 1f else plan.leafState[leaf * 4 + 3]
             if (t > 0f) {
                 val s = leaf * 4
                 val p = Vec3(plan.leafState[s] + (nodeAt(markChunk, 0) - plan.leafState[s]) * t,
@@ -971,7 +1003,7 @@ class GlMapRenderer(
             record = record.flying(flown)
             val d = drag
             if (lively && d != null) record = record.stepped().pressing(d.pressedTime.toFloat(), d.pressSlowedAfter.toFloat(),
-                d.pressTaken, d.pressSlowed) { SystemClock.uptimeMillis() }
+                d.pressTaken, d.pressSlowed, d.pressArrivedAtMs, prevFrameAtMs) { SystemClock.uptimeMillis() }
             record = record.universe(roleCounts, bodies.nearBeams + bodies.archedBeams, if (straightNow) 0 else bodies.archedBeams + bodies.farBeams,
                 bodies.farBeams, (d?.orbitTime ?: 0.0).toInt(), Math.round((d?.orbitRate ?: 0f) * 100) / 100f)
         }
@@ -1480,7 +1512,8 @@ class GlMapRenderer(
         val band = band
         for (k in 0 until tree.nodeCount) {
             val leaf = tree.leafOfNode[k]
-            val t = plan.leafState[leaf * 4 + 3]
+            // a body drawn whole (the kept one too, SpaceBodies) is named and picked at its own place
+            val t = if (bodies?.isBody(k) == true) 1f else plan.leafState[leaf * 4 + 3]
             if (t <= 0f) continue
             val s = leaf * 4
             val x = plan.leafState[s] + (nodeAt(k, 0) - plan.leafState[s]) * t
