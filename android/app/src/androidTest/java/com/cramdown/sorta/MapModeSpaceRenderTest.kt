@@ -1699,16 +1699,21 @@ class MapModeSpaceRenderTest {
         requireDrag(g, drag, carries = true, member = planet, at = holeAt, homes = !ValueAnimator.areAnimatorsEnabled(),
             carriedAtLeast = planets.size, members = planets)
         check(mapDrawn()?.flown == g) { "The drag left the Garden black hole ($g) not flown in to for $drag: ${mapDrawn()}" }
+        // the bodies' box as drawn flown in: a box read after Recentre must differ from it, or it is that one still
+        val flownBox = mapDrawn()?.box?.toList()
         compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
         try { compose.waitUntil(10_000) { mapDrawn()?.let { it.flown == -1 && same(home, it.pose) } == true } } catch (_: ComposeTimeoutException) {}
         SystemClock.sleep(500)
         val back = checkNotNull(mapDrawn())
         check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
         // the pose comes home at once, the bodies' box only with the next frame drawn (the tablet's came
-        // 800 ms apart): the test thread sleeps, so the map can draw, until the box lies inside the map
+        // 800 ms apart): the test thread sleeps, so the map can draw, until the box lies inside the map and
+        // is not the flown-in one, which lies inside it too (runs 43607814308 and 43610223941: an empty
+        // spot read off that box was the chosen planet's place at the first view)
+        fun homeBox(d: MapDrawn?) = d != null && boxInside(d) && d.box.toList() != flownBox
         val homeBy = SystemClock.uptimeMillis() + 10_000
-        while (SystemClock.uptimeMillis() < homeBy && mapDrawn()?.let { boxInside(it) } != true) SystemClock.sleep(250)
-        check(mapDrawn()?.let { boxInside(it) } == true) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
+        while (SystemClock.uptimeMillis() < homeBy && !homeBox(mapDrawn())) SystemClock.sleep(250)
+        check(homeBox(mapDrawn())) { "No frame drawn at the first view within 10 s of Recentre for $drag (flown in: $flownBox): ${mapDrawn()}" }
         val empty = emptySpot(drag)
         compose.onNode(map).performTouchInput { click(empty) }
         try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
