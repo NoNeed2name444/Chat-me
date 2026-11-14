@@ -1709,8 +1709,10 @@ class MapModeSpaceRenderTest {
         val homeBy = SystemClock.uptimeMillis() + 10_000
         while (SystemClock.uptimeMillis() < homeBy && mapDrawn()?.let { boxInside(it) } != true) SystemClock.sleep(250)
         check(mapDrawn()?.let { boxInside(it) } == true) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
-        compose.onNode(map).performTouchInput { click(emptySpot(drag)) }
-        compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) }
+        val empty = emptySpot(drag)
+        compose.onNode(map).performTouchInput { click(empty) }
+        try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
+        check(!shown(MapPanelTags.PEEK)) { "A tap on empty space at $empty did not put the card away after Recentre for $drag: ${mapDrawn()}" }
     }
 
     /**
@@ -1913,34 +1915,45 @@ class MapModeSpaceRenderTest {
     }
 
     /** A point of the map clear of every drawn body and of the chrome: the widest margin beside the bodies' box, in the map's pixels. */
+    /**
+     * A spot on the map with no body within the map's reach and no control on it, for a tap that lets
+     * the chosen body go. The map hands a touch to the nearest body within MapNameShow.PICK_DP (40 dp)
+     * of its centre, so a spot needs that much room from the bodies' box: up to Chat-me copy 28030fe
+     * this took the middle of any gap 56 dp wide, 28 dp from the bodies, and on that copy's phone,
+     * after Fly in, the Garden drag and Recentre, the tap chose a body and the card stayed. Of the four
+     * sides of the bodies the spot is the farthest from them, 24 dp in from the map's edges and off
+     * every control: on copy de0fd0f's phone the chosen sun's card, which began above the bodies' foot,
+     * took a tap meant for empty space, and on copy 03eb608's the dragged Garden black hole left the
+     * bodies from y 40 to 1296 of 2400 and from x 17 to 1022 of 1080, with room only below them.
+     */
     private fun emptySpot(name: String): Offset {
         val drawn = checkNotNull(mapDrawn())
         check(drawn.box.size == 4) { "No bodies' box to keep clear of for $name: $drawn" }
         val map = checkNotNull(mapNode()).boundsInRoot
         val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
         val density = instrumentation.targetContext.resources.displayMetrics.density
-        val gap = 56f * density
-        val middle = (drawn.box[1] + drawn.box[3]) / 2
+        val reach = (MapNameShow.PICK_DP + 4f) * density
+        val inset = 24f * density
+        val (left, top, right, foot) = drawn.box
+        val middle = (top + foot) / 2
         val stripBottom = strip.bottom - map.top
-        // below the bodies too, down to the highest of the chosen body's card and the mode switch: on
-        // Chat-me copy 03eb608's phone the dragged Garden black hole left the bodies from y 40 to 1296 of
-        // 2400 and from x 17 to 1022 of 1080, so no room beside or above them, and over 800 px below
-        // a piece that reaches below the bodies' foot bounds the room there, even where its top is higher:
-        // on Chat-me copy de0fd0f's phone the chosen sun's card began above the foot, was left out, and the
-        // tap meant for empty space landed on the card
-        val chrome = listOf(MapPanelTags.PEEK, SortaMode.MAP.identifier, SortaMode.SORT.identifier, SortaMode.TOGGLE)
-            .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() }
-            .filter { it.boundsInRoot.bottom - map.top > drawn.box[3] }
-            .map { maxOf(it.boundsInRoot.top - map.top, drawn.box[3]) }
-        val floor = chrome.minOrNull() ?: map.height
+        // every control over the map, in the map's own coordinates: the card, the tools, the mode switch
+        val controls = (compose.onAllNodes(hasClickAction()).fetchSemanticsNodes() +
+            listOf(MapPanelTags.PEEK, SortaMode.MAP.identifier, SortaMode.SORT.identifier, SortaMode.TOGGLE)
+                .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() })
+            .map { it.boundsInRoot.translate(-map.left, -map.top) }
+            .filter { it.width < map.width * 0.95f || it.height < map.height * 0.95f } // not the map itself
+        // below the bodies, the room ends at the highest control that reaches past their foot
+        val floor = controls.filter { it.bottom > foot }.minOfOrNull { maxOf(it.top, foot) } ?: map.height
         val choices = listOf(
-            Offset(drawn.box[0] / 2, middle) to drawn.box[0],
-            Offset((drawn.box[2] + map.width) / 2, middle) to (map.width - drawn.box[2]),
-            Offset(map.width / 2, (stripBottom + drawn.box[1]) / 2) to (drawn.box[1] - stripBottom),
-            Offset(map.width / 2, (drawn.box[3] + floor) / 2) to (floor - drawn.box[3]),
-        )
-        val (point, room) = choices.maxBy { it.second }
-        check(room >= gap) { "No empty space ${gap / density} dp wide beside the bodies for $name: $drawn" }
+            Offset(inset, middle) to (inset..left),
+            Offset(map.width - inset, middle) to (right..map.width - inset),
+            Offset(map.width / 2, stripBottom + inset) to (stripBottom + inset..top),
+            Offset(map.width / 2, floor - inset) to (foot..floor - inset),
+        ).map { (point, span) -> point to (span.endInclusive - span.start) }
+            .filter { (point, _) -> controls.none { it.inflate(8f * density).contains(point) } }
+        val (point, room) = checkNotNull(choices.maxByOrNull { it.second }) { "Every side of the bodies is under a control for $name: $drawn" }
+        check(room >= reach) { "No spot ${reach / density} dp from the bodies, the map's reach, for $name: $drawn" }
         return point
     }
 
