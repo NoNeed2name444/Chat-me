@@ -1943,8 +1943,13 @@ class MapModeSpaceRenderTest {
                 .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() })
             .map { it.boundsInRoot.translate(-map.left, -map.top) }
             .filter { it.width < map.width * 0.95f || it.height < map.height * 0.95f } // not the map itself
-        // below the bodies, the room ends at the highest control that reaches past their foot
-        val floor = controls.filter { it.bottom > foot }.minOfOrNull { maxOf(it.top, foot) } ?: map.height
+        // below the bodies, the room ends at the highest control that reaches past their foot and stands
+        // under the spot's column, the map's middle (S06c: the tools at the map's right edge grew by
+        // Collide, and on Chat-me run 43606446545's phone their top, far from the middle, left less
+        // than the reach below the bodies, though nothing stood under the spot)
+        val column = map.width / 2
+        val floor = controls.filter { it.bottom > foot && it.inflate(8f * density).let { c -> column in c.left..c.right } }
+            .minOfOrNull { maxOf(it.top, foot) } ?: map.height
         val choices = listOf(
             Offset(inset, middle) to (inset..left),
             Offset(map.width - inset, middle) to (right..map.width - inset),
