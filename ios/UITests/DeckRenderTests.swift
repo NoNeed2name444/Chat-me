@@ -130,6 +130,12 @@ final class DeckRenderTests: XCTestCase {
         keepShot("deck-4-frost-board")
         app.chooseLook("look-space")
         XCTAssertTrue(app.descendants(matching: .any)["graph3D"].firstMatch.waitForExistence(timeout: 60), "Space")
+        // the first-run card put away, so the frosted bodies show whole
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        if hint.waitForExistence(timeout: 5) {
+            hint.buttons["Got it"].tap()
+            XCTAssertTrue(waitFor { !hint.exists }, "Got it puts the first-run card away")
+        }
         sleep(4)
         keepShot("deck-5-frost-space")
         app.chooseLook("look-2d")

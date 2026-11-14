@@ -493,6 +493,8 @@ struct DeckCard: View {
         .padding(WardSpace.l)
         .wardRaised(in: shape, lift: .high, fill: .wardRaised)
         .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
+        // flying off, it takes no more taps
+        .allowsHitTesting(!leaving)
         .scaleEffect(leaving ? 0.6 : 1)
         .opacity(leaving ? 0 : 1)
         .offset(offset)

@@ -444,18 +444,18 @@ internal sealed class DeckActions {
             verticalArrangement = Arrangement.SpaceBetween) {
             Text(line, Modifier.padding(bottom = WardSpace.m.wardDp), style = WardType.body.textStyle(), color = wardColor(WardToken.ink),
                 maxLines = 4, overflow = TextOverflow.Ellipsis)
-            // the buttons at the card's foot, the room above them where a thumb grabs
+            // the buttons at the card's foot, the room above them where a thumb grabs; flying off, they take no more taps
             FlowRow(horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
                 when (actions) {
                     is DeckActions.Sort -> {
-                        WardTextButton(laterWords, { actions.later(note.id) }, kind = WardButtonKind.compact, fills = false)
-                        WardTextButton(chooseWords, { actions.choose(note.id) }, kind = WardButtonKind.compact, fills = false)
+                        WardTextButton(laterWords, { if (!leaving) actions.later(note.id) }, kind = WardButtonKind.compact, fills = false)
+                        WardTextButton(chooseWords, { if (!leaving) actions.choose(note.id) }, kind = WardButtonKind.compact, fills = false)
                     }
                     is DeckActions.Tide -> {
-                        WardTextButton(keepWords, { actions.keep(note.id) }, kind = WardButtonKind.compact, fills = false)
-                        WardTextButton(linkWords, { actions.link(note.id) }, kind = WardButtonKind.compact, fills = false)
+                        WardTextButton(keepWords, { if (!leaving) actions.keep(note.id) }, kind = WardButtonKind.compact, fills = false)
+                        WardTextButton(linkWords, { if (!leaving) actions.link(note.id) }, kind = WardButtonKind.compact, fills = false)
                         // compact as its neighbours, its words in the danger red, as the rows' Delete; Undo brings the idea back
-                        WardButtonBox({ actions.letGo(note.id) }, kind = WardButtonKind.compact, fills = false) {
+                        WardButtonBox({ if (!leaving) actions.letGo(note.id) }, kind = WardButtonKind.compact, fills = false) {
                             Text(letGoWords, textAlign = TextAlign.Center, color = danger)
                         }
                     }
