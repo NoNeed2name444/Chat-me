@@ -84,7 +84,11 @@ class SpaceSkyRenderTest {
         shot("sky-tails-$suffix")
 
         // A4: the leaning idea's card, its line and File there
-        choose(LEANING, suffix)
+        val leaning = choose(LEANING, suffix)
+        // where it is drawn, by its name pill's body, for a real tap on it below
+        val leanAt = checkNotNull(drawn()?.names?.firstOrNull { it.index == leaning }?.body?.takeIf { it.size == 2 }) {
+            "The leaning idea shows no name to find it by for $suffix: ${drawn()}"
+        }
         waitFor(SkyTags.LEAN, "the lean line on the card, $suffix")
         val lean = node(SkyTags.LEAN)
         check(spoken(lean) == "Shares ‘garden’ with Raised beds") { "The lean line reads ${spoken(lean)} for $suffix" }
@@ -100,6 +104,15 @@ class SpaceSkyRenderTest {
         check(spoken(node(SkyTags.SHARED_FROM)) == "Shared from example.org") { "The source mark reads ${spoken(node(SkyTags.SHARED_FROM))}" }
         settle(1_000)
         shot("sky-shared-card-$suffix")
+
+        // A4 by touch: a finger on the leaning comet chooses it, not the folder it leans to (the comet
+        // is kept three of the folder's radii out, Leaning.place); then back to the shared card's idea
+        val map = checkNotNull(mapNode()) { "No map for $suffix" }
+        val finger = map.positionOnScreen + Offset(leanAt[0], leanAt[1])
+        check(ui.click(finger.x.toInt(), finger.y.toInt())) { "The leaning comet could not be tapped for $suffix" }
+        try { compose.waitUntil(10_000) { drawn()?.chosen == leaning } } catch (_: ComposeTimeoutException) {}
+        check(drawn()?.chosen == leaning) { "A tap on the leaning comet at $finger chose ${drawn()?.chosen}, not $leaning, for $suffix: ${drawn()}" }
+        waitFor(SkyTags.LEAN, "the lean line after a tap on the comet, $suffix")
 
         // A5: the moons, from the strip's Days chip
         waitFor(SkyTags.DAYS_CHIP, "the Days chip, $suffix")
@@ -140,8 +153,10 @@ class SpaceSkyRenderTest {
         try { compose.waitUntil(5_000) { ValueAnimator.areAnimatorsEnabled() } } catch (_: ComposeTimeoutException) {}
         check(ValueAnimator.areAnimatorsEnabled()) { "Animations stayed off 5 s after the scale was set to 1 for $suffix" }
         tapOnScreen(node(SkyTags.FILE_THERE), "File there")
-        try { compose.waitUntil(30_000) { drawn()?.let { it.build != built && it.bodyFrames > 0 } == true } } catch (_: ComposeTimeoutException) {}
+        // two of the new scene's frames with bodies: by the second, the first is on the screen (MapDrawn.ENOUGH)
+        try { compose.waitUntil(30_000) { drawn()?.let { it.build != built && it.bodyFrames >= 2 } == true } } catch (_: ComposeTimeoutException) {}
         check(drawn()?.build != built) { "Filing built no new scene for $suffix: ${drawn()}" }
+        check((drawn()?.bodyFrames ?: 0) >= 2) { "The new scene drew no bodies within 30 s of filing for $suffix: ${drawn()}" }
         shot("sky-settle-$suffix")
         settle(1_500)
         shot("sky-settled-$suffix")
@@ -169,13 +184,14 @@ class SpaceSkyRenderTest {
     }
 
     /** The idea titled [title] chosen through the map's hit test, as a tap on it is. */
-    private fun choose(title: String, name: String) {
+    private fun choose(title: String, name: String): Int {
         val id = ideas(0).first { it.title == title }.id
         val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map hands on no hit test for $name" }
         val index = tap.ids.indexOfFirst { it.equals(id, ignoreCase = true) }
         check(index >= 0) { "$title is not on the map for $name: ${tap.ids}" }
         onMain { tap.tap(index) }
         compose.waitUntil(10_000) { drawn()?.chosen == index }
+        return index
     }
 
     private fun chooseLook(look: MapLook) {

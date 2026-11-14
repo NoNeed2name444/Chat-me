@@ -68,6 +68,25 @@ class SkyIdeasTest {
         assertEquals("then by name", "f3", Leaning.choose("Garden", "", listOf(one, three), emptyMap())?.folder)
     }
 
+    // A4: a leaning comet is drawn part of the way to its folder, never inside the folder's disc,
+    // where a tap on it would choose the folder (the iOS ideas red on Chat-me run 43610223855)
+    @Test fun aLeaningCometStopsOutsideItsFolder() {
+        val folder = Vec3(0f, 0f, 0f)
+        near("far off: the pull alone", Vec3(7f, 0f, 0f), Leaning.place(Vec3(10f, 0f, 0f), folder, 1f))
+        near("close: kept three radii out, on its own side", Vec3(0f, 3f, 0f), Leaning.place(Vec3(0f, 2f, 0f), folder, 1f))
+        near("inside: pushed out", Vec3(-6f, 0f, 0f), Leaning.place(Vec3(-0.5f, 0f, 0f), folder, 2f))
+        near("on top of it: out along x", Vec3(3f, 0f, 0f), Leaning.place(folder, folder, 1f))
+        near("no size, no keep-out", Vec3(0.7f, 0f, 0f), Leaning.place(Vec3(1f, 0f, 0f), folder, 0f))
+        for (k in 0 until 50) {
+            val own = Vec3((k % 7) - 3f, (k % 5) - 2f, (k % 3) - 1f) * 0.4f
+            val at = Leaning.place(own, Vec3(1f, 1f, 1f), 0.5f)
+            assertTrue("never within 3 radii: $own -> $at", (at - Vec3(1f, 1f, 1f)).length() >= 1.5f - 1e-4f)
+        }
+    }
+
+    private fun near(what: String, want: Vec3, got: Vec3) =
+        assertTrue("$what: want $want, got $got", (got - want).length() < 1e-5f)
+
     @Test fun onlyLooseIdeasLeanAndNothingIsStored() {
         val folders = listOf(Leaning.Folder("f1", "Raised beds", listOf("garden")))
         val notes = listOf(

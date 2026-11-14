@@ -95,6 +95,27 @@ nonisolated enum FolderWords {
 nonisolated enum Leaning {
     /// How far of the way to the folder a leaning comet is drawn.
     static let pull: Float = 0.3
+    /// The nearest a leaning comet comes to its folder, in the folder's
+    /// radii: nearer, the folder's disc would take the comet's taps.
+    static let keep: Float = 3
+
+    /// Where a comet at `own` leaning to a folder at `folder`, `size` in
+    /// radius, is drawn: `pull` of the way there, but never within `keep`
+    /// radii of it, pushed out along the line it came in on (Android's
+    /// Leaning.place).
+    static func place(own: SIMD3<Float>, folder: SIMD3<Float>, size: Float) -> SIMD3<Float> {
+        let pulled: SIMD3<Float> = own + (folder - own) * pull
+        let least: Float = max(size, 0) * keep
+        let away: SIMD3<Float> = pulled - folder
+        let gap: Float = (away * away).sum().squareRoot()
+        if gap >= least { return pulled }
+        let from: SIMD3<Float> = own - folder
+        let way: SIMD3<Float>
+        if gap > 1e-5 { way = away / gap }
+        else if (from * from).sum() > 1e-10 { way = from / (from * from).sum().squareRoot() }
+        else { way = SIMD3<Float>(1, 0, 0) }
+        return folder + way * least
+    }
 
     struct Folder {
         let id: UUID

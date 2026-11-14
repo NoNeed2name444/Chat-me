@@ -966,7 +966,7 @@ class GlMapRenderer(
             if (place.leader in 0 until i) return skyHome(place.leader, t) + SharedCircle.offset(place, circleRadius[i], t)
         }
         val j = s.leanTo.getOrElse(i) { -1 }
-        if (j >= 0 && j != i && j < plan.bodies.size) return own + (plan.position(j, t) - own) * Leaning.PULL
+        if (j >= 0 && j != i && j < plan.bodies.size) return Leaning.place(own, plan.position(j, t), UniverseBeams.radius(plan.bodies[j]))
         return own
     }
 

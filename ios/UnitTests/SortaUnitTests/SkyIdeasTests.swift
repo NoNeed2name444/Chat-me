@@ -74,6 +74,31 @@ final class SkyIdeasTests: XCTestCase {
                        id(3), "then by name")
     }
 
+    /// A4: a leaning comet is drawn part of the way to its folder, never
+    /// inside the folder's disc, where a tap on it would choose the folder
+    /// (the ideas red on Chat-me run 43610223855).
+    func testALeaningCometStopsOutsideItsFolder() {
+        let folder = SIMD3<Float>(0, 0, 0)
+        near(Leaning.place(own: SIMD3(10, 0, 0), folder: folder, size: 1), SIMD3(7, 0, 0), "far off: the pull alone")
+        near(Leaning.place(own: SIMD3(0, 2, 0), folder: folder, size: 1), SIMD3(0, 3, 0),
+             "close: kept three radii out, on its own side")
+        near(Leaning.place(own: SIMD3(-0.5, 0, 0), folder: folder, size: 2), SIMD3(-6, 0, 0), "inside: pushed out")
+        near(Leaning.place(own: folder, folder: folder, size: 1), SIMD3(3, 0, 0), "on top of it: out along x")
+        let none = Leaning.place(own: SIMD3(1, 0, 0), folder: folder, size: 0)
+        XCTAssertEqual(none.x, 0.7, accuracy: 1e-6, "no size, no keep-out")
+        let centre = SIMD3<Float>(1, 1, 1)
+        for k in 0..<50 {
+            let own = SIMD3<Float>(Float(k % 7) - 3, Float(k % 5) - 2, Float(k % 3) - 1) * 0.4
+            let at = Leaning.place(own: own, folder: centre, size: 0.5)
+            XCTAssertGreaterThanOrEqual(simd_length(at - centre), 1.5 - 1e-4, "never within 3 radii: \(own) -> \(at)")
+        }
+    }
+
+    private func near(_ got: SIMD3<Float>, _ want: SIMD3<Float>, _ what: String,
+                      file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertLessThan(simd_length(got - want), 1e-5, "\(what): want \(want), got \(got)", file: file, line: line)
+    }
+
     func testOnlyLooseIdeasLeanAndNothingIsStored() {
         let folders = [Leaning.Folder(id: id(1), name: "Raised beds", words: ["garden"])]
         let notes: [(id: UUID, title: String, body: String, folder: UUID?)] = [

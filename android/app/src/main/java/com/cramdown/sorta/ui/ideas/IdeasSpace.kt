@@ -315,7 +315,12 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     lit = lit.takeIf { theme == GraphTheme.SPACE }) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
-            val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
+            // the chosen idea's role as the latest scene has it: a comet filed with File there is a planet now (as iOS's card)
+            val peek = chosen?.let { picked ->
+                val body = roles[picked.id.uppercase()]?.takeIf { picked.kind == ThemeBodyKind.NOTE && it != picked.role }
+                    ?.let { picked.copy(role = it) } ?: picked
+                mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) }
+            }
             // a map with no folders yet, under the chrome at the top (GraphEmptyHint's place, Graph3DView.swift:289-294)
             // [top] counts from the window's top, the status bar in it, so the bar is only cleared when there is no strip
             if (panelsShown && book.folders.isEmpty() && book.notes.size < 25) Box(Modifier.align(Alignment.TopCenter)

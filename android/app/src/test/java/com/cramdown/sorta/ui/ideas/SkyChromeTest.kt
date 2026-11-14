@@ -126,9 +126,13 @@ class SkyChromeTest {
         val card = compose.onNode(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNode().boundsInRoot
         assertTrue("the card stays under the strip: $card, $strip", card.top >= strip.bottom)
         shot("sky_lean_card")
+        assertTrue("the card names a comet", run.shows("Comet · Idea"))
         node(SkyTags.FILE_THERE).performClick()
         run.until { IdeaStore(run.store).notes.first { it.id == leaning.id }.folderId == raisedBeds.id }
         run.until { !shown(SkyTags.LEAN) }
+        // the card stays up and follows the new scene: filed, the idea is no longer a comet (as iOS's card)
+        run.until { !run.shows("Comet · Idea") }
+        assertTrue("the card is still up after filing", shown(MapPanelTags.PEEK))
     }
 
     // A5, A6

@@ -643,10 +643,11 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         leanOf = leans
         circleOf = circles
         circleRadius = rings
+        let sizes: [Float] = infos.map(\.radius)
         if orbiting {
             for i in homeList.indices {
                 homeList[i] = GraphSim.skyPlace(i, homeList[i], at: homeList, lean: leans, circle: circles,
-                                                radius: rings, time: startTime)
+                                                radius: rings, size: sizes, time: startTime)
             }
         }
         let budgetNow: GraphicsBudget = GraphQuality.current
@@ -1853,7 +1854,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// loose idea pulled part of the way to the folder it leans to (never
     /// into it), a shared one circling the first of its group.
     private static func skyPlace(_ i: Int, _ own: SIMD3<Float>, at places: [SIMD3<Float>], lean: [Int],
-                                             circle: [SharedCircle.Place?], radius: [Float],
+                                             circle: [SharedCircle.Place?], radius: [Float], size: [Float],
                                              time: Double) -> SIMD3<Float> {
         if i < circle.count, let place = circle[i], place.leader >= 0, place.leader < i, place.leader < places.count {
             return places[place.leader] + SharedCircle.offset(place, radius: radius[i], time: time)
@@ -1861,7 +1862,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         if i < lean.count {
             let j: Int = lean[i]
             if j >= 0 && j < places.count && j != i {
-                return own + (places[j] - own) * Leaning.pull
+                return Leaning.place(own: own, folder: places[j], size: j < size.count ? size[j] : 0)
             }
         }
         return own
@@ -1889,7 +1890,8 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
             position[i] += carry
             let base: SIMD3<Float> = hasParent ? position[p] : zero
             let target: SIMD3<Float> = GraphSim.skyPlace(i, base + nextOffsets[i], at: position, lean: leanOf,
-                                                         circle: circleOf, radius: circleRadius, time: orbitTime)
+                                                         circle: circleOf, radius: circleRadius, size: radius,
+                                                         time: orbitTime)
             if let from = settleFrom[i] {
                 // a comet being filed follows the settle's curve, not the spring
                 let next: SIMD3<Float> = CometSettle.place(from: from, to: target, elapsed: settleTime)

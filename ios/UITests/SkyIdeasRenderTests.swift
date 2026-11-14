@@ -147,6 +147,12 @@ final class SkyIdeasRenderTests: XCTestCase {
         let map = app.descendants(matching: .any)["graph3D"].firstMatch
         XCTAssertTrue(map.waitForExistence(timeout: 60), "Space: the 3D map")
         XCTAssertTrue(body(app, SkyExport.leaning).waitForExistence(timeout: 60), "the bodies are laid out")
+        // the first-run card put away, as MapModeRenderTests does, so the stills show the sky under it
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        if hint.waitForExistence(timeout: 5) {
+            hint.buttons["Got it"].tap()
+            XCTAssertTrue(gone(hint), "Got it puts the first-run card away")
+        }
         // the scene's first frames and its name pills
         sleep(3)
     }

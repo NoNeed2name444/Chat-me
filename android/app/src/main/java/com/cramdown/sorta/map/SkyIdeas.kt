@@ -89,6 +89,27 @@ object FolderWords {
 object Leaning {
     /** How far of the way to the folder a leaning comet is drawn. */
     const val PULL = 0.3f
+    /** The nearest a leaning comet comes to its folder, in the folder's radii: nearer, the folder's disc would take its taps. */
+    const val KEEP = 3f
+
+    /**
+     * Where a comet at [own] leaning to a folder at [folder], [size] in radius, is drawn: [PULL] of the way there,
+     * but never within [KEEP] radii of it, pushed out along the line it came in on (iOS Leaning.place).
+     */
+    fun place(own: Vec3, folder: Vec3, size: Float): Vec3 {
+        val pulled = own + (folder - own) * PULL
+        val least = maxOf(size, 0f) * KEEP
+        val away = pulled - folder
+        val gap = away.length()
+        if (gap >= least) return pulled
+        val from = own - folder
+        val way = when {
+            gap > 1e-5f -> away * (1f / gap)
+            from.length() > 1e-5f -> from.normalized()
+            else -> Vec3(1f, 0f, 0f)
+        }
+        return folder + way * least
+    }
 
     data class Folder(val id: String, val name: String, val words: List<String>)
     /** [word]: the first of the folder's words the idea shares, as the folder has it. */
