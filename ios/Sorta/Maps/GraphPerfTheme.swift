@@ -24,6 +24,8 @@ enum GraphPerfDemo {
 struct GraphPerfSpace: View {
     let source: GraphPerfSource?
     let filter: GraphFilter
+    /// The ideas Map mode's lenses let through, nil with none on (S06d A2).
+    var lens: Set<UUID>? = nil
     let recenter: Int
     var command = GraphMapCommand()
     var chosen: UUID? = nil
@@ -82,7 +84,7 @@ struct GraphPerfSpace: View {
     @ViewBuilder
     private func map(insets: EdgeInsets) -> some View {
         #if canImport(Metal) && canImport(MetalKit)
-        GraphPerfMap(source: source, demo: demoInForce, filter: filter, recenter: recenter, insets: insets,
+        GraphPerfMap(source: source, demo: demoInForce, filter: filter, lens: lens, recenter: recenter, insets: insets,
                      command: command, chosen: chosen, linksFor: linksFor, touch: touch, tier: tier, bold: bold,
                      contrast: contrast == .increased, reduceMotion: reduceMotion, onStats: { stats = $0; if GraphPreview.isOn { reports += 1 } })
         #else
@@ -166,6 +168,7 @@ struct GraphPerfMap: UIViewRepresentable {
     let source: GraphPerfSource?
     let demo: Int
     let filter: GraphFilter
+    let lens: Set<UUID>?
     let recenter: Int
     let insets: EdgeInsets
     let command: GraphMapCommand
@@ -208,7 +211,7 @@ struct GraphPerfMap: UIViewRepresentable {
         view.accessibilityLabel = GraphTheme.performance.mapLabel
         view.accessibilityHint = GraphTheme.performance.hint
         c.load(source: source, demo: demo)
-        c.apply(filter: GraphPerfAdapter.filter(filter))
+        c.apply(filter: GraphPerfAdapter.filter(filter), lens: lens)
         c.choose(chosen, links: linksFor)
         if c.commandSerial != command.serial {
             c.commandSerial = command.serial
@@ -238,6 +241,8 @@ final class GraphPerfCoordinator {
     /// The chunked million map is showing.
     private var million: Bool = false
     private var filter: GraphPerfFilter = .all
+    /// The lenses' ideas, nil with none on (S06d A2).
+    private var lens: Set<UUID>?
     private var maskedScene: Int = -1
     private var sceneNumber: Int = 0
     private var chosenID: UUID?
@@ -311,16 +316,17 @@ final class GraphPerfCoordinator {
         applyChoice()
     }
 
-    func apply(filter next: GraphPerfFilter) {
-        guard next != filter || maskedScene != sceneNumber else { return }
+    func apply(filter next: GraphPerfFilter, lens: Set<UUID>? = nil) {
+        guard next != filter || lens != self.lens || maskedScene != sceneNumber else { return }
         filter = next
+        self.lens = lens
         applyMask()
     }
 
     private func applyMask() {
         guard let scene, let view else { return }
         maskedScene = sceneNumber
-        view.setMask(demo ? nil : scene.graph.mask(filter))
+        view.setMask(demo ? nil : scene.graph.mask(filter, only: lens))
     }
 
     /// What the Ideas map has chosen, and whose links it shows.

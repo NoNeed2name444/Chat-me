@@ -77,11 +77,14 @@ enum class FilterMove { NONE, FLY, REFRAME }
  * draws no body for (one inside a closed Neurons cell) still counts. [roots] are top-level folders
  * (in the Universe, galaxies); [degree] counts the book's links at both ends.
  */
-class MapFilterNotes(val pages: BooleanArray, val roots: Array<String?>, val degree: IntArray) {
-    /** How many notes [filter] lets through. */
-    fun shown(filter: MapFilter): Int {
+class MapFilterNotes(val pages: BooleanArray, val roots: Array<String?>, val degree: IntArray,
+                     /** Each note's upper-case id, which the lenses read (S06d); null where none was given. */
+                     val ids: Array<String>? = null) {
+    /** How many notes [filter] lets through, and with [lens] (upper-case ids, S06d) only those it holds. */
+    fun shown(filter: MapFilter, lens: Set<String>? = null): Int {
         var n = 0
-        for (i in pages.indices) if (filter.admits(pages[i], roots[i], degree[i])) n++
+        for (i in pages.indices) if (filter.admits(pages[i], roots[i], degree[i]) &&
+            (lens == null || ids?.getOrNull(i)?.let { it in lens } == true)) n++
         return n
     }
 
@@ -95,7 +98,8 @@ class MapFilterNotes(val pages: BooleanArray, val roots: Array<String?>, val deg
                 at[a.uppercase()]?.let { degree[it]++ }
                 at[b.uppercase()]?.let { degree[it]++ }
             }
-            return MapFilterNotes(BooleanArray(ids.size) { page(it) }, Array(ids.size) { root(it) }, degree)
+            return MapFilterNotes(BooleanArray(ids.size) { page(it) }, Array(ids.size) { root(it) }, degree,
+                Array(ids.size) { ids[it].uppercase() })
         }
 
         /**
@@ -189,8 +193,9 @@ class MapFilterBodies(
     }
 
     /** The notes [filter] lets through (iOS shownCount, Graph3DView.swift:854-868). */
-    fun shownNotes(filter: MapFilter): Int =
-        (0 until count).count { kinds[it] == ThemeBodyKind.NOTE && filter.admits(pages[it], roots[it], degree[it]) }
+    fun shownNotes(filter: MapFilter, lens: Set<String>? = null, ids: List<String>? = null): Int =
+        (0 until count).count { kinds[it] == ThemeBodyKind.NOTE && filter.admits(pages[it], roots[it], degree[it]) &&
+            (lens == null || ids?.getOrNull(it)?.uppercase()?.let { id -> id in lens } == true) }
 
     /**
      * What [filter] shows (iOS apply, shown(by:) and linkShown): a note when admitted; a folder or the
@@ -198,14 +203,22 @@ class MapFilterBodies(
      * as a ghost. A link shows while both ends show and neither is a ghost, and under Show links
      * ([linksFor] the chosen body, −1 for none) only the chosen body's own. The view's note count is
      * [stored]'s where given (the empty line counts the book's notes, as iOS's), else the bodies'.
+     * The lenses (S06d) narrow it further: with [lens] (upper-case note ids) a note shows only when
+     * the filter admits it and [lens] holds its id ([ids], the scene's, by body), and a folder or the
+     * home shows while a member does, as under a filter.
      */
-    fun visibility(filter: MapFilter, linksFor: Int = -1, stored: MapFilterNotes? = null): MapFilterView {
+    fun visibility(filter: MapFilter, linksFor: Int = -1, stored: MapFilterNotes? = null,
+                   lens: Set<String>? = null, ids: List<String>? = null): MapFilterView {
+        val open = filter == MapFilter.All && lens == null
         val wanted = BooleanArray(count) { i ->
-            if (kinds[i] == ThemeBodyKind.NOTE) filter.admits(pages[i], roots[i], degree[i]) else filter == MapFilter.All
+            if (kinds[i] == ThemeBodyKind.NOTE) filter.admits(pages[i], roots[i], degree[i]) &&
+                (lens == null || ids?.getOrNull(i)?.uppercase()?.let { it in lens } == true)
+            else open
         }
-        if (filter != MapFilter.All) for (i in 0 until count) {
+        if (!open) for (i in 0 until count) {
             if (kinds[i] == ThemeBodyKind.NOTE) continue
-            wanted[i] = if (hubsInside && filter is MapFilter.Folder) roots[i]?.equals(filter.id, ignoreCase = true) == true
+            wanted[i] = if (hubsInside && filter is MapFilter.Folder && lens == null) roots[i]?.equals(filter.id, ignoreCase = true) == true
+                else if (hubsInside && filter is MapFilter.Folder) roots[i]?.equals(filter.id, ignoreCase = true) == true && members[i].any { wanted[it] }
                 else members[i].any { wanted[it] }
         }
         val ghost = BooleanArray(count) { i ->
@@ -218,7 +231,7 @@ class MapFilterBodies(
             else if (linksFor >= 0 && a != linksFor && b != linksFor) false
             else shown[a] && shown[b] && !ghost[a] && !ghost[b]
         }
-        return MapFilterView(filter, shown, ghost, linkShown, stored?.shown(filter) ?: shownNotes(filter))
+        return MapFilterView(filter, shown, ghost, linkShown, stored?.shown(filter, lens) ?: shownNotes(filter, lens, ids))
     }
 }
 

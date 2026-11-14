@@ -21,6 +21,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -447,6 +449,7 @@ class MapSpaceLivelyTest {
         onMain { tap.tap(index) }
         try { compose.waitUntil(10_000) { drawn()?.chosen == index && named(index) != null } } catch (_: ComposeTimeoutException) {}
         settle(1_000) // the camera's 0.45 s ease, done
+        clearOfItsCard(index, name)
         val at = checkNotNull(named(index)) { "Body $index shows no name to put a finger on for $name: ${drawn()}" }
         val node = checkNotNull(mapNode())
         val origin = node.positionOnScreen
@@ -481,7 +484,13 @@ class MapSpaceLivelyTest {
             // the record read only now; 5 s only guards against a hang
             try { compose.waitUntil(5_000) { drawn()?.grabbed == index } } catch (_: ComposeTimeoutException) {}
             val picked = checkNotNull(drawn())
-            check(picked.grabbed == index) { "A finger held 350 ms on body $index, then moved fast, did not pick it up for $name: $picked" }
+            // with the down's place and the record before it, a red tells a finger off the body (the
+            // camera turned: pose's yaw moved), a rebuild (build moved) and a touch the map never had apart
+            check(picked.grabbed == index) {
+                "A finger held 350 ms on body $index, then moved fast, did not pick it up for $name: down at ($x, $y) on the screen, " +
+                    "the name's body at $at in the map at $origin; before the down: build ${before.build}, pose ${before.pose}, " +
+                    "chosen ${before.chosen}, names ${before.names}; now: $picked"
+            }
             start = picked
             t0 = SystemClock.uptimeMillis()
             var last = picked
@@ -643,6 +652,59 @@ class MapSpaceLivelyTest {
     private fun tapOnScreen(node: SemanticsNode, what: String) {
         val middle = node.positionOnScreen + Offset(node.size.width / 2f, node.size.height / 2f)
         check(ui.click(middle.x.toInt(), middle.y.toInt())) { "$what could not be tapped" }
+    }
+
+    /**
+     * The chosen body [index] moved clear of its card, as a person would see to it before putting a
+     * finger on it: two fingers on the map, above the card and on the far side from the body, carry
+     * the map up until the body's centre is 48 dp above the card's top. A tap's ease takes a body only
+     * a third of the way to its goal (MapCameraEase.SHARE, iOS's 0.34), so it can stay under the card:
+     * on Chat-me copy eec4320's tablet body 4's centre lay 21 px inside the card's top, the finger's down
+     * went to the card, and the map recorded no press at all.
+     */
+    private fun clearOfItsCard(index: Int, name: String) {
+        val px = instrumentation.targetContext.resources.displayMetrics.density
+        val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        repeat(3) { attempt ->
+            val card = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull()
+                ?: return check(attempt == 0 || drawn()?.chosen == index) { "Moving the map let body $index go for $name: ${drawn()}" }
+            val node = checkNotNull(mapNode())
+            val origin = node.positionOnScreen
+            val body = checkNotNull(named(index)) { "Body $index shows no name for $name: ${drawn()}" }
+            val cardTop = card.positionOnScreen.y
+            val cardLeft = card.positionOnScreen.x
+            val cardRight = cardLeft + card.size.width
+            val clear = cardTop - 48 * px
+            val bodyY = origin.y + body.y
+            val bodyX = origin.x + body.x
+            if (bodyY <= clear || bodyX < cardLeft - 24 * px || bodyX > cardRight + 24 * px) {
+                if (attempt > 0) check(drawn()?.chosen == index) { "Moving the map let body $index go for $name: ${drawn()}" }
+                return
+            }
+            // fingers on the far side of the map's middle from the body, starting just above the card
+            val w = node.size.width.toFloat()
+            val fingersX = if (body.x <= w / 2) 0.75f * w else 0.25f * w
+            val from = Offset(fingersX, clear - origin.y)
+            val to = from - Offset(0f, bodyY - clear + 24 * px)
+            val apart = 40 * px
+            compose.onNode(map).performTouchInput {
+                pinch(from - Offset(apart, 0f), to - Offset(apart, 0f), from + Offset(apart, 0f), to + Offset(apart, 0f), 600)
+            }
+            compose.waitForIdle()
+            try {
+                compose.waitUntil(10_000) { named(index)?.let { origin.y + it.y < bodyY - 8 * px } == true }
+            } catch (_: ComposeTimeoutException) {}
+            android.util.Log.i("MapSpaceLivelyTest", "$name: body $index at y ${origin.y + (named(index)?.y ?: Float.NaN)}, " +
+                "was $bodyY, its card's top $cardTop, after move ${attempt + 1}")
+        }
+        val card = compose.onAllNodes(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNodes().firstOrNull() ?: return
+        val body = checkNotNull(named(index))
+        val bodyX = checkNotNull(mapNode()).positionOnScreen.x + body.x
+        val beside = bodyX < card.positionOnScreen.x - 24 * px || bodyX > card.positionOnScreen.x + card.size.width + 24 * px
+        check(beside || checkNotNull(mapNode()).positionOnScreen.y + body.y <= card.positionOnScreen.y - 24 * px) {
+            "Body $index stays under its card after three moves of the map for $name: body $body, card at ${card.positionOnScreen}; ${drawn()}"
+        }
+        check(drawn()?.chosen == index) { "Moving the map let body $index go for $name: ${drawn()}" }
     }
 
     /** Waits [ms] while Compose's frames move on, as waitUntil moves them. */

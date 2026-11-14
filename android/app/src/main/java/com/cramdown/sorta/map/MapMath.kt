@@ -647,6 +647,20 @@ object LabelRoom {
     }
 
     /**
+     * [box] kept inside a view [viewWidth] across, [edge] in from either side, as iOS's
+     * GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204): a name under or above its body ([slides])
+     * slides along its row until it is inside, at the view's middle when it is wider than the room; one
+     * beside its body that would leave the view is null, as sliding it would lay it on its own body.
+     */
+    fun inView(box: LabelBox, viewWidth: Float, edge: Float, slides: Boolean): LabelBox? {
+        val lo = edge + box.width / 2
+        val hi = viewWidth - edge - box.width / 2
+        if (box.x in lo..hi) return box
+        if (!slides) return null
+        return box.copy(x = if (lo > hi) viewWidth / 2 else box.x.coerceIn(lo, hi))
+    }
+
+    /**
      * The first of [spots] clear of every name [placed] (by [gapX] beside, [gapY] above or below),
      * every link in [links] and every body in [discs] (by [gapY]) but the name's own ([self]); null
      * when none is, and the name waits.

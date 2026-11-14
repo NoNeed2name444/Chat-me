@@ -22,7 +22,9 @@
 # Sort screen's and Map mode's renders by day and by night (IdeasRenderTests,
 # MapModeRenderTests), Map mode's legends read for the controls they name
 # (S05f), and each one's largest text size; on the iPad, the two sets of
-# renders by day and by night and the legends. A whole class passes only when
+# renders by day and by night and the legends. On both, the lenses' and the
+# capsule offer's renders by day and by night (LensCapsuleRenderTests, S06d)
+# and Not now once. A whole class passes only when
 # every test in its file passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
@@ -119,11 +121,20 @@ case "$set_" in
           dark:SortaUITests/IdeasRenderTests/testScreensRender
           light:SortaUITests/MapModeRenderTests/testMapRenders
           dark:SortaUITests/MapModeRenderTests/testMapRenders
-          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls)
+          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls
+          light:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard
+          dark:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard
+          light:SortaUITests/LensCapsuleRenderTests/testLensesRender
+          dark:SortaUITests/LensCapsuleRenderTests/testLensesRender
+          light:SortaUITests/LensCapsuleRenderTests/testCapsuleOfferRenders
+          dark:SortaUITests/LensCapsuleRenderTests/testCapsuleOfferRenders
+          light:SortaUITests/LensCapsuleRenderTests/testNotNowPutsTheOfferAway)
     if [ "$kind" = "iphone" ]; then
+      # the largest text size by night too: the look menu's surface (S05m)
       runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
             light:SortaUITests/IdeasRenderTests/testLargestTextSize
-            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
+            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap
+            dark:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
     fi
     # one test, or one launch of the whole class's: each test starts the
     # app afresh, and the longest relaunches it once

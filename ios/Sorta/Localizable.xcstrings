@@ -217,6 +217,114 @@
         }
       }
     },
+    "capsule.notSaved" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.notSaved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the capsule. Try again, or choose another place."
+          }
+        }
+      }
+    },
+    "capsule.offer" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again."
+          }
+        }
+      }
+    },
+    "capsule.offer.later" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer.later",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
+    "capsule.offer.save" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save a capsule"
+          }
+        }
+      }
+    },
+    "capsule.refused.newer" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.newer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This capsule is from a newer version of Sorta. Check for a Sorta update, then try again."
+          }
+        }
+      }
+    },
+    "capsule.refused.notCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.notCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file isn't a Sorta capsule. Choose another file."
+          }
+        }
+      }
+    },
+    "capsule.refused.tooLarge" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.tooLarge",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is over 32 MB, too big to import. Choose a smaller file."
+          }
+        }
+      }
+    },
+    "capsule.refused.unreadable" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.unreadable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file didn't open. It may be damaged, so try another copy."
+          }
+        }
+      }
+    },
+    "capsule.saved" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.saved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capsule saved."
+          }
+        }
+      }
+    },
     "capture.placeholder" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key capture.placeholder",
       "extractionState" : "manual",
@@ -925,6 +1033,126 @@
         }
       }
     },
+    "lens.alone" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.alone",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alone"
+          }
+        }
+      }
+    },
+    "lens.alone.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.alone.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas with no links."
+          }
+        }
+      }
+    },
+    "lens.lateNight" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.lateNight",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Late night"
+          }
+        }
+      }
+    },
+    "lens.lateNight.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.lateNight.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas caught between 11 PM and 4 AM."
+          }
+        }
+      }
+    },
+    "lens.off.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.off.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows every idea again."
+          }
+        }
+      }
+    },
+    "lens.questions" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.questions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questions"
+          }
+        }
+      }
+    },
+    "lens.questions.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.questions.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas with a question mark."
+          }
+        }
+      }
+    },
+    "lens.spoken %@ %@" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "lens.unfinished" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.unfinished",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfinished"
+          }
+        }
+      }
+    },
+    "lens.unfinished.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.unfinished.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas that stop mid-sentence."
+          }
+        }
+      }
+    },
     "look.2d" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
       "extractionState" : "manual",
@@ -1021,6 +1249,30 @@
         }
       }
     },
+    "map.lens.empty" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key map.lens.empty",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas match. Turn a lens off to see more."
+          }
+        }
+      }
+    },
+    "map.lenses" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key map.lenses",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lenses"
+          }
+        }
+      }
+    },
     "map.list.hint" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key map.list.hint",
       "extractionState" : "manual",
@@ -1101,6 +1353,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New folder"
+          }
+        }
+      }
+    },
+    "more.openCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key more.openCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a capsule…"
+          }
+        }
+      }
+    },
+    "more.saveCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key more.saveCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save a capsule…"
           }
         }
       }

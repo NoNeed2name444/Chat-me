@@ -48,11 +48,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.R
+import com.cramdown.sorta.ideas.IdeaLens
+import com.cramdown.sorta.data.Capsule
 import com.cramdown.sorta.data.ImportRefusal
+import com.cramdown.sorta.ideas.CapsuleOffer
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.NoteFolder
@@ -62,7 +66,10 @@ import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.ZoneId
 import java.io.File
 import java.io.FileInputStream
 import kotlin.math.max
@@ -142,7 +149,9 @@ data class IdeasSplit(val sort: Double, val gap: Double) {
 }
 
 /** Where the screen starts: the top level, or in a folder, with the editor or the chooser open (the renders' way in). */
-data class IdeasStart(val folderId: String? = null, val editing: String? = null, val choosing: String? = null)
+data class IdeasStart(val folderId: String? = null, val editing: String? = null, val choosing: String? = null,
+                      /** The capsule's offer shown at once, whenever it was last (the tests', S06d). */
+                      val capsuleOffer: Boolean = false)
 
 /** The naming sheet, for a new folder (filing [filing] in it, from the chooser) or a renamed one. */
 internal sealed class FolderPrompt {
@@ -189,6 +198,8 @@ internal object IdeasBanner {
     /** The foot's height: the banner and the switch, which the list and the map keep above. */
     var footHeight by remember { mutableIntStateOf(0) }
     var stripHeight by remember { mutableIntStateOf(0) }
+    /** The lenses on (S06d): held while the screen is, never stored, as the map's filter. */
+    var lenses by remember { mutableStateOf(emptySet<IdeaLens>()) }
     /** Map mode's list sheet is up, and the folder it is browsing (nil: the top level). */
     var listing by rememberSaveable { mutableStateOf(false) }
     var listFolder by rememberSaveable { mutableStateOf<String?>(null) }
@@ -236,6 +247,41 @@ internal object IdeasBanner {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch { imported = importFrom(model) { context.contentResolver.openInputStream(uri) } }
     }
+    // the capsule (S06d A4-A5): opened as the import is, saved through the system's save screen
+    val capsulePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch { imported = importFrom(model, capsule = true) { context.contentResolver.openInputStream(uri) } }
+    }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
+        if (uri != null) scope.launch {
+            val now = System.currentTimeMillis()
+            val html = capsuleHtml(model.book, settings.lineStyle.isStraight, measurer, density, now)
+            val saved = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(html.toByteArray(Charsets.UTF_8)) } != null }
+                    .getOrDefault(false)
+            }
+            if (saved) settings.setCapsuleSaved(now)
+            say(res.getString(if (saved) R.string.capsule_saved else R.string.capsule_not_saved))
+        }
+    }
+    // the monthly offer: due by CapsuleOffer, and marked offered as it shows, so never twice in a month
+    var offering by rememberSaveable { mutableStateOf(false) }
+    val hasIdeas = book.notes.isNotEmpty()
+    LaunchedEffect(hasIdeas) {
+        if (!hasIdeas) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        if (settings.capsuleFirstSeen == null) settings.setCapsuleFirstSeen(now)
+        if (start.capsuleOffer || CapsuleOffer.due(now, book.notes.size, settings.capsuleFirstSeen, settings.capsuleOffered, settings.capsuleSaved)) {
+            offering = true
+            settings.setCapsuleOffered(now)
+        }
+    }
+    fun saveCapsule() {
+        offering = false
+        saver.launch(Capsule.fileName(System.currentTimeMillis(), ZoneId.systemDefault()))
+    }
+
     LaunchedEffect(testImport) {
         if (testImport != null && !testImported) {
             testImported = true
@@ -279,12 +325,16 @@ internal object IdeasBanner {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version)
-        // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
+            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version,
+            lens = rememberLensPass(book, model.version, lenses))
+        // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks;
+        // the lenses' row under it (S06d), in the strip's height, which the map's first view keeps under
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
-            MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
-                Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            Column(Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
+                MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }))
+                MapLensRow(book, model.version, lenses, toggle = { lens -> lenses = if (lens in lenses) lenses - lens else lenses + lens })
+            }
         }
     } }
 
@@ -304,6 +354,8 @@ internal object IdeasBanner {
                     setFolder = { folderId = it }, open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea,
                     name = { naming = it }, deleteFolder = { deletingFolder = it },
                     onImport = { picker.launch(arrayOf("application/json")) },
+                    offer = offering && hasIdeas, onSaveCapsule = ::saveCapsule, onLater = { offering = false },
+                    onOpenCapsule = { capsulePicker.launch(arrayOf("text/html")) },
                 )
             }
         }
@@ -419,6 +471,8 @@ internal object IdeasBanner {
             ImportRefusal.UNREADABLE -> R.string.import_refused_unreadable
             ImportRefusal.NOT_AN_EXPORT -> R.string.import_refused_not_export
             ImportRefusal.OTHER_VERSION -> R.string.import_refused_other_version
+            ImportRefusal.NOT_A_CAPSULE -> R.string.capsule_refused_not_capsule
+            ImportRefusal.NEWER_CAPSULE -> R.string.capsule_refused_newer
         })
         ImportOutcome.NotSaved -> stringResource(R.string.import_refused_title) to
             stringResource(if (unreadable) R.string.store_unreadable else R.string.store_save_failed)
@@ -434,6 +488,7 @@ internal object IdeasBanner {
     book: IdeaBook, version: Int, folderId: String?, draft: String, onDraft: (String) -> Unit, capture: FocusRequester, bottom: Dp,
     onCapture: () -> Unit, onSortIt: () -> Unit, setFolder: (String?) -> Unit, open: (String) -> Unit, choose: (String) -> Unit,
     delete: (String) -> Unit, name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit, onImport: () -> Unit,
+    offer: Boolean = false, onSaveCapsule: () -> Unit = {}, onLater: () -> Unit = {}, onOpenCapsule: () -> Unit = {},
 ) {
     val list = rememberLazyListState()
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
@@ -442,7 +497,8 @@ internal object IdeasBanner {
     val level = rememberIdeasListLevel(book, version, folderId)
     val fresh = remember(book, version) { book.notes.isEmpty() && book.folders.isEmpty() }
     val inset = WardSpace.s.wardDp
-    val more: @Composable () -> Unit = { MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) }) }
+    val more: @Composable () -> Unit = { MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) },
+        onSaveCapsule = onSaveCapsule, onOpenCapsule = onOpenCapsule, canSave = !fresh) }
     Column(Modifier.fillMaxSize().semantics { testTag = IdeasTags.SCREEN }) {
         // the pinned strip: the list scrolls under it and is cut at its edge, with a hairline while it is scrolled
         Box(Modifier.fillMaxWidth().background(wardColor(WardToken.background)).drawBehind {
@@ -467,6 +523,10 @@ internal object IdeasBanner {
                     }
                 }
                 return@LazyColumn
+            }
+            // the capsule's quiet offer, at the top level only, under the well (S06d A4)
+            if (offer && folderId == null) item(key = "capsule-offer") {
+                CapsuleOfferCard(onSaveCapsule, onLater, Modifier.padding(horizontal = inset).padding(top = WardSpace.xs.wardDp, bottom = WardSpace.s.wardDp))
             }
             ideasList(book, level, inset, more, setFolder = setFolder, open = open, choose = choose, delete = delete,
                 name = name, deleteFolder = deleteFolder)
@@ -547,14 +607,17 @@ internal object IdeasBanner {
     }
 }
 
-/** The More circle: Import from Stethoscore… and New folder. */
-@Composable private fun MoreButton(onImport: () -> Unit, onNewFolder: () -> Unit) {
+/** The More circle: Import from Stethoscore…, Save a capsule… (where there is something to save), Open a capsule… and New folder. */
+@Composable private fun MoreButton(onImport: () -> Unit, onNewFolder: () -> Unit, onSaveCapsule: () -> Unit = {}, onOpenCapsule: () -> Unit = {},
+                                   canSave: Boolean = true) {
     var open by remember { mutableStateOf(false) }
     Box {
         WardCircleButton(Icons.Rounded.MoreHoriz, stringResource(R.string.sort_more), { open = true },
             Modifier.semantics { testTag = IdeasTags.MORE })
         DropdownMenu(open, { open = false }, containerColor = wardColor(WardToken.background)) {
             MenuItem(stringResource(R.string.more_import)) { open = false; onImport() }
+            if (canSave) MenuItem(stringResource(R.string.more_save_capsule)) { open = false; onSaveCapsule() }
+            MenuItem(stringResource(R.string.more_open_capsule)) { open = false; onOpenCapsule() }
             MenuItem(stringResource(R.string.more_new_folder)) { open = false; onNewFolder() }
         }
     }

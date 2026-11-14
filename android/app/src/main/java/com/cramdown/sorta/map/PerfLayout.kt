@@ -513,6 +513,11 @@ object PerfLook {
     const val FADE_TO = 1.25f
     /** The hub's largest radius, for the node record's one-byte hub code. */
     const val HUB_RADIUS_MAX = 1.2f
+    /**
+     * The sky behind the map, sRGB 0-1: iOS's GraphPerfScene.background (GraphPerfScene.swift:189),
+     * which clears its Metal view and backs it (GraphPerfMapView.swift:145-155); 5, 7, 12 in bytes.
+     */
+    val SKY = floatArrayOf(0.02f, 0.027f, 0.047f)
 
     /** The radius [rho] (dp) is drawn at: never so small it vanishes, never so big one body hides the map. */
     fun drawnRadius(rho: Float, hub: Boolean): Float = if (hub) rho.coerceIn(HUB_MIN, HUB_MAX) else rho.coerceIn(NOTE_MIN, NOTE_MAX)
@@ -570,6 +575,17 @@ object PerfLines {
         if (shown != null && (a !in shown.indices || b !in shown.indices || !shown[a] || !shown[b])) return false
         return inView(a) || inView(b)
     }
+
+    /** The hubs' index list (S05i2): each hub's chunk, in folder order, those with none left out. */
+    fun hubIndices(hubChunks: IntArray): IntArray = hubChunks.filter { it >= 0 }.toIntArray()
+
+    /**
+     * An index buffer's first upload, as bytes and data: [indices] whole, or for none 4 bytes and no
+     * data, as GL wants a store. Android's glBufferData throws when the data holds fewer bytes than
+     * asked for, so the bytes are never more than the data's.
+     */
+    fun indexUpload(indices: IntArray): Pair<Int, IntArray?> =
+        if (indices.isEmpty()) 4 to null else indices.size * 4 to indices
 }
 
 /**

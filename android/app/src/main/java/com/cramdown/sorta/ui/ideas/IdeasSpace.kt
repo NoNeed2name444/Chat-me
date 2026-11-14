@@ -164,6 +164,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     book: IdeaBook, settings: IdeasSettings, covered: Boolean, hidden: Dp,
     open: (String) -> Unit, openFolder: (String?) -> Unit,
     choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
+    lens: Set<String>? = null,
 ) {
     val theme = GraphTheme.stored(settings.theme)
     // the demo maps are a developer's, as on iOS, where only the readout offers them
@@ -302,7 +303,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 // foot, and above the first-run card while it is not put away (S05d): by the card's own
                 // rules, not the moments it steps aside, so those never move the camera
                 else -> NotesMap(book, settings, theme, recenter + reframe, openPath, panels.linkLength, onRoles = { roles = it },
-                    filter = filter, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
+                    filter = filter, lens = lens, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
                     top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
                     card = if (theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && cardPx > 0)
                         hidden + WardSpace.l.wardDp + with(LocalDensity.current) { cardPx.toDp() } else 0.dp,
@@ -443,7 +444,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
                                   onHome: () -> Unit, peek: Rect?,
-                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
+                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, lens: Set<String>? = null, onGalaxies: (List<String>?) -> Unit = {},
                                   onHidden: (String) -> Unit = {}, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
@@ -540,8 +541,10 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val latestGalaxies by rememberUpdatedState(onGalaxies)
     LaunchedEffect(map) { map?.let { latestGalaxies(it.galaxies) } }
     // what the filter shows on this map (S05i): Performance's points and links go at once (GraphPerfRenderer.swift:161-164)
-    val view: MapFilterView? = remember(map, filter) {
-        if (filter == MapFilter.All) null else map?.bodies?.visibility(filter, stored = map.stored)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
+    // and the lenses (S06d), over the filter: a note shows when both let it through
+    val view: MapFilterView? = remember(map, filter, lens) {
+        if (filter == MapFilter.All && lens == null) null
+        else map?.bodies?.visibility(filter, stored = map.stored, lens = lens, ids = map.scene.ids)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
     }
     // the chosen body filtered away is let go (Graph3DView.swift:2178-2182); Performance keeps it (GraphPerfTheme.swift:313-320)
     val latestHidden by rememberUpdatedState(onHidden)
@@ -597,7 +600,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
             chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view)
         // no idea passes: say so, over Space and the Neurons only (Graph3DView.swift:308-313); nothing to touch
-        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(R.string.map_filter_empty),
+        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(
+                if (filter == MapFilter.All) R.string.map_lens_empty else R.string.map_filter_empty),
             Modifier.align(Alignment.Center).padding(horizontal = WardSpace.xl.wardDp).testTag(MapPanelTags.FILTER_EMPTY),
             style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)

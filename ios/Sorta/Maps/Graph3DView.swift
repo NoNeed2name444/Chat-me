@@ -76,6 +76,9 @@ struct Graph3DView: View {
     /// bar's note or name): the map draws slowly under it (GraphPace), as
     /// under its own sheets.
     var covered: Bool = false
+    /// The ideas Map mode's lenses let through (IdeaLens.passing), nil with
+    /// no lens on: the rest fade as the filter fades them (S06d A2).
+    var lens: Set<UUID>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The sky's shared switch (SpaceQuality): at .still - Low Power Mode,
     /// a hot device - the map holds still too.
@@ -157,10 +160,11 @@ struct Graph3DView: View {
     @AccessibilityFocusState private var cardFocused: Bool
 
     init(open: @escaping (UUID) -> Void, openFolder: @escaping (UUID?) -> Void = { _ in },
-         covered: Bool = false) {
+         covered: Bool = false, lens: Set<UUID>? = nil) {
         self.open = open
         self.openFolder = openFolder
         self.covered = covered
+        self.lens = lens
         _ = GraphFirstRun.reset
     }
 
@@ -295,7 +299,7 @@ struct Graph3DView: View {
         ZStack {
             GeometryReader { geo in
                 let insets: GraphInsets = mapInsets(geo)
-                GraphSCNView(built: built, filter: filter, recenter: recenter,
+                GraphSCNView(built: built, filter: filter, lens: lens, recenter: recenter,
                              insets: insets, card: cardCover(built, viewBottom: geo.frame(in: .global).maxY),
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
@@ -305,8 +309,14 @@ struct Graph3DView: View {
             .ignoresSafeArea()
         }
         .overlay {
-            if filter != .all && shownCount == 0 {
-                Text("Nothing here for this filter.")
+            if (filter != .all || lens != nil) && shownCount == 0 {
+                Group {
+                    if filter == .all {
+                        Text(IdeasWords.lensEmpty)
+                    } else {
+                        Text("Nothing here for this filter.")
+                    }
+                }
                     .wardFont(.footnote)
                     .foregroundStyle(Color.wardInkSecondary)
                     .allowsHitTesting(false)
@@ -363,7 +373,7 @@ struct Graph3DView: View {
     /// The Performance theme's map (GraphPerfSpace), with the same tools,
     /// peek card and options as every other theme.
     private var perfSpace: some View {
-        GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
+        GraphPerfSpace(source: perfSource, filter: filter, lens: lens, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
                        touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
@@ -850,7 +860,8 @@ struct Graph3DView: View {
         return found.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// How many notes the current filter lets through, to say so when none do.
+    /// How many notes the current filter and lenses let through, to say so
+    /// when none do.
     private var shownCount: Int {
         var degree: [UUID: Int] = [:]
         for edge in notes.allEdges() {
@@ -862,7 +873,7 @@ struct Graph3DView: View {
             var root: UUID? = notes.rootFolder(of: note.folderId)
             if let built, built.universe { root = built.galaxyOf[note.id] }
             let links: Int = degree[note.id] ?? 0
-            if filter.admits(kind: note.kind, root: root, degree: links) { count += 1 }
+            if filter.admits(kind: note.kind, root: root, degree: links) && (lens?.contains(note.id) ?? true) { count += 1 }
         }
         return count
     }
@@ -1619,6 +1630,8 @@ struct GraphTouchHandlers {
 struct GraphSCNView: UIViewRepresentable {
     let built: GraphScene
     let filter: GraphFilter
+    /// The ideas the lenses let through, nil with none on (S06d A2).
+    var lens: Set<UUID>? = nil
     let recenter: Int
     /// How much of the view is under glass on each side; the graph is
     /// framed to the rest.
@@ -1697,7 +1710,7 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.commandSerial = command.serial
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
         // the design preview's hold is sent once the scene is built, and can
         // be sent before SwiftUI makes this view for it: the line above then
         // counts it as seen, and it is lost (Chat-me copy daa2707, maps re-run)
@@ -1719,7 +1732,7 @@ struct GraphSCNView: UIViewRepresentable {
         } else {
             coordinator.syncChoice()
         }
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
             coordinator.run(command.kind)
@@ -1835,6 +1848,8 @@ struct GraphSCNView: UIViewRepresentable {
         /// been turned or zoomed since.
         private var framedPose: simd_float4x4?
         private var shownFilter: GraphFilter?
+        /// The lenses' ideas as last shown (S06d A2).
+        private var shownLens: Set<UUID>?
         /// The note a drag is about to pick up, found when the drag begins.
         private var pending: Int?
         /// How far into the screen the dragged note sits, so it moves across
@@ -1897,6 +1912,7 @@ struct GraphSCNView: UIViewRepresentable {
             framedSize = .zero
             framedPose = nil
             shownFilter = nil
+            shownLens = nil
             // the simulation steps on SceneKit's render loop, once per frame
             view.delegate = built.sim
             view.scene = built.scene
@@ -2167,12 +2183,13 @@ struct GraphSCNView: UIViewRepresentable {
             }
         }
 
-        func apply(_ filter: GraphFilter) {
+        func apply(_ filter: GraphFilter, lens: Set<UUID>? = nil) {
             guard let sim else { return }
-            if shownFilter == filter { return }
+            if shownFilter == filter && shownLens == lens { return }
             let before: GraphFilter? = shownFilter
             shownFilter = filter
-            sim.apply(filter)
+            shownLens = lens
+            sim.apply(filter, lens: lens)
             refreshVoice()
             wake()
             // the chosen body filtered away: let it go (after this update)
@@ -2181,8 +2198,8 @@ struct GraphSCNView: UIViewRepresentable {
                 DispatchQueue.main.async { report(nil) }
             }
             // the Universe: a folder filter flies to its galaxy, and
-            // Everything frames the whole map again
-            guard universe, let before else { return }
+            // Everything frames the whole map again; a lens alone never flies
+            guard universe, let before, before != filter else { return }
             if case .folder(let id) = filter, let slot = folders[id] {
                 fly(to: slot, animated: true)
             } else if filter == .all && before != .all {

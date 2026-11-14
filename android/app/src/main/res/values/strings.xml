@@ -299,4 +299,31 @@
     <string name="map_cells">Cells</string>
     <string name="map_cell_by_cell">Cell by cell</string>
     <string name="map_same_as_all">Same as all</string>
+    <!-- S06d: the lenses over the map (plugins-plan idea 8): the row's name, each chip, what a tap does, the empty line -->
+    <string name="map_lenses">Lenses</string>
+    <string name="lens_questions">Questions</string>
+    <string name="lens_late_night">Late night</string>
+    <string name="lens_unfinished">Unfinished</string>
+    <string name="lens_alone">Alone</string>
+    <!-- A chip, spoken: "Questions, 3 ideas" -->
+    <plurals name="lens_spoken">
+        <item quantity="one">%1$s, %2$d idea</item>
+        <item quantity="other">%1$s, %2$d ideas</item>
+    </plurals>
+    <string name="lens_questions_hint">show only ideas with a question mark</string>
+    <string name="lens_late_night_hint">show only ideas caught between 11 PM and 4 AM</string>
+    <string name="lens_unfinished_hint">show only ideas that stop mid-sentence</string>
+    <string name="lens_alone_hint">show only ideas with no links</string>
+    <string name="lens_off_hint">show every idea again</string>
+    <string name="map_lens_empty">No ideas match. Turn a lens off to see more.</string>
+    <!-- S06d: the capsule (plugins-plan idea 11): the More menu, the monthly offer, the notices, the refusals -->
+    <string name="more_save_capsule">Save a capsule…</string>
+    <string name="more_open_capsule">Open a capsule…</string>
+    <string name="capsule_offer">Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again.</string>
+    <string name="capsule_offer_save">Save a capsule</string>
+    <string name="capsule_offer_later">Not now</string>
+    <string name="capsule_saved">Capsule saved.</string>
+    <string name="capsule_not_saved">Couldn\'t save the capsule. Try again, or choose another place.</string>
+    <string name="capsule_refused_not_capsule">This file isn\'t a Sorta capsule. Choose another file.</string>
+    <string name="capsule_refused_newer">This capsule is from a newer version of Sorta. Check for a Sorta update, then try again.</string>
 </resources>

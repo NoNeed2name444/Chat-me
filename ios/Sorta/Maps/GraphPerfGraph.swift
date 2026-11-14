@@ -360,6 +360,21 @@ nonisolated struct GraphPerfGraph: Sendable {
         return shown
     }
 
+    /// The filter's mask with Map mode's lenses too (S06d A2): a note shows
+    /// when the filter lets it through and the lenses do (`only`, nil with
+    /// none on), and a hub while the filter shows it and a note under it
+    /// still shows, as Space's and Neurons' (GraphSim.apply).
+    func mask(_ filter: GraphPerfFilter, only lens: Set<UUID>?) -> [Bool]? {
+        guard let lens else { return mask(filter) }
+        var shown: [Bool] = mask(filter) ?? [Bool](repeating: true, count: nodeCount)
+        for i in 0..<noteCount where shown[i] && !lens.contains(noteIDs[i]) { shown[i] = false }
+        var any = [Bool](repeating: false, count: folderCount)
+        for i in 0..<noteCount where shown[i] && folder[i] >= 0 { any[Int(folder[i])] = true }
+        for f in Self.deepestFirst(folderDepth) where any[f] && folderParent[f] >= 0 { any[Int(folderParent[f])] = true }
+        for f in 0..<folderCount { shown[noteCount + f] = shown[noteCount + f] && any[f] }
+        return shown
+    }
+
     // MARK: - Helpers
 
     /// A UUID as two big-endian words, so comparing words compares bytes.

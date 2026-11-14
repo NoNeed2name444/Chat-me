@@ -175,9 +175,14 @@ jobs:
   # legends brought the iPhone's step to about 36 minutes on copy ca4797f
   # (boot 104 s), and on copy 93ca857 (boot 145 s) it met its limit of 40 in
   # the last test, every test before it passed: so 60, and the job 125.
+  # S05m adds the largest text size by night and the whole-title test by
+  # day and by night on the iPhone, about 8 minutes more: so 70, and the
+  # job 135. S06d adds five runs on each (the lenses and the capsule offer
+  # by day and by night, Not now once), each one launch and an import, about
+  # 8 minutes: so 80 and 45, and the job 155.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 125
+    timeout-minutes: 155
     steps:
       - uses: actions/checkout@v7
         with:
@@ -206,14 +211,14 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 60
+        timeout-minutes: 80
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone ideas
       - name: The Ideas renders on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 35
+        timeout-minutes: 45
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}

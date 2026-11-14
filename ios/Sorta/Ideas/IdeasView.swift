@@ -34,7 +34,17 @@ struct IdeasView: View {
     /// The editor, chooser, naming sheet and delete dialog the list opens.
     @State private var routes = IdeasListRoutes()
     @State private var importing = false
+    /// What the one file picker opens: Stethoscore's backup or a capsule.
+    @State private var importKind: ImportKind = .backup
     @State private var imported: ImportOutcome?
+    /// The capsule (S06d A4): the file the system's save screen writes, its
+    /// name, the screen up, and the monthly offer under the well.
+    @State private var capsuleFile: CapsuleFile?
+    @State private var capsuleName = ""
+    @State private var exporting = false
+    @State private var offering = false
+    /// "Lines", for the capsule's picture of the board (GraphLineStyle).
+    @AppStorage(SpaceSettings.straightLinesKey) private var straightLines: Bool = false
     @State private var toldReadProblem = false
     /// The list is scrolled away from its top: the hairline under the well shows.
     @State private var scrolled = false
@@ -53,6 +63,16 @@ struct IdeasView: View {
         #endif
     }()
 
+    /// The tests' way to the capsule's offer (`-SortaCapsuleOffer`): shown
+    /// at once, whenever it was last.
+    private static let testOffer: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-SortaCapsuleOffer")
+        #else
+        return false
+        #endif
+    }()
+
     private var showsEmpty: Bool {
         folderId == nil && IdeasDesk.isEmpty(ideas: notes.notes.count, folders: notes.folders.count)
     }
@@ -60,6 +80,14 @@ struct IdeasView: View {
     var body: some View {
         VStack(spacing: 0) {
             captureStrip
+            // the capsule's quiet offer, at the top level only, under the
+            // well (S06d A4)
+            if offering && folderId == nil && !notes.notes.isEmpty {
+                CapsuleOfferCard(save: saveCapsule, later: { offering = false })
+                    .padding(.horizontal, WardSpace.gutter)
+                    .padding(.top, WardSpace.xs)
+                    .padding(.bottom, WardSpace.s)
+            }
             if showsEmpty {
                 // the lines scroll, so at the largest sizes they take the
                 // room left under the well rather than squeezing the well
@@ -83,8 +111,19 @@ struct IdeasView: View {
         .background { WardBackground() }
         .lineSpacing(WardSpace.leading)
         .ideasListSheets(routes, folderId: $folderId)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [IdeaImportFlow.backupType]) { result in
-            if case .success(let url) = result { runImport(url) }
+        .fileImporter(isPresented: $importing,
+                      allowedContentTypes: importKind == .capsule ? [UTType.html] : [IdeaImportFlow.backupType]) { result in
+            guard case .success(let url) = result else { return }
+            switch importKind {
+            case .backup: runImport(url)
+            case .capsule: imported = IdeaImportFlow.runCapsule(url, into: notes)
+            }
+        }
+        .fileExporter(isPresented: $exporting, document: capsuleFile, contentType: .html,
+                      defaultFilename: capsuleName) { result in
+            savedCapsule(result)
+        } onCancellation: {
+            capsuleFile = nil
         }
         .alert(imported?.title ?? "", isPresented: importedShown, presenting: imported) { _ in
             Button(IdeasWords.importDone, role: .cancel) {}
@@ -92,6 +131,7 @@ struct IdeasView: View {
             Text(outcome.message)
         }
         .onAppear(perform: tellReadProblem)
+        .task(id: notes.notes.isEmpty) { considerOffer() }
         .task(id: capturing) {
             if capturing {
                 typing = true
@@ -186,6 +226,11 @@ struct IdeasView: View {
     private var moreMenu: some View {
         Menu {
             Button(IdeasWords.importFromStethoscore, systemImage: "square.and.arrow.down") { startImport() }
+            // where there is something to keep (S06d A4)
+            if !(notes.notes.isEmpty && notes.folders.isEmpty) {
+                Button(IdeasWords.saveCapsule, systemImage: "archivebox") { saveCapsule() }
+            }
+            Button(IdeasWords.openCapsule, systemImage: "tray.and.arrow.down") { openCapsule() }
             Button(IdeasWords.newFolder, systemImage: "folder.badge.plus") { routes.naming = .new(parent: folderId) }
         } label: {
             Image(systemName: "ellipsis")
@@ -222,6 +267,7 @@ struct IdeasView: View {
     }
 
     private func startImport() {
+        importKind = .backup
         if let data = Self.testImport {
             // the UI tests' file, handed to the call the picker's result makes
             let url = FileManager.default.temporaryDirectory
@@ -241,6 +287,61 @@ struct IdeasView: View {
     private func runImport(_ url: URL) {
         imported = IdeaImportFlow.run(url, into: notes)
     }
+
+    // MARK: the capsule (S06d A4-A5)
+
+    /// The offer, once a month at most (CapsuleOffer): the first launch with
+    /// ideas is noted, and an offer shown is marked offered at once, so it
+    /// never comes twice in a month, whatever the person does.
+    private func considerOffer() {
+        guard !notes.notes.isEmpty else { return }
+        let now = Date()
+        if CapsuleOffer.time(CapsuleOffer.firstSeenKey) == nil { CapsuleOffer.setTime(now, CapsuleOffer.firstSeenKey) }
+        let due: Bool = CapsuleOffer.due(now: now, ideas: notes.notes.count,
+                                         firstSeen: CapsuleOffer.time(CapsuleOffer.firstSeenKey),
+                                         offered: CapsuleOffer.time(CapsuleOffer.offeredKey),
+                                         saved: CapsuleOffer.time(CapsuleOffer.savedKey))
+        guard Self.testOffer || due else { return }
+        offering = true
+        CapsuleOffer.setTime(now, CapsuleOffer.offeredKey)
+    }
+
+    /// The page made now, with the board's picture, and the system's save
+    /// screen to choose where it goes.
+    private func saveCapsule() {
+        offering = false
+        let now = Date()
+        do {
+            capsuleFile = CapsuleFile(html: try CapsuleSave.html(notes, straight: GraphLineStyle.inForce(straightLines).isStraight,
+                                                                 now: now))
+            capsuleName = String(SortaCapsule.fileName(now, zone: .current).dropLast(".html".count))
+            exporting = true
+        } catch {
+            filing.notice = IdeasNotice(text: IdeasWords.capsuleNotSaved, undo: nil)
+        }
+    }
+
+    private func savedCapsule(_ result: Result<URL, Error>) {
+        capsuleFile = nil
+        switch result {
+        case .success:
+            CapsuleOffer.setTime(Date(), CapsuleOffer.savedKey)
+            filing.notice = IdeasNotice(text: IdeasWords.capsuleSaved, undo: nil)
+        case .failure(let error):
+            if (error as? CocoaError)?.code == .userCancelled { return }
+            filing.notice = IdeasNotice(text: IdeasWords.capsuleNotSaved, undo: nil)
+        }
+    }
+
+    private func openCapsule() {
+        importKind = .capsule
+        importing = true
+    }
+}
+
+/// What the one file picker is open for.
+enum ImportKind {
+    case backup, capsule
 }
 
 /// The import's two ends: the file type the picker offers, and what one
@@ -264,18 +365,35 @@ enum IdeaImportFlow {
             return .refused(.unreadable)
         }
     }
+
+    /// Opens a capsule (asking for access, as a picked file needs), merges
+    /// its ideas (SortaCapsule.merge, the backup's rules) and says how it went.
+    @MainActor
+    static func runCapsule(_ url: URL, into store: NoteStore) -> ImportOutcome {
+        let scoped: Bool = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            return .added(try SortaCapsule.merge(capsuleAt: url, into: store))
+        } catch let failure as SortaCapsule.Failure {
+            return .refusedCapsule(failure)
+        } catch {
+            return .refusedCapsule(.unreadable)
+        }
+    }
 }
 
 /// What one import said: what it added, or why the file was refused.
 enum ImportOutcome: Equatable {
     case added(IdeaImport.Counts)
     case refused(LibraryBackup.Failure)
+    /// A capsule refused (S06d A5).
+    case refusedCapsule(SortaCapsule.Failure)
 
     var title: String {
         switch self {
         case .added(let counts):
             return counts.ideas + counts.folders == 0 ? IdeasWords.nothingNewTitle : IdeasWords.importedTitle
-        case .refused: return IdeasWords.refusedTitle
+        case .refused, .refusedCapsule: return IdeasWords.refusedTitle
         }
     }
 
@@ -288,6 +406,10 @@ enum ImportOutcome: Equatable {
         case .refused(.notABackup): return IdeasWords.refusedNotBackup
         case .refused(.newerVersion): return IdeasWords.refusedNewer
         case .refused(.unreadable): return IdeasWords.refusedUnreadable
+        case .refusedCapsule(.notACapsule): return IdeasWords.capsuleRefusedNotCapsule
+        case .refusedCapsule(.newerVersion): return IdeasWords.capsuleRefusedNewer
+        case .refusedCapsule(.unreadable): return IdeasWords.capsuleRefusedUnreadable
+        case .refusedCapsule(.tooLarge): return IdeasWords.capsuleRefusedTooLarge
         }
     }
 }

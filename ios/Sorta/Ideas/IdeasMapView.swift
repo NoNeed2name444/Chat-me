@@ -31,12 +31,20 @@ struct IdeasMapView: View {
     @State private var choosingLook = false
     /// The top strip's height, so the list of the looks opens under it.
     @State private var stripHeight: CGFloat = 0
+    /// The lenses on (S06d): held while Map mode is, never stored, as the
+    /// map's filter.
+    @State private var lenses: Set<IdeaLens> = []
 
     private var look: MapLook { MapLook.stored(board: board, theme: themeRaw) }
 
     private var empty: Bool { notes.notes.isEmpty }
 
     private var night: Bool { !empty && look != .twoD }
+
+    /// The ideas the lenses on let through, nil with none on (S06d A2).
+    private var lensPass: Set<UUID>? {
+        IdeaLens.passing(lenses, notes: notes.notes, edges: notes.allEdges())
+    }
 
     var body: some View {
         content
@@ -46,8 +54,13 @@ struct IdeasMapView: View {
             // strip and the foot, so every sheet still follows the phone
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !empty {
-                    MapTopStrip(look: look, openLooks: { choosingLook = true },
-                                list: paned ? nil : { listing = true })
+                    // the lenses' row under the strip (S06d), in the strip's
+                    // height, which the map's first view keeps under
+                    VStack(spacing: 0) {
+                        MapTopStrip(look: look, openLooks: { choosingLook = true },
+                                    list: paned ? nil : { listing = true })
+                        MapLensRow(on: $lenses)
+                    }
                         .environment(\.colorScheme, night ? .dark : scheme)
                         .mapTextCap()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
@@ -126,10 +139,10 @@ struct IdeasMapView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("map-empty")
         } else if look == .twoD {
-            IdeaBoardView(open: { opening = NoteRef(id: $0) })
+            IdeaBoardView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
                 .wardUnlit()
         } else {
-            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder)
+            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lens: lensPass)
                 .mapSky()
         }
     }

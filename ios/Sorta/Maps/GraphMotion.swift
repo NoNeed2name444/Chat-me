@@ -1285,12 +1285,13 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     // MARK: showing and hiding
 
     /// Shows only the notes the filter lets through and the links between
-    /// them.
+    /// them. With `lens` (S06d: the ids the lenses on pass), only those of
+    /// them it holds.
     @MainActor
-    func apply(_ filter: GraphFilter) {
+    func apply(_ filter: GraphFilter, lens: Set<UUID>? = nil) {
         var changed: [(Int, Bool)] = []
         var ghostChanged: [(Int, Bool)] = []
-        let wanted: [Bool] = shown(by: filter)
+        let wanted: [Bool] = shown(by: filter, lens: lens)
         lock.lock()
         for i in nodes.indices {
             // a hidden planet whose moon is shown stays, faintly
@@ -1351,16 +1352,19 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         }
     }
 
-    /// Which bodies the filter lets through. A folder body shows for
-    /// Everything, or while any note inside it is shown.
-    private func shown(by filter: GraphFilter) -> [Bool] {
+    /// Which bodies the filter lets through, and the lenses (`lens`, S06d):
+    /// a note when both do. A folder body shows for Everything with no
+    /// lens, or while any note inside it is shown.
+    private func shown(by filter: GraphFilter, lens: Set<UUID>? = nil) -> [Bool] {
+        let open: Bool = filter == .all && lens == nil
         var wanted: [Bool] = []
         wanted.reserveCapacity(nodes.count)
         for i in nodes.indices {
             let admitted: Bool = filter.admits(kind: kinds[i], root: roots[i], degree: degree[i])
-            wanted.append(bodyKind[i] == .note ? admitted : filter == .all)
+                && (lens.map { i < ids.count && $0.contains(ids[i]) } ?? true)
+            wanted.append(bodyKind[i] == .note ? admitted : open)
         }
-        if filter != .all {
+        if !open {
             for i in nodes.indices where bodyKind[i] == .folder || bodyKind[i] == .home {
                 wanted[i] = members[i].contains { wanted[$0] }
             }

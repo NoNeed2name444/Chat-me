@@ -1234,7 +1234,8 @@ class GlMapRenderer(
             // Performance's force settling, and the tour under way (S05i2)
             || settling || (touring && !tourDone)
 
-        if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(0.055f, 0.106f, 0.173f, 1f)
+        // Performance's sky is iOS's (PerfLook.SKY), no longer navy (14, 27, 44)
+        if (space) GLES30.glClearColor(0.004f, 0.006f, 0.016f, 1f) else GLES30.glClearColor(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2], 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         uploadLeafState(plan)
         writeOffsets(orbiting)
@@ -1603,14 +1604,17 @@ class GlMapRenderer(
         if (perf == null) return
         val ids = IntArray(2)
         GLES30.glGenBuffers(2, ids, 0); hubIbo = ids[0]; lineIbo = ids[1]
-        val hubs = ByteBuffer.allocateDirect(max(hubChunks.size, 1) * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
-        for (k in hubChunks) if (k >= 0) hubs.put(k)
-        hubs.flip()
+        // a book with no folders has no hubs: a store with no data, not 4 bytes asked of an empty list
+        val (hubBytes, hubList) = PerfLines.indexUpload(PerfLines.hubIndices(hubChunks))
+        val hubs = hubList?.let { list ->
+            val b = ByteBuffer.allocateDirect(list.size * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+            b.put(list); b.position(0); b
+        }
         GLES30.glGenVertexArrays(1, ids, 0); hubVao = ids[0]
         GLES30.glBindVertexArray(hubVao)
         bindNodeAttributes()
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, hubIbo)
-        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, max(hubs.limit(), 1) * 4, hubs, GLES30.GL_STATIC_DRAW)
+        GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, hubBytes, hubs, GLES30.GL_STATIC_DRAW)
         GLES30.glGenVertexArrays(1, ids, 0); lineVao = ids[0]
         GLES30.glBindVertexArray(lineVao)
         bindNodeAttributes()

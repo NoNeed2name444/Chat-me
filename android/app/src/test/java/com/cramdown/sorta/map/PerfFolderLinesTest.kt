@@ -73,10 +73,39 @@ class PerfFolderLinesTest {
         }
     }
 
+    // v13 review: a book of ideas with no folders has no hubs; their first upload asks GL for a
+    // store and sends no data, never more bytes than it sends (Android's glBufferData throws)
+    @Test fun noFoldersNoHubsAndAnUploadAskingNoMoreThanItSends() {
+        val loose = PerfMap.build(PerfInput(listOf("N0", "N1"), booleanArrayOf(false, false), intArrayOf(-1, -1),
+            emptyList(), IntArray(0), intArrayOf(0, 1)))!!
+        assertEquals(0, loose.graph.folderCount)
+        val none = PerfLines.hubIndices(IntArray(loose.graph.folderCount) { loose.graph.hubNode(it) })
+        assertEquals(0, none.size)
+        for (list in listOf(none, PerfLines.hubIndices(intArrayOf(-1, -1)), PerfLines.hubIndices(intArrayOf(4, -1, 7)))) {
+            val (bytes, data) = PerfLines.indexUpload(list)
+            assertTrue("a store of some bytes for ${list.toList()}", bytes >= 4)
+            assertTrue("no more bytes asked than sent for ${list.toList()}: $bytes", data == null || bytes <= data.size * 4)
+            assertEquals("the hubs drawn are the hubs sent", list.size, data?.size ?: 0)
+        }
+        assertArrayEquals("each hub's chunk, those with none left out", intArrayOf(4, 7), PerfLines.hubIndices(intArrayOf(4, -1, 7)))
+    }
+
     @Test fun onTheHundredThousandEveryFolderWithAParentHasALine() {
         val g = PerfVault.graph
         val lines = PerfLines.of(g)
         assertEquals(2 * (0 until g.folderCount).count { g.folderParent[it] >= 0 }, lines.size)
         for (k in 0 until lines.size / 2) assertEquals(g.folderParent[lines[2 * k] - g.noteCount] + g.noteCount, lines[2 * k + 1])
+    }
+
+    // v13: Performance's sky is iOS's, GraphPerfScene.background (GraphPerfScene.swift:189), which clears
+    // and backs its view (GraphPerfMapView.swift:145-155): near-black 5, 7, 12, not Android's navy 14, 27, 44
+    @Test fun theSkyIsIosNearBlack() {
+        var root: java.io.File? = java.io.File(System.getProperty("user.dir")).absoluteFile
+        while (root != null && !java.io.File(root, "ios/Sorta").exists()) root = root.parentFile
+        val swift = java.io.File(checkNotNull(root) { "no repository root above ${System.getProperty("user.dir")}" }, "ios/Sorta/Maps/GraphPerfScene.swift").readText()
+        val ios = checkNotNull(Regex("""static let background = SIMD3<Float>\(([^)]*)\)""").find(swift)) { "iOS's background is not found" }
+            .groupValues[1].split(",").map { it.trim().toFloat() }
+        assertArrayEquals(ios.toFloatArray(), PerfLook.SKY, 0f)
+        assertEquals(listOf(5, 7, 12), PerfLook.SKY.map { Math.round(it * 255) })
     }
 }
