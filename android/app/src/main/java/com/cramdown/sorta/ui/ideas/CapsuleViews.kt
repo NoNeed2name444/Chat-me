@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -68,8 +70,11 @@ object CapsuleTags {
 
 /**
  * The quiet offer: the kit's banner well (WardBanner's inset, glyph and words) with its two actions
- * under the words, at the end, each a full target: Not now, then Save a capsule.
+ * under the words, at the end, each a full target: Not now, then Save a capsule. Where the two don't
+ * fit on one line (a large font on a narrow phone) Save a capsule goes under Not now, at the end, as
+ * iOS's stack does (S06d review N12).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable fun CapsuleOfferCard(onSave: () -> Unit, onLater: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().wardInset(WardRadius.field, fill = WardControlStates.wellFill)
         .padding(start = WardSpace.m.wardDp, end = WardSpace.m.wardDp, top = WardSpace.m.wardDp, bottom = WardSpace.xs.wardDp)
@@ -79,7 +84,7 @@ object CapsuleTags {
             Text(stringResource(R.string.capsule_offer), Modifier.weight(1f), style = WardTextStyle.subheadline.textStyle(),
                 color = wardColor(WardToken.ink))
         }
-        Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp, Alignment.End)) {
             @Composable fun Action(text: String, tag: String, weight: WardWeight, onClick: () -> Unit) =
                 Box(Modifier.defaultMinSize(WardControlSize.target.wardDp, WardControlSize.target.wardDp)
                     .clickable(role = Role.Button, onClick = onClick).semantics { testTag = tag }, contentAlignment = Alignment.Center) {

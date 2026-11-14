@@ -256,8 +256,9 @@ internal object IdeasBanner {
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
         if (uri != null) scope.launch {
             val now = System.currentTimeMillis()
-            // the book as it is now, drawn and compressed off the main thread
-            val snapshot = model.book
+            // the book as it is now, taken here on the main thread (its lists, which a change swaps
+            // whole, in a book of their own that nothing changes), then drawn and compressed off it
+            val snapshot = model.book.let { IdeaBook(it.notes, it.folders) }
             val straight = settings.lineStyle.isStraight
             val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, straight, measurer, density, now) }
             val saved = withContext(Dispatchers.IO) {

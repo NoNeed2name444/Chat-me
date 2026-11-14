@@ -127,6 +127,7 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
 import com.cramdown.sorta.ui.ward.WardType
@@ -477,6 +478,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     val home = remember(scene) { HomeView(camera, HomeView.framer(scene)) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
+    // what the first view and a fly-in fit to: half a touch target more under the top glass, so a
+    // body's touch area clears the strip and the lens row too, as iOS's framing keeps it (S06d)
+    val framed = with(density) { insets.copy(top = insets.top + (WardControlSize.target / 2).dp.toPx()) }
     val cover = with(density) { card.toPx() }
     // the card's cover the home was last fitted to
     val framedCover = remember(home) { floatArrayOf(0f) }
@@ -532,7 +536,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), framed)) loop.touched()
     }
     // the filter reaches the renderer as it changes; the next frame applies it (S05i)
     // a map built again under a filter starts filtered, with no pop (its first one is set at once)
@@ -591,9 +595,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // the first view fits the shape the map has (on its size, below) and what the chrome and the
     // first-run card leave of it, again when the chrome changes or the card comes or grows
     fun fitHome(size: IntSize, follow: Boolean = true) {
-        if (synchronized(camera) { home.fit(camera, size.width, size.height, insets.coveringFoot(framedCover[0]), follow) }) loop.moved()
+        if (synchronized(camera) { home.fit(camera, size.width, size.height, framed.coveringFoot(framedCover[0]), follow) }) loop.moved()
     }
-    LaunchedEffect(home, insets) { fitHome(viewSize) }
+    LaunchedEffect(home, framed) { fitHome(viewSize) }
     LaunchedEffect(home, cover) {
         val follow = MapCardCover.refits(framedCover[0], cover)
         framedCover[0] = cover
