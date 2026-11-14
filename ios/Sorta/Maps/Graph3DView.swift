@@ -1887,9 +1887,16 @@ struct GraphSCNView: UIViewRepresentable {
         }
 
         /// What framing fits the graph to: the glass, and the first-run
-        /// card while it is up (S05d).
+        /// card while it is up (S05d). Half a touch target more under the
+        /// top glass, as the card's cover has (cardCover): the framing keeps
+        /// each body's middle in the window, and its touch frame (voiceFrame,
+        /// 44 pt round its middle) must clear the strip and the lens row too.
+        /// The lens row's second line on a phone (S06d) made the first view
+        /// fill the band's height, and the top body's frame ran 4 pt under it.
         private var framing: GraphInsets {
-            insets.coveringFoot(card)
+            var out: GraphInsets = insets.coveringFoot(card)
+            out.top += Float(WardControlSize.target / 2)
+            return out
         }
 
         /// Shows a newly built scene.

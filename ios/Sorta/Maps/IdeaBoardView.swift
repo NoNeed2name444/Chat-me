@@ -204,12 +204,11 @@ struct IdeaBoardView: View {
                     let layer: Double = lifted ? 1 : 0
                     // a card the lenses leave out (S06d)
                     let faded: Bool = lens.map { !$0.contains(note.id) } ?? false
-                    card(note, oneKind: oneKind)
+                    card(note, oneKind: oneKind, faded: faded)
                         // its size before the board's zoom, in board points
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { sizes[note.id] = $0 }
                         .opacity(faded ? IdeaLens.fade : 1)
                         .allowsHitTesting(!faded)
-                        .accessibilityHidden(faded)
                         .scaleEffect(scale)
                         .position(points[note.id] ?? .zero)
                         .zIndex(layer)
@@ -290,7 +289,7 @@ struct IdeaBoardView: View {
 
     // MARK: cards
 
-    private func card(_ note: Note, oneKind: Bool) -> some View {
+    private func card(_ note: Note, oneKind: Bool, faded: Bool = false) -> some View {
         let tone = NoteTone.color(for: note.folderId, in: notes)
         let chosen: Bool = source == note.id
         // a card being dragged or starting a connection rises off the board
@@ -365,6 +364,10 @@ struct IdeaBoardView: View {
         .accessibilityIdentifier("board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
         // as Android's hold names it, and as both hints say it
         .accessibilityAction(named: "Start a connection") { source = note.id }
+        // a card the lenses leave out is not read (S06d A2): hidden on its own
+        // element, which the card makes here; hidden from outside it, the
+        // faded card was still found (CI, 14 Nov: iPhone and iPad)
+        .accessibilityHidden(faded)
     }
 
     /// The whole title over its card, at least 240 wide, inside the board's

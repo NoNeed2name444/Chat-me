@@ -47,7 +47,7 @@ final class LensCapsuleRenderTests: XCTestCase {
 
         // one lens: the unfinished ideas, the rest faded and unread
         app.buttons["map-lens-unfinished"].tap()
-        XCTAssertTrue(waitGone(card(app, "Paint the shed green")), "the shed's card is left out, so not read")
+        assertGone(app, card(app, "Paint the shed green"), "the shed's card is left out, so not read")
         for title in ["A bell for the bike", baker] { XCTAssertTrue(card(app, title).exists, "\(title) passes Unfinished") }
         for title in ["Seed swap list", "Try a rye starter"] { XCTAssertFalse(card(app, title).exists, "\(title) is left out") }
         chip(app, "unfinished", "Unfinished", 2, on: true, window)
@@ -57,7 +57,7 @@ final class LensCapsuleRenderTests: XCTestCase {
 
         // two lenses: only the idea that passes both
         app.buttons["map-lens-questions"].tap()
-        XCTAssertTrue(waitGone(card(app, "A bell for the bike")), "the bell has no question mark")
+        assertGone(app, card(app, "A bell for the bike"), "the bell has no question mark")
         XCTAssertTrue(card(app, baker).exists, "the baker's question passes both")
         chip(app, "questions", "Questions", 1, on: true, window)
         chip(app, "unfinished", "Unfinished", 1, on: true, window)
@@ -96,12 +96,12 @@ final class LensCapsuleRenderTests: XCTestCase {
 
         // Save a capsule: the system's save screen, which this test leaves
         save.tap()
-        let cancel = app.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 20), "the system's save screen")
+        let screen = SaveScreen(app)
+        XCTAssertTrue(screen.waitShown(), "the system's save screen")
         sleep(1)
         keepShot("capsule-save-screen")
-        cancel.tap()
-        XCTAssertTrue(waitGone(cancel), "the save screen closed")
+        screen.cancel()
+        XCTAssertTrue(screen.waitGone(), "the save screen closed")
         XCTAssertFalse(offer.exists, "the offer went with Save a capsule")
         XCTAssertFalse(app.staticTexts["Capsule saved."].exists, "nothing saved, so no notice")
 
@@ -144,11 +144,65 @@ final class LensCapsuleRenderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Self.points(frame.width), 44, "\(name) is 44 wide: \(frame)", file: file, line: line)
     }
 
+    /// `element` goes within ten seconds; if not, the failure keeps the
+    /// app's tree, to show what still holds it.
+    private func assertGone(_ app: XCUIApplication, _ element: XCUIElement, _ message: String,
+                            file: StaticString = #filePath, line: UInt = #line) {
+        if waitGone(element) { return }
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "tree when \(message)"
+        tree.lifetime = .keepAlways
+        add(tree)
+        XCTFail(message, file: file, line: line)
+    }
+
     /// Whether `element` has gone within ten seconds.
     private func waitGone(_ element: XCUIElement) -> Bool {
         let start = Date()
         while element.exists && Date().timeIntervalSince(start) < 10 { usleep(200_000) }
         return !element.exists
+    }
+}
+
+/// The system's save screen (fileExporter): its file name field, or its
+/// Cancel. On the iPhone it can open in the last place saved to ("On My
+/// iPhone", with Browse to go back) where it shows no Cancel, and a Cancel
+/// seen at Browse can go as it moves on there (CI, 14 Nov); Cancel is at
+/// Browse, so it goes back until Cancel shows, and taps it.
+struct SaveScreen {
+    let app: XCUIApplication
+    init(_ app: XCUIApplication) { self.app = app }
+
+    private var name: XCUIElement { app.textFields["DOCPicker.filenameTextField"].firstMatch }
+    private var cancelButton: XCUIElement { app.buttons["Cancel"].firstMatch }
+    private var back: XCUIElement { app.buttons["BackButton"].firstMatch }
+    private var shown: Bool { name.exists || cancelButton.exists }
+
+    /// Whether it shows within twenty seconds.
+    func waitShown() -> Bool {
+        let start = Date()
+        while !shown && Date().timeIntervalSince(start) < 20 { usleep(250_000) }
+        return shown
+    }
+
+    /// Cancel, going back to Browse first where it isn't shown.
+    func cancel() {
+        let start = Date()
+        while shown && Date().timeIntervalSince(start) < 20 {
+            if cancelButton.exists && cancelButton.isHittable {
+                cancelButton.tap()
+            } else if back.exists && back.isHittable {
+                back.tap()
+            }
+            usleep(500_000)
+        }
+    }
+
+    /// Whether it has gone within ten seconds.
+    func waitGone() -> Bool {
+        let start = Date()
+        while shown && Date().timeIntervalSince(start) < 10 { usleep(250_000) }
+        return !shown
     }
 }
 
