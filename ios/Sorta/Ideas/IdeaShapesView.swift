@@ -181,18 +181,18 @@ final class EchoIndexCache {
     var index: IdeaEchoes.Index<UUID>?
 }
 
-/// The ideas like the one being written, as a section of the editor's form
-/// (every layout: it is the plain way to them, and what VoiceOver reaches):
+/// Finds the ideas like the one being written, for the editor's form:
 /// asked 300 ms after the last change and handed to the map and the board
-/// through `shapes`, so they glow there. A tap links one, with Undo.
-struct EchoesSection: View {
+/// through `shapes`, so they glow there. On the form itself, not on the
+/// section: a Form row that shows nothing is never made, so a section's own
+/// task would never run while it is empty, and it starts empty.
+struct EchoesFinder: ViewModifier {
     let current: UUID
     let title: String
     let text: String
+    @Binding var echoes: [UUID]
     @EnvironmentObject private var notes: NoteStore
-    @Environment(IdeasFiling.self) private var filing
     @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
-    @State private var echoes: [UUID] = []
     @State private var cache = EchoIndexCache()
 
     /// What the ask depends on: the words typed, and the ideas (compared
@@ -208,46 +208,24 @@ struct EchoesSection: View {
         AskKey(current: current, title: title, text: text, ideas: notes.notes)
     }
 
-    var body: some View {
-        let shown: [Note] = echoes.compactMap { notes.note($0) }
-        Group {
-            if !shown.isEmpty {
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: WardSpace.s) {
-                            ForEach(shown) { other in
-                                chip(other)
-                            }
-                        }
-                        // room for the chips' lift
-                        .padding(.vertical, WardSpace.xs)
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("idea-echoes")
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(PopOutField.rowInsets)
-                    .listRowSeparator(.hidden)
-                } header: {
-                    WardSectionLabel(IdeasWords.echoesTitle)
-                }
+    func body(content: Content) -> some View {
+        content
+            .task(id: key) {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                find()
             }
-        }
-        .task(id: key) {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            find()
-        }
-        .onAppear { shapes?.editing = current }
-        .onChange(of: current) { _, now in
-            echoes = []
-            shapes?.editing = now
-            shapes?.glowing = []
-        }
-        .onDisappear {
-            guard let shapes, shapes.editing == current else { return }
-            shapes.editing = nil
-            shapes.glowing = []
-        }
+            .onAppear { shapes?.editing = current }
+            .onChange(of: current) { _, now in
+                echoes = []
+                shapes?.editing = now
+                shapes?.glowing = []
+            }
+            .onDisappear {
+                guard let shapes, shapes.editing == current else { return }
+                shapes.editing = nil
+                shapes.glowing = []
+            }
     }
 
     private func find() {
@@ -271,6 +249,48 @@ struct EchoesSection: View {
         if let shapes {
             shapes.editing = current
             shapes.glowing = found
+        }
+    }
+}
+
+extension View {
+    /// The editor's form finds the ideas like `current` into `echoes`.
+    func findsEchoes(current: UUID, title: String, text: String, into echoes: Binding<[UUID]>) -> some View {
+        modifier(EchoesFinder(current: current, title: title, text: text, echoes: echoes))
+    }
+}
+
+/// The ideas like the one being written, as a section of the editor's form
+/// (every layout: it is the plain way to them, and what VoiceOver reaches),
+/// as EchoesFinder found them. A tap links one, with Undo.
+struct EchoesSection: View {
+    let current: UUID
+    @Binding var echoes: [UUID]
+    @EnvironmentObject private var notes: NoteStore
+    @Environment(IdeasFiling.self) private var filing
+    @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
+
+    var body: some View {
+        let shown: [Note] = echoes.compactMap { notes.note($0) }
+        if !shown.isEmpty {
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WardSpace.s) {
+                        ForEach(shown) { other in
+                            chip(other)
+                        }
+                    }
+                    // room for the chips' lift
+                    .padding(.vertical, WardSpace.xs)
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("idea-echoes")
+                .listRowBackground(Color.clear)
+                .listRowInsets(PopOutField.rowInsets)
+                .listRowSeparator(.hidden)
+            } header: {
+                WardSectionLabel(IdeasWords.echoesTitle)
+            }
         }
     }
 

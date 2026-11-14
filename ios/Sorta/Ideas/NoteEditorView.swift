@@ -56,6 +56,8 @@ struct NoteEditorView: View {
     @State private var linking = false
     @State private var choosingFolder = false
     @State private var confirmingDelete = false
+    /// The ideas like this one, as EchoesFinder found them (S06c).
+    @State private var echoes: [UUID] = []
     /// Which field has the caret, if any.
     @FocusState private var editing: EditorField?
 
@@ -258,7 +260,7 @@ struct NoteEditorView: View {
 
             // S06c: the older ideas that share a rare word with this one, under
             // the details' hint and over the links it adds to; a tap links one
-            EchoesSection(current: current, title: title, text: text)
+            EchoesSection(current: current, echoes: $echoes)
 
             linkedSection
                 .wardRowBackground()
@@ -274,6 +276,7 @@ struct NoteEditorView: View {
                 .wardRowBackground()
             }
         }
+        .findsEchoes(current: current, title: title, text: text, into: $echoes)
     }
 
     // MARK: the bottom bar and the chip
