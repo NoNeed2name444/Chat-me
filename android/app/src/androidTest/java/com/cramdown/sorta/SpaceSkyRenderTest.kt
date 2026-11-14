@@ -145,7 +145,7 @@ class SpaceSkyRenderTest {
         shot("sky-settle-$suffix")
         settle(1_500)
         shot("sky-settled-$suffix")
-        check(onMain { compose.onAllNodes(hasText("Moved to Raised beds.", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }) {
+        check(compose.onAllNodes(hasText("Moved to Raised beds.", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
             "No notice of the filing for $suffix"
         }
     }
@@ -184,14 +184,15 @@ class SpaceSkyRenderTest {
         tapOnScreen(node(look.identifier), look.identifier)
     }
 
-    private fun shown(tag: String) = onMain { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    // on the test thread: compose's finders wait for idle, which they refuse to do on the main thread
+    private fun shown(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private fun waitFor(tag: String, what: String) {
         try { compose.waitUntil(15_000) { shown(tag) } } catch (_: ComposeTimeoutException) {}
         check(shown(tag)) { "Not on screen: $what" }
     }
 
-    private fun node(tag: String): SemanticsNode = onMain { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().first() }
+    private fun node(tag: String): SemanticsNode = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().first()
 
     private fun spoken(node: SemanticsNode): String = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ") ?: ""
 
