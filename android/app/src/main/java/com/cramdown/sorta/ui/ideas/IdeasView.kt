@@ -352,7 +352,7 @@ internal object IdeasBanner {
                         deckOn = settings.sortDeck, setDeck = { settings.setSortDeck(it) }, deckShown = deckShown,
                         order = order, tide = tide, closeTide = { IdeasSession.tide = emptyList() },
                         sortActions = sortActions, tideActions = tideActions, paneTargets = paneTargets, frames = frames,
-                        hovered = hovered, hover = { hovered = it }),
+                        hovered = hovered, hover = { hovered = it }, paned = split != null),
                 )
             }
         }
@@ -447,6 +447,8 @@ internal class SortExtras(
     val sortActions: DeckActions.Sort, val tideActions: DeckActions.Tide,
     val paneTargets: List<NoteFolder>?, val frames: SnapshotStateMap<String, Rect>,
     val hovered: String?, val hover: (String?) -> Unit,
+    /** Two panes: the deck stands in the middle of its own, the tide's too. */
+    val paned: Boolean,
 )
 
 /**
@@ -535,7 +537,7 @@ internal class SortExtras(
             }
             val tideUp = extras.tide.isNotEmpty()
             DeckArea(book, version, if (tideUp) extras.tide else extras.order, if (tideUp) extras.tideActions else extras.sortActions,
-                paneTargets = if (tideUp) emptyList() else extras.paneTargets, frames = extras.frames, hovered = extras.hovered, hover = extras.hover, bottom = bottom,
+                paneTargets = if (tideUp) (if (extras.paned) emptyList() else null) else extras.paneTargets, frames = extras.frames, hovered = extras.hovered, hover = extras.hover, bottom = bottom,
                 modifier = Modifier.weight(1f).padding(top = WardSpace.m.wardDp))
             return@Column
         }

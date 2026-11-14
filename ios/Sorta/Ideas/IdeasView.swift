@@ -249,7 +249,7 @@ struct IdeasView: View {
                 DeckArea(order: order, actions: sortActions,
                          paneTargets: paned ? IdeasDeckRule.targets(notes, slots: DeckLayout.paneCap) : nil)
             } else {
-                DeckArea(order: tide, actions: tideActions, paneTargets: [])
+                DeckArea(order: tide, actions: tideActions, paneTargets: paned ? [] : nil)
             }
         }
     }

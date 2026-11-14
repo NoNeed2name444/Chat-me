@@ -304,7 +304,8 @@ struct DeckArea: View {
             let above = max(0, height - cardZone - WardSpace.m)
             let roomy: Bool = above >= WardControlSize.target * 2
             let sorting: Bool = { if case .sort = actions { return true } else { return false } }()
-            let centred: Bool = sorting && paneTargets != nil
+            // two panes (paneTargets not nil, empty for the tide): the card and its well in the middle
+            let centred: Bool = paneTargets != nil
             let edges = paneTargets == nil && sorting && roomy
             let slots = edges ? DeckFolders.slots(height: Double(above), row: Double(DeckLayout.row), columns: 2, cap: DeckLayout.phoneCap) : 0
             let targets: [NoteFolder] = paneTargets ?? (edges ? IdeasDeckRule.targets(notes, slots: slots) : [])
@@ -346,8 +347,8 @@ struct DeckArea: View {
         .padding(.bottom, WardSpace.l)
     }
 
-    /// The edge columns, leading and trailing, at the foot of the room above
-    /// the card, the well between them at its top; or the well alone (two
+    /// The targets in rows of two at the foot of the room above the card, the
+    /// most used nearest it, the well at its top between the two sides; or the well alone (two
     /// panes, and the tide, where it is Keep).
     @ViewBuilder
     private func wells(top: Note, targets: [NoteFolder], width: CGFloat, height: CGFloat) -> some View {
@@ -361,28 +362,30 @@ struct DeckArea: View {
         }
         if case let .sort(file, _, _) = actions, !targets.isEmpty {
             let sides = max(0, (width - DeckLayout.wellWidth - WardSpace.m * 2) / 2)
-            HStack(alignment: .top, spacing: WardSpace.m) {
-                column(targets.enumerated().filter { $0.offset % 2 == 0 }.map(\.element), top: top, file: file)
-                    .frame(width: sides)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+            // rows of two, the most used in the row nearest the card
+            let rows: [[NoteFolder]] = stride(from: 0, to: targets.count, by: 2).map { Array(targets[$0 ..< min($0 + 2, targets.count)]) }
+            ZStack(alignment: .top) {
                 well.frame(width: DeckLayout.wellWidth)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                column(targets.enumerated().filter { $0.offset % 2 == 1 }.map(\.element), top: top, file: file)
-                    .frame(width: sides)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+                VStack(spacing: WardSpace.s) {
+                    Spacer(minLength: 0)
+                    ForEach(rows.reversed(), id: \.[0].id) { pair in
+                        HStack(alignment: .bottom, spacing: 0) {
+                            DeckTarget(folder: pair[0]) { file(top.id, pair[0].id) }
+                                .frame(width: sides)
+                            Spacer(minLength: 0)
+                            if pair.count > 1 {
+                                DeckTarget(folder: pair[1]) { file(top.id, pair[1].id) }
+                                    .frame(width: sides)
+                            }
+                        }
+                    }
+                }
             }
+            .frame(maxWidth: .infinity)
             .frame(height: height)
         } else {
             well.frame(width: DeckLayout.wellWidth)
                 .frame(maxWidth: .infinity)
-        }
-    }
-
-    private func column(_ folders: [NoteFolder], top: Note, file: @escaping (UUID, UUID) -> Void) -> some View {
-        VStack(spacing: WardSpace.s) {
-            ForEach(folders) { folder in
-                DeckTarget(folder: folder) { file(top.id, folder.id) }
-            }
         }
     }
 }

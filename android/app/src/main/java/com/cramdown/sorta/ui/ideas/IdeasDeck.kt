@@ -233,7 +233,8 @@ internal sealed class DeckActions {
             (DeckLayout.cardHeight + WardSpace.s * 2).toFloat()).dp
         val above = maxHeight - cardZone - WardSpace.m.wardDp
         val roomy = above >= (WardControlSize.target * 2).dp
-        val centred = sort != null && paneTargets != null
+        // two panes (paneTargets not null, empty for the tide): the card and its well in the middle
+        val centred = paneTargets != null
         val edges = paneTargets == null && sort != null && roomy
         val slots = if (edges) DeckFolders.slots(above.value.toDouble(), DeckLayout.row, 2, DeckLayout.phoneCap) else 0
         val targets = paneTargets ?: remember(book, version, slots) { deckTargets(book, slots) }
@@ -264,15 +265,16 @@ internal sealed class DeckActions {
         val sides = (maxWidth - DeckLayout.wellWidth.dp - WardSpace.m.wardDp * 2) / 2
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
             if (edges && sort != null && targets.isNotEmpty()) {
-                // the edge columns, leading and trailing, at the foot of the room above the card; the Later well between them at its top
-                val (leading, trailing) = targets.withIndex().partition { it.index % 2 == 0 }
-                Row(Modifier.fillMaxWidth().height(above), horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-                    Column(Modifier.width(sides).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.Bottom)) {
-                        leading.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
-                    }
-                    LaterWell(Modifier.width(DeckLayout.wellWidth.dp)) { sort.later(top.id) }
-                    Column(Modifier.width(sides).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.Bottom)) {
-                        trailing.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
+                // the targets in rows of two at the foot of the room above the card, the most used in the row
+                // nearest it; the Later well at the top, between the two sides
+                Box(Modifier.fillMaxWidth().height(above)) {
+                    LaterWell(Modifier.align(Alignment.TopCenter).width(DeckLayout.wellWidth.dp)) { sort.later(top.id) }
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.Bottom)) {
+                        targets.chunked(2).reversed().forEach { pair ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                                pair.forEach { f -> DeckTarget(f, hovered == f.id, frames, Modifier.width(sides)) { sort.file(top.id, f.id) } }
+                            }
+                        }
                     }
                 }
             } else if (roomy) {
