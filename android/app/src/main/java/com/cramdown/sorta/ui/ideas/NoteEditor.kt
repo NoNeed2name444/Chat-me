@@ -105,8 +105,12 @@ const val EDITOR_LINK_TAG = "editor-link"
     go: (String) -> Unit, back: () -> Unit, choose: (String) -> Unit, delete: (String) -> Unit, done: () -> Unit,
 ) {
     val id = note.id
-    var title by rememberSaveable(id) { mutableStateOf(note.title) }
-    var body by rememberSaveable(id) { mutableStateOf(note.body) }
+    val shapes = LocalIdeaShapes.current
+    // S06c: a split or a join of this idea (or its Undo) changes its words from outside: read afresh then,
+    // so the next save never puts the old words back (the menu items save before they ask)
+    val reshaped = shapes?.reshaped ?: 0
+    var title by rememberSaveable(id, reshaped) { mutableStateOf(model.book.note(id)?.title ?: note.title) }
+    var body by rememberSaveable(id, reshaped) { mutableStateOf(model.book.note(id)?.body ?: note.body) }
     var menu by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
@@ -120,7 +124,10 @@ const val EDITOR_LINK_TAG = "editor-link"
     }
     // half a second after the last key, and whenever the page goes
     LaunchedEffect(title, body) { delay(500); save() }
-    DisposableEffect(id) { onDispose { save() } }
+    // the save of the latest composition: after a split or a join the words are new state, and the
+    // first composition's save would put the old words back as the page goes
+    val saveLatest by rememberUpdatedState { save() }
+    DisposableEffect(id) { onDispose { saveLatest() } }
     fun leave(then: () -> Unit) { save(); then() }
     fun openTitle(name: String) {
         save()
@@ -144,6 +151,12 @@ const val EDITOR_LINK_TAG = "editor-link"
                 Box {
                     WardCircleButton(Icons.Rounded.MoreHoriz, stringResource(R.string.sort_more), { menu = true })
                     DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
+                        // S06c: Split…, Join with… and Collide with…, the plain ways to the map's gestures
+                        if (shapes != null) {
+                            MenuItem(stringResource(R.string.shape_split), tag = IdeaShapeTags.MENU_SPLIT) { menu = false; save(); shapes.askSplit(id) }
+                            MenuItem(stringResource(R.string.shape_join), tag = IdeaShapeTags.MENU_JOIN) { menu = false; save(); shapes.askJoin(id) }
+                            MenuItem(stringResource(R.string.shape_collide), tag = IdeaShapeTags.MENU_COLLIDE) { menu = false; save(); shapes.askCollide(id) }
+                        }
                         MenuItem(stringResource(R.string.editor_delete), destructive = true) { menu = false; deleting = true }
                     }
                 }
@@ -167,6 +180,9 @@ const val EDITOR_LINK_TAG = "editor-link"
                 if (suggestions.isNotEmpty()) FlowRowOf(suggestions.map { it.title }) { name -> body = NoteEditing.complete(body, name) }
             }
             Text(stringResource(R.string.editor_hint), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
+            // S06c: the older ideas that share a rare word with this one; a tap links it. Under the details'
+            // hint, which is about the field, and over the links, which it adds to
+            EchoesStrip(book, model.version, note, title, body, shapes)
 
             // the ideas this one links to, shown once there is one; "Link to an idea…" is offered once,
             // in the bar with Write / Read, never as a row here as well (S05's next step, item 8; as iOS)

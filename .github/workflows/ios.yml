@@ -12,7 +12,7 @@
 name: iOS
 on:
   push:
-    branches: [sorta, sorta-b, sorta-d]
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
 permissions:
   contents: read
 concurrency:
@@ -175,9 +175,15 @@ jobs:
   # legends brought the iPhone's step to about 36 minutes on copy ca4797f
   # (boot 104 s), and on copy 93ca857 (boot 145 s) it met its limit of 40 in
   # the last test, every test before it passed: so 60, and the job 125.
+  # S05m adds the largest text size by night and the whole-title test by
+  # day and by night on the iPhone, about 8 minutes more: so 70, and the
+  # job 135. On copy 34089de the iPhone's step took 42 minutes and the
+  # iPad's 21; S06c adds 5 behaviour tests and 3 render runs on the iPhone
+  # and 3 render runs on the iPad, about 17 and 8 minutes more: so 85 and
+  # 45, and the job 160.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 125
+    timeout-minutes: 160
     steps:
       - uses: actions/checkout@v7
         with:
@@ -206,14 +212,14 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 60
+        timeout-minutes: 85
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone ideas
       - name: The Ideas renders on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 35
+        timeout-minutes: 45
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}
@@ -242,7 +248,8 @@ jobs:
   # touched, its legend and look menu, bodies dying, and the depth fade, with
   # testDepthGlide), one at a time on an iPhone, beside the build job. Their
   # normal time is set by the first green run; until then, the limit is
-  # about twice a guess of an hour for 30 tests and the build.
+  # about twice a guess of an hour for 33 tests and the build (S05l split
+  # testDepthMeasure's 35 takes into four tests).
   maps:
     runs-on: macos-latest
     timeout-minutes: 120

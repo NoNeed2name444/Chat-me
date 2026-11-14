@@ -68,6 +68,10 @@ struct Graph3DView: View {
     /// Map mode's filings, deletes and Undo, the Sort screen's (S05b
     /// checklist 7).
     @Environment(IdeasFiling.self) private var filing
+    /// S06c: the ideas like the one open in the editor, rung; Collide,
+    /// Split and Join. Absent where the map is shown without the Ideas
+    /// screens, which offer none of them.
+    @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
     let open: (UUID) -> Void
     /// Opens a folder in the List (nil: its top level) - two double taps on
     /// a star or black hole in the Universe.
@@ -300,7 +304,8 @@ struct Graph3DView: View {
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
-                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp)
+                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp,
+                             glows: shapes?.glowing ?? [], dropPreview: dropPreview)
             }
             .ignoresSafeArea()
         }
@@ -507,12 +512,28 @@ struct Graph3DView: View {
         out.hold = { id, point in held(id, at: point) }
         out.voice = { id, action in voiceAction(id, action) }
         out.flown = { id in flownRegion = id }
+        if let shapes {
+            out.collide = { a, b in shapes.collide(a, b, from: .map, notes: notes) }
+            out.split = { id in shapes.askSplit(id, from: .map, notes: notes, filing: filing) }
+            out.join = { a, b in shapes.joinOlderFirst(a, b, notes: notes, filing: filing) }
+        }
         return out
+    }
+
+    /// UI tests only: the idea rung as a held one's drop target
+    /// (GraphReshapePreview).
+    private var dropPreview: UUID? {
+        guard let name = GraphReshapePreview.drop else { return nil }
+        return notes.notes.first(where: { $0.title == name })?.id
     }
 
     /// A tap on the map: on a body (its id) or on empty space (nil).
     private func touched(_ id: UUID?) {
-        if let id {
+        // S06c: a tap on an idea rung as like the one open in the editor
+        // links the two, with Undo (Performance draws no rings, so not there)
+        if let id, let shapes, shapes.editing != nil, shapes.glows(id), theme.bodies != .points {
+            shapes.link(id, notes: notes, filing: filing)
+        } else if let id {
             handle(.tapBody(id))
         } else {
             handle(.tapEmpty)
@@ -583,6 +604,12 @@ struct Graph3DView: View {
             command.send(.flyIn(id))
         case "Delete":
             askToDelete(optionsTarget(id, in: built, at: nil))
+        case "Split\u{2026}":
+            shapes?.askSplit(id, from: .map, notes: notes, filing: filing)
+        case "Join with\u{2026}":
+            shapes?.askJoin(id, from: .map, notes: notes)
+        case "Collide with\u{2026}":
+            shapes?.askCollide(id, from: .map, notes: notes)
         default:
             if selection.selected != id { handle(.tapBody(id)) }
         }
@@ -597,6 +624,9 @@ struct Graph3DView: View {
         case "Link to\u{2026}": linkingFrom = GraphReading(id: target.id)
         case "Choose folder": movingNote = GraphReading(id: target.id)
         case "Add idea here": addingInto = target
+        case "Split\u{2026}": shapes?.askSplit(target.id, from: .map, notes: notes, filing: filing)
+        case "Join with\u{2026}": shapes?.askJoin(target.id, from: .map, notes: notes)
+        case "Collide with\u{2026}": shapes?.askCollide(target.id, from: .map, notes: notes)
         case "Delete": askToDelete(target)
         default: break
         }
@@ -778,6 +808,14 @@ struct Graph3DView: View {
         .ideaToolRelief(active: filtering)
         .accessibilityLabel("Filter")
 
+        // S06c: Collide, two far-apart ideas face to face, above Recentre
+        if let shapes, !GraphPreview.isOn {
+            IdeaToolButton(symbol: "bolt", label: IdeasWords.collideTool) {
+                shapes.collideAny(from: .map, notes: notes, filing: filing)
+            }
+            .accessibilityIdentifier("collide-tool")
+        }
+
         IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") {
             recenter += 1
         }
@@ -948,7 +986,7 @@ struct Graph3DView: View {
     /// and takes its touches): it draws slowly under them (GraphPace).
     private var sheetUp: Bool {
         reading != nil || renaming != nil || linkingFrom != nil || movingNote != nil || addingInto != nil
-            || addingFolder || showingLegend
+            || addingFolder || showingLegend || shapes?.sheet != nil
     }
 
     /// Reduce Transparency or Increase Contrast: brighter, solid links.
@@ -1614,6 +1652,12 @@ struct GraphTouchHandlers {
     var voice: (UUID, String) -> Void = { _, _ in }
     /// The camera flew in to a region (its id) or back out to the whole map.
     var flown: (UUID?) -> Void = { _ in }
+    /// S06c, on ideas only: a held idea let go on another (`collide`); two
+    /// fingers spread on the chosen idea (`split`), or on it and another
+    /// pushed together (`join`). Nil: the map offers none of them.
+    var collide: ((UUID, UUID) -> Void)?
+    var split: ((UUID) -> Void)?
+    var join: ((UUID, UUID) -> Void)?
 }
 
 struct GraphSCNView: UIViewRepresentable {
@@ -1638,6 +1682,11 @@ struct GraphSCNView: UIViewRepresentable {
     var touch = GraphTouchHandlers()
     /// A sheet is up over the map: it draws slowly under it (GraphPace).
     var covered: Bool = false
+    /// S06c: the ideas like the one open in the editor, rung in the accent;
+    /// and, for the drop target's render only, an idea rung as a held one
+    /// would be let go on (GraphReshapePreview).
+    var glows: [UUID] = []
+    var dropPreview: UUID? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets, card: card)
@@ -1689,6 +1738,17 @@ struct GraphSCNView: UIViewRepresentable {
         // a tap waits only for the hold to fail - at once when the finger
         // lifts before a quarter second - so a long hold never also taps
         tap.require(toFail: hold)
+        // S06c: two fingers on the chosen idea split it or join it to
+        // another; the camera's pinches wait for this to fail
+        let reshape = GraphReshapeRecognizer(target: coordinator, action: #selector(Coordinator.reshaped(_:)))
+        reshape.delegate = coordinator
+        reshape.cancelsTouchesInView = false
+        reshape.delaysTouchesEnded = false
+        reshape.starts = { [weak coordinator] a, b in
+            coordinator?.reshapeStart(a, b) ?? GraphReshapeTouch.Start.none
+        }
+        view.addGestureRecognizer(reshape)
+        coordinator.reshaper = reshape
 
         coordinator.touch = touch
         coordinator.chosenID = chosen
@@ -1698,6 +1758,7 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
         coordinator.apply(filter)
+        coordinator.glow(glows, drop: dropPreview)
         // the design preview's hold is sent once the scene is built, and can
         // be sent before SwiftUI makes this view for it: the line above then
         // counts it as seen, and it is lost (Chat-me copy daa2707, maps re-run)
@@ -1720,6 +1781,7 @@ struct GraphSCNView: UIViewRepresentable {
             coordinator.syncChoice()
         }
         coordinator.apply(filter)
+        coordinator.glow(glows, drop: dropPreview, rebuilt: rebuilt)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
             coordinator.run(command.kind)
@@ -2427,6 +2489,8 @@ struct GraphSCNView: UIViewRepresentable {
         func stop() {
             view?.isPlaying = false
             view?.delegate = nil
+            ringLink?.invalidate()
+            ringLink = nil
         }
 
         // MARK: the frame rate
@@ -2540,9 +2604,23 @@ struct GraphSCNView: UIViewRepresentable {
         /// and is never held up by one: choosing a note is instant.
         func gestureRecognizer(_ gesture: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            // S06c: two fingers are watched alongside everything; once they
+            // split or join, `reshaped` lets the camera's own gestures go
+            if gesture === reshaper || other === reshaper { return true }
             let involvesTap: Bool = gesture === tapper || other === tapper
             guard involvesTap else { return false }
             return gesture is UITapGestureRecognizer && other is UITapGestureRecognizer
+        }
+
+        /// S06c: the camera's pinch, twist and two-finger drags wait for the
+        /// reshaping fingers to fail - at once, unless both are on the
+        /// chosen idea, or on it and another.
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            guard gesture === reshaper else { return false }
+            if other is UIPinchGestureRecognizer || other is UIRotationGestureRecognizer { return true }
+            if let pan = other as? UIPanGestureRecognizer { return pan.minimumNumberOfTouches >= 2 }
+            return false
         }
 
         /// A hold on a body (GraphTouchRules): at a quarter second it is
@@ -2591,10 +2669,15 @@ struct GraphSCNView: UIViewRepresentable {
                 guard holdMoving else { return }
                 let finger: SIMD3<Float> = fingerPoint(point, in: view, sim: sim)
                 sim.drag(to: finger + dragOffset)
+                // S06c: the idea under the finger, rung, is where the held
+                // one would be let go
+                if touch.collide != nil, let i = pending { setDrop(dropTarget(for: i, at: point, in: view)) }
             default:
                 holdGeneration += 1
                 let picked: Int? = pending
                 let wasStill: Bool = !holdMoving && !holdMenu
+                let dropped: Int? = dropIndex
+                setDrop(nil)
                 if dragging { sim.release() }
                 dragging = false
                 pending = nil
@@ -2607,7 +2690,185 @@ struct GraphSCNView: UIViewRepresentable {
                     if chosenSlot != i {
                         if let chosenSlot { sim.select(chosenSlot) } else { sim.clearSelection() }
                     }
+                    // S06c: let go on another idea, the held one springs
+                    // home as before and the two collide
+                    if gesture.state == .ended, let d = dropped, i < sim.ids.count, d < sim.ids.count,
+                       let collide = touch.collide {
+                        collide(sim.ids[i], sim.ids[d])
+                    }
                 }
+            }
+        }
+
+        // MARK: ideas like the open one, and reshaping (S06c)
+
+        /// The ideas like the one open in the editor, and the idea a held
+        /// one would be let go on: still rings in the accent over the
+        /// scene, on a layer that takes no touch. They never move or pulse,
+        /// so Reduce Motion needs nothing more. Android's Map3DView draws
+        /// the same rings.
+        private var glowIDs: [UUID] = []
+        private var dropIndex: Int?
+        private var shownDropPreview: UUID?
+        private var ringView: UIView?
+        private let glowRings = CAShapeLayer()
+        private let dropRings = CAShapeLayer()
+        private let dropFill = CAShapeLayer()
+        /// Moves the rings with the bodies, each frame, while there are any.
+        private var ringLink: CADisplayLink?
+        weak var reshaper: GraphReshapeRecognizer?
+
+        func glow(_ ids: [UUID], drop preview: UUID?, rebuilt: Bool = true) {
+            var changed: Bool = rebuilt || ids != glowIDs
+            glowIDs = ids
+            // the preview's ring is found again in a scene built anew
+            if let sim, preview != shownDropPreview || (rebuilt && preview != nil) {
+                shownDropPreview = preview
+                dropIndex = preview.flatMap { sim.index[$0] }
+                changed = true
+            }
+            if changed { drawRings() }
+        }
+
+        private func setDrop(_ i: Int?) {
+            guard i != dropIndex else { return }
+            dropIndex = i
+            if i != nil { light.impactOccurred() }
+            drawRings()
+        }
+
+        /// The idea under the finger while body `held` is moved: within its
+        /// drawn radius, or GraphReshapeTouch.drop points of a small one's
+        /// centre; never the held one, a folder or the home.
+        private func dropTarget(for held: Int, at point: CGPoint, in view: SCNView) -> Int? {
+            let seen: [Seen] = project(at: point, in: view)
+            guard seen.contains(where: { $0.index == held && !$0.folder }) else { return nil }
+            var best: Seen?
+            for body in seen where body.index != held && !body.folder {
+                guard body.distance <= max(body.size, CGFloat(GraphReshapeTouch.drop)) else { continue }
+                if best == nil || body.distance < best!.distance { best = body }
+            }
+            return best?.index
+        }
+
+        /// Draws the rings where the bodies are drawn now.
+        func drawRings() {
+            guard let view, let sim else { return }
+            let glowing: Set<Int> = Set(glowIDs.compactMap { sim.index[$0] })
+            guard !glowing.isEmpty || dropIndex != nil else {
+                ringLink?.invalidate()
+                ringLink = nil
+                ringView?.isHidden = true
+                return
+            }
+            let host: UIView = ringHost(in: view)
+            host.isHidden = false
+            if ringLink == nil {
+                let link = CADisplayLink(target: GraphRingTicker(self), selector: #selector(GraphRingTicker.tick))
+                link.add(to: .main, forMode: .common)
+                ringLink = link
+            }
+            let glow = UIBezierPath()
+            let drop = UIBezierPath()
+            let fill = UIBezierPath()
+            for body in project(at: .zero, in: view) where !body.folder {
+                let isDrop: Bool = body.index == dropIndex
+                guard isDrop || glowing.contains(body.index) else { continue }
+                let r: CGFloat = max(body.size, 10) + 6
+                glow.append(Self.circle(body.centre, r))
+                if isDrop {
+                    drop.append(Self.circle(body.centre, r + 7))
+                    fill.append(Self.circle(body.centre, r))
+                }
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            glowRings.path = glow.cgPath
+            dropRings.path = drop.cgPath
+            dropFill.path = fill.cgPath
+            CATransaction.commit()
+        }
+
+        private static func circle(_ centre: CGPoint, _ r: CGFloat) -> UIBezierPath {
+            UIBezierPath(ovalIn: CGRect(x: centre.x - r, y: centre.y - r, width: 2 * r, height: 2 * r))
+        }
+
+        /// The rings' layer over the scene: no touch, nothing VoiceOver
+        /// reads; the map is always night, so the accent is night's.
+        private func ringHost(in view: SCNView) -> UIView {
+            if let ringView, ringView.superview === view { return ringView }
+            let host = UIView(frame: view.bounds)
+            host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            host.isUserInteractionEnabled = false
+            host.backgroundColor = .clear
+            host.isAccessibilityElement = false
+            host.accessibilityElementsHidden = true
+            let accent: UIColor = Color.uiColor(WardPalette.hex(.accent, dark: true))
+            for layer in [glowRings, dropRings] {
+                layer.fillColor = nil
+                layer.strokeColor = accent.cgColor
+                layer.lineWidth = 2.5
+            }
+            dropFill.fillColor = accent.withAlphaComponent(0.25).cgColor
+            dropFill.strokeColor = nil
+            for layer in [dropFill, glowRings, dropRings] {
+                layer.removeFromSuperlayer()
+                host.layer.addSublayer(layer)
+            }
+            view.addSubview(host)
+            ringView = host
+            return host
+        }
+
+        /// Two fingers coming down at `a` and `b`: a split of the chosen
+        /// idea, a join of it and another, or nothing (GraphReshapeTouch).
+        /// Never while a body is held, and only on ideas.
+        func reshapeStart(_ a: CGPoint, _ b: CGPoint) -> GraphReshapeTouch.Start {
+            guard touch.split != nil, !dragging, let view, let sim,
+                  let chosen = chosenID, let c = sim.index[chosen] else { return .none }
+            let ideas: [Seen] = project(at: .zero, in: view).filter { !$0.folder }
+            func under(_ p: CGPoint) -> Int? {
+                var best: (index: Int, distance: CGFloat)?
+                for body in ideas {
+                    let dx: CGFloat = body.centre.x - p.x
+                    let dy: CGFloat = body.centre.y - p.y
+                    let distance: CGFloat = (dx * dx + dy * dy).squareRoot()
+                    guard distance <= max(body.size, CGFloat(GraphReshapeTouch.reach)) else { continue }
+                    if best == nil || distance < best!.distance { best = (body.index, distance) }
+                }
+                return best?.index
+            }
+            let middle = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            let dx: Double = Double(a.x - b.x)
+            let dy: Double = Double(a.y - b.y)
+            let start = GraphReshapeTouch.start(first: under(a), second: under(b), middle: under(middle),
+                                                apart: (dx * dx + dy * dy).squareRoot())
+            switch start {
+            case .split(let i) where i == c: return start
+            case .join(let x, let y) where x == c || y == c: return start
+            default: return .none
+            }
+        }
+
+        /// Two fingers split or joined: the camera lets go of them, a tick,
+        /// and SwiftUI is told.
+        @objc func reshaped(_ gesture: GraphReshapeRecognizer) {
+            guard gesture.state == .recognized, let sim else { return }
+            for other in view?.gestureRecognizers ?? [] where other !== gesture {
+                guard other is UIPanGestureRecognizer || other is UIPinchGestureRecognizer
+                        || other is UIRotationGestureRecognizer else { continue }
+                other.isEnabled = false
+                other.isEnabled = true
+            }
+            wake()
+            pickup.impactOccurred()
+            switch gesture.start {
+            case .split(let i):
+                if i < sim.ids.count { touch.split?(sim.ids[i]) }
+            case .join(let a, let b):
+                if a < sim.ids.count, b < sim.ids.count { touch.join?(sim.ids[a], sim.ids[b]) }
+            case .none:
+                break
             }
         }
 
@@ -3158,5 +3419,19 @@ final class GraphWholeElement: UIAccessibilityElement {
     override var accessibilityFrameInContainerSpace: CGRect {
         get { container?.bounds ?? .zero }
         set { _ = newValue }
+    }
+}
+
+/// Calls the map's rings each frame without the display link keeping the
+/// coordinator alive.
+final class GraphRingTicker: NSObject {
+    private weak var owner: GraphSCNView.Coordinator?
+
+    init(_ owner: GraphSCNView.Coordinator) {
+        self.owner = owner
+    }
+
+    @MainActor @objc func tick() {
+        owner?.drawRings()
     }
 }

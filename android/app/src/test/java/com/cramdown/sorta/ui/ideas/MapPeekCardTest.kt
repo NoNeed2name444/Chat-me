@@ -13,6 +13,8 @@ import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.MapLook
@@ -355,6 +358,33 @@ class MapPeekCardTest {
         assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
+    @Test fun aPerformanceHubsCardIsItsFoldersAndFliesIn() {
+        // S05i2: in Performance each folder has a hub on the map (GraphPerfScene), picked as its folder
+        // (GraphPerfTheme.swift:344-346): its card a folder's, Open folder and Fly in, no Show links; Fly in
+        // keeps the card; an idea's card there has Show links and never Fly in
+        IdeasSettings(run.context).setLook(MapLook.PERFORMANCE)
+        IdeaStore(run.store).replaceIdeas(listOf(gate), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        // laid out off the main thread, then its panels up; Performance has no first-run card
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true && shown(MapPanelTags.FILTER_TOOL) }
+        assertFalse("Performance shows no first-run card", shown(MapPanelTags.HINT))
+        val ids = checkNotNull(tapper()).ids
+        assertEquals("the idea, then the folder's hub", listOf(gate.id.uppercase(), garden.id.uppercase()), ids.map { it.uppercase() })
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a hub's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_OPEN)).assert(hasText(words.openFolder))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        compose.waitForIdle()
+        cardFor(garden.name)
+        tapBody(gate.id)
+        cardFor(gate.title)
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks))
+        assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
+    }
+
     @Test fun underOneSingleStyleNoCardFliesIn() {
         // Look › Bodies › one style: today's Space, one body per idea and no folder bodies, so no card has Fly in
         IdeasSettings(run.context).setNodeStyle(SpaceStyle.SUN.rawValue)
@@ -366,6 +396,39 @@ class MapPeekCardTest {
         assertFalse("no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
-    private fun drawnPose(): List<Float> =
-        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
+    @Test fun recentreAndTwoEmptyTapsEachCountAReturnHomeAndOneTapDoesNot() {
+        // S05i repair 5: the map's record counts each return to the first view (MapDrawn.homes), so a
+        // test reads the pose once the record shows the camera there; Recentre and two taps on empty
+        // space each count one, a single empty tap none, and the pose with each count is the first view.
+        // With no GL here, no frame recomposes the map, so the pose read before any count is the camera's
+        // at the map's last composition, not the first view fitted after it: what the counts are for
+        launchOnSpace()
+        // the first-run card put away by its Got it, as the device's test does, so empty space is free to tap
+        compose.onNode(hasText(s(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT))).performClick()
+        run.until { !shown(MapPanelTags.HINT) }
+        assertEquals("no return home yet", 0, drawn().homes)
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        run.until { drawn().homes == 1 }
+        val home = drawn().pose
+        // S05j item 3: Space's first view is iOS's, from yaw 0 looking down at GraphTilt's 45 degrees
+        assertEquals("the first view's turn", listOf(0f, (45.0 * Math.PI / 180.0).toFloat()), home.drop(4))
+        // a turn of the camera on empty space, then one tap there: no return home
+        compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, height * 0.3f), Offset(centerX + width * 0.3f, height * 0.3f)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("one tap on empty space is no return home", 1, drawn().homes)
+        compose.onNode(mapNode).performTouchInput { doubleClick(Offset(centerX, height * 0.3f)) }
+        run.until { drawn().homes == 2 }
+        assertEquals("two taps' pose is Recentre's first view", home, drawn().pose)
+    }
+
+    private fun drawn() =
+        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey))
+
+    private fun drawnPose(): List<Float> = drawn().pose
 }

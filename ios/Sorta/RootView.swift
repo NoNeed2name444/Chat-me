@@ -51,6 +51,9 @@ struct RootView: View {
 struct IdeasRoot: View {
     @StateObject private var notes = NoteStore(fileURL: IdeasRoot.storeURL)
     @State private var filing = IdeasFiling()
+    /// Ideas like this, Collide, Split and Join (S06c): what the editor,
+    /// the map and the board share.
+    @State private var shapes = IdeaShapes()
     @State private var mode: SortaMode = .sort
     @State private var draft = ""
     @State private var folderId: UUID?
@@ -111,6 +114,7 @@ struct IdeasRoot: View {
         }
         .environmentObject(notes)
         .environment(filing)
+        .environment(shapes)
     }
 }
 

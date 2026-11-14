@@ -42,21 +42,24 @@ final class IdeasListRoutes {
 extension View {
     /// The sheets and dialog `routes` opens, over the list browsing
     /// `folderId`; a folder made in the chooser goes in it, and when the
-    /// folder is deleted the list goes back to the top.
-    func ideasListSheets(_ routes: IdeasListRoutes, folderId: Binding<UUID?>) -> some View {
-        modifier(IdeasListSheets(routes: routes, folderId: folderId))
+    /// folder is deleted the list goes back to the top. `inline`: the screen
+    /// shows the editor itself, beside the map (IdeasView on two panes,
+    /// S06c), so it is no sheet.
+    func ideasListSheets(_ routes: IdeasListRoutes, folderId: Binding<UUID?>, inline: Bool = false) -> some View {
+        modifier(IdeasListSheets(routes: routes, folderId: folderId, inline: inline))
     }
 }
 
 private struct IdeasListSheets: ViewModifier {
     @Bindable var routes: IdeasListRoutes
     @Binding var folderId: UUID?
+    let inline: Bool
     @EnvironmentObject private var notes: NoteStore
     @Environment(IdeasFiling.self) private var filing
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $routes.opening, onDismiss: { filing.offerEditorUndo(notes: notes) }) { ref in
+            .sheet(item: inline ? .constant(nil) : $routes.opening, onDismiss: { filing.offerEditorUndo(notes: notes) }) { ref in
                 NoteEditorView(noteID: ref.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
                                delete: { filing.deleteIdea($0, notes: notes) })
             }

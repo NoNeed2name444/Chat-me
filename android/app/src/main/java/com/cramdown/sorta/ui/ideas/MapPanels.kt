@@ -53,6 +53,9 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapMenuItem
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.automirrored.outlined.CallMerge
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.MapPeekContent
 import com.cramdown.sorta.ideas.MapPeekInput
@@ -111,6 +114,20 @@ object MapPanelTags {
     /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
     const val TOP_STRIP = "mapTopStrip"
 
+    /** The Filter tool, its empty line and the Look menu's Cell by cell row and sheet (S05i). */
+    const val FILTER_TOOL = "mapFilterTool"
+    const val FILTER_EMPTY = "mapFilterEmpty"
+    const val LOOK_CELL_BY_CELL = "lookCellByCell"
+    const val CELL_BY_CELL = "cellByCellSheet"
+    /** A row of the Filter menu. */
+    fun filterRow(filter: com.cramdown.sorta.map.MapFilter): String = when (filter) {
+        com.cramdown.sorta.map.MapFilter.All -> "filterAll"
+        com.cramdown.sorta.map.MapFilter.Pages -> "filterPages"
+        com.cramdown.sorta.map.MapFilter.Ideas -> "filterIdeas"
+        com.cramdown.sorta.map.MapFilter.Linked -> "filterLinked"
+        is com.cramdown.sorta.map.MapFilter.Folder -> "filterFolder-" + filter.id
+    }
+
     /** The legend's touch help, its last line (S05g). */
     const val LEGEND_TOUCH = "legendTouch"
 
@@ -142,6 +159,9 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     rename = res.getString(R.string.map_menu_rename),
     moveToFolder = res.getString(R.string.map_menu_move),
     delete = res.getString(R.string.map_menu_delete),
+    split = res.getString(R.string.shape_split),
+    joinWith = res.getString(R.string.shape_join),
+    collideWith = res.getString(R.string.shape_collide),
     // GraphPeek.roleWord (GraphTouchModel.swift:267-281): Space's bodies, and Neurons' roles by number
     roles = mapOf(
         "space:galaxy" to res.getString(R.string.map_role_black_hole),
@@ -427,6 +447,9 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
     MapMenuItem.OPEN -> Icons.Outlined.Description
     MapMenuItem.RENAME -> Icons.Outlined.Edit
     MapMenuItem.MOVE -> Icons.Outlined.Folder
+    MapMenuItem.SPLIT -> Icons.AutoMirrored.Outlined.CallSplit
+    MapMenuItem.JOIN -> Icons.AutoMirrored.Outlined.CallMerge
+    MapMenuItem.COLLIDE -> Icons.Outlined.Bolt
     MapMenuItem.DELETE -> Icons.Outlined.Delete
 }
 

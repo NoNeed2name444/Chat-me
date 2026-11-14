@@ -87,7 +87,7 @@ data class NeuronStateChoice(val main: String = NATURAL_VALUE, val folders: Map<
         if (i < 0 || i >= plan.bodies.size) return NeuronState.RESTING
         val body = plan.bodies[i]
         if (body.kind != ThemeBodyKind.NOTE) return NeuronState.RESTING
-        if (body.region >= 0 && body.region < plan.bodies.size) folders[plan.bodies[body.region].id]?.let { return it }
+        if (body.region >= 0 && body.region < plan.bodies.size) folders[plan.bodies[body.region].id.uppercase()]?.let { return it }
         NeuronState.raw(main)?.let { return it }
         return NeuronState.natural(NeuronRole.of(body.role) ?: NeuronRole.GRANULE)
     }

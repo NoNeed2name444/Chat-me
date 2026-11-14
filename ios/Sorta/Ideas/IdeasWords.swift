@@ -195,4 +195,38 @@ enum IdeasWords {
         String(localized: "import.refused.unreadable.ios",
                defaultValue: "This backup didn't open. It may be damaged, so try another copy.")
     }
+
+    // MARK: ideas like this, collide, split and join (S06c), as Android's strings.xml
+    static var echoesTitle: String { String(localized: "echoes.title", defaultValue: "Ideas like this") }
+    static var echoesLinkHint: String { String(localized: "echoes.link.hint", defaultValue: "Links it to this idea.") }
+    static func echoesLinked(_ title: String) -> String {
+        String(localized: "echoes.linked %@", defaultValue: "Linked to \u{201C}\(title)\u{201D}.")
+    }
+    static var collideTool: String { String(localized: "collide.tool", defaultValue: "Collide two ideas") }
+    static var collideTitle: String { String(localized: "collide.title", defaultValue: "What if both?") }
+    static var collideField: String { String(localized: "collide.field", defaultValue: "The idea they make") }
+    static var collideSave: String { String(localized: "collide.save", defaultValue: "Save idea") }
+    static var collideAnother: String { String(localized: "collide.another", defaultValue: "Try another pair") }
+    static var collideSaved: String { String(localized: "collide.saved", defaultValue: "New idea in To sort.") }
+    static var collideNone: String {
+        String(localized: "collide.none",
+               defaultValue: "No two ideas are far apart yet. Put ideas in different folders, then try again.")
+    }
+    static var shapeSplit: String { String(localized: "shape.split", defaultValue: "Split\u{2026}") }
+    static var shapeJoin: String { String(localized: "shape.join", defaultValue: "Join with\u{2026}") }
+    static var shapeCollide: String { String(localized: "shape.collide", defaultValue: "Collide with\u{2026}") }
+    static var shapeJoinTitle: String { String(localized: "shape.join.title", defaultValue: "Join with") }
+    static var shapeCollideTitle: String { String(localized: "shape.collide.title", defaultValue: "Collide with") }
+    static var splitTitle: String { String(localized: "split.title", defaultValue: "Split in two") }
+    static var splitHint: String {
+        String(localized: "split.hint", defaultValue: "Tap the last sentence of the first idea.")
+    }
+    static var splitFirst: String { String(localized: "split.first", defaultValue: "First idea") }
+    static var splitSecond: String { String(localized: "split.second", defaultValue: "Second idea") }
+    static var splitConfirm: String { String(localized: "split.confirm", defaultValue: "Split idea") }
+    static var splitDone: String { String(localized: "split.done", defaultValue: "Idea split in two.") }
+    static var splitOne: String {
+        String(localized: "split.one", defaultValue: "This idea has one sentence, so it can\u{2019}t be split.")
+    }
+    static var joinDone: String { String(localized: "join.done", defaultValue: "Ideas joined.") }
 }

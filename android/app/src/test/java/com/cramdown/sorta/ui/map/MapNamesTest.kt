@@ -23,7 +23,8 @@ class MapNamesTest {
     private val rules = MapNames.Rules(largest = 24f, gapX = 8f, gapY = 4f, line = 1f)
 
     private fun layout(nodes: List<ScreenNode>, titles: List<String>, links: IntArray = IntArray(0), linkHalf: Float = 0f,
-                       held: Map<Int, Int> = emptyMap()) = MapNames.layout(nodes, titles, links, linkHalf, held, rules, metrics)
+                       held: Map<Int, Int> = emptyMap(), limit: Int = Int.MAX_VALUE) =
+        MapNames.layout(nodes, titles, links, linkHalf, held, rules, metrics, limit)
 
     /** No two names placed print over each other, or closer than the room the rules keep. */
     private fun clearOfEachOther(names: List<PlacedName>) {
@@ -113,6 +114,19 @@ class MapNamesTest {
         assertEquals(MapNames.CUT, names.single().label.length)
     }
 
+    // iOS's limit (GraphPerfLabelSpots.limit): a Performance map of more bodies than MapNames.LIMIT, the
+    // proof tour's 100,000 among them, names none; Space and Neurons pass no limit and still name it, so no main-thread frame weighs every name against every body and
+    // link (the tour's ran 4 to 16 s on CI's emulator, cde6f9a); a map at the limit is named as before
+    @Test fun aMapPastTheLimitNamesNothing() {
+        val nodes = listOf(ScreenNode(0, 400f, 500f, 28f), ScreenNode(1, 900f, 1400f, 28f))
+        val at = List(MapNames.LIMIT) { "Made-up idea $it" }
+        val perf = MapNames.LIMIT
+        assertEquals("at the limit, both named", setOf(0, 1), layout(nodes, at, limit = perf).map { it.index }.toSet())
+        assertEquals("one body more, none", emptyList<PlacedName>(), layout(nodes, at + "One more", limit = perf))
+        assertEquals("no limit (Space, Neurons), both named", setOf(0, 1), layout(nodes, at + "One more").map { it.index }.toSet())
+        assertEquals(2_000, MapNames.LIMIT)
+    }
+
     // S05j 6c: counted and cut by code point, as MapNameShow.cut: an emoji across the cut stays whole
     @Test fun anEmojiAcrossTheCutStaysWhole() {
         val seedling = "🌱"
@@ -122,5 +136,36 @@ class MapNamesTest {
         assertEquals("23 code points, 24 chars, kept whole", whole, MapNames.label(whole))
         val cut = MapNames.label("a".repeat(21) + seedling.repeat(4))
         assertFalse("no lone surrogate: $cut", Character.isHighSurrogate(cut[cut.length - 2]))
+    }
+
+    // v13: Performance's names stay inside the map, 12 points in from either side, as iOS's
+    // GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204). On CI's phone stills "Loop diuret…",
+    // "Atrial fibri…" and the chosen idea's "Try the s…" ran off the right edge. A name under its body
+    // slides in along its row; one beside it that would leave the map is not tried.
+    @Test fun performancesNamesStayInsideTheMap() {
+        val width = 1080f; val edge = 30f
+        fun inside(names: List<PlacedName>) = names.all { it.box.x - it.box.width / 2 >= edge - 1e-3f && it.box.x + it.box.width / 2 <= width - edge + 1e-3f }
+        fun framed(nodes: List<ScreenNode>, titles: List<String>) =
+            MapNames.layout(nodes, titles, IntArray(0), 0f, emptyMap(), rules, metrics, viewWidth = width, edge = edge)
+        // at the right edge, alone: under its body, slid in along its row
+        val alone = listOf(ScreenNode(0, 1050f, 1000f, 28f))
+        val titles = listOf("Atrial fibrillation")
+        assertFalse("without the map's width the name leaves it", inside(layout(alone, titles)))
+        val slid = framed(alone, titles).single()
+        assertEquals(0, slid.spot)
+        assertEquals(width - edge - slid.box.width / 2, slid.box.x, 1e-3f)
+        assertEquals(layout(alone, titles).single().box.y, slid.box.y, 1e-3f)
+        // under and above taken by bodies: before it, never after it and off the map
+        val crowd = listOf(ScreenNode(0, 1000f, 1000f, 28f), ScreenNode(1, 1000f, 1040f, 28f), ScreenNode(2, 1000f, 960f, 28f))
+        val crowdTitles = listOf("Loop diuretics", "", "")
+        val loose = layout(crowd, crowdTitles).first { it.index == 0 }
+        assertEquals("unbounded, it goes after its body", 2, loose.spot)
+        assertFalse(inside(listOf(loose)))
+        val kept = framed(crowd, crowdTitles).first { it.index == 0 }
+        assertEquals("bounded, before it", 3, kept.spot)
+        assertTrue(inside(listOf(kept)))
+        // a name well inside is where it always was
+        val middle = listOf(ScreenNode(0, 540f, 1000f, 28f))
+        assertEquals(layout(middle, titles).single(), framed(middle, titles).single())
     }
 }

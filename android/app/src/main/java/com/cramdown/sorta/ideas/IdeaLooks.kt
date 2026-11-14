@@ -69,7 +69,7 @@ enum class GraphTheme(val rawValue: String, val title: String) {
         NEURONS -> listOf("Hold an idea › Choose folder › New folder: a new cell.",
             "Type an idea in Sort: a new granule.",
             "Type [[ and another idea’s title in an idea to join them with an axon.")
-        PERFORMANCE -> listOf("Hold an idea › Choose folder › New folder: a folder of points in one colour.",
+        PERFORMANCE -> listOf("Hold an idea › Choose folder › New folder: a new cluster round its hub.",
             "Type an idea in Sort: a new point.",
             "Type [[ and another idea’s title in an idea to join them with a line.")
     }

@@ -83,6 +83,9 @@ struct IdeasMapView: View {
             .sheet(isPresented: $listing) {
                 MapListSheet()
             }
+            // S06c: the collide card, the split chooser and the picker, from
+            // the map's options, its gestures and the Collide tool
+            .ideaShapeSheets(.map)
     }
 
     /// The list of the looks under the strip, at its trailing end; a tap

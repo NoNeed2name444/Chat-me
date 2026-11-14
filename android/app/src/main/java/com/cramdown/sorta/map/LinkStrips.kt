@@ -70,11 +70,12 @@ class LinkStrips(val samples: Int) {
      * The Universe (S05h): [set] picks the near beams (0: kinds 0 and 1) or the far ones (1: kind 2),
      * −1 all; an arched beam bows its bow (beam float 24) times its length away from its centre
      * ([centres], three floats a beam; GraphRibbons.swift:480-482), and Straight drops the arch.
-     * It runs every frame, so it makes no garbage beyond an arched beam's direction.
+     * It runs every frame, so it makes no garbage beyond an arched beam's direction. Only the beams
+     * from [from] are written (S05h2: the dying links, after the rest, are drawn apart).
      */
-    fun write(beams: FloatArray, beamCount: Int, unit: Float, straight: Boolean, centres: FloatArray? = null, set: Int = -1) {
+    fun write(beams: FloatArray, beamCount: Int, unit: Float, straight: Boolean, centres: FloatArray? = null, set: Int = -1, from: Int = 0) {
         clear()
-        for (k in 0 until beamCount) {
+        for (k in from until beamCount) {
             val o = k * SpaceBodies.BEAM_STRIDE
             val far = UniverseBeams.far(beams[o + 23].toInt())
             if (set == 0 && far || set == 1 && !far) continue

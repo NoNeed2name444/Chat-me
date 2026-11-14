@@ -1,0 +1,166 @@
+{
+  "about": "S06c: the cases both platforms' tests read (IdeaShapeTests.swift on Linux, Android's IdeaEchoesTest and IdeaReshapeTest). Made up, nothing medical.",
+  "words": [
+    {"text": "Paint the shed blue, then the fence.", "want": ["paint", "shed", "blue", "fence"]},
+    {"text": "Don't forget: it's the BEEHIVE's roof!", "want": ["forget", "beehives", "roof"]},
+    {"text": "Café crêpes at 2024 or 7pm", "want": ["café", "crêpes", "7pm"]},
+    {"text": "a an to of in on it is", "want": []},
+    {"text": "kite-flying, kite_flying; kite", "want": ["kite", "flying"]},
+    {"text": "Ideas about ideas", "want": []}
+  ],
+  "echoes": [
+    {
+      "name": "a rare shared word finds the older idea",
+      "ideas": [
+        {"id": "a", "text": "Paint the shed blue", "made": 1},
+        {"id": "b", "text": "Plant beans by the fence", "made": 2},
+        {"id": "c", "text": "Fix the bike bell", "made": 3}
+      ],
+      "text": "A trellis for the beans", "current": null, "made": 10, "connected": [],
+      "want": ["b"]
+    },
+    {
+      "name": "the rarer word scores higher; ties go to the newer idea",
+      "ideas": [
+        {"id": "a", "text": "Kite festival in spring", "made": 1},
+        {"id": "b", "text": "Kite and lanterns", "made": 2},
+        {"id": "c", "text": "Lanterns for the garden party", "made": 3},
+        {"id": "d", "text": "Garden party games", "made": 4},
+        {"id": "e", "text": "Spring cleaning list", "made": 5}
+      ],
+      "text": "Kite lanterns for spring", "current": null, "made": 10, "connected": [],
+      "want": ["b", "a", "e", "c"]
+    },
+    {
+      "name": "a word held by too many ideas is common and finds nothing",
+      "ideas": [
+        {"id": "a", "text": "Garden shed", "made": 1},
+        {"id": "b", "text": "Garden beans", "made": 2},
+        {"id": "c", "text": "Garden pond", "made": 3},
+        {"id": "d", "text": "Bike bell", "made": 4}
+      ],
+      "text": "Garden lights", "current": null, "made": 10, "connected": [],
+      "want": []
+    },
+    {
+      "name": "the idea itself, newer ideas and connected ones are left out",
+      "ideas": [
+        {"id": "a", "text": "Pottery class on Tuesdays, near the kiln", "made": 1},
+        {"id": "b", "text": "Pottery wheel and glaze", "made": 2},
+        {"id": "c", "text": "Pottery glaze colours", "made": 3},
+        {"id": "d", "text": "Pottery kiln at the club", "made": 4}
+      ],
+      "text": "Pottery glaze for the kiln", "current": "c", "made": 3, "connected": ["b"],
+      "want": ["a"]
+    },
+    {
+      "name": "the idea's own stored words don't count towards how common a word is",
+      "ideas": [
+        {"id": "a", "text": "Sourdough starter", "made": 1},
+        {"id": "b", "text": "Sourdough loaf", "made": 2},
+        {"id": "c", "text": "Bike bell", "made": 3},
+        {"id": "d", "text": "Sourdough notes", "made": 4}
+      ],
+      "text": "Sourdough notes and timings", "current": "d", "made": 4, "connected": [],
+      "want": ["b", "a"]
+    },
+    {
+      "name": "at most five, best first",
+      "ideas": [
+        {"id": "a", "text": "origami", "made": 1},
+        {"id": "b", "text": "origami crane", "made": 2},
+        {"id": "c", "text": "crane", "made": 3},
+        {"id": "d", "text": "frog pond", "made": 4},
+        {"id": "e", "text": "pond", "made": 5},
+        {"id": "f", "text": "lily moss", "made": 6},
+        {"id": "g", "text": "frog", "made": 7},
+        {"id": "h", "text": "bike", "made": 8}, {"id": "i", "text": "bell", "made": 9},
+        {"id": "j", "text": "shed", "made": 10}, {"id": "k", "text": "roof", "made": 11},
+        {"id": "l", "text": "kite", "made": 12}, {"id": "m", "text": "beans", "made": 13},
+        {"id": "n", "text": "lamp", "made": 14}, {"id": "o", "text": "rope", "made": 15},
+        {"id": "p", "text": "sail", "made": 16}, {"id": "q", "text": "fence", "made": 17},
+        {"id": "r", "text": "jam", "made": 18}, {"id": "s", "text": "honey", "made": 19},
+        {"id": "t", "text": "tent", "made": 20}
+      ],
+      "text": "origami crane frog pond lily moss", "current": null, "made": 30, "connected": [],
+      "want": ["f", "d", "b", "g", "e"]
+    }
+  ],
+  "sentences": [
+    {"title": "Paint the shed. Then the fence!", "body": "",
+     "want": [["Paint the shed.", true], ["Then the fence!", true]]},
+    {"title": "Holiday plans", "body": "Book the train… Pack light.\n- sun hat\n- \"Maps.\" Then go",
+     "want": [["Holiday plans", true], ["Book the train…", false], ["Pack light.", false], ["- sun hat", false], ["- \"Maps.\"", false], ["Then go", false]]},
+    {"title": "v2.0 of the plan", "body": "Costs 3.50 each.  Ok?\n\n\nDone",
+     "want": [["v2.0 of the plan", true], ["Costs 3.50 each.", false], ["Ok?", false], ["Done", false]]},
+    {"title": "  ", "body": "One line only", "want": [["One line only", false]]}
+  ],
+  "cuts": [
+    {"title": "Paint the shed. Then the fence!", "body": "Blue for both.", "after": 1,
+     "want": {"firstTitle": "Paint the shed.", "firstBody": "", "secondTitle": "Then the fence!", "secondBody": "Blue for both.", "titleChanged": true, "titleFromBody": false}},
+    {"title": "Holiday plans", "body": "Book the train. Pack light.\n# Day one\nWalk to the [[Old harbour]].", "after": 1,
+     "want": {"firstTitle": "Holiday plans", "firstBody": "", "secondTitle": "Book the train.", "secondBody": "Pack light.\n# Day one\nWalk to the [[Old harbour]].", "titleChanged": false, "titleFromBody": true}},
+    {"title": "Holiday plans", "body": "Book the train. Pack light.\n# Day one\nWalk to the [[Old harbour]].", "after": 3,
+     "want": {"firstTitle": "Holiday plans", "firstBody": "Book the train. Pack light.", "secondTitle": "Day one", "secondBody": "Walk to the [[Old harbour]].", "titleChanged": false, "titleFromBody": true}},
+    {"title": "Holiday plans", "body": "Book the train.", "after": 2, "want": null},
+    {"title": "Holiday plans", "body": "Book the train.", "after": 0, "want": null}
+  ],
+  "headings": [
+    {"line": "# Day one", "want": "Day one"},
+    {"line": "- [ ] a box", "want": "[ ] a box"},
+    {"line": "-5 degrees at night", "want": "-5 degrees at night"},
+    {"line": "> quoted", "want": "quoted"}
+  ],
+  "joined": [
+    {"first": ["Garden", "Beans by the fence."], "second": ["Trellis", "Bamboo canes."],
+     "want": ["Garden", "Beans by the fence.\n\nTrellis\n\nBamboo canes."]},
+    {"first": ["Garden", ""], "second": ["Trellis", ""], "want": ["Garden", "Trellis"]},
+    {"first": ["  ", "notes"], "second": ["Trellis", "Bamboo."], "want": ["Trellis", "notes\n\nBamboo."]}
+  ],
+  "splitLinks": [
+    {"own": ["x", "y"], "heldBy": ["h", "x"], "namedBy": ["n"], "titleChanged": false, "secondTitleNames": ["w", "y"],
+     "first": "a", "second": "a2", "want": [["x", "y"], ["x", "y", "h", "w"]]},
+    {"own": ["x", "a"], "heldBy": [], "namedBy": ["n", "x"], "titleChanged": true, "secondTitleNames": [],
+     "first": "a", "second": "a2", "want": [["x", "n"], ["x"]]}
+  ],
+  "joinLinks": [
+    {"first": "a", "second": "b", "firstOwn": ["x", "b", "x"], "secondOwn": ["a", "y", "x", "z"], "pointedAtSecond": ["s", "a", "y"],
+     "connected": ["z"], "want": ["x", "y", "s"]}
+  ],
+  "collide": [
+    {"name": "only pairs across top folders with no link",
+     "ideas": [["a", "f1"], ["b", "f1"], ["c", "f2"], ["d", null]], "links": [["a", "c"]], "last": null,
+     "allowed": [["a", "d"], ["b", "c"], ["b", "d"], ["c", "d"]]},
+    {"name": "never the last pair",
+     "ideas": [["a", "f1"], ["b", "f2"], ["c", "f2"]], "links": [], "last": ["b", "a"],
+     "allowed": [["a", "c"]]},
+    {"name": "the last pair alone is none",
+     "ideas": [["a", "f1"], ["b", "f2"]], "links": [], "last": ["a", "b"], "allowed": []},
+    {"name": "all in one folder is none",
+     "ideas": [["a", "f1"], ["b", "f1"], ["c", "f1"]], "links": [], "last": null, "allowed": []},
+    {"name": "two in To sort are one place",
+     "ideas": [["a", null], ["b", null]], "links": [], "last": null, "allowed": []}
+  ],
+  "touchStart": [
+    {"first": 1, "second": 2, "middle": null, "apart": 200, "want": "join 1 2"},
+    {"first": 3, "second": 3, "middle": 3, "apart": 30, "want": "split 3"},
+    {"first": null, "second": null, "middle": 4, "apart": 60, "want": "split 4"},
+    {"first": 4, "second": null, "middle": 4, "apart": 88, "want": "split 4"},
+    {"first": null, "second": null, "middle": 4, "apart": 89, "want": "none"},
+    {"first": 5, "second": null, "middle": 4, "apart": 40, "want": "none"},
+    {"first": null, "second": null, "middle": null, "apart": 40, "want": "none"}
+  ],
+  "touchJudge": [
+    {"start": "split", "from": 40, "now": 99, "want": "waiting"},
+    {"start": "split", "from": 40, "now": 100, "want": "done"},
+    {"start": "split", "from": 200, "now": 319, "want": "waiting"},
+    {"start": "split", "from": 200, "now": 320, "want": "done"},
+    {"start": "split", "from": 40, "now": 33, "want": "failed"},
+    {"start": "join", "from": 200, "now": 101, "want": "waiting"},
+    {"start": "join", "from": 200, "now": 100, "want": "done"},
+    {"start": "join", "from": 60, "now": 41, "want": "waiting"},
+    {"start": "join", "from": 60, "now": 40, "want": "done"},
+    {"start": "join", "from": 200, "now": 231, "want": "failed"},
+    {"start": "none", "from": 50, "now": 50, "want": "failed"}
+  ]
+}

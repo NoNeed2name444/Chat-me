@@ -82,7 +82,26 @@ struct IdeasView: View {
         .wardMasthead()
         .background { WardBackground() }
         .lineSpacing(WardSpace.leading)
-        .ideasListSheets(routes, folderId: $folderId)
+        // under the editor beside the map, the list is not read out either
+        .accessibilityHidden(paned && routes.opening != nil)
+        // S06c: on two panes the editor opens here, over the Sort screen
+        // and its foot, so the map beside it stays in sight and in reach:
+        // the ideas like the open one glow there, and a tap links one
+        .overlay {
+            if paned, let ref = routes.opening {
+                NoteEditorView(noteID: ref.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
+                               delete: { filing.deleteIdea($0, notes: notes) },
+                               close: {
+                                   routes.opening = nil
+                                   filing.offerEditorUndo(notes: notes)
+                               })
+                    .id(ref.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background { WardBackground() }
+                    .transition(.identity)
+            }
+        }
+        .ideasListSheets(routes, folderId: $folderId, inline: paned)
         .fileImporter(isPresented: $importing, allowedContentTypes: [IdeaImportFlow.backupType]) { result in
             if case .success(let url) = result { runImport(url) }
         }

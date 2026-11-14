@@ -313,6 +313,126 @@
         }
       }
     },
+    "collide.another" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.another",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try another pair"
+          }
+        }
+      }
+    },
+    "collide.field" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The idea they make"
+          }
+        }
+      }
+    },
+    "collide.none" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.none",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No two ideas are far apart yet. Put ideas in different folders, then try again."
+          }
+        }
+      }
+    },
+    "collide.save" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save idea"
+          }
+        }
+      }
+    },
+    "collide.saved" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.saved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New idea in To sort."
+          }
+        }
+      }
+    },
+    "collide.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What if both?"
+          }
+        }
+      }
+    },
+    "collide.tool" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.tool",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide two ideas"
+          }
+        }
+      }
+    },
+    "echoes.link.hint" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.link.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Links it to this idea."
+          }
+        }
+      }
+    },
+    "echoes.linked %@" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.linked",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked to “%@”."
+          }
+        }
+      }
+    },
+    "echoes.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas like this"
+          }
+        }
+      }
+    },
     "editor.body" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.body",
       "extractionState" : "manual",
@@ -925,6 +1045,18 @@
         }
       }
     },
+    "join.done" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key join.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas joined."
+          }
+        }
+      }
+    },
     "look.2d" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
       "extractionState" : "manual",
@@ -1225,6 +1357,66 @@
         }
       }
     },
+    "shape.collide" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.collide",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide with…"
+          }
+        }
+      }
+    },
+    "shape.collide.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.collide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide with"
+          }
+        }
+      }
+    },
+    "shape.join" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.join",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Join with…"
+          }
+        }
+      }
+    },
+    "shape.join.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.join.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Join with"
+          }
+        }
+      }
+    },
+    "shape.split" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.split",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split…"
+          }
+        }
+      }
+    },
     "sort.allSorted" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.allSorted",
       "extractionState" : "manual",
@@ -1281,6 +1473,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "To sort, %@"
+          }
+        }
+      }
+    },
+    "split.confirm" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.confirm",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split idea"
+          }
+        }
+      }
+    },
+    "split.done" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idea split in two."
+          }
+        }
+      }
+    },
+    "split.first" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.first",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First idea"
+          }
+        }
+      }
+    },
+    "split.hint" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the last sentence of the first idea."
+          }
+        }
+      }
+    },
+    "split.one" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.one",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This idea has one sentence, so it can’t be split."
+          }
+        }
+      }
+    },
+    "split.second" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.second",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Second idea"
+          }
+        }
+      }
+    },
+    "split.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split in two"
           }
         }
       }

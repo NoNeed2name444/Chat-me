@@ -53,6 +53,10 @@ final class IdeasFiling {
             notes.move(idea, to: notes.folder(from)?.id)
         case let .deleted(removal):
             notes.undo(removal)
+        case let .linked(a, b):
+            notes.unlink(a, b)
+        case let .reshaped(reshape):
+            notes.undo(reshape)
         }
     }
 }

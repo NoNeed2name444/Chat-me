@@ -239,6 +239,28 @@ class MapLegendRenderTest {
         org.junit.Assert.assertTrue("clear of Done", node.boundsInWindow.right <= done.left + 0.5f)
     }
 
+    // S05i2: Performance's ladder gains the Folder rung (a hub, 22 dp) between Glow and Idea; on a 360 dp phone
+    // its four rungs stay one item, inside the window, tall enough for the Glow, and the Folder row its own item
+    @Config(sdk = [35], qualifiers = "w360dp-h748dp-port-notnight-xxhdpi")
+    @Test fun thePerformanceLadderHoldsItsFolderRungOnASmallPhone() {
+        compose.setContent { SortaTheme(dark = false) { WindowShapeHost { LegendSheet(GraphTheme.PERFORMANCE, readout = false) {} } } }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        val content = MapLegend.of(GraphTheme.PERFORMANCE)
+        org.junit.Assert.assertEquals(listOf("Glow", "Folder", "Idea", "Far idea"), content.rungs.map { it.caption })
+        val density = compose.density.density
+        val width = compose.activity.resources.displayMetrics.widthPixels
+        val ladder = compose.onAllNodes(hasContentDescription("Size ladder: glow, folder, idea, far idea")).fetchSemanticsNodes()
+        org.junit.Assert.assertEquals("the ladder, one item", 1, ladder.size)
+        val box = ladder.single().boundsInWindow
+        org.junit.Assert.assertTrue("inside the window's width: $box of $width", box.left >= 0f && box.right <= width + 0.5f)
+        org.junit.Assert.assertTrue("the Glow's 30 dp whole: ${box.height / density} dp", box.height >= 30 * density)
+        val folder = content.rows.single { it.name == "Folder" }
+        org.junit.Assert.assertEquals("the Folder row, one item", 1,
+            compose.onAllNodes(hasContentDescription(MapLegend.spoken(folder))).fetchSemanticsNodes().size)
+    }
+
     private companion object {
         /** The logo's coral (work/T0137: the light icon's fill). */
         const val LOGO_CORAL = 0xC9553E

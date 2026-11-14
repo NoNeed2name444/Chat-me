@@ -205,6 +205,26 @@ class OrbitCamera(
         val target = centre - (right() * across + up() * up) * (distance / focal)
         return MapFit(distance, target)
     }
+
+    /**
+     * iOS's GraphPerfCamera.framing (GraphPerfCamera.swift:232-250), as Performance flies to a folder's
+     * ball and the tour frames its hub (S05i2): the ball of [radius] round [centre], from this camera's
+     * yaw and pitch, its silhouette filling [fill] of the narrower side of the window the [insets] leave
+     * on a [width] x [height] view (pixels), its centre in that window's middle.
+     */
+    fun framing(centre: Vec3, radius: Float, width: Float, height: Float, insets: MapInsets = MapInsets.NONE,
+                fill: Float = 0.9f): MapFit {
+        val w = max(width - insets.left - insets.right, 1f)
+        val h = max(height - insets.top - insets.bottom, 1f)
+        val f = focalPixels(height)
+        val half = max(min(w, h) / 2 * fill, 1f)
+        // the ball's silhouette at distance D has half-width R f / sqrt(D² − R²)
+        val ratio = f / half
+        val distance = max(radius, 1e-3f) * sqrt(1 + ratio * ratio)
+        val ox = (insets.left + w / 2) - width / 2
+        val oy = height / 2 - (insets.top + h / 2)
+        return MapFit(distance, centre - (right() * ox + up() * oy) * (distance / f))
+    }
 }
 
 /**
@@ -624,6 +644,20 @@ object LabelRoom {
         val side = pixels / 2 + beside + width / 2
         return listOf(LabelBox(x, y + below, width, height), LabelBox(x, y - below, width, height),
             LabelBox(x + side, y, width, height), LabelBox(x - side, y, width, height))
+    }
+
+    /**
+     * [box] kept inside a view [viewWidth] across, [edge] in from either side, as iOS's
+     * GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204): a name under or above its body ([slides])
+     * slides along its row until it is inside, at the view's middle when it is wider than the room; one
+     * beside its body that would leave the view is null, as sliding it would lay it on its own body.
+     */
+    fun inView(box: LabelBox, viewWidth: Float, edge: Float, slides: Boolean): LabelBox? {
+        val lo = edge + box.width / 2
+        val hi = viewWidth - edge - box.width / 2
+        if (box.x in lo..hi) return box
+        if (!slides) return null
+        return box.copy(x = if (lo > hi) viewWidth / 2 else box.x.coerceIn(lo, hi))
     }
 
     /**

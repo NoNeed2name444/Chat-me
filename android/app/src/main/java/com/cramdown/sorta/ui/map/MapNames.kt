@@ -29,6 +29,19 @@ object MapNames {
     /** A name past this many characters is cut, with an ellipsis (S03-result.md: one cut rule is step 4's design work). */
     const val CUT = 23
 
+    /**
+     * Performance names only a map of at most this many bodies (iOS's GraphPerfLabelSpots.limit and its
+     * updateLabels, GraphPerfMapView.swift:569-576): past it, the proof tour's 100,000 and any vault as
+     * big, none. A layout weighs every name against every body and link on screen, on the main thread
+     * whenever the bodies move; on the tour's map each main-thread frame took 4 to 16 s on CI's emulator
+     * (S05i2, cde6f9a), so the main thread never idled while the map moved. Space and Neurons have
+     * no such limit on iOS, so none here: they pass no [layout] limit.
+     */
+    const val LIMIT = 2_000
+
+    /** The room Performance keeps between a name and either side of the map, in dp (iOS's GraphPerfLabelRoom.edge, 12 points). */
+    const val EDGE_DP = 12f
+
     /** The sizes the names keep, in pixels. */
     class Rules(
         /** The largest a name's words grow. */
@@ -49,11 +62,14 @@ object MapNames {
      * The names to draw for [nodes], with [titles] by node index, the scene's [links] (pairs of node
      * indices, each a band [linkHalf] world units each side) and [held], the names drawn last frame
      * by index, with the spot each took: those count [LabelRoom.HOLD] times bigger and try that spot
-     * first, so a name does not hop as the map drifts.
+     * first, so a name does not hop as the map drifts. None on a map of more than [limit] bodies.
+     * Given a [viewWidth] (Performance's, v13), every name stays inside it, [edge] in from either side
+     * ([LabelRoom.inView], iOS's GraphPerfLabelRoom.box): on CI's stills "Loop diuret…" and "Atrial
+     * fibri…" ran off the phone's right edge.
      */
     fun layout(nodes: List<ScreenNode>, titles: List<String>, links: IntArray, linkHalf: Float, held: Map<Int, Int>,
-               rules: Rules, metrics: NameMetrics): List<PlacedName> {
-        if (titles.isEmpty() || nodes.isEmpty()) return emptyList()
+               rules: Rules, metrics: NameMetrics, limit: Int = Int.MAX_VALUE, viewWidth: Float = 0f, edge: Float = 0f): List<PlacedName> {
+        if (titles.isEmpty() || nodes.isEmpty() || titles.size > limit) return emptyList()
         val at = HashMap<Int, ScreenNode>(nodes.size * 2)
         for (n in nodes) at[n.index] = n
         // every link with both ends on screen, as its band there
@@ -78,9 +94,11 @@ object MapNames {
             val ascent = metrics.ascent(size); val descent = metrics.descent(size)
             // under the body as the map has always put it: the baseline 1.4 sizes past its edge
             val below = node.pixels / 2 + size * 1.4f + (ascent + descent) / 2
-            val spots = LabelRoom.spots(node.x, node.y, node.pixels, metrics.width(label, size), descent - ascent, below, size * 0.5f)
+            val all = LabelRoom.spots(node.x, node.y, node.pixels, metrics.width(label, size), descent - ascent, below, size * 0.5f)
+            // under and above slide inside the view; after and before that would leave it are not tried
+            val spots: List<LabelBox?> = if (viewWidth > 0f) all.mapIndexed { i, b -> LabelRoom.inView(b, viewWidth, edge, slides = i < 2) } else all
             val last = held[node.index]
-            val tried = if (last != null && last in spots.indices) listOf(spots[last]) + spots.filterIndexed { i, _ -> i != last } else spots
+            val tried = (if (last != null && last in spots.indices) listOf(spots[last]) + spots.filterIndexed { i, _ -> i != last } else spots).filterNotNull()
             val box = LabelRoom.place(tried, placed, bands, discs, rules.gapX, rules.gapY, self = node.index) ?: continue
             placed.add(box)
             out.add(PlacedName(node.index, label, size, box, spots.indexOf(box)))

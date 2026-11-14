@@ -287,4 +287,41 @@
     <string name="map_no_folder_neurons">No folders yet: every idea shares one cell. Add a folder to grow a cell of its own.</string>
     <string name="map_no_folder_performance">No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour.</string>
     <string name="map_add_folder">Add folder</string>
+    <!-- S05i: the Filter tool and its menu (Graph3DView.swift:779, :824-841, :309), and the Neurons' cell states in Look (GraphNodeStyles.swift:224-243) -->
+    <string name="map_filter">Filter</string>
+    <string name="map_filter_show">Show</string>
+    <string name="map_filter_everything">Everything</string>
+    <string name="map_filter_pages">Pages</string>
+    <string name="map_filter_ideas">Ideas</string>
+    <string name="map_filter_linked">Linked ideas</string>
+    <string name="map_filter_folder">Folder</string>
+    <string name="map_filter_empty">Nothing here for this filter.</string>
+    <string name="map_cells">Cells</string>
+    <string name="map_cell_by_cell">Cell by cell</string>
+    <string name="map_same_as_all">Same as all</string>
+    <!-- S06c: older ideas that share rare words (echoes), Collide, Split and Join; the same words as iOS's IdeasWords -->
+    <string name="echoes_title">Ideas like this</string>
+    <!-- TalkBack: "Double-tap to link it to this idea" -->
+    <string name="echoes_link_hint">link it to this idea</string>
+    <string name="echoes_linked">Linked to “%1$s”.</string>
+    <string name="collide_tool">Collide two ideas</string>
+    <string name="collide_title">What if both?</string>
+    <string name="collide_field">The idea they make</string>
+    <string name="collide_save">Save idea</string>
+    <string name="collide_another">Try another pair</string>
+    <string name="collide_saved">New idea in To sort.</string>
+    <string name="collide_none">No two ideas are far apart yet. Put ideas in different folders, then try again.</string>
+    <string name="shape_split">Split…</string>
+    <string name="shape_join">Join with…</string>
+    <string name="shape_collide">Collide with…</string>
+    <string name="shape_join_title">Join with</string>
+    <string name="shape_collide_title">Collide with</string>
+    <string name="split_title">Split in two</string>
+    <string name="split_hint">Tap the last sentence of the first idea.</string>
+    <string name="split_first">First idea</string>
+    <string name="split_second">Second idea</string>
+    <string name="split_confirm">Split idea</string>
+    <string name="split_done">Idea split in two.</string>
+    <string name="split_one">This idea has one sentence, so it can’t be split.</string>
+    <string name="join_done">Ideas joined.</string>
 </resources>

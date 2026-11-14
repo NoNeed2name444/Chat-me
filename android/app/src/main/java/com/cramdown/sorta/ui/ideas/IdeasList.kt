@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,8 +123,9 @@ internal fun LazyListScope.ideasList(
 }
 
 /** A menu's item: an action in the accent's words, a destructive one in danger. */
-@Composable internal fun MenuItem(text: String, destructive: Boolean = false, onClick: () -> Unit) {
-    DropdownMenuItem({ Text(text, style = WardType.body.textStyle(), color = wardColor(if (destructive) WardToken.danger else WardToken.primaryInk)) }, onClick)
+@Composable internal fun MenuItem(text: String, destructive: Boolean = false, tag: String? = null, onClick: () -> Unit) {
+    DropdownMenuItem({ Text(text, style = WardType.body.textStyle(), color = wardColor(if (destructive) WardToken.danger else WardToken.primaryInk)) }, onClick,
+        if (tag != null) Modifier.testTag(tag) else Modifier)
 }
 
 /** The first row in a folder: back to its parent ("To sort" at the top level). */
