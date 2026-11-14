@@ -174,9 +174,9 @@ enum SkyWords {
     static var days: String { String(localized: "moons.chip", defaultValue: "Days") }
     static var daysHint: String { String(localized: "moons.chip.hint", defaultValue: "Shows recent days as moons.") }
     static var recentDays: String { String(localized: "moons.title", defaultValue: "Recent days") }
-    static var pickADay: String { String(localized: "moons.pick", defaultValue: "Pick a day to light its ideas.") }
+    static var pickADay: String { String(localized: "moons.pick", defaultValue: "Choose a day to light its ideas.") }
     static var clear: String { String(localized: "moons.clear", defaultValue: "Clear") }
-    static var clearSpoken: String { String(localized: "moons.clear.spoken", defaultValue: "Clear the day") }
+    static var clearSpoken: String { String(localized: "moons.clear.spoken", defaultValue: "Clear the chosen day") }
     static var moonHint: String { String(localized: "moons.moon.hint", defaultValue: "Lights that day’s ideas.") }
     /// "14 November, 3 ideas"; a day with none, "14 November, no ideas".
     static func moonSpoken(_ day: String, _ n: Int) -> String {

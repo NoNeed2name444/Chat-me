@@ -316,9 +316,9 @@
     <string name="moons_chip">Days</string>
     <string name="moons_chip_hint">show recent days as moons</string>
     <string name="moons_title">Recent days</string>
-    <string name="moons_pick">Pick a day to light its ideas.</string>
+    <string name="moons_pick">Choose a day to light its ideas.</string>
     <string name="moons_clear">Clear</string>
-    <string name="moons_clear_spoken">Clear the day</string>
+    <string name="moons_clear_spoken">Clear the chosen day</string>
     <string name="moons_moon_hint">light that day’s ideas</string>
     <!-- A moon, spoken and as the row's heading: "14 November, 3 ideas" -->
     <string name="moons_moon_none">%1$s, no ideas</string>

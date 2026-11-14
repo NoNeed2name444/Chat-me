@@ -1220,7 +1220,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clear the day"
+            "value" : "Clear the chosen day"
           }
         }
       }
@@ -1268,7 +1268,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pick a day to light its ideas."
+            "value" : "Choose a day to light its ideas."
           }
         }
       }

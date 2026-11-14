@@ -275,7 +275,7 @@ final class GraphStyleKit {
             node.addChildNode(dusty)
             dust = dusty
             haze.append(dusty)
-            extra = SIMD2<Float>(r * 2, r * 7 * min(max(tail, 0.1), CometTail.longest))
+            extra = SIMD2<Float>(r * 2, r * 7 * min(max(self.tail, 0.1), CometTail.longest))
         default:
             break
         }
