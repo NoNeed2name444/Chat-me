@@ -57,8 +57,13 @@ import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.MapLook
+import com.cramdown.sorta.map.FolderWords
+import com.cramdown.sorta.map.MoonDays
+import java.time.LocalDate
+import java.time.ZoneId
 import com.cramdown.sorta.ui.LocalWardLook
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.launch
@@ -109,6 +114,8 @@ object IdeasTags {
     const val BANNER = "notice"
     /** Map mode with no ideas yet. */
     const val MAP_EMPTY = "map-empty"
+    /** The map's pane on two panes (S05j item 1). */
+    const val MAP_PANE = "map-pane"
 }
 
 /**
@@ -145,6 +152,8 @@ data class IdeasStart(val folderId: String? = null, val editing: String? = null,
 internal sealed class FolderPrompt {
     data class New(val parent: String?, val filing: String? = null) : FolderPrompt()
     data class Rename(val folder: NoteFolder) : FolderPrompt()
+    /** S06b: a folder's own words (FolderWords), which loose ideas sharing one lean towards in Space. */
+    data class Words(val folder: NoteFolder) : FolderPrompt()
 }
 
 /**
@@ -189,6 +198,9 @@ internal object IdeasBanner {
     /** Map mode's list sheet is up, and the folder it is browsing (nil: the top level). */
     var listing by rememberSaveable { mutableStateOf(false) }
     var listFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    /** S06b: the moons row is open, and the day picked in it, whose ideas are lit on the map. */
+    var showingDays by rememberSaveable { mutableStateOf(false) }
+    var litDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val capture = remember { FocusRequester() }
     val focus = LocalFocusManager.current
 
@@ -271,19 +283,42 @@ internal object IdeasBanner {
     val stripTop = with(LocalDensity.current) { (if (book.notes.isNotEmpty()) stripHeight else 0).toDp() }
     val outer = LocalWardLook.current
 
+    // S06b: the Days chip and the moons are Space's and 2D's, over ideas; another look or no ideas puts them away
+    val daysShown = book.notes.isNotEmpty() && (settings.look == MapLook.SPACE || settings.look == MapLook.TWO_D)
+    LaunchedEffect(daysShown) { if (!daysShown) { showingDays = false; litDay = null } }
+    val litIdeas: Set<String>? = litDay?.let { day ->
+        remember(book.notes, model.version, day) {
+            MoonDays.lit(book.notes.map { it.id to it.createdAt }, LocalDate.ofEpochDay(day), ZoneId.systemDefault())
+        }
+    }
+
     /** The map, edge to edge: the tools and the empty page keep above the foot ([hidden]) and the navigation bar. */
-    @Composable fun MapPane(paned: Boolean) = WardTextCap {
+    @Composable fun MapPane(paned: Boolean) = WardTextCap { CompositionLocalProvider(LocalSortaBars provides !paned) {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version)
-        // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
+            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version,
+            lit = litIdeas, file = { id, to -> file(id, to) })
+        // the top strip: the To sort chip (not on two panes), the Days chip and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
                 Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
+                days = if (daysShown) ({ showingDays = !showingDays; if (!showingDays) litDay = null }) else null, daysOn = showingDays)
+            // the moons, under the strip; closing them ends the lit day
+            if (daysShown && showingDays) {
+                val moons = remember(book.notes, model.version) {
+                    MoonDays.days(book.notes.map { it.createdAt }, System.currentTimeMillis(), MoonDays.MOST, ZoneId.systemDefault())
+                }
+                Box(Modifier.fillMaxWidth().padding(top = stripTop + WardSpace.s.wardDp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(horizontal = WardSpace.gutter.wardDp), contentAlignment = Alignment.TopCenter) {
+                    MoonRow(moons, litDay?.let { LocalDate.ofEpochDay(it) }, pick = { litDay = it?.toEpochDay() },
+                        close = { showingDays = false; litDay = null })
+                }
+            }
         }
-    }
+    } }
 
     /** The Sort screen, or the editor open from it, in its column. */
     @Composable fun SortSide() {
@@ -331,7 +366,9 @@ internal object IdeasBanner {
                 Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) { Foot(switches = false) }
             }
             if (split.gap > 0) Spacer(Modifier.width(split.gap.dp).fillMaxHeight())
-            Box(Modifier.weight(1f).fillMaxHeight()) { MapPane(paned = true) }
+            // the map pane starts below the status bar, whose row shows the page across the window, and
+            // the bar's icons follow the page (S05j item 1, question 1's default; LocalSortaBars)
+            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
         } else {
             if (mapShown) WardHingePane(shape, Modifier.fillMaxSize()) { MapPane(paned = false) }
             else WardHingePane(shape, Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) { SortSide() }
@@ -343,23 +380,34 @@ internal object IdeasBanner {
 
     // first, so the chooser, the naming sheet and the dialog it opens come over it
     if (sheetUp) MapListSheet(book, model.version, banner, folderId = listFolder, setFolder = { listFolder = it }, onDone = { listing = false },
-        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it })
+        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it },
+        overMap = night)
     choosing?.let { id ->
         val note = book.note(id)
         if (note == null) choosing = null
         else FolderChooser(book, note.folderId, version = model.version, onDismiss = { choosing = null },
-            onChoose = { to -> choosing = null; file(id, to) },
+            onChoose = { to -> choosing = null; file(id, to) }, overMap = night,
             // a new folder goes in the folder being browsed: the sheet's, while it is up
             onNewFolder = { choosing = null; naming = FolderPrompt.New(parent = if (sheetUp) listFolder else folderId, filing = id) })
     }
     when (val prompt = naming) {
         is FolderPrompt.New -> NameSheet(stringResource(R.string.name_new_title), stringResource(R.string.name_field), "",
-            stringResource(R.string.name_create), { naming = null }) { name ->
+            stringResource(R.string.name_create), { naming = null }, overMap = night) { name ->
             val folder = model.book.createFolder(name, prompt.parent)
             prompt.filing?.let { file(it, folder.id) }
         }
         is FolderPrompt.Rename -> NameSheet(stringResource(R.string.name_rename_title), stringResource(R.string.name_field), prompt.folder.name,
-            stringResource(R.string.name_rename), { naming = null }) { model.book.renameFolder(prompt.folder.id, it) }
+            stringResource(R.string.name_rename), { naming = null }, overMap = night) { model.book.renameFolder(prompt.folder.id, it) }
+        // blank clears them; the footnote says what a save keeps
+        is FolderPrompt.Words -> {
+            val note = stringResource(R.string.folder_words_note)
+            val kept = stringResource(R.string.folder_words_kept)
+            NameSheet(stringResource(R.string.folder_words_title), stringResource(R.string.folder_words_prompt),
+                prompt.folder.words.joinToString(" "), stringResource(R.string.sky_save), { naming = null }, overMap = night,
+                footnote = { text -> SkyWords.folderWordsFootnote(text, note, kept) }, allowsBlank = true) {
+                model.book.setWords(prompt.folder.id, FolderWords.parse(it))
+            }
+        }
         null -> {}
     }
     deletingFolder?.let { folder ->

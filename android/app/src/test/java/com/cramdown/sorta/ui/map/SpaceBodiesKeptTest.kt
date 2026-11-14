@@ -8,6 +8,7 @@ import com.cramdown.sorta.map.FramePlan
 import com.cramdown.sorta.map.GuardBand
 import com.cramdown.sorta.map.LodSelector
 import com.cramdown.sorta.map.DeathKind
+import com.cramdown.sorta.map.FilterPop
 import com.cramdown.sorta.map.MapDeathStage
 import com.cramdown.sorta.map.MapDeparture
 import com.cramdown.sorta.map.Mat4
@@ -139,6 +140,20 @@ class SpaceBodiesKeptTest {
         val held = bodies().apply { chosen = farthest; grabbed = star }
         assertEquals(1, update(held, closed, maxBodies = 1, vp = vp, cam = near))
         assertEquals(star, held.nodes[0])
+    }
+
+    @Test fun aMarkedBodyTheFilterHidesIsNotKept() {
+        // v13: S05h2 keeps the marked body whole; S05i's filter never draws a node it has hidden, even
+        // in the frames before the page lets the chosen one go (MapSelectionEvent.Gone)
+        val closed = FramePlan(tree.leafCount)
+        val b = bodies().apply { chosen = star; grabbed = star }
+        b.filterScale = FloatArray(tree.nodeCount) { 1f }.also { it[star] = FilterPop.HIDE_AT }
+        assertEquals(0, update(b, closed))
+        assertTrue(!b.isBody(star))
+        // on its way back, above the line, it is kept again, at its pop's size
+        b.filterScale = FloatArray(tree.nodeCount) { 1f }.also { it[star] = 0.5f }
+        assertEquals(1, update(b, closed))
+        assertEquals(star, b.nodes[0])
     }
 
     @Test fun aKeptBodyBehindTheEyeIsNotDrawn() {

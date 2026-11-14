@@ -76,6 +76,9 @@ struct Graph3DView: View {
     /// bar's note or name): the map draws slowly under it (GraphPace), as
     /// under its own sheets.
     var covered: Bool = false
+    /// S06b: the ideas of the day picked in the moons row (IdeasMapView),
+    /// lit where they are while the rest dim; nil, none picked.
+    var lit: Set<UUID>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The sky's shared switch (SpaceQuality): at .still - Low Power Mode,
     /// a hot device - the map holds still too.
@@ -157,10 +160,11 @@ struct Graph3DView: View {
     @AccessibilityFocusState private var cardFocused: Bool
 
     init(open: @escaping (UUID) -> Void, openFolder: @escaping (UUID?) -> Void = { _ in },
-         covered: Bool = false) {
+         covered: Bool = false, lit: Set<UUID>? = nil) {
         self.open = open
         self.openFolder = openFolder
         self.covered = covered
+        self.lit = lit
         _ = GraphFirstRun.reset
     }
 
@@ -300,7 +304,8 @@ struct Graph3DView: View {
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
-                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp)
+                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp,
+                             lit: lit)
             }
             .ignoresSafeArea()
         }
@@ -365,7 +370,7 @@ struct Graph3DView: View {
     private var perfSpace: some View {
         GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
-                       touch: touchHandlers, bold: bold)
+                       touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
                 bottomPanels(nil)
             }
@@ -398,7 +403,10 @@ struct Graph3DView: View {
                                   flyIn: { command.send(.flyIn(id)) },
                                   chip: { other in handle(.chip(other)) },
                                   more: GraphPeek.menu(folder: folder, home: id == GraphUniverse.homeID),
-                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) })
+                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) },
+                                  lean: folder ? nil : skyLean(id, in: built)?.line,
+                                  fileThere: { fileThere(id, in: built) },
+                                  source: folder ? nil : notes.note(id)?.sharedFrom)
                     .id(id)
                     .accessibilityFocused($cardFocused)
                     .transition(.move(edge: .bottom))
@@ -411,6 +419,20 @@ struct Graph3DView: View {
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: selection.cardShown)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: tuningLinks)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: options == nil)
+    }
+
+    /// S06b: a loose idea's lean in the Universe, for its card: the words
+    /// it shares with a folder, and that folder.
+    private func skyLean(_ id: UUID, in built: GraphScene?) -> (line: GraphSkyLean, folder: UUID)? {
+        guard built?.universe == true, let found = GraphSkyBodies.lean(id, store: notes) else { return nil }
+        return (GraphSkyLean(word: found.lean.word, folder: found.folder.name), found.folder.id)
+    }
+
+    /// File there: the idea goes into the folder it leans to, with the
+    /// filing's notice and Undo; the card stays on it as it settles.
+    private func fileThere(_ id: UUID, in built: GraphScene?) {
+        guard let target = skyLean(id, in: built)?.folder else { return }
+        filing.file(id, in: target, notes: notes)
     }
 
     /// A body's options, held still on it: a glass list beside where it
@@ -918,8 +940,28 @@ struct Graph3DView: View {
         // the link length plans the Universe and the themes (not the single
         // looks, which the force layout places)
         if universe { parts.append(GraphLinkLength.tag(linkValue)) }
+        if universe { parts.append(skyTag) }
         parts.append("p\(probeRound)")
         return parts.joined(separator: "\n")
+    }
+
+    /// S06b's part of the signature, in the Universe: the folders' words
+    /// (leaning), the shared ideas' marks (circling) and each loose idea's
+    /// tail step, so a tail grows when its idea crosses a day, a week or a
+    /// month the next time the map is drawn.
+    private var skyTag: String {
+        var hasher = Hasher()
+        let now = Date()
+        for folder in notes.folders where !folder.words.isEmpty {
+            hasher.combine(folder.id)
+            hasher.combine(folder.words)
+        }
+        for note in notes.notes where note.folderId == nil {
+            hasher.combine(note.id)
+            hasher.combine(note.sharedFrom)
+            hasher.combine(CometTail.length(created: note.createdAt, now: now))
+        }
+        return "k\(hasher.finalize())"
     }
 
     /// Whether a shader check this look builds with was not kept: it failed
@@ -1638,6 +1680,8 @@ struct GraphSCNView: UIViewRepresentable {
     var touch = GraphTouchHandlers()
     /// A sheet is up over the map: it draws slowly under it (GraphPace).
     var covered: Bool = false
+    /// S06b: the lit day's ideas (Graph3DView.lit).
+    var lit: Set<UUID>? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets, card: card)
@@ -1720,6 +1764,7 @@ struct GraphSCNView: UIViewRepresentable {
             coordinator.syncChoice()
         }
         coordinator.apply(filter)
+        coordinator.lightDay(lit)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
             coordinator.run(command.kind)
@@ -2682,6 +2727,20 @@ struct GraphSCNView: UIViewRepresentable {
                 sim.focusLinks(on: slot)
                 wake()
             }
+        }
+
+        /// S06b: the lit day's ideas on this scene, once per change and
+        /// again on a new scene (the sim it was lit on).
+        private var litShown: Set<UUID>?
+        private weak var litSim: GraphSim?
+
+        func lightDay(_ ids: Set<UUID>?) {
+            guard let sim else { return }
+            if litSim === sim && litShown == ids { return }
+            litSim = sim
+            litShown = ids
+            sim.lightDay(ids.map { Set($0.compactMap { sim.index[$0] }) })
+            wake()
         }
 
         /// A request from the card.

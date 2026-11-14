@@ -63,6 +63,26 @@ class Octree private constructor(
     val leafCount get() = leafCell.size
     val nodeCount get() = groups.size
     fun isLeaf(cell: Int) = leafIndex[cell] >= 0
+
+    /**
+     * Each cell's centre and radius again from [positions] as they now stand, for Performance's force,
+     * which moves the notes inside their chunks (S05i2): membership stays, so only the balls change.
+     */
+    fun refit() {
+        for (c in 0 until cellCount) {
+            val lo = start[c]; val hi = end[c]
+            var sx = 0.0; var sy = 0.0; var sz = 0.0
+            for (k in lo until hi) { sx += positions[3 * k]; sy += positions[3 * k + 1]; sz += positions[3 * k + 2] }
+            val cnt = max(hi - lo, 1)
+            val x = (sx / cnt).toFloat(); val y = (sy / cnt).toFloat(); val z = (sz / cnt).toFloat()
+            var maxD2 = 0f
+            for (k in lo until hi) {
+                val dx = positions[3 * k] - x; val dy = positions[3 * k + 1] - y; val dz = positions[3 * k + 2] - z
+                maxD2 = max(maxD2, dx * dx + dy * dy + dz * dz)
+            }
+            cx[c] = x; cy[c] = y; cz[c] = z; radius[c] = max(sqrt(maxD2), 1e-3f)
+        }
+    }
     /** Index count (two per link) of the link list of a leaf. */
     fun leafEdgeIndexCount(leaf: Int) = leafEdgeStart[leaf + 1] - leafEdgeStart[leaf]
 

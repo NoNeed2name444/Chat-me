@@ -92,7 +92,11 @@ class MapModeTest {
 
     private fun p(id: Int, n: Int, vararg args: Any) = run.context.resources.getQuantityString(id, n, *args)
 
-    private fun card(words: String) = compose.onNode(hasContentDescription("$words, ", substring = true))
+    // a board card, by its title: read alone on a board of one kind, else followed by its kind or
+    // folder (S05m item 4)
+    private fun cardIs(words: String) = hasTestTag(BOARD_CARD_TAG) and
+        (hasContentDescription(words) or hasContentDescription("$words, ", substring = true))
+    private fun card(words: String) = compose.onNode(cardIs(words))
 
     @Test fun theSwitchChangesModesAndBack() {
         run.launch()
@@ -247,7 +251,7 @@ class MapModeTest {
         run.until { !shown(EDITOR_TAG) }
         assertFalse("back on the map, not Sort", shown(IdeasTags.CAPTURE))
         card("Paint the shed green").assertIsDisplayed()
-        assertEquals("the old title is gone", 0, compose.onAllNodes(hasContentDescription("Paint the shed, ", substring = true)).fetchSemanticsNodes().size)
+        assertEquals("the old title is gone", 0, compose.onAllNodes(cardIs("Paint the shed")).fetchSemanticsNodes().size)
     }
 
     // S05b, step 4's list (S03-result.md: "the Map group and the demo maps are in a developer's build
@@ -275,5 +279,146 @@ class MapModeTest {
         assertFalse("no Your ideas", run.shows("Your ideas"))
         for (n in IdeasSettings.perfDemoSizes) assertFalse("no ${perfDemoTitle(n)}", run.shows(perfDemoTitle(n)))
         assertFalse("no demo of any size", run.shows("Demo:"))
+    }
+
+    // ---- S05j item 1: the status bar on two panes; item 6a: light icons on every sheet over a 3D look ----
+
+    /** A status bar this tall, as a phone's, handed to the window as the system would (Robolectric gives none). */
+    private fun statusBar(px: Int) = run.onActivity { a ->
+        val insets = androidx.core.view.WindowInsetsCompat.Builder()
+            .setInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars(), androidx.core.graphics.Insets.of(0, px, 0, 0))
+            .setVisible(androidx.core.view.WindowInsetsCompat.Type.statusBars(), true).build()
+        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(a.window.decorView, insets)
+    }
+
+    private fun lightStatusIcons(window: android.view.Window): Boolean =
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars
+
+    /**
+     * Two panes by [dark]'s light (question 1's default): the map pane starts below the status bar, the
+     * bar's row is the page across the window, and its icons follow the page: the clock (the bar's
+     * start) at 4.5:1 and the end icons at 3:1 against what is behind them. The system draws light
+     * icons white and dark ones black at 60% (SystemUI's light_mode_icon_color_single_tone and
+     * dark_mode_icon_color_single_tone); on 1015763 the map's night themes turned them white over the
+     * bone Sort pane by day.
+     */
+    private fun twoPanesBar(name: String, dark: Boolean) {
+        IdeaStore(run.store).replaceIdeas(listOf(IdeasFixture.gate, IdeasFixture.compost), listOf(IdeasFixture.garden))
+        IdeasSettings(run.context).setLook(MapLook.SPACE)
+        run.launch()
+        val density = run.context.resources.displayMetrics.density
+        val bar = (24 * density).toInt()
+        statusBar(bar)
+        compose.waitForIdle()
+        assertTrue("$name: two panes", shown(IdeasTags.MAP_PANE))
+        val light = run.onActivity { lightStatusIcons(it.window) }
+        assertEquals("$name: the icons follow the page", !dark, light)
+        val pane = compose.onNode(hasTestTag(IdeasTags.MAP_PANE)).fetchSemanticsNode().boundsInRoot
+        assertTrue("$name: the map pane starts below the status bar: ${pane.top} of $bar", pane.top >= bar - 0.5f)
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        assertTrue("$name: its strip below the bar too: ${strip.top}", strip.top >= bar - 0.5f)
+        System.setProperty("roborazzi.test.record", "true")
+        val file = java.io.File("build/outputs/roborazzi/mapmode_panes_bar_$name.png")
+        com.github.takahirom.roborazzi.captureScreenRoboImage(file.path)
+        val image = javax.imageio.ImageIO.read(file)
+        val y = bar / 2
+        val start = image.getRGB((16 * density).toInt(), y) and 0xFFFFFF
+        val end = image.getRGB(image.width - (16 * density).toInt(), y) and 0xFFFFFF
+        assertEquals("$name: the bar's row is the page across the window", start, end)
+        fun icon(behind: Int): Int = if (light) blend(0x000000, behind, 0.6) else 0xFFFFFF
+        val clock = com.cramdown.sorta.ui.ward.WardPalette.contrast(icon(start), start)
+        val icons = com.cramdown.sorta.ui.ward.WardPalette.contrast(icon(end), end)
+        assertTrue("$name: the clock at 4.5:1, ${"%.2f".format(clock)}", clock >= 4.5)
+        assertTrue("$name: the end icons at 3:1, ${"%.2f".format(icons)}", icons >= 3.0)
+    }
+
+    private fun blend(top: Int, under: Int, alpha: Double): Int {
+        fun ch(c: Int, s: Int) = ((c shr s and 0xFF) * alpha + (under shr s and 0xFF) * (1 - alpha)).toInt().coerceIn(0, 255)
+        return (ch(top, 16) shl 16) or (ch(top, 8) shl 8) or ch(top, 0)
+    }
+
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-notnight-xhdpi")
+    @Test fun twoPanesOnTheTabletByDay() = twoPanesBar("tablet_light", dark = false)
+
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    @Test fun twoPanesOnTheTabletByNight() = twoPanesBar("tablet_dark", dark = true)
+
+    @Config(sdk = [35], qualifiers = "w841dp-h701dp-land-notnight-xhdpi")
+    @Test fun twoPanesOnTheOpenFoldableByDay() = twoPanesBar("foldable_light", dark = false)
+
+    @Config(sdk = [35], qualifiers = "w841dp-h701dp-land-night-xhdpi")
+    @Test fun twoPanesOnTheOpenFoldableByNight() = twoPanesBar("foldable_dark", dark = true)
+
+    /**
+     * The window of the sheet up now: a ModalBottomSheet's own dialog window, the last window added
+     * (WindowManagerGlobal's views, read as Robolectric's own shadows do), checked to hold [tag].
+     */
+    private fun sheetWindow(tag: String): android.view.Window {
+        compose.onNode(hasTestTag(tag)).assertExists()
+        val global = Class.forName("android.view.WindowManagerGlobal")
+        val instance = global.getMethod("getInstance").invoke(null)
+        @Suppress("UNCHECKED_CAST")
+        val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<android.view.View>
+        fun find(v: android.view.View): androidx.compose.ui.window.DialogWindowProvider? {
+            if (v is androidx.compose.ui.window.DialogWindowProvider) return v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
+            return null
+        }
+        return views.asReversed().firstNotNullOfOrNull { find(it) }?.window ?: error("$tag is in no dialog window")
+    }
+
+    // Item 6a: in light mode a 3D look is night all the same, so a sheet over it keeps light status
+    // icons: the list sheet, the chooser from Choose folder, and the naming sheet from its New folder.
+    // On 1015763 the three left them dark.
+    @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
+    @Test fun everySheetOverA3DLookKeepsLightStatusIcons() {
+        IdeaStore(run.store).replaceIdeas(listOf(IdeasFixture.gate, IdeasFixture.compost), listOf(IdeasFixture.garden))
+        IdeasSettings(run.context).setLook(MapLook.SPACE)
+        run.launch()
+        switchTo(SortaMode.MAP)
+        compose.onNode(hasTestTag(MapTags.LIST_CHIP)).performClick()
+        compose.waitForIdle()
+        assertFalse("the list sheet's icons are light", lightStatusIcons(sheetWindow(MapTags.LIST)))
+        val inList = hasAnyAncestor(hasTestTag(MapTags.LIST))
+        compose.onNode(hasContentDescription(s(R.string.row_choose_folder_spoken, IdeasFixture.gate.title)) and inList).performClick()
+        compose.waitForIdle()
+        assertTrue("the chooser opens", run.chooserShown())
+        assertFalse("the chooser's icons are light", lightStatusIcons(sheetWindow(FOLDER_CHOOSER_TAG)))
+        run.inChooser(s(R.string.chooser_new_folder)).performClick()
+        compose.waitForIdle()
+        assertFalse("the naming sheet's icons are light", lightStatusIcons(sheetWindow(NAME_SHEET_TAG)))
+    }
+
+    // Item 6a: over the 2D board and over the Sort screen in light mode, the chooser and the naming
+    // sheet keep dark icons, as the page under them
+    @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
+    @Test fun overTheBoardAndSortTheSheetsKeepDarkStatusIcons() {
+        lookIs2D()
+        IdeaStore(run.store).replaceIdeas(listOf(IdeasFixture.gate, IdeasFixture.compost), listOf(IdeasFixture.garden))
+        run.launch()
+        for (mode in listOf(SortaMode.MAP, SortaMode.SORT)) {
+            switchTo(mode)
+            if (mode == SortaMode.MAP) {
+                compose.onNode(hasTestTag(MapTags.LIST_CHIP)).performClick()
+                compose.waitForIdle()
+                val inList = hasAnyAncestor(hasTestTag(MapTags.LIST))
+                assertTrue("$mode: the list sheet over the board keeps dark icons", lightStatusIcons(sheetWindow(MapTags.LIST)))
+                compose.onNode(hasContentDescription(s(R.string.row_choose_folder_spoken, IdeasFixture.gate.title)) and inList).performClick()
+            } else {
+                compose.onNode(hasContentDescription(s(R.string.row_choose_folder_spoken, IdeasFixture.gate.title))).performClick()
+            }
+            compose.waitForIdle()
+            assertTrue("$mode: the chooser opens", run.chooserShown())
+            assertTrue("$mode: the chooser keeps dark icons", lightStatusIcons(sheetWindow(FOLDER_CHOOSER_TAG)))
+            run.inChooser(s(R.string.chooser_new_folder)).performClick()
+            compose.waitForIdle()
+            assertTrue("$mode: the naming sheet keeps dark icons", lightStatusIcons(sheetWindow(NAME_SHEET_TAG)))
+            compose.onNode(hasText(s(R.string.sheet_cancel)) and hasAnyAncestor(hasTestTag(NAME_SHEET_TAG))).performClick()
+            compose.waitForIdle()
+            if (mode == SortaMode.MAP) {
+                compose.onNode(hasTestTag(MapTags.LIST_DONE)).performClick()
+                compose.waitForIdle()
+            }
+        }
     }
 }

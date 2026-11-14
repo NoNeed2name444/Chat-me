@@ -92,6 +92,7 @@ internal fun LazyListScope.ideasList(
         items(level.subfolders, key = { "f-" + it.id }) { folder ->
             FolderRow(folder, book.count(folder.id), open = { setFolder(folder.id) },
                 rename = { name(FolderPrompt.Rename(folder)) }, newInside = { name(FolderPrompt.New(folder.id)) },
+                words = { name(FolderPrompt.Words(folder)) },
                 delete = { deleteFolder(folder) })
         }
     }
@@ -186,18 +187,22 @@ internal fun LazyListScope.ideasList(
  * swiped trailing, Delete folder, which asks first (the row springs back), as TalkBack's action does.
  */
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun FolderRow(folder: NoteFolder, count: Int, open: () -> Unit, rename: () -> Unit, newInside: () -> Unit, delete: () -> Unit) {
+@Composable private fun FolderRow(folder: NoteFolder, count: Int, open: () -> Unit, rename: () -> Unit, newInside: () -> Unit, delete: () -> Unit,
+                                  words: () -> Unit = {}) {
     var menu by remember { mutableStateOf(false) }
     val spoken = pluralStringResource(R.plurals.folder_row_spoken, count, folder.name, count)
     val renameWords = stringResource(R.string.folder_rename)
     val insideWords = stringResource(R.string.folder_new_inside)
+    val wordsTitle = stringResource(R.string.folder_words_title)
+    val wordsItem = stringResource(R.string.folder_words)
     val deleteWords = stringResource(R.string.folder_delete)
     SwipeRow(lead = null, trail = deleteWords to delete, trailGoes = false) { Box {
         Row(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClick = { menu = true }, onClick = open).wardRowTile()
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
                 customActions = listOf(CustomAccessibilityAction(renameWords) { rename(); true },
-                    CustomAccessibilityAction(insideWords) { newInside(); true }, CustomAccessibilityAction(deleteWords) { delete(); true })
+                    CustomAccessibilityAction(insideWords) { newInside(); true }, CustomAccessibilityAction(wordsTitle) { words(); true },
+                    CustomAccessibilityAction(deleteWords) { delete(); true })
             },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
             Icon(Icons.Outlined.Folder, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(20.0)))
@@ -208,6 +213,7 @@ internal fun LazyListScope.ideasList(
         DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
             MenuItem(renameWords) { menu = false; rename() }
             MenuItem(insideWords) { menu = false; newInside() }
+            MenuItem(wordsItem) { menu = false; words() }
             MenuItem(deleteWords, destructive = true) { menu = false; delete() }
         }
     } }

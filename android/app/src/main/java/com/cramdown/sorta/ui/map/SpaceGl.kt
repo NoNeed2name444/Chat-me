@@ -62,7 +62,7 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
     /** Called on the GL thread with a new context; marks which styles can be drawn. */
     fun create(bodies: SpaceBodies, detail: Float) {
         for (style in SpaceStyle.entries) {
-            programs[style.code] = runCatching { buildProgram(SpaceShaders.bodyVertex, SpaceShaders.fragment(style)) }
+            programs[style.code] = runCatching { buildProgram(SpaceShaders.bodyVertex, SpaceBodies.bloomed(SpaceShaders.fragment(style))) }
                 .onFailure { Log.w("SpaceGl", "${style.label}: ${it.message}") }.getOrDefault(0)
             bodies.enabled[style.code] = programs[style.code] != 0
         }

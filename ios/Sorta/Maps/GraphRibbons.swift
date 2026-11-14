@@ -614,6 +614,9 @@ nonisolated struct GraphRecall: Sendable {
     /// The Universe's orbit clock on the scene being replaced, so a rebuild
     /// never rewinds the orbits; 0 when the space opens.
     var orbitTime: Double = 0
+    /// S06b: comets just filed, which settle into their folder's system from
+    /// where they were (CometSettle) instead of popping in.
+    var settling: Set<UUID> = []
 
     static let everything = GraphRecall(fresh: nil, freshLinks: nil, ghosts: [], starts: [:])
 }
@@ -640,6 +643,7 @@ enum GraphMemory {
                        lively: Bool) -> GraphRecall {
         guard lively, let sim = lastSim else { return .everything }
         var fresh = Set<UUID>()
+        var settling = Set<UUID>()
         var starts: [UUID: SIMD3<Float>] = [:]
         for id in ids {
             guard let slot = sim.index[id] else {
@@ -647,7 +651,11 @@ enum GraphMemory {
                 continue
             }
             starts[id] = sim.currentPosition(slot)
-            if lastStyles[id] != styles[id] { fresh.insert(id) }
+            if lastStyles[id] == .comet && styles[id] != .comet && styles[id] != nil {
+                settling.insert(id)
+            } else if lastStyles[id] != styles[id] {
+                fresh.insert(id)
+            }
         }
         var now = Set<String>()
         for (a, b) in edges { now.insert(key(a, b)) }
@@ -660,6 +668,7 @@ enum GraphMemory {
         }
         var recalled = GraphRecall(fresh: fresh, freshLinks: freshLinks, ghosts: ghosts, starts: starts)
         recalled.orbitTime = sim.orbitClock
+        recalled.settling = settling
         return recalled
     }
 

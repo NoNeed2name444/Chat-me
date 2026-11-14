@@ -85,6 +85,11 @@ extension GraphSceneBuilder {
         var folders: [UUID: Int] = [:]
         var titles: [String: Int] = [:]
         var galaxyOf: [UUID: UUID] = [:]
+        // S06b: each comet's tail by how long its idea has waited, the
+        // loose ideas leaning towards a folder whose words they share, and
+        // the shared ones circling the first from the same place
+        let sky: GraphSkyBodies = GraphSkyBodies.make(plan: plan, store: store, edges: edges)
+        let now = Date()
         for (i, body) in plan.bodies.enumerated() {
             // a folder look: by the note's planned galaxy
             let galaxyID: UUID? = body.galaxy >= 0 ? plan.bodies[body.galaxy].id : nil
@@ -103,6 +108,7 @@ extension GraphSceneBuilder {
             default: break
             }
             let r: Float = body.sphere * grow / GraphStyleKit.bodyScale(dress.style)
+            kit.tail = body.role == .comet ? (note.map { CometTail.length(created: $0.createdAt, now: now) } ?? 1) : 1
             let made: GraphStyledParts = kit.make(name: dress.name, folder: folder, style: dress.style, radius: r,
                                                   random: &random, look: dress.look, light: dress.light,
                                                   palette: body.palette)
@@ -137,6 +143,8 @@ extension GraphSceneBuilder {
             info.shell = body.shell
             info.light = body.light
             info.shine = GraphShine.universe(body.role.rawValue, empty: body.empty, tier: body.tier)
+            info.leanTo = sky.leanTo[i] ?? -1
+            info.circle = sky.circles[i]
             infos.append(info)
             styles[body.id] = dress.style
             if dress.kind != .note {

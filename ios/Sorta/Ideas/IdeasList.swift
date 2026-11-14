@@ -14,6 +14,8 @@ struct IdeasListActions {
     let newFolderInside: (NoteFolder) -> Void
     /// Asks before deleting a folder.
     let deleteFolder: (NoteFolder) -> Void
+    /// S06b: opens the sheet for a folder's own words (SkyWords).
+    var folderWords: (NoteFolder) -> Void = { _ in }
 }
 
 /// S05's list, shared by the Sort screen and Map mode's list sheet (S05b,
@@ -171,10 +173,12 @@ struct IdeasList<TitleEnd: View>: View {
         .accessibilityIdentifier("folder-row")
         .accessibilityAction(named: IdeasWords.renameFolder) { actions.renameFolder(folder) }
         .accessibilityAction(named: IdeasWords.newFolderInside) { actions.newFolderInside(folder) }
+        .accessibilityAction(named: SkyWords.folderWordsTitle) { actions.folderWords(folder) }
         .accessibilityAction(named: IdeasWords.deleteFolder) { actions.deleteFolder(folder) }
         .contextMenu {
             Button(IdeasWords.renameFolder, systemImage: "pencil") { actions.renameFolder(folder) }
             Button(IdeasWords.newFolderInside, systemImage: "folder.badge.plus") { actions.newFolderInside(folder) }
+            Button(SkyWords.folderWords, systemImage: "tag") { actions.folderWords(folder) }
             Button(IdeasWords.deleteFolder, systemImage: "trash", role: .destructive) { actions.deleteFolder(folder) }
         }
         .swipeActions {

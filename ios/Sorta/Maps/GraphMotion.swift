@@ -95,6 +95,11 @@ struct GraphNodeInfo {
     /// How bright it and its glow are, for the estimate of what is behind
     /// a name pill (GraphLabelContrast.swift).
     var shine: GraphShine = .dark
+    /// S06b, the Universe: the folder body a loose idea leans towards
+    /// (-1: none; Leaning), and the body a shared idea circles with where
+    /// it sits round it (nil: none; SharedCircle).
+    var leanTo: Int = -1
+    var circle: SharedCircle.Place? = nil
 }
 
 /// The Universe's own pieces, for GraphSim (built by GraphUniverseScene).
@@ -512,6 +517,16 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// Show links: the chosen body and its neighbours (every other body
     /// dimmed, only their links drawn); nil for everything.
     private var focusSet: Set<Int>?
+    /// S06b. A lit day: its ideas and the bodies they sit in, the rest
+    /// dimmed (nil: none). Each loose idea's lean, each shared idea's place
+    /// round the one it circles and how far, and the comets being filed:
+    /// where each started and how long it has settled.
+    private var litSet: Set<Int>?
+    private var leanOf: [Int] = []
+    private var circleOf: [SharedCircle.Place?] = []
+    private var circleRadius: [Float] = []
+    private var settleFrom: [Int: SIMD3<Float>] = [:]
+    private var settleTime: Double = 0
 
     // the name pills' styles (GraphLabelContrast.swift)
     private let shines: [GraphShine]
@@ -618,6 +633,22 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         orbitTime = startTime
         offsets = offsetList
         nextOffsets = offsetList
+        // S06b: leaning and circling ideas start where they are drawn
+        let leans: [Int] = infos.map(\.leanTo)
+        let circles: [SharedCircle.Place?] = infos.map(\.circle)
+        let rings: [Float] = infos.indices.map { i in
+            guard let place = infos[i].circle, place.leader >= 0, place.leader < infos.count else { return 0 }
+            return max(infos[place.leader].radius, infos[i].radius) * 3
+        }
+        leanOf = leans
+        circleOf = circles
+        circleRadius = rings
+        if orbiting {
+            for i in homeList.indices {
+                homeList[i] = GraphSim.skyPlace(i, homeList[i], at: homeList, lean: leans, circle: circles,
+                                                radius: rings, time: startTime)
+            }
+        }
         let budgetNow: GraphicsBudget = GraphQuality.current
         budget = budgetNow
         let linkCount: Int = pairs.count
@@ -816,6 +847,14 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         ghostGrow = [Float](repeating: 1, count: ghostList.count)
         let zero = SIMD3<Float>(0, 0, 0)
         position = start
+        // S06b: a comet just filed eases in from where it was (CometSettle)
+        var settling: [Int: SIMD3<Float>] = [:]
+        if lively {
+            for (k, id) in idList.enumerated() where recall.settling.contains(id) {
+                settling[k] = start[k]
+            }
+        }
+        settleFrom = settling
         velocity = [SIMD3<Float>](repeating: zero, count: infos.count)
         force = [SIMD3<Float>](repeating: zero, count: infos.count)
         visible = [Bool](repeating: true, count: infos.count)
@@ -1337,9 +1376,14 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
                 if shown { popWait[i] = 0 }
             }
         }
+        let focusNow: Set<Int>? = focusSet
+        let litNow: Set<Int>? = litSet
         lock.unlock()
         if stillSelected == nil { highlight(nil) }
-        for (i, isGhost) in ghostChanged { nodes[i].opacity = isGhost ? 0.3 : 1 }
+        for (i, isGhost) in ghostChanged {
+            let dim: Bool = (focusNow.map { !$0.contains(i) } ?? false) || (litNow.map { !$0.contains(i) } ?? false)
+            nodes[i].opacity = dim ? 0.15 : (isGhost ? 0.3 : 1)
+        }
         for (k, ring) in shellNodes.enumerated() where k < ringsShown.count {
             ring.isHidden = !ringsShown[k]
         }
@@ -1408,10 +1452,47 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         linesDirty = true
         resting = false
         let ghosts: [Bool] = ghost
+        let lit: Set<Int>? = litSet
         lock.unlock()
+        shade(ghosts: ghosts, near: i == nil ? nil : near, lit: lit)
+    }
+
+    /// S06b: lights a day's ideas (body indices) where they are, and the
+    /// bodies they sit in, dimming the rest as Show links does; nil: all
+    /// back. Main thread.
+    @MainActor
+    func lightDay(_ ideas: Set<Int>?) {
+        var kept: Set<Int>?
+        if let ideas {
+            var all = Set<Int>()
+            for i in ideas where i >= 0 && i < nodes.count {
+                all.insert(i)
+                var up: Int = parentOf[i]
+                var steps: Int = 0
+                while up >= 0 && up < nodes.count && steps <= nodes.count {
+                    all.insert(up)
+                    up = parentOf[up]
+                    steps += 1
+                }
+            }
+            kept = all
+        }
+        lock.lock()
+        litSet = kept
+        resting = false
+        let ghosts: [Bool] = ghost
+        let near: Set<Int>? = focusSet
+        lock.unlock()
+        shade(ghosts: ghosts, near: near, lit: kept)
+    }
+
+    /// Each body's opacity: a ghost at 0.3, dimmed to 0.15 outside Show
+    /// links' neighbourhood or a lit day.
+    @MainActor
+    private func shade(ghosts: [Bool], near: Set<Int>?, lit: Set<Int>?) {
         for (k, node) in nodes.enumerated() {
-            let base: CGFloat = ghosts[k] ? 0.3 : 1
-            let dim: Bool = i != nil && !near.contains(k)
+            let base: CGFloat = k < ghosts.count && ghosts[k] ? 0.3 : 1
+            let dim: Bool = (near.map { !$0.contains(k) } ?? false) || (lit.map { !$0.contains(k) } ?? false)
             let want: CGFloat = dim ? 0.15 : base
             if node.opacity != want { node.opacity = want }
         }
@@ -1762,6 +1843,28 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
             guard let orbit = orbitOf[i] else { continue }
             nextOffsets[i] = GraphUniverse.offset(orbit, time: orbitTime)
         }
+        if !settleFrom.isEmpty {
+            settleTime += Double(dt)
+            if settleTime > CometSettle.duration { settleFrom.removeAll() }
+        }
+    }
+
+    /// S06b: where body `i` is drawn, given its place on its own path: a
+    /// loose idea pulled part of the way to the folder it leans to (never
+    /// into it), a shared one circling the first of its group.
+    private static func skyPlace(_ i: Int, _ own: SIMD3<Float>, at places: [SIMD3<Float>], lean: [Int],
+                                             circle: [SharedCircle.Place?], radius: [Float],
+                                             time: Double) -> SIMD3<Float> {
+        if i < circle.count, let place = circle[i], place.leader >= 0, place.leader < i, place.leader < places.count {
+            return places[place.leader] + SharedCircle.offset(place, radius: radius[i], time: time)
+        }
+        if i < lean.count {
+            let j: Int = lean[i]
+            if j >= 0 && j < places.count && j != i {
+                return own + (places[j] - own) * Leaning.pull
+            }
+        }
+        return own
     }
 
     /// One step of `h` seconds for every body, parents first: carried by
@@ -1785,7 +1888,17 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
             if first { carry += nextOffsets[i] - offsets[i] }
             position[i] += carry
             let base: SIMD3<Float> = hasParent ? position[p] : zero
-            let target: SIMD3<Float> = base + nextOffsets[i]
+            let target: SIMD3<Float> = GraphSim.skyPlace(i, base + nextOffsets[i], at: position, lean: leanOf,
+                                                         circle: circleOf, radius: circleRadius, time: orbitTime)
+            if let from = settleFrom[i] {
+                // a comet being filed follows the settle's curve, not the spring
+                let next: SIMD3<Float> = CometSettle.place(from: from, to: target, elapsed: settleTime)
+                velocity[i] = (next - position[i]) / max(h, 0.0001)
+                moved[i] = carry + next - position[i]
+                position[i] = next
+                fastest = max(fastest, simd_length_squared(velocity[i]))
+                continue
+            }
             let pull: SIMD3<Float> = (target - position[i]) * stiffness
             let brake: SIMD3<Float> = velocity[i] * damping
             velocity[i] += (pull - brake) * h

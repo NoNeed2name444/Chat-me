@@ -61,6 +61,7 @@ final class LaunchTests: XCTestCase {
         let capture = app.descendants(matching: .any).matching(identifier: "capture").firstMatch
         XCTAssertTrue(capture.waitForExistence(timeout: 30), "the Sort screen is open, with capture")
         let well: CGRect = capture.frame
+        waitForNoBanner(over: app, name: name)
 
         let shot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: shot)
@@ -80,6 +81,54 @@ final class LaunchTests: XCTestCase {
             XCTAssertLessThanOrEqual(
                 off, Self.tolerance,
                 "\(name): at \(fx), \(fy) the page is \(hex(seen)), not \(hex(expected))")
+        }
+    }
+
+    /// A system notification banner, SpringBoard's: a short element at the
+    /// top of the screen, named as a notification's short look or as the
+    /// one that came on 12 Nov.
+    private static var bannerQuery: NSPredicate {
+        NSPredicate(format: "identifier BEGINSWITH 'NotificationShortLook' OR label CONTAINS[c] 'Apple Intelligence'")
+    }
+
+    /// The screenshot is the whole screen, SpringBoard's banners too: in
+    /// Chat-me run 43239659022 a freshly booted simulator's "Ready for Apple
+    /// Intelligence" banner covered the top points at y 0.1 of the light
+    /// page as it was taken. So a banner over the app is waited out first,
+    /// up to 15 s, as its own activity; one still there is swiped up, as a
+    /// person would, with 5 s more for it to go. Nothing about the points
+    /// changes: if a banner stays, they read it and fail.
+    private func waitForNoBanner(over app: XCUIApplication, name: String) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let screen: CGRect = app.frame
+        func banner() -> XCUIElement? {
+            let found = springboard.descendants(matching: .any).matching(Self.bannerQuery).allElementsBoundByIndex
+            return found.first { element in
+                guard element.exists else { return false }
+                let frame: CGRect = element.frame
+                return !frame.isEmpty && frame.intersects(screen)
+                    && frame.minY < screen.height * 0.25 && frame.height < screen.height * 0.3
+            }
+        }
+        guard let first = banner() else { return }
+        XCTContext.runActivity(named: "\(name): a system banner is over the app (\(first.label)); wait for it to go") { _ in
+            func gone(within halves: Int) -> Bool {
+                for _ in 0..<halves {
+                    usleep(500_000)
+                    if banner() == nil { return true }
+                }
+                return false
+            }
+            if gone(within: 30) { return }
+            if let still = banner() {
+                XCTContext.runActivity(named: "\(name): the banner stayed 15 s; swipe it up") { _ in
+                    // it may go on its own between the look and the swipe
+                    if still.exists { still.swipeUp() }
+                }
+            }
+            if !gone(within: 10) {
+                XCTContext.runActivity(named: "\(name): a banner is still over the app; the points read what is there") { _ in }
+            }
         }
     }
 

@@ -21,6 +21,8 @@ targets:
       - path: Sorta
         excludes:
           - Resources/Earth
+          # the Share extension's own (SortaShare, below)
+          - ShareExtension
       # The Earth maps the Space theme's rocky planets wear (NASA imagery;
       # where each comes from and its licence: the folder's SOURCES.md), as
       # a folder, so they sit in Earth/ in the app (GraphEarth.swift), as
@@ -86,12 +88,45 @@ targets:
           - CFBundleURLName: com.cramdown.sorta
             CFBundleURLSchemes:
               - sorta
+    # the Share extension, embedded in the app's PlugIns
+    dependencies:
+      - target: SortaShare
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta
         # XcodeGen names an icon, AppIcon, for every app, and the asset
         # compiler stops when the catalog has none. These builds have none;
         # the builds with the art name it on the xcodebuild line.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  # Sorta in the share sheet (S06b, plugins plan idea 10): it hands the
+  # shared text and link to the app as sorta://share?text=..., where the
+  # share sheet keeps the words chosen (ShareSheet). Its own bundle id and
+  # no signing change; a device build needs one more App ID for it. Its
+  # Info.plist is made by `xcodegen generate`, like the app's, and is not
+  # committed.
+  SortaShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sorta/ShareExtension
+        excludes:
+          - Info.plist
+    info:
+      path: Sorta/ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Sorta
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cramdown.sorta.share
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
   # The look kit's SwiftUI checks (touch targets, fonts), run in the app.
   # The Foundation-only suites in UnitTests/Suites belong to no target:

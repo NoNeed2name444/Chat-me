@@ -29,6 +29,9 @@ import SwiftUI
 struct IdeaBoardView: View {
     @EnvironmentObject private var notes: NoteStore
     let open: (UUID) -> Void
+    /// S06b: the ideas of the day picked in the moons row; the other cards
+    /// dim while it is lit. Nil: none picked.
+    var lit: Set<UUID>? = nil
 
     /// How far the board has been moved, and the move in progress.
     @State private var pan: CGSize = .zero
@@ -58,7 +61,14 @@ struct IdeaBoardView: View {
     /// The places the cards are drawn at, worked out again only when a
     /// stored place, a card or a size changes.
     @State private var spread = BoardSpreadMemo()
+    /// The width of 20 letters of a card's title font (S05m item 5).
+    @State private var titleWidth: CGFloat = 0
+    /// The card whose whole title shows over it: a pointer over it, or a
+    /// finger resting on it (S05m item 5); and that view's height.
+    @State private var peek: UUID?
+    @State private var peekHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.windowSpan) private var span
 
     /// Where a new idea was asked for, in board points.
     struct BoardSpot: Identifiable {
@@ -67,8 +77,33 @@ struct IdeaBoardView: View {
         let y: Double
     }
 
-    private static let cardWidth: CGFloat = IdeaBoardDrop.card.width
     private static let space = "idea-board"
+    /// A card outside the lit day: dimmed, its words still there to read.
+    static let unlit: Double = 0.3
+    /// The UI tests' stand-in for a resting finger, which XCUITest can't
+    /// hold while it takes a picture: `-SortaBoardPeek <title>` shows that
+    /// idea's whole title until the board is moved.
+    private static let peekHook: String? = UserDefaults.standard.string(forKey: "SortaBoardPeek")
+
+    /// Every card's width: 20 letters of its title, never under 150 (S05m
+    /// item 5).
+    private var cardWidth: CGFloat { max(IdeaBoardDrop.card.width, titleWidth.rounded(.up) + 2 * WardSpace.m) }
+
+    /// The tool cluster's box: three targets and their spacing, in the
+    /// gutter (IdeaToolCluster, IdeaToolsPlacement).
+    private var tools: IdeaBoardFit.Tools {
+        IdeaBoardFit.Tools(width: Double(WardControlSize.target + 2 * WardSpace.gutter),
+                           height: Double(3 * WardControlSize.target + 2 * WardSpace.l + 2 * WardSpace.gutter),
+                           centred: span == .broad)
+    }
+
+    /// The card whose whole title shows: the one a pointer or a finger is
+    /// on, or the UI tests' until the board is moved.
+    private var shownPeek: UUID? {
+        if let peek { return peek }
+        guard !moved, let title = Self.peekHook else { return nil }
+        return notes.notes.first { $0.title == title }?.id
+    }
 
     private var scale: CGFloat { min(max(zoom * pinching, 0.3), 2.5) }
     private var offset: CGSize {
@@ -81,6 +116,16 @@ struct IdeaBoardView: View {
         ZStack {
             canvas
                 .ignoresSafeArea(.container, edges: .bottom)
+        }
+        // the title font's 20 letters, measured unseen at the reader's text size
+        .background {
+            Text(IdeaBoardDrop.titleSample)
+                .wardFont(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .fixedSize()
+                .hidden()
+                .accessibilityHidden(true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { titleWidth = $0 }
         }
         // the safe part's height, read here: the canvas, past the safe area,
         // reads no bottom inset, so its hidden part is its height less this
@@ -128,6 +173,9 @@ struct IdeaBoardView: View {
             let lineWidth: CGFloat = max(1, 1.5 * scale)
             let style: GraphLineStyle = GraphLineStyle.inForce(straightLines)
             let lanes: [(lane: Int, lanes: Int)] = Self.lanes(edges)
+            // a board of one kind keeps each card's symbol but drops the kind's
+            // word (S05m item 4); worked out once a pass, not once a card
+            let oneKind: Bool = Set(notes.notes.map(\.kind)).count <= 1
             ZStack {
                 // the board itself: moved by dragging, added to by double-tap
                 Color.clear
@@ -152,12 +200,17 @@ struct IdeaBoardView: View {
                     // a lifted card is drawn over the flat ones it passes
                     let lifted: Bool = dragged == note.id || source == note.id
                     let layer: Double = lifted ? 1 : 0
-                    card(note)
+                    card(note, oneKind: oneKind)
                         // its size before the board's zoom, in board points
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { sizes[note.id] = $0 }
+                        .opacity(lit.map { $0.contains(note.id) ? 1 : IdeaBoardView.unlit } ?? 1)
                         .scaleEffect(scale)
                         .position(points[note.id] ?? .zero)
                         .zIndex(layer)
+                }
+
+                if let id = shownPeek, let note = notes.notes.first(where: { $0.id == id }), let at = points[id] {
+                    peekView(note, at: at, in: size, hidden: hidden)
                 }
 
                 if notes.notes.isEmpty {
@@ -198,56 +251,61 @@ struct IdeaBoardView: View {
         fitAll()
     }
 
-    /// Zoom and pan so every card is on screen, clear of the edges and the
-    /// tool circles on the trailing side (16 + 44 + 16).
+    /// Zoom and pan so every card is on screen, 16 in from the edges and
+    /// clear of the tool circles where they are (S05m item 1).
     private func fitAll() {
         // the cards as drawn: their spread centres and their own sizes, which
-        // at the largest text sizes are far taller than the least card
+        // at the largest text sizes are far taller than the least card;
+        // never so far out that the shortest card is shorter than a target
         let cards: [IdeaBoardSpread.Card] = spreadCards()
         let drawn: [UUID: CGPoint] = spread.places(cards)
         let placed: [IdeaBoardSpread.Card] = cards.filter { drawn[$0.id] != nil }
         let centres: [CGPoint] = placed.compactMap { drawn[$0.id] }
-        let margins = IdeaBoardFit.Margins(top: 16, leading: 16, bottom: 16, trailing: 76)
-        let card = IdeaBoardDrop.card
-        // never so far out that a card is shorter than a target: the
-        // shortest card's height, which is never under the least card's
-        let shortest: CGFloat = placed.map(\.size.height).min() ?? card.height
-        let range = IdeaBoardFit.firstRange(cardHeight: Double(shortest), target: Double(WardControlSize.target))
-        let cam = IdeaBoardFit.camera(centres: centres, card: card, view: frame,
-                                      hidden: Double(underGlass), margins: margins, zoomRange: range,
-                                      sizes: placed.map(\.size))
+        let card = CGSize(width: cardWidth, height: IdeaBoardDrop.card.height)
+        let cam = IdeaBoardFit.firstView(centres: centres, sizes: placed.map(\.size), card: card, view: frame,
+                                         hidden: Double(underGlass), top: 0, tools: tools,
+                                         target: Double(WardControlSize.target))
         zoom = cam.zoom
         pan = CGSize(width: cam.panX, height: cam.panY)
     }
 
     // MARK: cards
 
-    private func card(_ note: Note) -> some View {
+    private func card(_ note: Note, oneKind: Bool) -> some View {
         let tone = NoteTone.color(for: note.folderId, in: notes)
         let chosen: Bool = source == note.id
         // a card being dragged or starting a connection rises off the board
         let lifted: Bool = dragged == note.id || chosen
         let grow: CGFloat = lifted && !reduceMotion ? 1.04 : 1
         let wash: Color = tone.opacity(0.14)
-        let place: String = notes.folder(note.folderId)?.name ?? note.kind.label
+        // a board of one kind (oneKind) drops the kind's word; a folder's name where it has one (S05m item 4)
+        let folder: String? = notes.folder(note.folderId)?.name
+        let place: String? = folder ?? (oneKind ? nil : note.kind.label)
         let title: String = note.title.isEmpty ? "Untitled" : note.title
+        // read as drawn, the whole title first
+        let spoken: String = [title, oneKind ? nil : note.kind.label, folder].compactMap { $0 }.joined(separator: ", ")
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
         return VStack(alignment: .leading, spacing: WardSpace.xs) {
             HStack(spacing: WardSpace.xs) {
                 Image(systemName: note.kind.symbol)
-                Text(place)
-                    .lineLimit(1)
+                // a folder's name takes two lines before it ends in "…" (S05m item 8)
+                if let place {
+                    Text(place)
+                        .lineLimit(2)
+                }
             }
             .wardFont(.caption2)
             .foregroundStyle(Color.wardInkSecondary)
+            // one line, at most 20 letters wide, then "…"; the whole title
+            // shows over the card (S05m item 5)
             Text(title)
                 .wardFont(.subheadline.weight(.medium))
                 .foregroundStyle(Color.wardInk)
-                .lineLimit(4)
-                .multilineTextAlignment(.leading)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .padding(WardSpace.m)
-        .frame(width: Self.cardWidth, alignment: .leading)
+        .frame(width: cardWidth, alignment: .leading)
         // the height the first view fits by, so its floor keeps a one-line
         // card a target tall (fitAll's firstRange)
         .frame(minHeight: IdeaBoardDrop.card.height, alignment: .top)
@@ -266,16 +324,53 @@ struct IdeaBoardView: View {
         .contentShape(shape)
         .contentShape(.hoverEffect, shape)
         .hoverEffect(.lift)
+        // the whole title while the iPad's pointer is over the card
+        .onHover { inside in
+            if inside { peek = note.id } else if peek == note.id { peek = nil }
+        }
         .onTapGesture { tapped(note.id) }
-        .onLongPressGesture(minimumDuration: 0.4) { source = note.id }
+        // and while a finger rests on it, until it lifts, drags or the hold
+        // starts a connection
+        .onLongPressGesture(minimumDuration: 0.4) {
+            peek = nil
+            source = note.id
+        } onPressingChanged: { pressing in
+            if pressing { peek = note.id } else if peek == note.id { peek = nil }
+        }
         .gesture(cardDrag(note))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
         .accessibilityAddTraits(.isButton)
-        // its stored place, which the board may draw it away from (S05c), for
-        // the UI tests; VoiceOver doesn't read an identifier
-        .accessibilityIdentifier("board-card \(note.boardX) \(note.boardY)")
+        // its symbol and its stored place, which the board may draw it away
+        // from (S05c), for the UI tests; VoiceOver doesn't read an identifier
+        .accessibilityIdentifier("board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
         // as Android's hold names it, and as both hints say it
         .accessibilityAction(named: "Start a connection") { source = note.id }
+    }
+
+    /// The whole title over its card, at least 240 wide, inside the board's
+    /// room and clear of its tools, above every card; it takes no touch.
+    private func peekView(_ note: Note, at centre: CGPoint, in size: CGSize, hidden: CGFloat) -> some View {
+        let own: CGSize = sizes[note.id] ?? CGSize(width: cardWidth, height: IdeaBoardDrop.card.height)
+        let width: Double = IdeaBoardPeek.width(card: Double(own.width * scale), view: Double(size.width))
+        let corner = CGPoint(x: centre.x - own.width * scale / 2, y: centre.y - own.height * scale / 2)
+        let at: CGPoint = IdeaBoardPeek.place(corner: corner, width: width, height: Double(peekHeight), view: size,
+                                              hidden: Double(hidden), top: 0, tools: tools)
+        let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
+        return Text(note.title.isEmpty ? "Untitled" : note.title)
+            .wardFont(.subheadline.weight(.medium))
+            .foregroundStyle(Color.wardInk)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(WardSpace.m)
+            .frame(width: CGFloat(width), alignment: .leading)
+            .background { WardReliefFace(shape: shape, lift: .high) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { peekHeight = $0 }
+            .position(x: at.x + CGFloat(width) / 2, y: at.y + peekHeight / 2)
+            .zIndex(2)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("board-peek")
     }
 
     /// A tap opens the card - unless a connection is being made, when it is
@@ -335,7 +430,7 @@ struct IdeaBoardView: View {
     /// The cards as the spread takes them: the store's order, each at its
     /// stored centre with its drawn size (at least the card the board fits by).
     private func spreadCards() -> [IdeaBoardSpread.Card] {
-        let least: CGSize = IdeaBoardDrop.card
+        let least = CGSize(width: cardWidth, height: IdeaBoardDrop.card.height)
         return notes.notes.map { note in
             let seen: CGSize = sizes[note.id] ?? least
             return IdeaBoardSpread.Card(id: note.id, centre: CGPoint(x: note.boardX, y: note.boardY),
@@ -407,6 +502,7 @@ struct IdeaBoardView: View {
             .updating($panning) { value, state, _ in
                 state = value.translation
             }
+            .onChanged { _ in peek = nil }
             .onEnded { value in
                 pan.width += value.translation.width
                 pan.height += value.translation.height
@@ -430,6 +526,7 @@ struct IdeaBoardView: View {
     private func cardDrag(_ note: Note) -> some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.space))
             .onChanged { value in
+                peek = nil
                 dragged = note.id
                 dragOffset = value.translation
             }
@@ -441,7 +538,8 @@ struct IdeaBoardView: View {
                 let from: CGPoint = drawn[note.id] ?? CGPoint(x: note.boardX, y: note.boardY)
                 let dropped = CGPoint(x: Double(from.x) + Double(value.translation.width / scale),
                                       y: Double(from.y) + Double(value.translation.height / scale))
-                let own: CGSize = cards.first { $0.id == note.id }?.size ?? IdeaBoardDrop.card
+                let own: CGSize = cards.first { $0.id == note.id }?.size
+                    ?? CGSize(width: cardWidth, height: IdeaBoardDrop.card.height)
                 let others: [(CGPoint, CGSize)] = cards.filter { $0.id != note.id }.map { (drawn[$0.id] ?? $0.centre, $0.size) }
                 let at: CGPoint = IdeaBoardSpread.settle(dropped, size: own, others: others)
                 notes.setPosition(note.id, x: Double(at.x), y: Double(at.y))

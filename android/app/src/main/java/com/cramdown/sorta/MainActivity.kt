@@ -1,6 +1,7 @@
 package com.cramdown.sorta
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ui.SortaTheme
@@ -15,10 +18,15 @@ import com.cramdown.sorta.ui.ideas.IdeasBanner
 import com.cramdown.sorta.ui.ideas.IdeasModel
 import com.cramdown.sorta.ui.ideas.IdeasView
 import com.cramdown.sorta.ui.ideas.MapPreview
+import com.cramdown.sorta.ui.ideas.ShareIntake
+import com.cramdown.sorta.ui.ideas.ShareSheet
 import com.cramdown.sorta.ui.ward.WindowShapeHost
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    /** S06b: text shared to Sorta, waiting in the share sheet; null when none is. */
+    private val shared: MutableState<ShareIntake?> = mutableStateOf(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -26,7 +34,10 @@ class MainActivity : ComponentActivity() {
         // (MapPreview), as iOS's -graphPreview; no screen a user reaches opens it
         val preview: String? = intent?.getStringExtra(MAP_PREVIEW)
         if (preview != null) {
-            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview) } }
+            val cells: String? = intent?.getStringExtra(MAP_PREVIEW_CELLS)
+            // the proof tour (S05i2): read only beside the "performance" preview
+            val tour = preview == "performance" && intent?.getBooleanExtra(MAP_PREVIEW_TOUR, false) == true
+            setContent { SortaTheme(dark = isSystemInDarkTheme()) { MapPreview(preview, cells, tour) } }
             return
         }
         // the store, opened at launch: ideas.json in the files directory, or the tests' own
@@ -35,12 +46,41 @@ class MainActivity : ComponentActivity() {
         // the tests' Undo notices kept up till acted on (S05h2 repair 3); a release build ignores the extra
         val undoStays = IdeasBanner.undoStays(intent?.getBooleanExtra(UNDO_STAYS, false) == true,
             applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
-        setContent { SortaRoot(store, testImport, undoStays) }
+        // a share is taken once: a turn or a fold rebuilds the activity with the same intent
+        if (savedInstanceState == null) shared.value = shareOf(intent)
+        setContent { SortaRoot(store, testImport, undoStays, shared) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        shareOf(intent)?.let { shared.value = it }
+    }
+
+    /**
+     * S06b: the text of a SEND of text/plain, with where it came from: the link's host, else the
+     * sending app's name when the system says which app it was (SharedFrom). Nothing else is read.
+     */
+    private fun shareOf(intent: Intent?): ShareIntake? {
+        if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return null
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: return null
+        val app = runCatching {
+            referrer?.takeIf { it.scheme == "android-app" }?.host?.let { pkg ->
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+            }
+        }.getOrNull()
+        return ShareIntake.of(text, app)
     }
 
     companion object {
         /** The launch extra that shows [MapPreview]: "space", "neurons", "performance" or "board". */
         const val MAP_PREVIEW = "sortaMapPreview"
+        /** The Neurons' cell state for every idea in [MapPreview], as iOS's -graphPreviewCells (S05i). */
+        const val MAP_PREVIEW_CELLS = "sortaMapPreviewCells"
+        /**
+         * Beside "performance" in [MAP_PREVIEW], the proof tour (S05i2, as iOS's -graphPreviewPerfTour):
+         * 100,000 made-up ideas fly PerfTour's path, each phase's frame numbers to logcat (tag SortaTour).
+         */
+        const val MAP_PREVIEW_TOUR = "sortaMapPreviewTour"
         /**
          * The tests' launch extras: a directory for the store (a new one gives a fresh store; the
          * same one again reopens it), and a file handed to the import as the picker's result is.
@@ -71,11 +111,18 @@ class MainActivity : ComponentActivity() {
 
 /** The first screen: the Sort screen on the store, in the window's shape and the system's light or dark. */
 @Composable
-fun SortaRoot(store: IdeaStore, testImport: File? = null, undoStays: Boolean = false) {
+fun SortaRoot(store: IdeaStore, testImport: File? = null, undoStays: Boolean = false,
+              shared: MutableState<ShareIntake?>? = null) {
     SortaTheme(dark = isSystemInDarkTheme()) {
         WindowShapeHost {
             val model = remember(store) { IdeasModel.open(store) }
             IdeasView(model, testImport, undoStays = undoStays)
+            // S06b: a share's sheet over the Sort screen; Save adds the words kept to To sort
+            shared?.value?.let { intake ->
+                ShareSheet(intake, onDismiss = { shared.value = null }) { text ->
+                    model.book.create(text, sharedFrom = intake.mark)
+                }
+            }
         }
     }
 }

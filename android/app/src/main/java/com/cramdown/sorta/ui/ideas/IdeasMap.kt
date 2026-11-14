@@ -29,10 +29,13 @@ import com.cramdown.sorta.ui.wardColor
  * [choose] the folder chooser, [delete] deletes with S05's undo. [top] is what the top strip covers,
  * from the window's top: the first view and the no-folder hint keep under it. [version] is the
  * book's (IdeasModel.version): the book changes in place, so the map is redrawn by it, not by the book.
+ * S06b: [lit] is a lit day's ideas, the rest dimmed (Space and 2D); [file] files an idea from Space's
+ * File there, with the Undo banner.
  */
 @Composable fun IdeasMap(
     book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, openFolder: (String?) -> Unit,
     choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
+    lit: Set<String>? = null, file: (String, String) -> Unit = { _, _ -> },
 ) {
     when {
         book.notes.isEmpty() -> MapEmpty(hidden)
@@ -40,10 +43,10 @@ import com.cramdown.sorta.ui.wardColor
             Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
                 // the board is already clear of the status bar, so only the strip below it is taken off
                 val inset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
-                IdeaBoard(book, settings, hidden = hidden, open = open, top = (top - inset).coerceAtLeast(0.dp), version = version)
+                IdeaBoard(book, settings, hidden = hidden, open = open, top = (top - inset).coerceAtLeast(0.dp), version = version, lit = lit)
             }
         else -> IdeasSpace(book, settings, covered = false, hidden = hidden, open = open, openFolder = openFolder,
-            choose = choose, delete = delete, top = top, version = version)
+            choose = choose, delete = delete, top = top, version = version, lit = lit, file = file)
     }
 }
 

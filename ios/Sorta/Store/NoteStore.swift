@@ -41,6 +41,9 @@ struct Note: Identifiable, Codable, Hashable {
     /// The question, card, case, station or lecture the note was saved from
     /// with Save to Ideas (SaveToIdeas.swift); nil for a note written here.
     var source: NoteSource? = nil
+    /// Where an idea shared into Sorta came from (S06b): the link's host or
+    /// the sending app's name only; nil for one written here. Not `source`.
+    var sharedFrom: String? = nil
 }
 
 /// A folder of notes. Folders nest: a folder with a parent sits inside it.
@@ -49,6 +52,9 @@ struct NoteFolder: Identifiable, Codable, Hashable {
     var name: String
     var parentId: UUID? = nil
     var createdAt: Date = Date()
+    /// The folder's own words (S06b): at most five, each one word; loose
+    /// ideas sharing one lean towards it in Space (FolderWords).
+    var words: [String] = []
 }
 
 /// Read tolerantly, like the library: a file written by an older or newer
@@ -57,6 +63,7 @@ struct NoteFolder: Identifiable, Codable, Hashable {
 extension Note {
     private enum Keys: String, CodingKey {
         case id, title, body, folderId, kind, links, tags, boardX, boardY, createdAt, updatedAt, source
+        case sharedFrom
     }
 
     init(from decoder: Decoder) throws {
@@ -77,12 +84,14 @@ extension Note {
         // a source this version cannot read (a kind from a newer one) is
         // dropped, never the note
         source = try? c.decodeIfPresent(NoteSource.self, forKey: .source)
+        sharedFrom = try? c.decodeIfPresent(String.self, forKey: .sharedFrom)
     }
 }
 
 extension NoteFolder {
     private enum Keys: String, CodingKey {
         case id, name, parentId, createdAt
+        case words
     }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +104,7 @@ extension NoteFolder {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? id
         parentId = try c.decodeIfPresent(UUID.self, forKey: .parentId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? createdAt
+        words = (try? c.decodeIfPresent([String].self, forKey: .words)) ?? []
     }
 }
 
@@ -230,10 +240,11 @@ final class NoteStore: ObservableObject {
     @discardableResult
     func create(title: String, body: String = "", kind: NoteKind = .idea,
                 folderId: UUID? = nil, at point: (x: Double, y: Double)? = nil,
-                source: NoteSource? = nil) -> Note {
+                source: NoteSource? = nil, sharedFrom: String? = nil) -> Note {
         var note = Note(id: makeID(), title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         body: body, folderId: folderId, kind: kind)
         note.source = source
+        note.sharedFrom = sharedFrom
         let spot = point ?? nextBoardSpot()
         note.boardX = spot.x
         note.boardY = spot.y
@@ -452,6 +463,16 @@ final class NoteStore: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let index = folders.firstIndex(where: { $0.id == id }) else { return }
         folders[index].name = trimmed
+        save()
+    }
+
+    /// Gives a folder its own words (S06b), as FolderWords.parse keeps them
+    /// from what was typed: at most five; none clears them.
+    func setWords(_ id: UUID, to kept: [String]) {
+        guard let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        let words: [String] = Array(kept.prefix(5))
+        guard words != folders[index].words else { return }
+        folders[index].words = words
         save()
     }
 

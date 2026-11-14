@@ -89,6 +89,9 @@ final class GraphStyleKit {
     /// Each folder's tone where the caller knows better than the store's
     /// top-level walk (the Universe: its planned galaxy's tone).
     var tones: [UUID: UIColor] = [:]
+    /// S06b: the next comet's tail as a share of the full one, by how long
+    /// its idea has waited (CometTail); set before each `make`.
+    var tail: Float = 1
     /// The turn every body's own frame starts from: the Universe's is its
     /// default view's pitch, Rx(GraphTilt.angle(.space)), so each disk,
     /// ring and spin axis leans as it did seen face-on (plan 4f, U6).
@@ -272,7 +275,7 @@ final class GraphStyleKit {
             node.addChildNode(dusty)
             dust = dusty
             haze.append(dusty)
-            extra = SIMD2<Float>(r * 2, r * 7)
+            extra = SIMD2<Float>(r * 2, r * 7 * min(max(tail, 0.1), CometTail.longest))
         default:
             break
         }

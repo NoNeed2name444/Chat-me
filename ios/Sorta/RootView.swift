@@ -54,6 +54,8 @@ struct IdeasRoot: View {
     @State private var mode: SortaMode = .sort
     @State private var draft = ""
     @State private var folderId: UUID?
+    /// S06b: text shared to Sorta, waiting in the share sheet.
+    @State private var sharing: ShareIntake? = ShareIntake.launched
 
     static var storeURL: URL? {
         #if DEBUG
@@ -108,6 +110,13 @@ struct IdeasRoot: View {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { now in
                     if now != frame { frame = now }
                 }
+        }
+        // a share from another app (the Share extension's sorta://share)
+        .onOpenURL { url in
+            if let intake = ShareIntake(url: url) { sharing = intake }
+        }
+        .sheet(item: $sharing) { intake in
+            ShareSheet(intake: intake)
         }
         .environmentObject(notes)
         .environment(filing)

@@ -34,8 +34,11 @@ import kotlin.math.sqrt
  * - pulsar: light.x its nebula's turn, A its beam, A.w 2 + how edge-on its nebula is, B its spin axis;
  * - comet: A its ion tail, B its dust tail (SpaceOptics.cometTails).
  * A fifth vec4 (S05g), the mark: x its fade under Show links (1, or [MapMark.FADED] outside
- * [focus]), y 1 for the marked body, z its look (S05h) and w how far a dying rocky body is stretched
- * along its tidal axis (S05h2: B.xyz; 0 for every other body, which the shaders read as 1).
+ * [focus]), y 1 for the marked body, z its look (S05h) and w, told apart by its sign: how far a
+ * dying rocky body is stretched along its tidal axis (S05h2: B.xyz; at least 1, and 0 for every other
+ * body, which the shaders read as 1), or minus a live body's bloom as the filter brings it back (S05i,
+ * [filterBloom]: 0 down to −1), which swells and brightens its glows as [bloomed] says. A dying body
+ * has no bloom and a live one no tides, so neither reads the other's.
  *
  * The bodies dying since the scene before ([death], S05h2) are drawn among them, in the same order by
  * style, at their last places, shrinking and fading by their plans: records with no node (−1 in
@@ -68,6 +71,27 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         const val MAX_LIGHTS = 4096
         /** A body stays one down to this share of [SpaceLod.BODY_PIXELS] (SpaceDepth's gap, 1.5 / 2.25). */
         const val KEEP = SpaceDepth.POINT_ENTER / SpaceDepth.POINT_LEAVE
+
+        /**
+         * The bloom's line in a body's glows (iOS shapeRing, GraphMotion.swift:2134-2137: a halo's opacity
+         * min((0.85 + 0.15 m + 0.35 b) × glowGain, 1)). Space's bodies here do not move (m 0) and draw every
+         * glow at its full gain (glowGain 1), so a glow is min(0.85 + 0.35 b, 1) over its resting 0.85, as
+         * MapPop.glow; vMark.w is b.
+         */
+        const val BLOOM_LINE = "    rp_col = rp_col * (min(0.85 + 0.35 * max(-vMark.w, 0.0), 1.0) / 0.85);\n"
+        /** Where every glow of a body's shader passes (SpaceShaders' rpFadedGlow), which the bloom brightens. */
+        const val GLOW_HEAD = "vec3 rpFadedGlow(vec3 rp_col, float rp_dfF) {\n"
+
+        /**
+         * A body's fragment shader with the filter's bloom (S05i): each glow (halo, corona, ring,
+         * coma) brighter by [BLOOM_LINE] as the body comes back, as iOS's halo blooms; the body itself
+         * is not. Each glow also swells (SpaceShaders' rpSwell). A shader without [GLOW_HEAD] exactly once is refused.
+         */
+        fun bloomed(fragment: String): String {
+            val at = fragment.indexOf(GLOW_HEAD)
+            require(at >= 0 && fragment.indexOf(GLOW_HEAD, at + 1) < 0) { "a body shader without one rpFadedGlow" }
+            return fragment.substring(0, at + GLOW_HEAD.length) + BLOOM_LINE + fragment.substring(at + GLOW_HEAD.length)
+        }
     }
 
     val data = FloatArray(capacity * STRIDE)
@@ -153,8 +177,23 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     private fun reachOf(i: Int): Float = reaches?.getOrNull(i) ?: radiusOf(i)
     /** Its radius's scale this frame (MapPop.scale). */
     var chosenScale: Float = 1f
+    /**
+     * The filter (S05i), by chunk-order node: each body's pop ([FilterPop.scale]), a node gone not a body
+     * at all; a ghost drawn at 0.3; a beam only while both its ends are [filterWanted] (shown, not a
+     * ghost), drawing back as [filterLinks] says. Null with no filter.
+     */
+    var filterScale: FloatArray? = null
+    var filterGhost: BooleanArray? = null
+    var filterWanted: BooleanArray? = null
+    var filterLinks: FilterLinkGrowth? = null
+    /** Each node's bloom as the filter brings it back ([FilterPop.bloom]), chunk order; null for none. */
+    var filterBloom: FloatArray? = null
     /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
     var focus: IntArray? = null
+    /** S06b: a lit day's bodies, chunk order (the rest drawn at [MapMark.FADED]); null with no day lit. */
+    var lit: BooleanArray? = null
+    /** S06b: each comet's tail by how long it has waited (CometTail), chunk order; 0 or none, the full tail. */
+    var tails: FloatArray? = null
     /** Bodies drawn faded this frame (MapDrawn.faded), and beams drawn lit (MapDrawn.lit). */
     var fadedCount = 0; private set
     var litCount = 0; private set
@@ -187,8 +226,10 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         // `grabbed ?? selected` (GraphSpaceDepthStage.swift:151-158, GraphMotion.swift:1561-1563): drawn
         // whole wherever it is, whatever its size, the band or its chunk's openness, so a frame budget
         // that leaves its chunk a summary never takes it (nor its sparks, SpaceTrails) away. Only a body
-        // behind the eye, or of a style with no shader here, is not; it keeps a place of the limit
-        val keep = marked.takeIf { it in 0 until tree.nodeCount && tree.groups[it].toInt().let { s -> s in 0..5 && enabled[s] } } ?: -1
+        // behind the eye, or of a style with no shader here, is not; it keeps a place of the limit. Nor is
+        // one the filter has hidden (S05i: a hidden node is never a body), until the page lets it go
+        val keep = marked.takeIf { it in 0 until tree.nodeCount && tree.groups[it].toInt().let { s -> s in 0..5 && enabled[s] } &&
+            filterScale?.let { f -> f[it] <= FilterPop.HIDE_AT } != true } ?: -1
         val keepDepth = if (keep < 0) 0f
             else viewProj[3] * at(keep, 0) + viewProj[7] * at(keep, 1) + viewProj[11] * at(keep, 2) + viewProj[15]
         val kept = keep >= 0 && keepDepth > 1e-3f && limit > 0
@@ -205,6 +246,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 if (kept && i == keep) continue
                 val style = tree.groups[i].toInt()
                 if (style !in 0..5 || !enabled[style]) continue
+                if (filterScale?.let { it[i] <= FilterPop.HIDE_AT } == true) continue
                 val x = at(i, 0); val y = at(i, 1); val z = at(i, 2)
                 val w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15]
                 if (w <= 1e-3f) continue
@@ -360,9 +402,13 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val seed = SpaceOptics.seed(tree.order[node])
         val chosenHere = node == marked
         val own = radiusOf(node)
-        val fade = fadeOf(node)
-        write(j, node, c, style, seed, if (chosenHere) own * chosenScale else own, own, depth, eye, right, up, focal, time,
+        // the filter's pop (S05i) sizes the body; its pixels stay judged by its own radius
+        val popped = own * (filterScale?.getOrNull(node) ?: 1f)
+        val fade = fadeOf(node) * if (filterGhost?.getOrNull(node) == true) MapFilterView.GHOST_ALPHA else 1f
+        val o = write(j, node, c, style, seed, if (chosenHere) popped * chosenScale else popped, own, depth, eye, right, up, focal, time,
             SpaceOptics.beamPhase(time, seed), fade, if (chosenHere) 1f else 0f, looks?.getOrNull(node) ?: 0f)
+        // its bloom as the filter brings it back (S05i), negated: a dying body's tides are w's positive side
+        data[o + 19] = filterBloom?.getOrNull(node)?.takeIf { it > 0f }?.let { -it } ?: 0f
     }
 
     /**
@@ -422,6 +468,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 val sun = nearestSuns(c, self).firstOrNull()?.let { Vec3(it[0], it[1], it[2]) }
                 val (ion, dust) = SpaceOptics.cometTails(c, Vec3.ZERO, sun, KEY)
                 a = ion; b = dust
+                codeA = tails?.getOrNull(self) ?: 0f
             }
         }
         val o = j * STRIDE
@@ -434,8 +481,9 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         return o
     }
 
-    /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]. */
+    /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]; the same outside a lit day (S06b). */
     fun fadeOf(node: Int): Float {
+        if (lit?.getOrNull(node) == false) return MapMark.FADED
         val near = focus ?: return 1f
         return if (MapFocus.holdsAny(near, node, node + 1)) 1f else MapMark.FADED
     }
@@ -491,8 +539,12 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 if (slot[u] < 0 && slot[v] < 0) continue
                 // Show links: only the chosen body's own (focusLinks)
                 if (focus != null && !MapFocus.own(only, u, v)) continue
-                if (!seen.add(Octree.pairKey(min(u, v), maxOf(u, v)))) continue
-                val grow = growth?.shown(u, v) ?: 1f
+                val key = Octree.pairKey(min(u, v), maxOf(u, v))
+                if (!seen.add(key)) continue
+                // the filter: a link whose end is hidden or a ghost draws back into its sending end (S05i)
+                val wanted = filterWanted
+                val kept = if (wanted == null) 1f else (filterLinks?.level(key, wanted[u] && wanted[v]) ?: if (wanted[u] && wanted[v]) 1f else 0f)
+                val grow = (growth?.shown(u, v) ?: 1f) * kept
                 if (grow <= 0.001f) continue
                 addBeam(plan, u, v, grow)
             }

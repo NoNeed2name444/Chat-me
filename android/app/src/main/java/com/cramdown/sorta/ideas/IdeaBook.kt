@@ -32,6 +32,8 @@ data class NoteFolder(
     val parentId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val rawJson: String = "{}",
+    /** The folder's own words (S06b): at most five, each one word; loose ideas sharing one lean towards it in Space. */
+    val words: List<String> = emptyList(),
 )
 
 /** A deleted note, and the notes that held a hand-made link to it (IdeaBook.removal, IdeaBook.restore). */
@@ -105,11 +107,11 @@ class IdeaBook(
      * then to the nearest place where its card covers no other ([IdeaBoardDrop], as a dropped card).
      */
     fun create(title: String, body: String = "", kind: NoteKind = NoteKind.IDEA, folderId: String? = null,
-               at: BoardPoint? = null): Note {
+               at: BoardPoint? = null, sharedFrom: String? = null): Note {
         val spot = at ?: nextBoardSpot()
         val time = now()
         val note = Note(id = makeId(), title = title.trim(), body = body, folderId = folderId, kind = kind.rawValue,
-            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
+            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time, sharedFrom = sharedFrom)
         notes = notes + note
         changed()
         return note
@@ -246,6 +248,16 @@ class IdeaBook(
         val index = folders.indexOfFirst { it.id == id }
         if (trimmed.isEmpty() || index < 0) return
         folders = folders.toMutableList().also { it[index] = it[index].copy(name = trimmed) }
+        changed()
+    }
+
+    /** Gives a folder its own words (S06b), as FolderWords.parse keeps them from what was typed: at most five; none clears them. */
+    fun setWords(id: String, kept: List<String>) {
+        val index = folders.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val words = kept.take(5)
+        if (words == folders[index].words) return
+        folders = folders.toMutableList().also { it[index] = it[index].copy(words = words) }
         changed()
     }
 

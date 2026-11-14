@@ -166,4 +166,17 @@ class MapLinkFocusTest {
     }
 
     private fun abs(v: Float) = kotlin.math.abs(v)
+
+    // S05j 7a: Performance's names under Show links, as iOS's GraphPerfLOD.nameAlpha (question 3's default,
+    // on both): a name outside the chosen point's own links at 0.15, its own and its neighbours' whole
+    @Test fun underShowLinksTheNamesOutsideTheChosenPointsLinksDim() {
+        val links = intArrayOf(0, 1, 2, 0, 3, 4, 1, 3)
+        val near = MapFocus.neighbourhood(0, 5, links)
+        assertEquals("its own", 1f, MapMark.nameAlpha(0, near), 0f)
+        assertEquals("a neighbour", 1f, MapMark.nameAlpha(1, near), 0f)
+        assertEquals("a neighbour", 1f, MapMark.nameAlpha(2, near), 0f)
+        assertEquals("outside its links", 0.15f, MapMark.nameAlpha(3, near), 0f)
+        assertEquals("outside its links", MapMark.FADED, MapMark.nameAlpha(4, near), 0f)
+        for (i in 0 until 5) assertEquals("no focus: whole", 1f, MapMark.nameAlpha(i, null), 0f)
+    }
 }

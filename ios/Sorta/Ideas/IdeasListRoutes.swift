@@ -18,11 +18,14 @@ final class IdeasListRoutes {
     enum FolderPrompt: Identifiable {
         case new(parent: UUID?)
         case rename(NoteFolder)
+        /// S06b: a folder's own words.
+        case words(NoteFolder)
 
         var id: String {
             switch self {
             case .new(let parent): return "new-\(parent?.uuidString ?? "top")"
             case .rename(let folder): return "rename-\(folder.id.uuidString)"
+            case .words(let folder): return "words-\(folder.id.uuidString)"
             }
         }
     }
@@ -35,7 +38,8 @@ final class IdeasListRoutes {
                          delete: { filing.deleteIdea($0, notes: notes) },
                          renameFolder: { self.naming = .rename($0) },
                          newFolderInside: { self.naming = .new(parent: $0.id) },
-                         deleteFolder: { self.deletingFolder = $0 })
+                         deleteFolder: { self.deletingFolder = $0 },
+                         folderWords: { self.naming = .words($0) })
     }
 }
 
@@ -101,6 +105,13 @@ private struct IdeasListSheets: ViewModifier {
             NameSheet(title: IdeasWords.renameFolder, prompt: IdeasWords.folderName, initial: folder.name,
                       confirm: IdeasWords.rename) { name in
                 notes.renameFolder(folder.id, to: name)
+            }
+        case .words(let folder):
+            // blank clears them; the footnote says what a save keeps
+            NameSheet(title: SkyWords.folderWordsTitle, prompt: SkyWords.folderWordsPrompt,
+                      initial: folder.words.joined(separator: " "), confirm: SkyWords.save,
+                      footnote: SkyWords.folderWordsFootnote, allowsBlank: true) { text in
+                notes.setWords(folder.id, to: FolderWords.parse(text))
             }
         }
     }

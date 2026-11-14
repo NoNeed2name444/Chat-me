@@ -287,4 +287,51 @@
     <string name="map_no_folder_neurons">No folders yet: every idea shares one cell. Add a folder to grow a cell of its own.</string>
     <string name="map_no_folder_performance">No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour.</string>
     <string name="map_add_folder">Add folder</string>
+    <!-- S05i: the Filter tool and its menu (Graph3DView.swift:779, :824-841, :309), and the Neurons' cell states in Look (GraphNodeStyles.swift:224-243) -->
+    <string name="map_filter">Filter</string>
+    <string name="map_filter_show">Show</string>
+    <string name="map_filter_everything">Everything</string>
+    <string name="map_filter_pages">Pages</string>
+    <string name="map_filter_ideas">Ideas</string>
+    <string name="map_filter_linked">Linked ideas</string>
+    <string name="map_filter_folder">Folder</string>
+    <string name="map_filter_empty">Nothing here for this filter.</string>
+    <string name="map_cells">Cells</string>
+    <string name="map_cell_by_cell">Cell by cell</string>
+    <string name="map_same_as_all">Same as all</string>
+    <!-- S06b (plugins plan ideas 1, 3, 7, 10), the same words as iOS SkyWords (GraphSkyMap.swift), after the ux-writing, better-writing and unslop passes -->
+    <!-- A folder row's menu item and spoken action, and its sheet: the folder's own words -->
+    <string name="folder_words">Folder words…</string>
+    <string name="folder_words_title">Folder words</string>
+    <string name="folder_words_prompt">Up to 5 words</string>
+    <string name="sky_save">Save</string>
+    <string name="folder_words_note">In Space, ideas in To sort that use one of these words lean towards this folder.</string>
+    <!-- Under the words field as it is typed: "Saves: garden, soil" -->
+    <string name="folder_words_kept">Saves: %1$s</string>
+    <!-- A loose idea's preview card in Space: "Shares ‘garden’ with Raised beds", and its button -->
+    <string name="lean_shares">Shares ‘%1$s’ with %2$s</string>
+    <string name="lean_file">File there</string>
+    <string name="lean_file_spoken">File in %1$s</string>
+    <!-- The map strip's Days chip and the moons row it opens -->
+    <string name="moons_chip">Days</string>
+    <string name="moons_chip_hint">show recent days as moons</string>
+    <string name="moons_title">Recent days</string>
+    <string name="moons_pick">Pick a day to light its ideas.</string>
+    <string name="moons_clear">Clear</string>
+    <string name="moons_clear_spoken">Clear the day</string>
+    <string name="moons_moon_hint">light that day’s ideas</string>
+    <!-- A moon, spoken and as the row's heading: "14 November, 3 ideas" -->
+    <string name="moons_moon_none">%1$s, no ideas</string>
+    <plurals name="moons_moon_spoken">
+        <item quantity="one">%1$s, %2$d idea</item>
+        <item quantity="other">%1$s, %2$d ideas</item>
+    </plurals>
+    <!-- The sheet a share opens -->
+    <string name="share_title">New idea</string>
+    <string name="share_hint">Tap a word to leave it out. The idea goes in To sort.</string>
+    <string name="share_word_kept">Kept</string>
+    <string name="share_word_out">Left out</string>
+    <!-- Where a shared idea came from: "From example.org", spoken "Shared from example.org" -->
+    <string name="shared_from">From %1$s</string>
+    <string name="shared_from_spoken">Shared from %1$s</string>
 </resources>

@@ -39,9 +39,27 @@ enum IdeasText {
 }
 
 /// How many times this test has had to take the caret back
-/// (`takeCaretBack`); `launchIdeas` starts it at 0 for each test.
-enum CaretRetaps {
-    static var count = 0
+/// (`takeCaretBack`). It counts per test, not per launch: three tests
+/// relaunch partway (IdeasBehaviourTests' relaunch check, IdeasRenderTests'
+/// largest text size and MapModeTests' relaunch on Sort), and a count
+/// started again at each launch let each of them re-tap twice and pass. So
+/// every class that calls `launchIdeas` calls `reset()` in its `setUp`.
+/// `row` counts the same way for a tap on an idea's row made again
+/// (`openEditor`), `intro` for a tap on the slide-to-type card's
+/// Continue made again (`clearSlideToTypeIntro`), and `retype` for an idea
+/// typed into capture once more (`captureIdea`).
+enum Retaps {
+    static var caret = 0
+    static var row = 0
+    static var intro = 0
+    static var retype = 0
+
+    static func reset() {
+        caret = 0
+        row = 0
+        intro = 0
+        retype = 0
+    }
 }
 
 /// One test's store: a name of its own, so the app opens a new file in its
@@ -58,7 +76,6 @@ extension XCTestCase {
     func launchIdeas(_ store: IdeasStoreName, _ more: [String] = [],
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
-        CaretRetaps.count = 0
         app.keepTraceOffConsole()
         app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + more
         app.launch()
@@ -174,14 +191,42 @@ extension XCUIApplication {
     /// stalled runner the first tap after a launch can be lost: in run
     /// 41812442710 the app was busy 27 s after it and never took the caret.
     /// So a tap that brings no caret in 5 s is made once more; the well must
-    /// still have the caret, empty, before a key is typed.
+    /// still have the caret, empty, before a key is typed. If, 10 s after
+    /// Return, the well is not ready, is empty and no row holds the idea,
+    /// the idea was lost on its way in, and it is typed once more, as its
+    /// own activity, with the same checks; the well must then be ready in
+    /// 10 s. It may happen once in a test: a second time fails, so a well
+    /// that keeps losing ideas is still caught.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
         typeDraft(text, file: file, line: line)
         takeCaretBack(capture, file: file, line: line)
         capture.typeText("\n")
+        let message = "capture took the caret back, empty, after \"\(text)\""
+        let first = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
+                                   timeout: 10)
+        guard first != .completed else { return }
+        guard captureIsEmpty, !ideaRow(text).exists else {
+            XCTAssertEqual(first, .completed, message, file: file, line: line)
+            return
+        }
+        Retaps.retype += 1
+        XCTAssertLessThanOrEqual(Retaps.retype, 1,
+                                 "an idea typed into capture was lost more than once in this test",
+                                 file: file, line: line)
+        XCTContext.runActivity(named: "capture is empty and no row holds \"\(text)\"; type it again") { _ in
+            typeDraft(text, file: file, line: line)
+            takeCaretBack(capture, file: file, line: line)
+            capture.typeText("\n")
+        }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
                                       timeout: 10),
-                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
+                       .completed, message, file: file, line: line)
+    }
+
+    /// The well holds nothing: no words, or only its prompt.
+    private var captureIsEmpty: Bool {
+        let held = capture.value as? String ?? ""
+        return held.isEmpty || held == capture.placeholderValue
     }
 
     /// iOS's slide-to-type introduction ("Speed up your typing by sliding
@@ -194,7 +239,13 @@ extension XCUIApplication {
     /// keyboard warm-up had passed before it. So once the keyboard is up,
     /// a card on show is closed with its Continue and the field tapped to
     /// take the caret back. The card is looked for in the app, which hosts
-    /// the keyboard, and in SpringBoard.
+    /// the keyboard, and in SpringBoard. On a stalled runner the Continue
+    /// tap can be lost: in run 43289469605, attempt 2, the card and its
+    /// Continue stayed on screen 23 s and the tap at 53.86 s did nothing.
+    /// So if the card is still there 5 s after the tap, Continue is tapped
+    /// once more, as its own activity, and the card must go in the other
+    /// 5 s: 10 s of waiting, as before. It may happen once in a test: a
+    /// second time fails, so a card that keeps losing taps is still caught.
     @discardableResult
     func clearSlideToTypeIntro(refocus field: XCUIElement) -> Bool {
         guard keyboards.firstMatch.waitForExistence(timeout: 5) else { return false }
@@ -207,7 +258,16 @@ extension XCUIApplication {
             XCTAssertTrue(go.waitForExistence(timeout: 5), "the slide-to-type card has its Continue")
             go.tap()
             let gone = NSPredicate(format: "exists == false")
-            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 10),
+            if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 5) != .completed,
+               card.exists, go.exists, go.isHittable {
+                Retaps.intro += 1
+                XCTAssertLessThanOrEqual(Retaps.intro, 1,
+                                         "a tap on the slide-to-type card's Continue left the card on show more than once in this test")
+                XCTContext.runActivity(named: "the slide-to-type card's Continue left it on show for 5 s; tap Continue again") { _ in
+                    go.tap()
+                }
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: card)], timeout: 5),
                            .completed, "the slide-to-type card has gone")
             field.tap()
             let focused = NSPredicate(format: "hasKeyboardFocus == true")
@@ -306,8 +366,8 @@ extension XCUIApplication {
     func takeCaretBack(_ field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         if keyboards.firstMatch.exists { _ = keyboards.firstMatch.settledFrame }
         guard !(field.value(forKey: "hasKeyboardFocus") as? Bool ?? false) else { return }
-        CaretRetaps.count += 1
-        XCTAssertLessThanOrEqual(CaretRetaps.count, 1,
+        Retaps.caret += 1
+        XCTAssertLessThanOrEqual(Retaps.caret, 1,
                                  "the keyboard went down with the caret more than once in this test", file: file, line: line)
         XCTContext.runActivity(named: "the keyboard went down with the caret; tap the field again") { _ in
             field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
@@ -316,6 +376,30 @@ extension XCUIApplication {
                            .completed, "the field has the caret again", file: file, line: line)
             if keyboards.firstMatch.waitForExistence(timeout: 10) { _ = keyboards.firstMatch.settledFrame }
         }
+    }
+
+    /// Taps an idea's row and requires its editor (`editor-done`) within
+    /// 10 s, as a test did with one tap. On a stalled runner the first tap
+    /// after a launch can be lost (captureIdea's run 41812442710): on 12
+    /// Nov, testLargestTextSize's tap after its relaunch dimmed the row and
+    /// no editor opened in 10 s. So if none is open after 5 s, and the row
+    /// is still there to tap, it is tapped once more, as its own activity,
+    /// and the editor must open in the other 5 s. It may happen once in a
+    /// test: a second time fails, so a row that keeps losing taps is still
+    /// caught.
+    func openEditor(from row: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let done = buttons["editor-done"]
+        row.tap()
+        if !done.waitForExistence(timeout: 5), row.exists, row.isHittable {
+            Retaps.row += 1
+            XCTAssertLessThanOrEqual(Retaps.row, 1,
+                                     "a tap on an idea's row opened no editor more than once in this test",
+                                     file: file, line: line)
+            XCTContext.runActivity(named: "the row's tap opened no editor in 5 s; tap the row again") { _ in
+                row.tap()
+            }
+        }
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "the editor opened", file: file, line: line)
     }
 
     /// Taps the notice's Undo, at its trailing end: the banner reads as one
@@ -397,12 +481,18 @@ enum MadeUpExport {
     /// Two more ideas with no board place, so at (0, 0), as an import leaves
     /// them (`base64(stacked: true)`, S05c).
     static let placeless = ["Oil the gate", "Ask about the allotment waiting list"]
+    /// One more in the stacked export, with a title of over 100 characters
+    /// and a clear place (S05m item 5), as Android's IdeasFixture.boiler.
+    static let long = "Ask the landlord when the boiler service is booked, and whether the hall light can be fixed the same day"
+    /// A page, under `page` only, so the board holds both kinds (S05m item 4).
+    static let page = "Plot plan for spring"
     /// Each idea's stored board place, as its board card's identifier names
-    /// it (`IdeaBoardView`, "board-card x y").
+    /// it (`IdeaBoardView`, "board-card <symbol> x y").
     static let places: [String: CGPoint] = [
         "Paint the shed green": CGPoint(x: 120, y: -40), "Seed swap list": .zero,
         "Try a rye starter": CGPoint(x: -75.5, y: 210.25), "A bell for the bike": CGPoint(x: 0, y: 33),
         "Oil the gate": .zero, "Ask about the allotment waiting list": .zero,
+        long: CGPoint(x: 0, y: -230), page: CGPoint(x: -330, y: 150),
     ]
 
     static let manifest = """
@@ -435,22 +525,37 @@ enum MadeUpExport {
     {"body":"","createdAt":"2026-09-06T10:00:00Z","id":"\(id(5))","kind":"idea","links":[],"tags":[],\
     "title":"Oil the gate","updatedAt":"2026-09-06T10:00:00Z"},\
     {"body":"","createdAt":"2026-09-07T10:00:00Z","id":"\(id(6))","kind":"idea","links":[],"tags":[],\
-    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"}
+    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"},\
+    {"boardX":0,"boardY":-230,"body":"","createdAt":"2026-09-08T10:00:00Z","id":"\(id(7))","kind":"idea","links":[],\
+    "tags":[],"title":"\(long)","updatedAt":"2026-09-08T10:00:00Z"}
+    """
+
+    static let pageNote = """
+    {"boardX":-330,"boardY":150,"body":"Beds by the fence first.","createdAt":"2026-09-09T10:00:00Z",\
+    "id":"\(id(8))","kind":"page","links":[],"tags":[],"title":"\(page)","updatedAt":"2026-09-09T10:00:00Z"}
     """
 
     /// The backup as base64, for `-SortaImportFile`; `version` 2 is a newer
-    /// Stethoscore's; `stacked` adds the two `placeless` ideas.
-    static func base64(version: Int = 1, stacked: Bool = false) throws -> String {
+    /// Stethoscore's; `stacked` adds the two `placeless` ideas and the
+    /// `long` one; `page`, with `stacked`, adds the page.
+    static func base64(version: Int = 1, stacked: Bool = false, page: Bool = false) throws -> String {
         let last = "\"updatedAt\":\"2026-09-05T10:00:00Z\"}]}"
-        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + placelessNotes + "]}") : notes
-        precondition(!stacked || ideas != notes, "the stacked export adds its two ideas")
+        let more: String = placelessNotes + (stacked && page ? "," + pageNote : "")
+        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + more + "]}") : notes
+        precondition(!stacked || ideas != notes, "the stacked export adds its ideas")
+        precondition(stacked || !page, "the page comes with the stacked export")
+        return try base64(notes: ideas, version: version, count: stacked ? (page ? 8 : 7) : 4)
+    }
+
+    /// Any made-up notes.json as a backup, as base64 (S06b's sky export too).
+    static func base64(notes ideas: String, version: Int = 1, count: Int) throws -> String {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorta-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let parts: [(String, String)] = [
             ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")
-                .replacingOccurrences(of: "NOTES", with: stacked ? "6" : "4")),
+                .replacingOccurrences(of: "NOTES", with: "\(count)")),
             ("notes.json", ideas),
         ]
         var files: [(name: String, file: URL)] = []
@@ -477,6 +582,11 @@ enum MadeUpExport {
 /// The script runs this first, notes how it went, and counts only the tests
 /// after it; every counted test still has to pass by name.
 final class KeyboardWarmUp: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        Retaps.reset()
+    }
+
     func testFirstKeyboard() throws {
         let app = launchIdeas(IdeasStoreName())
         app.captureIdea("Warm up the keyboard")

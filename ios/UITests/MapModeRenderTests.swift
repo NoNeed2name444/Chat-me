@@ -17,6 +17,7 @@ final class MapModeRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     func testMapRenders() throws {
@@ -52,9 +53,25 @@ final class MapModeRenderTests: XCTestCase {
         // no card over another, though the export puts three ideas at (0, 0)
         // and A bell for the bike 33 points below them (S05c); the stored
         // places are as the export has them
-        let all: [String] = MadeUpExport.titles + MadeUpExport.placeless
+        let all: [String] = MadeUpExport.titles + MadeUpExport.placeless + [MadeUpExport.long]
         assertBoardApart(app, all)
         assertPlacesKept(app, all)
+        // S05m item 2: the three on (0, 0) are drawn round it, and the bell,
+        // stored 33 below them, is drawn below them
+        let block: [CGRect] = ["Seed swap list", "Oil the gate", "Ask about the allotment waiting list"].map { mapCard(app, $0).frame }
+        let bellTop: CGFloat = mapCard(app, "A bell for the bike").frame.minY
+        XCTAssertGreaterThanOrEqual(bellTop, block.map(\.maxY).max()! - 0.5,
+                                    "the bell is drawn below the three on its point: \(bellTop), \(block)")
+        // S05m item 4: a board of ideas only says no "Idea"; the symbol stays,
+        // as the identifier names it; a card is read by its title, then its folder
+        XCTAssertEqual(mapCard(app, "A bell for the bike").label, "A bell for the bike", "a board of one kind: the title alone")
+        XCTAssertEqual(mapCard(app, "Seed swap list").label, "Seed swap list, Raised beds", "the title, then the folder")
+        // S05m item 5: the long title is one line, as tall as a short one's
+        // card, and read whole
+        let long = mapCard(app, MadeUpExport.long)
+        XCTAssertEqual(long.label, MadeUpExport.long, "the long title is read whole")
+        XCTAssertLessThanOrEqual(long.frame.height, mapCard(app, "A bell for the bike").frame.height + 0.5,
+                                 "the long title is one line: \(long.frame)")
         // a card let go of on another settles clear of every card (S05c)
         let bell = mapCard(app, "A bell for the bike")
         let before: CGRect = bell.frame
@@ -80,6 +97,17 @@ final class MapModeRenderTests: XCTestCase {
         XCTAssertTrue(hint.waitForExistence(timeout: 10), "Space at first run: the first-run card")
         assertClear(app, of: hint.frame, "Space")
         assertBelowStrip(app, "Space")
+        // S05j item 4: the card within a third of the iPhone's height, and the
+        // first view centred in the band between the strip's foot and the card
+        keepShot("mapmode-first-run-card")
+        if !paned {
+            XCTAssertLessThanOrEqual(hint.frame.height, window.height / 3 + 0.5,
+                                     "the first-run card within a third of the iPhone: \(hint.frame) in \(window)")
+        }
+        keepShot("mapmode-first-view")
+        if !paned { assertCentred(app, above: hint.frame, window, "Space") }
+        // S05j item 1: the iPad's two panes with the status bar, for the renders check
+        if paned { keepShot("mapmode-panes-bar") }
 
         if !paned {
             let chip = app.descendants(matching: .any)["map-list-chip"].firstMatch
@@ -123,8 +151,40 @@ final class MapModeRenderTests: XCTestCase {
         assertClear(app, of: hint.frame, "Neurons")
         assertBelowStrip(app, "Neurons")
         keepShot("mapmode-4-neurons")
+        // S05j 6b: Performance's first view, framed below the strip with the
+        // glass Graph3DView measures (mapInsets)
+        app.chooseLook("look-performance")
+        let fast = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Performance map of ideas"),
+                                             object: app.descendants(matching: .any)["graph3D"].firstMatch)
+        _ = XCTWaiter().wait(for: [fast], timeout: 30)
+        sleep(3)
+        keepShot("mapmode-perf-first-view")
         app.chooseLook("look-space")
         // Space: the look as the other tests find it
+    }
+
+    /// The bodies' box (their centres) lies in the middle of the band between
+    /// the top strip's foot and the first-run card's top: its middle within 4%
+    /// of the window's height of the band's, the gaps above and below it
+    /// within 8% of the band (S05j item 4).
+    private func assertCentred(_ app: XCUIApplication, above card: CGRect, _ window: CGRect, _ name: String,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
+        var foot: CGFloat = look.frame.maxY
+        let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
+        if list.exists { foot = max(foot, list.frame.maxY) }
+        let bodies: [CGRect] = bodyFrames(app)
+        guard let top = bodies.map(\.midY).min(), let bottom = bodies.map(\.midY).max() else {
+            XCTFail("\(name): no bodies to centre", file: file, line: line)
+            return
+        }
+        let band: CGFloat = card.minY - foot
+        let off: CGFloat = abs((top + bottom) / 2 - (foot + card.minY) / 2)
+        let gaps: CGFloat = abs((top - foot) - (card.minY - bottom))
+        XCTAssertLessThanOrEqual(off, window.height * 0.04,
+                                 "\(name): the box \(top)-\(bottom) off the band \(foot)-\(card.minY) by \(off)", file: file, line: line)
+        XCTAssertLessThanOrEqual(gaps, band * 0.08,
+                                 "\(name): the gaps above and below the box differ by \(gaps) in a band of \(band)", file: file, line: line)
     }
 
     /// Every body the 3D map shows, where it is drawn (its VoiceOver
@@ -214,6 +274,9 @@ final class MapModeRenderTests: XCTestCase {
         // places kept (S05c)
         assertBoardApart(app, MadeUpExport.titles)
         assertPlacesKept(app, MadeUpExport.titles)
+        // S05m item 8: the folder's caption takes two lines, so Raised beds
+        // is whole on its card at this size; read whole, as drawn
+        XCTAssertEqual(mapCard(app, "Seed swap list").label, "Seed swap list, Raised beds", "the folder's name whole")
         let look = app.descendants(matching: .any)[MapText.lookChip].firstMatch
         let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
         XCTAssertTrue(list.waitForExistence(timeout: 10), "the To sort chip")
@@ -272,6 +335,16 @@ final class MapModeRenderTests: XCTestCase {
                        .completed, "the list sheet closed")
         // Space: the look as the other tests find it
         app.chooseLook("look-space")
+        // S05j 8f: the first-run card at the largest size the map takes (AX1):
+        // its top below the strip, its buttons whole and at least 44 points
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 60), "Space at first run: the first-run card")
+        sleep(2)
+        keepShot("mapmode-ax5-5-first-run-card")
+        XCTAssertGreaterThanOrEqual(hint.frame.minY, look.frame.maxY, "the card below the strip: \(hint.frame)")
+        assertInside(hint.buttons["Full list"], window, "the card's Full list")
+        assertInside(hint.buttons["Got it"], window, "the card's Got it")
+        XCTAssertLessThanOrEqual(hint.buttons["Got it"].frame.maxY, hint.frame.maxY + 0.5, "Got it whole inside the card")
     }
 
     /// Each 3D look's legend, and Space's and Neurons' first-run cards, name
@@ -290,7 +363,7 @@ final class MapModeRenderTests: XCTestCase {
         let looks: [(look: String, title: String, last: String)] = [
             ("look-space", "How your universe is built", "Links: "),
             ("look-neuron", "How your network is built", "Axons and synapses: "),
-            ("look-performance", "How the Performance map is built", "Lines: "),
+            ("look-performance", "How Performance is built", "Lines: "),
         ]
         for (look, title, last) in looks {
             app.chooseLook(look)
@@ -433,6 +506,61 @@ final class MapModeRenderTests: XCTestCase {
         return seen > 0 ? Double(bright) / Double(seen) : 0
     }
 
+    /// S05m item 5: the whole of a long title over its card, on a board of
+    /// both kinds (the stacked export and a page). XCUITest can't hover on
+    /// an iPad nor hold a finger while it takes a picture, so the app shows
+    /// the title as a resting finger would (`-SortaBoardPeek`) until the
+    /// board is moved. Kept as `mapmode-board-whole-title`, by day and by
+    /// night on the iPhone and the iPad (tools/run_ui_tests.sh).
+    func testWholeTitleOnTheBoard() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64(stacked: true, page: true),
+                                                 "-SortaBoardPeek", MadeUpExport.long])
+        importExport(app)
+        XCTAssertTrue(app.ideaRow("Ask about the allotment waiting list").waitForExistence(timeout: 10))
+        app.keyboards.buttons["Done"].firstMatch.tapIfThere()
+        let window = app.windows.firstMatch.frame
+        if window.width >= 700 {
+            XCTAssertTrue(app.descendants(matching: .any)[MapText.lookChip].waitForExistence(timeout: 10),
+                          "two panes: the map beside the Sort screen")
+        } else {
+            app.switchMode(to: "mode-map")
+        }
+        app.chooseLook("look-2d")
+        let peek = app.descendants(matching: .any)["board-peek"].firstMatch
+        XCTAssertTrue(peek.waitForExistence(timeout: 10), "the whole title over its card")
+        let shown: CGRect = peek.settledFrame
+        sleep(1)
+        keepShot("mapmode-board-whole-title")
+        XCTAssertEqual(peek.label, MadeUpExport.long, "the whole title, wrapped, not cut")
+        XCTAssertTrue(window.contains(shown), "inside the window: \(shown)")
+        // clear of the tools
+        let recentre = app.buttons["Recentre"].firstMatch
+        XCTAssertTrue(recentre.waitForExistence(timeout: 10), "the Recentre tool")
+        let tools = CGRect(x: recentre.frame.minX, y: recentre.frame.maxY - 3 * 44 - 2 * 16,
+                           width: recentre.frame.width, height: 3 * 44 + 2 * 16)
+        XCTAssertTrue(shown.intersection(tools).isNull || shown.intersection(tools).width < 0.5,
+                      "the whole title clear of the tools: \(shown), \(tools)")
+        // a board of both kinds: each card says its kind, and its identifier
+        // names its symbol
+        XCTAssertEqual(mapCard(app, "A bell for the bike").label, "A bell for the bike, Idea", "both kinds: the kind said")
+        XCTAssertEqual(mapCard(app, MadeUpExport.page).label, MadeUpExport.page + ", Page", "the page says Page")
+        XCTAssertTrue(mapCard(app, MadeUpExport.page).identifier.hasPrefix("board-card doc.text "), "the page's symbol")
+        XCTAssertTrue(mapCard(app, "A bell for the bike").identifier.hasPrefix("board-card lightbulb "), "an idea's symbol")
+        // the card itself is one line and read whole
+        let long = mapCard(app, MadeUpExport.long)
+        XCTAssertEqual(long.label, MadeUpExport.long + ", Idea", "the long card is read whole")
+        XCTAssertLessThanOrEqual(long.frame.height, mapCard(app, "A bell for the bike").frame.height + 0.5,
+                                 "the long title is one line: \(long.frame)")
+        // moving the board puts it away: a drag in the gutter beside the
+        // tools, where no card is
+        let from = app.windows.firstMatch.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: recentre.frame.maxX + 8, dy: tools.minY - 40))
+        from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: -120, dy: 0)))
+        let gone = NSPredicate(format: "exists == false")
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: peek)], timeout: 10),
+                       .completed, "the whole title goes once the board is moved")
+    }
+
     /// Every board card named is on the board and covers no other: their
     /// frames, as drawn, apart.
     private func assertBoardApart(_ app: XCUIApplication, _ titles: [String],
@@ -451,7 +579,8 @@ final class MapModeRenderTests: XCTestCase {
                                   file: StaticString = #filePath, line: UInt = #line) {
         for title in titles {
             guard let p = MadeUpExport.places[title] else { return XCTFail("no place for \(title)", file: file, line: line) }
-            let stored = "board-card \(Double(p.x)) \(Double(p.y))"
+            let symbol: String = title == MadeUpExport.page ? "doc.text" : "lightbulb"
+            let stored = "board-card \(symbol) \(Double(p.x)) \(Double(p.y))"
             let named: String = mapCard(app, title).identifier
             if title == moved {
                 XCTAssertTrue(named.hasPrefix("board-card ") && named != stored,

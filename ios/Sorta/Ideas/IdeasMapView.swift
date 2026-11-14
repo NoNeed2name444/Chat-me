@@ -31,6 +31,12 @@ struct IdeasMapView: View {
     @State private var choosingLook = false
     /// The top strip's height, so the list of the looks opens under it.
     @State private var stripHeight: CGFloat = 0
+    /// S06b: the moons row is open, and the day picked in it (its start),
+    /// whose ideas are lit on the map.
+    @State private var showingDays = false
+    @State private var litDay: Date?
+    /// How many moons the row holds, the most it scrolls back.
+    private static let moonCount = MoonDays.most
 
     private var look: MapLook { MapLook.stored(board: board, theme: themeRaw) }
 
@@ -47,7 +53,8 @@ struct IdeasMapView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !empty {
                     MapTopStrip(look: look, openLooks: { choosingLook = true },
-                                list: paned ? nil : { listing = true })
+                                list: paned ? nil : { listing = true },
+                                days: daysShown ? { toggleDays() } : nil, daysOn: showingDays)
                         .environment(\.colorScheme, night ? .dark : scheme)
                         .mapTextCap()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
@@ -60,6 +67,12 @@ struct IdeasMapView: View {
             }
             // in the view itself, not a Menu or a popover: those closed when
             // the 3D map's scene replaced "Laying out your ideas"
+            .overlay(alignment: .top) {
+                if showingDays && daysShown && !choosingLook {
+                    moonRow
+                        .mapTextCap()
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if choosingLook && !empty {
                     lookList
@@ -69,7 +82,14 @@ struct IdeasMapView: View {
             // on two panes the last idea can go from the Sort screen while
             // the list is open: it must not come back with the next one
             .onChange(of: empty) { _, now in
-                if now { choosingLook = false }
+                if now {
+                    choosingLook = false
+                    closeDays()
+                }
+            }
+            // the moons are Space's and 2D's: another look puts them away
+            .onChange(of: look) { _, _ in
+                if !daysShown { closeDays() }
             }
             // the map frames itself in one side of a fold's hinge, never on it
             .clearOfBand()
@@ -105,6 +125,35 @@ struct IdeasMapView: View {
         .environment(\.colorScheme, night ? .dark : scheme)
     }
 
+    /// S06b: the Days chip shows on Space and 2D, over ideas.
+    private var daysShown: Bool { !empty && (look == .space || look == .twoD) }
+
+    private func toggleDays() {
+        if showingDays { closeDays() } else { showingDays = true }
+    }
+
+    /// Closing the row ends the lit day too.
+    private func closeDays() {
+        showingDays = false
+        litDay = nil
+    }
+
+    /// The lit day's ideas, nil when none is picked.
+    private var litIdeas: Set<UUID>? {
+        guard let litDay else { return nil }
+        return MoonDays.lit(notes.notes.map { (id: $0.id, created: $0.createdAt) }, day: litDay, calendar: .current)
+    }
+
+    /// The moons row under the strip, a gutter in from each side.
+    private var moonRow: some View {
+        let days: [MoonDays.Day] = MoonDays.days(created: notes.notes.map(\.createdAt), now: Date(),
+                                                 count: Self.moonCount, calendar: .current)
+        return MoonRow(days: days, lit: litDay, pick: { litDay = $0 }, close: { closeDays() })
+            .padding(.top, stripHeight)
+            .padding(.horizontal, WardSpace.gutter)
+            .environment(\.colorScheme, night ? .dark : scheme)
+    }
+
     /// A new look, as a cut: no morph and no cross-fade between looks
     /// (T0135-review, item 6). 2D keeps the theme, for going back to 3D.
     private func choose(_ new: MapLook) {
@@ -126,10 +175,10 @@ struct IdeasMapView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("map-empty")
         } else if look == .twoD {
-            IdeaBoardView(open: { opening = NoteRef(id: $0) })
+            IdeaBoardView(open: { opening = NoteRef(id: $0) }, lit: litIdeas)
                 .wardUnlit()
         } else {
-            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder)
+            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lit: litIdeas)
                 .mapSky()
         }
     }

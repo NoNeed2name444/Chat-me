@@ -88,9 +88,17 @@ fun wardColorScheme(look: WardLook): ColorScheme {
     return wardRgb(glide.ink(look.dark))
 }
 
-@Composable fun SortaTheme(dark:Boolean=false, section:WardSection=WardSection.outside, content:@Composable ()->Unit) {
+/**
+ * Whether a theme set inside this one may set the window's bar icons (S05j item 1). On two panes the
+ * map pane starts below the status bar, whose row shows the page across the window, so the map's
+ * night themes there leave the icons to the page's (IdeasView's MapPane provides false).
+ */
+val LocalSortaBars = staticCompositionLocalOf { true }
+
+@Composable fun SortaTheme(dark:Boolean=false, section:WardSection=WardSection.outside, bars:Boolean=LocalSortaBars.current,
+                           content:@Composable ()->Unit) {
     val view = LocalView.current
-    if (!view.isInEditMode) {
+    if (!view.isInEditMode && bars) {
         // the bars' icons for this look while it is up, and back as they were when it goes: a
         // theme inside another (the 3D maps' night, IdeasSpace) holds them while it is shown
         DisposableEffect(view, dark) {

@@ -37,8 +37,10 @@ flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vMark;
 void main() {
-    // a dying rocky body stretched along its tidal axis (aMark.w, S05h2) needs the longer reach
-    vec3 w = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (uExtent * aCenter.w * max(aMark.w, 1.0));
+    // a dying rocky body stretched along its tidal axis (aMark.w, S05h2) needs the longer reach; the
+    // filter's bloom (−aMark.w, S05i) swells every glow by 1 + 0.6 × bloom (GraphMotion.swift:2128), so
+    // the quad too. Each reads only its own side of w (SpaceBodies)
+    vec3 w = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * (uExtent * aCenter.w * max(aMark.w, 1.0)) * (1.0 + 0.6 * max(-aMark.w, 0.0));
     gl_Position = uVP * vec4(w, 1.0);
     vWorld = w;
     vCenter = aCenter;
@@ -188,6 +190,10 @@ vec2 rpPlane(vec3 c, float h) {
     vec3 d = vWorld - c;
     return vec2(dot(d, uRight), dot(d, uUp)) / h;
 }
+// A glow's size as the filter brings its body back: iOS's swellBy, 1 + 0.6 × bloom (−vMark.w; a dying
+// body's tides, w's positive side, are no bloom), with no motion term, as Space's bodies here do not move
+// (GraphMotion.swift:2128). The body itself keeps its size.
+float rpSwell() { return 1.0 + 0.6 * max(-vMark.w, 0.0); }
 // Where the ray meets the plane through `c` holding `along` and `across`: (across, along), world units.
 vec2 rpStrip(vec3 rd, vec3 c, vec3 along, vec3 across) {
     vec3 nrm = cross(across, along);
@@ -450,7 +456,8 @@ void main() {
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
     // S05h: an empty galaxy's black hole has no disk (UniverseLooks.EMPTY_GALAXY)
     float rp_disk = abs(vMark.z - 5.0) < 0.5 ? 0.0 : 1.0;
-    vec3 col = rpFadedGlow(bhRing(dot(q, xP), dot(q, yP), vA.w, vLight.w), rp_dfF) * rp_disk;
+    vec2 qg = rpPlane(c, r * 2.1 * rpSwell());
+    vec3 col = rpFadedGlow(bhRing(dot(qg, xP), dot(qg, yP), vA.w, vLight.w), rp_dfF) * rp_disk;
     float b = length(q) * 3.0;
     float side = r * 2.1 * uFocal / max(length(c - uEye), 1e-4);
     float shadow = clamp((1.0 - b) * side / 3.0 + 0.5, 0.0, 1.0);
@@ -629,7 +636,7 @@ void main() {
     vec3 rp_tint = rp_look > 3.5 && rp_look < 4.5 ? vec3(0.42, 0.20, 0.14)
         : (rp_look > 2.5 && rp_look < 3.5 ? vec3(1.0, 0.52, 0.36) : (rp_look > 1.5 && rp_look < 2.5 ? vec3(1.0, 0.74, 0.50) : vec3(1.0)));
     vec4 res = vec4(rpFadedBody(sunBody(n, -rd, X, Y, Z, vB.w * 1.1) * rp_tint, rp_dfF) * cover, cover);
-    vec2 q = rpPlane(c, R * 4.0);
+    vec2 q = rpPlane(c, R * 4.0 * rpSwell());
     if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0 && !(rp_look > 3.5 && rp_look < 4.5)) res.rgb = res.rgb + rpFadedGlow(sunCorona(q.x, q.y, vA.w) * rp_tint, rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
@@ -776,9 +783,10 @@ void main() {
     float mt = rpEllipsoid(rd, c + rp_mo, R * 0.27, rp_tide, rp_k, mn, mcover);
     vec4 moon = vec4(rpFadedBody(moonBody(mn, vLight.xyz), rp_dfF) * mcover, mcover);
     vec4 res = (mt > 0.0 && (t < 0.0 || mt < t)) ? rpOver(moon, planet) : rpOver(planet, moon);
-    // and the air round it: the halo's plane squeezed back along the tide as seen, by the stretched
-    // planet's outline there, sqrt(1 + (k^2 - 1) |a|^2) with a the tide on the screen
-    vec2 rp_hq = rpPlane(c, R * 1.5);
+    // and the air round it: the halo's plane, swelled by the filter's bloom (S05i), squeezed back along
+    // the tide as seen, by the stretched planet's outline there, sqrt(1 + (k^2 - 1) |a|^2) with a the
+    // tide on the screen
+    vec2 rp_hq = rpPlane(c, R * 1.5 * rpSwell());
     vec2 rp_ta = vec2(dot(rp_tide, uRight), dot(rp_tide, uUp));
     float rp_ta2 = dot(rp_ta, rp_ta);
     if (rp_k > 1.0 && rp_ta2 > 1e-6) {
@@ -948,7 +956,7 @@ void main() {
         float hidden = (t > 0.0 && tr > t) ? cover : 0.0;
         res.rgb = res.rgb + rpFadedGlow(ring, rp_dfF) * (1.0 - hidden);
     }
-    res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5), rpSeen(vLight.xyz, c), rpTintA * 0.8, 0.0), rp_dfF);
+    res.rgb = res.rgb + rpFadedGlow(halo(rpPlane(c, R * 1.5 * rpSwell()), rpSeen(vLight.xyz, c), rpTintA * 0.8, 0.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)
     fragColor = fragColor * vMark.x;
@@ -1043,7 +1051,7 @@ void main() {
     rpSphere(rd, c, R, n, cover);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
     vec4 res = vec4(rpFadedBody(pulsarCore(max(dot(n, -rd), 0.0)), rp_dfF) * cover, cover);
-    vec2 q = rpPlane(c, r * 2.5);
+    vec2 q = rpPlane(c, r * 2.5 * rpSwell());
     float turn = vLight.x;
     vec2 xN = vec2(cos(turn), sin(turn));
     vec2 yN = vec2(-xN.y, xN.x);
@@ -1162,17 +1170,19 @@ void main() {
     rpSphere(rd, c, r * 0.18, n, cover);
     float rp_dfF = rpDepthFade(dot(c - uEye, uForward));
     vec4 res = vec4(rpFadedBody(cometNucleus(n, vLight.xyz), rp_dfF) * cover, cover);
-    vec2 q = rpPlane(c, r * 1.6);
+    vec2 q = rpPlane(c, r * 1.6 * rpSwell());
     if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometComa(q.x, q.y, rpSeen(vLight.xyz, c)), rp_dfF);
     vec3 ion = normalize(vA.xyz);
     vec2 a = rpStrip(rd, c, ion, rpAcross(ion, c));
-    vec2 ti = vec2(a.x / (r * 0.8), a.y / (r * 3.5) - 1.0);
+    // S06b: the tails' length by how long the idea has waited (CometTail, vA.w); 0 is the full tail
+    float rp_tl = vA.w > 0.0 ? vA.w : 1.0;
+    vec2 ti = vec2(a.x / (r * 0.8), a.y / (r * 3.5 * rp_tl) - 1.0);
     if (abs(ti.x) <= 1.0 && abs(ti.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometTail(ti.x, ti.y, 0.0), rp_dfF);
     vec3 dust = normalize(vB.xyz);
     vec3 dx = rpAcross(dust, c);
     if (dot(dx, dust - ion) < 0.0) dx = -dx;
     vec2 d = rpStrip(rd, c, dust, dx);
-    vec2 td = vec2(d.x / (r * 1.5), d.y / (r * 2.975) - 1.0);
+    vec2 td = vec2(d.x / (r * 1.5), d.y / (r * 2.975 * rp_tl) - 1.0);
     if (abs(td.x) <= 1.0 && abs(td.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometDust(td.x, td.y, 0.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)

@@ -5,6 +5,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.cramdown.sorta.map.NeuronScene
+import com.cramdown.sorta.map.NeuronState
+import com.cramdown.sorta.map.NeuronStateChoice
+import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.map.UniverseEdge
+import com.cramdown.sorta.map.UniverseFolder
+import com.cramdown.sorta.map.UniverseInput
+import com.cramdown.sorta.map.UniverseNote
 
 /** The record ScreenshotTest waits on before it looks at the map (MapDrawn, Map3DView's MapDrawnKey). */
 class MapDrawnTest {
@@ -360,6 +368,44 @@ class MapDrawnTest {
         assertEquals(-1.0, r.dying(1, 3, 0.5f, 1, 3, secondsNow = -1.0).dyingSeconds, 0.0)
     }
 
+    @Test fun theDeathsClockCarriesTheStartOfTheFrameItWasTakenAt() {
+        // S05h2 repair 9, CI's dark tablet: frames under the test clock's hold, the orbit stepping on, made
+        // records two orbit steps apart with the clock at the hold in both; read only after the let-go, they
+        // passed for a clock stalled after it. Each record carries the start of the frame its clock is from
+        val hold = 0.35
+        val at = listOf(896f, 964f, 41.8f)
+        fun frame(r: MapDrawn, seconds: Double, startMs: Long, reach: Float = 0.5f) =
+            r.stepped().dying(1, 4, reach, 1, 4, 1, at, secondsNow = seconds, frameAtMsNow = startMs)
+        val first = frame(MapDrawn(), hold, 10_000L)
+        assertEquals(10_000L, first.dyingClockAtMs)
+        // two more frames held: a new record (the orbit stepped), the same clock, and still its own frame's start
+        val later = frame(frame(first, hold, 10_480L), hold, 10_960L)
+        assertEquals(first.orbitSteps + 2, later.orbitSteps)
+        assertFalse(first == later)
+        assertEquals(hold, later.dyingSeconds, 0.0)
+        assertEquals("taken in the first held frame, not a later one", 10_000L, later.dyingClockAtMs)
+        // let go at 11_200: the frame begun after it steps a quarter, its links drawn back; handed on with its start
+        val released = 11_200L
+        assertTrue("both held clocks were taken before the release", first.dyingClockAtMs <= released && later.dyingClockAtMs <= released)
+        val on = frame(later, hold + 0.25, 11_440L, reach = 0.06f)
+        assertEquals(hold + 0.25, on.dyingSeconds, 0.0)
+        assertEquals(11_440L, on.dyingClockAtMs)
+        assertTrue(on.dyingClockAtMs > released && on.dyingSeconds > later.dyingSeconds)
+        // a step under a tenth with nothing else of the death changed: the clock and its frame kept as a pair
+        val small = frame(on, hold + 0.3, 11_500L, reach = 0.06f)
+        assertEquals(on.orbitSteps + 1, small.orbitSteps)
+        assertEquals(on.dyingSeconds, small.dyingSeconds, 0.0)
+        assertEquals(11_440L, small.dyingClockAtMs)
+        // anything else of the death changing hands on the clock now with this frame's start
+        val moved = frame(small, hold + 0.3, 11_560L, reach = 0.03f)
+        assertEquals(hold + 0.3, moved.dyingSeconds, 0.0)
+        assertEquals(11_560L, moved.dyingClockAtMs)
+        // the frame's start alone is no change; callers that hand on no frame leave it at none
+        assertSame(on, on.dying(1, 4, 0.06f, 1, 4, 1, at, secondsNow = hold + 0.25, frameAtMsNow = 99_999L))
+        assertEquals(-1L, MapDrawn().dyingClockAtMs)
+        assertEquals(-1L, MapDrawn().dying(1, 3, 0.5f, 1, 3, secondsNow = hold).dyingClockAtMs)
+    }
+
     @Test fun sparksRoundUpToTensAndNoneStaysNone() {
         val d = MapDrawn()
         assertSame(d, d.sparking(0, 0L))
@@ -371,5 +417,133 @@ class MapDrawnTest {
         assertSame(one, one.sparking(7, 1L))
         val gone = one.sparking(0, 40L)
         assertEquals(0, gone.sparks); assertEquals(40L, gone.sparksTotal)
+    }
+
+    @Test fun theFiltersFieldsAreHandedOnWhenTheyChange() {
+        // S05i: no filter at first, and the record says so
+        val start = MapDrawn(build = 5)
+        assertFalse(start.filtered)
+        assertEquals(0, start.shown + start.hidden + start.filterLinks)
+        assertEquals(emptyList<Int>(), start.states)
+        // the Neurons under Everything: twelve bodies drawn, nine links, the ideas by state (all firing)
+        val firing = listOf(0, 7, 0, 0, 0, 0)
+        val all = start.filtering(false, 12, 0, 9, firing)
+        assertEquals(12, all.shown); assertEquals(0, all.hidden); assertEquals(9, all.filterLinks); assertEquals(firing, all.states)
+        assertSame("nothing changed: the same record", all, all.filtering(false, 12, 0, 9, listOf(0, 7, 0, 0, 0, 0)))
+        // Pages: five bodies hidden, two links left
+        val pages = all.filtering(true, 7, 5, 2, listOf(0, 3, 0, 0, 0, 0))
+        assertTrue(pages.filtered); assertEquals(7, pages.shown); assertEquals(5, pages.hidden); assertEquals(2, pages.filterLinks)
+        assertEquals(listOf(0, 3, 0, 0, 0, 0), pages.states)
+        assertEquals("the rest of the record kept", all.copy(filtered = true, shown = 7, hidden = 5, filterLinks = 2, states = pages.states), pages)
+        // Everything again: all back
+        assertEquals(all, pages.filtering(false, 12, 0, 9, firing))
+    }
+
+    // S05i repair 6: the cell states as drawn, so a state's still is told from resting's by numbers
+    @Test fun theHalosDrawnByStateAreHandedOnWhenTheyChange() {
+        val start = MapDrawn(build = 5)
+        assertEquals(emptyList<Int>(), start.halos)
+        // Garden's three ideas resting inside their cell: no halo of their own
+        val resting = start.filtering(false, 6, 0, 3, listOf(3, 0, 0, 0, 0, 0), listOf(0, 0, 0, 0, 0, 0))
+        assertEquals(listOf(0, 0, 0, 0, 0, 0), resting.halos)
+        // the filter's own call, with no halos given, keeps them
+        assertSame("nothing changed: the same record", resting, resting.filtering(false, 6, 0, 3, listOf(3, 0, 0, 0, 0, 0)))
+        // firing: each of the three keeps a halo, drawn firing
+        val firing = resting.filtering(false, 6, 0, 3, listOf(0, 3, 0, 0, 0, 0), listOf(0, 3, 0, 0, 0, 0))
+        assertEquals(listOf(0, 3, 0, 0, 0, 0), firing.halos)
+        assertEquals("the rest of the record kept", resting.copy(states = firing.states, halos = firing.halos), firing)
+        assertSame(firing, firing.filtering(false, 6, 0, 3, listOf(0, 3, 0, 0, 0, 0), listOf(0, 3, 0, 0, 0, 0)))
+    }
+
+    @Test fun eachIdeaOnScreenCarriesItsStateAndSize() {
+        // the made-up Garden and Kitchen of the emulator's test, Garden open, every idea firing
+        val scene = gardenOpen(NeuronStateChoice(NeuronState.FIRING.rawValue))
+        val ideas = scene.plan.bodies.indices.filter { scene.plan.bodies[it].kind == ThemeBodyKind.NOTE }
+        assertEquals(3, ideas.size)
+        val nodes = scene.plan.bodies.indices.map { ScreenNode(it, 10f * it, 20f * it, 4f + it) }
+        val cells = MapDrawnCell.of(scene, nodes)
+        assertEquals("the ideas only, not the cells or the home", ideas, cells.map { it.index })
+        for (c in cells) {
+            assertEquals(NeuronState.FIRING.code, c.state)
+            assertEquals(10f * c.index, c.x, 0f); assertEquals(20f * c.index, c.y, 0f); assertEquals(4f + c.index, c.across, 0f)
+        }
+        // an idea off screen is not listed; another theme lists none
+        assertEquals(ideas.drop(1), MapDrawnCell.of(scene, nodes.filter { it.index != ideas[0] }).map { it.index })
+        assertEquals(emptyList<MapDrawnCell>(), MapDrawnCell.of(null, nodes))
+        // left alone, every idea rests (GraphNeuronStates.swift:169-171)
+        assertTrue(MapDrawnCell.of(gardenOpen(NeuronStateChoice.NATURAL), nodes).all { it.state == NeuronState.RESTING.code })
+        // a halo reaches five body radii across (GraphNeuronLook.swift:343-344), 2.5 times the body's size across
+        assertEquals(2.5f, MapDrawnCell.HALO_ACROSS, 0f)
+    }
+
+    @Test fun theNeuronsComeAsCloseAsTheirSmallestBody() {
+        // iOS's pinch has no floor (allowsCameraControl, Graph3DView.swift:1650); Android's stops at four
+        // radii of the smallest body, so an idea in an open cell, a twentieth of it, can be brought close
+        val open = MapScene.neurons(gardenOpen(NeuronStateChoice.NATURAL))
+        val smallest = open.neurons!!.plan.bodies.minOf { it.sphere }
+        assertEquals(0.41f / 20, smallest, 1e-4f)
+        assertEquals(smallest * 4, open.closest, 1e-6f)
+        assertTrue("closer than four median radii, the floor before", open.closest < open.nodeRadius * 4 / 10)
+        // every cell closed: the cells are the smallest bodies, about as close as before
+        val closed = MapScene.neurons(neurons(emptyList(), NeuronStateChoice.NATURAL))
+        assertEquals(closed.neurons!!.plan.bodies.minOf { it.sphere } * 4, closed.closest, 1e-6f)
+    }
+
+    private fun id(n: Int) = ("00000000-0000-4000-8000-" + n.toString().padStart(12, '0')).uppercase()
+
+    private fun gardenOpen(cells: NeuronStateChoice) = neurons(listOf(id(201)), cells)
+
+    /** MapModeSpaceRenderTest's made-up book as the Neurons plan it (made up, not medical). */
+    private fun neurons(open: List<String>, cells: NeuronStateChoice): NeuronScene {
+        val garden = id(201); val kitchen = id(202)
+        val folders = listOf(UniverseFolder(garden, "Garden", null), UniverseFolder(kitchen, "Kitchen", null))
+        val notes = listOf(
+            UniverseNote(id(11), "Fix the gate latch", false, null, 0, 9.0),
+            UniverseNote(id(12), "Buy brushes", false, null, 0, 8.0),
+            UniverseNote(id(13), "Paint the shed green", false, garden, 5, 7.0),
+            UniverseNote(id(14), "Turn the compost", false, garden, 0, 6.0),
+            UniverseNote(id(15), "Plant tulips before the frost", false, garden, 0, 5.0),
+            UniverseNote(id(16), "Try the seeded bread", false, kitchen, 0, 4.0),
+            UniverseNote(id(17), "Order more coffee beans", false, kitchen, 0, 3.0),
+            UniverseNote(id(18), "Plan the weekend walk", false, null, 0, 2.0))
+        val edges = listOf(UniverseEdge(id(13), id(12)), UniverseEdge(id(14), id(13)), UniverseEdge(id(15), id(13)),
+            UniverseEdge(id(15), id(14)), UniverseEdge(id(13), id(11)), UniverseEdge(id(17), id(16)))
+        return NeuronScene.of(UniverseInput(notes, folders, edges, open = open), cells)
+    }
+
+    // S05i repair 3: the level of detail a frame chose, so a far view with no bodies says why
+    @Test fun theLevelOfDetailIsHandedOnWhenItChanges() {
+        val start = MapDrawn(build = 5)
+        assertEquals(0f, start.detail, 0f)
+        assertEquals(0, start.chunks + start.openChunks + start.summaries)
+        val far = start.detailing(0.6f, 2, 0, 11)
+        assertEquals(0.6f, far.detail, 0f); assertEquals(2, far.chunks); assertEquals(0, far.openChunks); assertEquals(11, far.summaries)
+        assertEquals("the rest of the record kept", start, far.copy(detail = 0f, chunks = 0, summaries = 0))
+        // to 0.01, so a budget's step under that leaves the record as it is
+        assertSame("nothing changed: the same record", far, far.detailing(0.6012f, 2, 0, 11))
+        val cut = far.detailing(0.6f * 0.88f, 2, 0, 11)
+        assertEquals(0.53f, cut.detail, 0f)
+        val open = cut.detailing(0.53f, 3, 1, 9)
+        assertEquals(1, open.openChunks); assertEquals(3, open.chunks); assertEquals(9, open.summaries)
+    }
+    @Test fun performancesHubsFolderLinesForceAndTourAreHandedOnWhenTheyChange() {
+        // S05i2: the hubs and folder lines drawn, whether the force has settled, and the tour's phase
+        val start = MapDrawn(build = 7)
+        assertEquals(0, start.hubs); assertEquals(0, start.folderLines)
+        assertTrue("settled where there is no force", start.settled)
+        assertEquals("no tour", "", start.tourPhase)
+        val drawn = start.performing(5, 3, settledNow = false)
+        assertEquals(5, drawn.hubs); assertEquals(3, drawn.folderLines); assertFalse(drawn.settled)
+        assertEquals("the rest of the record kept", start, drawn.copy(hubs = 0, folderLines = 0, settled = true))
+        assertSame("nothing changed: the same record", drawn, drawn.performing(5, 3, false))
+        val settled = drawn.performing(5, 3, true)
+        assertTrue(settled.settled)
+        // the tour's phase is kept unless a new one is given, and each new one is handed on
+        val warm = settled.performing(5, 3, true, "warm")
+        assertEquals("warm", warm.tourPhase)
+        assertSame(warm, warm.performing(5, 3, true))
+        val measure = warm.performing(5, 3, true, "measure")
+        assertEquals("measure", measure.tourPhase)
+        assertEquals("a filter's fewer hubs and lines", listOf(2, 1), measure.performing(2, 1, true).let { listOf(it.hubs, it.folderLines) })
     }
 }

@@ -172,6 +172,14 @@ struct NoteEditorView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(PopOutField.rowInsets)
                     .listRowSeparator(.hidden)
+                // S06b: where a shared idea came from, under its folder
+                if let mark = notes.note(current)?.sharedFrom {
+                    SharedFromMark(mark: mark)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(PopOutField.rowInsets)
+                        .listRowSeparator(.hidden)
+                }
                 if typeSize.isAccessibilitySize {
                     actionControls
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -320,7 +320,8 @@ class UniverseTree(val input: UniverseInput, gatherLoose: Boolean = false) {
 
     companion object {
         fun folderLabel(name: String, count: Int): String {
-            val shown = if (name.length > 20) name.take(20) + "…" else name
+            // by code point, as MapNameShow.cut: an emoji across the cut stays whole (S05j 6c)
+            val shown = if (name.codePointCount(0, name.length) > 20) name.substring(0, name.offsetByCodePoints(0, 20)) + "…" else name
             if (count == 0) return "$shown · empty"
             return "$shown · $count " + if (count == 1) "idea" else "ideas"
         }
@@ -473,7 +474,10 @@ object GraphTilt {
 
     val canonical = listOf(window(393f, 852f, top = 118f, bottom = 158f), window(1194f, 834f, top = 86f, bottom = 112f))
 
-    fun fit(points: List<Vec3>, pads: List<Float>, window: GraphWindow, fill: Float, tilt: Float): GraphTiltFit {
+    /** [field] is the camera's vertical field of view in degrees: [FIELD_OF_VIEW] unless a camera has its own (S05j item 3). */
+    fun fit(points: List<Vec3>, pads: List<Float>, window: GraphWindow, fill: Float, tilt: Float,
+            field: Float = FIELD_OF_VIEW): GraphTiltFit {
+        val tanHalf = tan(field * FPI / 360f)
         val seen = points.map { rotX(-tilt, it) }
         val pad = points.indices.map { if (it < pads.size) max(pads[it], 0f) else 0f }
         if (seen.isEmpty()) return GraphTiltFit(1f, 0f, 0f, 1f, 1f, REACH_LOW)
@@ -481,21 +485,22 @@ object GraphTilt {
         var high = 1f
         for (i in seen.indices) high = max(high, seen[i].z + pad[i] * 2 + 1)
         var tries = 0
-        while (shift(seen, pad, window, fill, high) == null && tries < 80) { low = high; high *= 2; tries += 1 }
+        while (shift(seen, pad, window, fill, high, tanHalf) == null && tries < 80) { low = high; high *= 2; tries += 1 }
         for (k in 0 until 64) {
             val mid = (low + high) * 0.5f
             if (!(mid > low && mid < high)) break
-            if (shift(seen, pad, window, fill, mid) != null) high = mid else low = mid
+            if (shift(seen, pad, window, fill, mid, tanHalf) != null) high = mid else low = mid
         }
         val d = high
-        val s = shift(seen, pad, window, fill, d) ?: floatArrayOf(0f, 0f)
+        val s = shift(seen, pad, window, fill, d, tanHalf) ?: floatArrayOf(0f, 0f)
         var deepest = d
         for (p in seen) deepest = max(deepest, d - p.z)
         val reach = min(max(deepest / d - 1, REACH_LOW), REACH_HIGH)
         return GraphTiltFit(d, s[0], s[1], d, deepest, reach)
     }
 
-    private fun shift(seen: List<Vec3>, pads: List<Float>, window: GraphWindow, fill: Float, distance: Float): FloatArray? {
+    private fun shift(seen: List<Vec3>, pads: List<Float>, window: GraphWindow, fill: Float, distance: Float,
+                      tanHalf: Float): FloatArray? {
         val tanUp = tanHalf * fill * window.share
         val tanSide = tanUp * max(window.aspect, 0.1f)
         val leanX = window.across * 2 * tanHalf

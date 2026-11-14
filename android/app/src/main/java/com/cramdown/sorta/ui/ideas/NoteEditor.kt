@@ -155,6 +155,8 @@ const val EDITOR_LINK_TAG = "editor-link"
             // the title, in a well
             EditorField(title, { title = it }, stringResource(R.string.editor_title), WardType.title, Modifier.fillMaxWidth(), well = true)
             FolderChip(book, note) { save(); choose(id) }
+            // S06b: where a shared idea came from, under its folder
+            note.sharedFrom?.let { SharedFromMark(it) }
 
             EditorSection(stringResource(R.string.editor_body))
             if (reading) MarkdownReader(body, Modifier.fillMaxWidth().wardRowTile(), openTitle = ::openTitle)

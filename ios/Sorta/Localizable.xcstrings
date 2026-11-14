@@ -613,6 +613,66 @@
         }
       }
     },
+    "folder.words" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder words…"
+          }
+        }
+      }
+    },
+    "folder.words.kept %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.kept %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves: %@"
+          }
+        }
+      }
+    },
+    "folder.words.note" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.note",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Space, ideas in To sort that use one of these words lean towards this folder."
+          }
+        }
+      }
+    },
+    "folder.words.prompt" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.prompt",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 5 words"
+          }
+        }
+      }
+    },
+    "folder.words.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder words"
+          }
+        }
+      }
+    },
     "folderDelete.body %@" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key folderDelete.body",
       "extractionState" : "manual",
@@ -925,6 +985,42 @@
         }
       }
     },
+    "lean.file" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File there"
+          }
+        }
+      }
+    },
+    "lean.file.spoken %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.file.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File in %@"
+          }
+        }
+      }
+    },
+    "lean.shares %@ %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.shares %@ %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shares ‘%1$@’ with %2$@"
+          }
+        }
+      }
+    },
     "look.2d" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
       "extractionState" : "manual",
@@ -1081,6 +1177,114 @@
         }
       }
     },
+    "moons.chip" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.chip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days"
+          }
+        }
+      }
+    },
+    "moons.chip.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.chip.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows recent days as moons."
+          }
+        }
+      }
+    },
+    "moons.clear" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.clear",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        }
+      }
+    },
+    "moons.clear.spoken" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.clear.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear the day"
+          }
+        }
+      }
+    },
+    "moons.moon.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lights that day’s ideas."
+          }
+        }
+      }
+    },
+    "moons.moon.none %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.none %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, no ideas"
+          }
+        }
+      }
+    },
+    "moons.moon.spoken %@ %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.spoken %@ %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "moons.pick" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.pick",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick a day to light its ideas."
+          }
+        }
+      }
+    },
+    "moons.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent days"
+          }
+        }
+      }
+    },
     "more.import" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key more.import",
       "extractionState" : "manual",
@@ -1221,6 +1425,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Delete"
+          }
+        }
+      }
+    },
+    "share.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a word to leave it out. The idea goes in To sort."
+          }
+        }
+      }
+    },
+    "share.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New idea"
+          }
+        }
+      }
+    },
+    "share.word.kept" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.word.kept",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept"
+          }
+        }
+      }
+    },
+    "share.word.out" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.word.out",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left out"
+          }
+        }
+      }
+    },
+    "shared.from %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key shared.from %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From %@"
+          }
+        }
+      }
+    },
+    "shared.from.spoken %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key shared.from.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared from %@"
+          }
+        }
+      }
+    },
+    "sky.save" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key sky.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
           }
         }
       }

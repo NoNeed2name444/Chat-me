@@ -49,13 +49,19 @@ object MapTags {
 /**
  * The top strip: leading, the "To sort n" chip, which opens the list sheet ([list]; null on two
  * panes, where the Sort screen is beside the map); trailing, the look chip. A gutter in from the
- * edges and WardSpace.s under the status bar; when one row can't hold both, they stack.
+ * edges and WardSpace.s under the status bar; when one row can't hold both, they stack. S06b: [days],
+ * Space's and 2D's Days chip (MapDaysChip) before the look chip, pressed in while the moons are open
+ * ([daysOn]); null on the other looks.
  */
-@Composable fun MapTopStrip(book: IdeaBook, version: Int, look: MapLook, choose: (MapLook) -> Unit, list: (() -> Unit)?, modifier: Modifier = Modifier) {
+@Composable fun MapTopStrip(book: IdeaBook, version: Int, look: MapLook, choose: (MapLook) -> Unit, list: (() -> Unit)?, modifier: Modifier = Modifier,
+                            days: (() -> Unit)? = null, daysOn: Boolean = false) {
     val gap = WardSpace.s.wardDp
     Layout({
         if (list != null) MapListChip(book, version, list)
-        MapLookChip(look, choose)
+        Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+            if (days != null) MapDaysChip(daysOn, days)
+            MapLookChip(look, choose)
+        }
     }, modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = gap)) { measurables, constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val placeables = measurables.map { it.measure(loose) }
@@ -124,12 +130,14 @@ object MapTags {
 @Composable internal fun MapListSheet(
     book: IdeaBook, version: Int, banner: SnackbarHostState, folderId: String?, setFolder: (String?) -> Unit, onDone: () -> Unit,
     open: (String) -> Unit, choose: (String) -> Unit, delete: (String) -> Unit,
-    name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit,
+    name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit, overMap: Boolean = true,
 ) {
     val level = rememberIdeasListLevel(book, version, folderId)
     val inset = WardSpace.s.wardDp
     ModalBottomSheet(onDismissRequest = onDone, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // the 3D looks are night in light mode too, so the status icons over them stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         ReaderNavBar(stringResource(R.string.sort_title), trailing = {
             Box(Modifier.semantics { testTag = MapTags.LIST_DONE }) { ReaderDoneButton(onClick = onDone) }
         })

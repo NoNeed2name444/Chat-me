@@ -276,6 +276,15 @@ object MapMark {
     const val FADED = 0.15f
     /** Performance's own links are drawn this much brighter under Show links, the rest at [FADED]. */
     const val PERF_FOCUS = 3f
+
+    /**
+     * A name's alpha under Show links (S05j 7a, on both platforms; iOS's GraphPerfLOD.nameAlpha): with
+     * Show links on ([near], the sorted neighbourhood, non-null), a name outside the chosen body's own
+     * links at [FADED]; the chosen body's and its neighbours' whole; every name whole with no focus.
+     * Points do not change.
+     */
+    fun nameAlpha(index: Int, near: IntArray?): Float =
+        if (near == null || java.util.Arrays.binarySearch(near, index) >= 0) 1f else FADED
 }
 
 /**
