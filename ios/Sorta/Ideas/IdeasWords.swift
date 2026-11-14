@@ -218,7 +218,7 @@ enum IdeasWords {
         String(localized: "lens.unfinished.hint", defaultValue: "Shows only ideas that stop mid-sentence.")
     }
     static var lensAloneHint: String { String(localized: "lens.alone.hint", defaultValue: "Shows only ideas with no links.") }
-    static var lensOffHint: String { String(localized: "lens.off.hint", defaultValue: "Shows every idea again.") }
+    static var lensOffHint: String { String(localized: "lens.off.hint", defaultValue: "Turns this lens off.") }
     static var lensEmpty: String {
         String(localized: "map.lens.empty", defaultValue: "No ideas match. Turn a lens off to see more.")
     }

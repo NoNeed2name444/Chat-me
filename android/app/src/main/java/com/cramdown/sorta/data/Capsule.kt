@@ -41,14 +41,14 @@ object Capsule {
         const val LINKED_TO = "Linked to"
         const val EMPTY_FOLDER = "No ideas here."
         const val PICTURE = "Every idea on the board, joined by its links."
-        const val RESTORE = "To bring these ideas back, open this file in Sorta with More, then Open a capsule."
+        const val RESTORE = "To bring these ideas back, open Sorta, choose More, then Open a capsule…, and pick this file."
         fun saved(date: String) = "Saved $date."
         fun counts(ideas: Int, folders: Int): String {
             val i = if (ideas == 1) "1 idea" else "$ideas ideas"
             return when (folders) {
                 0 -> "$i."
-                1 -> "$i in 1 folder."
-                else -> "$i in $folders folders."
+                1 -> "$i and 1 folder."
+                else -> "$i and $folders folders."
             }
         }
         fun caught(kind: String, date: String) = "$kind, caught $date"
@@ -108,7 +108,10 @@ object Capsule {
             linked.getOrPut(b.uppercase()) { ArrayList() }.add(a.uppercase())
         }
         fun title(n: Note) = n.title.trim().ifEmpty { Words.UNTITLED }
-        val order = compareBy<Note> { it.createdAt }.thenBy { it.id.uppercase() }
+        // newest first, as the app lists them
+        val order = compareByDescending<Note> { it.createdAt }.thenBy { it.id.uppercase() }
+        val index = titleIndex(notes)
+        fun anchor(n: Note) = "<a href=\"#n-" + n.id.lowercase() + "\">" + escape(title(n)) + "</a>"
         fun inFolder(id: String?): List<Note> = notes.filter { n ->
             val f = n.folderId?.uppercase()?.takeIf { it in folderById }
             f == id?.uppercase()
@@ -127,15 +130,17 @@ object Capsule {
                 .append("\" alt=\"").append(escape(Words.PICTURE)).append("\"></figure>\n")
         }
         fun section(heading: String, list: List<Note>, folder: Boolean) {
+            // To sort with nothing in it is left out
+            if (list.isEmpty() && !folder) return
             out.append("<section>\n<h2>").append(escape(heading)).append("</h2>\n")
             if (list.isEmpty() && folder) out.append("<p class=\"none\">").append(escape(Words.EMPTY_FOLDER)).append("</p>\n")
             for (n in list) {
                 val kind = if (n.kind == "page") Words.PAGE else Words.IDEA
-                out.append("<article>\n<h3>").append(escape(title(n))).append("</h3>\n<p class=\"meta\">")
+                out.append("<article id=\"n-").append(n.id.lowercase()).append("\">\n<h3>").append(escape(title(n))).append("</h3>\n<p class=\"meta\">")
                     .append(escape(Words.caught(kind, date(n.createdAt, zone)))).append("</p>\n")
-                if (n.body.isNotBlank()) out.append("<div class=\"words\">").append(escape(n.body.trim())).append("</div>\n")
-                val names = linked[n.id.uppercase()].orEmpty().distinct().mapNotNull { byId[it]?.let(::title) }
-                if (names.isNotEmpty()) out.append("<p class=\"links\">").append(escape(Words.LINKED_TO + " " + names.joinToString(", "))).append("</p>\n")
+                if (n.body.isNotBlank()) out.append("<div class=\"words\">").append(words(n.body.trim(), index)).append("</div>\n")
+                val names = linked[n.id.uppercase()].orEmpty().distinct().mapNotNull { byId[it]?.let(::anchor) }
+                if (names.isNotEmpty()) out.append("<p class=\"links\">").append(escape(Words.LINKED_TO)).append(" ").append(names.joinToString(", ")).append("</p>\n")
                 out.append("</article>\n")
             }
             out.append("</section>\n")
@@ -145,6 +150,47 @@ object Capsule {
         out.append("<footer><p>").append(escape(Words.RESTORE)).append("</p></footer>\n</main>\n")
         out.append("<script type=\"application/json\" id=\"").append(BLOCK_ID).append("\">")
             .append(scriptSafe(data(notes, folders, savedAt).toString(1))).append("</script>\n</body>\n</html>\n")
+        return out.toString()
+    }
+
+    /** Each title, trimmed and lower-cased, to its note's lower-case id: what `[[Title]]` finds. The oldest wins, as in the app. */
+    fun titleIndex(notes: List<Note>): Map<String, String> {
+        val index = HashMap<String, String>()
+        for (n in notes.sortedWith(compareBy<Note> { it.createdAt }.thenBy { it.id.uppercase() })) {
+            val key = n.title.trim { it == ' ' || it == '\t' }.lowercase()
+            if (key.isNotEmpty() && key !in index) index[key] = n.id.lowercase()
+        }
+        return index
+    }
+
+    /**
+     * An idea's words as the page shows them, HTML-escaped: each `[[Title]]` (or `[[Title|shown]]`) as its
+     * words, not the brackets, and a link to that idea on the page where [index] has the title.
+     */
+    fun words(text: String, index: Map<String, String>): String {
+        val out = StringBuilder()
+        var at = 0
+        while (true) {
+            val open = text.indexOf("[[", at)
+            if (open < 0) break
+            val close = text.indexOf("]]", open + 2)
+            if (close < 0) break
+            val inner = text.substring(open + 2, close)
+            val parts = inner.split("|", limit = 2)
+            val title = parts[0].trim { it == ' ' || it == '\t' }
+            val shown = (parts.getOrNull(1) ?: parts[0]).trim { it == ' ' || it == '\t' }
+            if ('\n' in inner || title.isEmpty() || shown.isEmpty()) {
+                out.append(escape(text.substring(at, open + 2)))
+                at = open + 2
+                continue
+            }
+            out.append(escape(text.substring(at, open)))
+            val id = index[title.lowercase()]
+            if (id != null) out.append("<a href=\"#n-").append(id).append("\">").append(escape(shown)).append("</a>")
+            else out.append(escape(shown))
+            at = close + 2
+        }
+        out.append(escape(text.substring(at)))
         return out.toString()
     }
 
@@ -201,6 +247,8 @@ h3 { font-size: 1.0625rem; margin: 0; }
 .saved { margin: 0; }
 figure { margin: 24px 0 0; }
 figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
+@media (prefers-color-scheme: dark) { figure img { filter: brightness(0.82); } }
+a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 2px; }
 article { padding: 12px 0; border-bottom: 1px solid var(--line); }
 article:last-child { border-bottom: 0; }
 .meta, .links { margin: 2px 0 0; }

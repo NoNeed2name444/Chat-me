@@ -63,7 +63,7 @@ class MapLensRenderTest {
         when (n.id) {
             IdeasFixture.gate.id -> n.copy(body = "Which screws?")
             IdeasFixture.compost.id -> n.copy(createdAt = ms("2026-10-27T02:10:00Z"))
-            IdeasFixture.bread.id -> n.copy(title = "Try the seeded bread?", createdAt = ms("2026-10-26T23:30:00Z"))
+            IdeasFixture.bread.id -> n.copy(title = "Seeded bread?", createdAt = ms("2026-10-26T23:30:00Z"))
             else -> n
         }
     }
@@ -97,17 +97,23 @@ class MapLensRenderTest {
             check("$window: ${lens.id} is 48 dp at least", b.width >= 48 * density - 0.5f && b.height >= 48 * density - 0.5f, "${b.width} x ${b.height}")
         }
         read(IdeaLens.QUESTIONS, 2, false); read(IdeaLens.LATE_NIGHT, 2, false); read(IdeaLens.UNFINISHED, 3, false); read(IdeaLens.ALONE, 3, false)
+        // every chip whole on screen, the narrowest window too: the row wraps rather than hide one
+        val width = compose.activity.resources.displayMetrics.widthPixels
+        for (lens in IdeaLens.entries) {
+            val b = chip(lens).fetchSemanticsNode().boundsInRoot
+            check("$window: ${lens.id} is whole on screen", b.left >= 0f && b.right <= width + 0.5f && b.width > 0f, "$b of $width")
+        }
 
         // one lens: the late ideas, the rest faded and unread
         chip(IdeaLens.LATE_NIGHT).performClick(); settle()
         check("$window: Late night keeps the compost and the bread", cards().map { it.substringBefore(",") }.sorted() ==
-            listOf("Try the seeded bread?", "Turn the compost"), cards().toString())
+            listOf("Seeded bread?", "Turn the compost"), cards().toString())
         read(IdeaLens.LATE_NIGHT, 2, true); read(IdeaLens.QUESTIONS, 1, false); read(IdeaLens.UNFINISHED, 1, false); read(IdeaLens.ALONE, 2, false)
         shot(this, "lens_one_${window}_${if (dark) "dark" else "light"}", dark)
 
         // two lenses: only the ideas that pass both
         chip(IdeaLens.QUESTIONS).performClick(); settle()
-        check("$window: Late night and Questions keep the bread", cards().map { it.substringBefore(",") } == listOf("Try the seeded bread?"),
+        check("$window: Late night and Questions keep the bread", cards().map { it.substringBefore(",") } == listOf("Seeded bread?"),
             cards().toString())
         read(IdeaLens.QUESTIONS, 1, true); read(IdeaLens.LATE_NIGHT, 1, true)
         check("$window: no empty line while one passes", !shown(MapPanelTags.FILTER_EMPTY))
@@ -122,15 +128,32 @@ class MapLensRenderTest {
         check("$window: every card back with no lens on", cards().size == 7, cards().toString())
     }
 
-    private fun shot(c: WardChecks, name: String, dark: Boolean) {
+    /** The row over Space's night chrome (the strip is night over every 3D look), Late night on. */
+    private fun renderSpace(window: String) = checks {
+        val model = IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, true, ideas))
+        IdeasSettings(compose.activity).setLook(MapLook.SPACE)
+        compose.setContent { SortaTheme(dark = isSystemInDarkTheme()) { WindowShapeHost { IdeasView(model) } } }
+        settle()
+        if (shown(SortaMode.MAP.identifier)) compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        settle()
+        check("$window: the lens row over Space", shown(MapLensTags.ROW))
+        chip(IdeaLens.LATE_NIGHT).performClick(); settle()
+        check("$window: Late night is on over Space", chip(IdeaLens.LATE_NIGHT).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected) == true)
+        // the ground is Space's sky, not the page
+        shot(this, "lens_space_$window", dark = true, page = false)
+    }
+
+    private fun shot(c: WardChecks, name: String, dark: Boolean, page: Boolean = true) {
         val file = File("build/outputs/roborazzi/$name.png")
         captureScreenRoboImage(file.path)
         val image = runCatching { javax.imageio.ImageIO.read(file) }.getOrNull()
         c.check("$name: the PNG reads back", image != null, file.absolutePath)
         if (image == null) return
-        val page = WardPalette.hex(WardToken.background, dark)
-        val corner = image.getRGB(image.width - 2, image.height - 2) and 0xFFFFFF
-        c.check("$name: the ground is the page", corner == page, "${hx(corner)} vs ${hx(page)}")
+        if (page) {
+            val ground = WardPalette.hex(WardToken.background, dark)
+            val corner = image.getRGB(image.width - 2, image.height - 2) and 0xFFFFFF
+            c.check("$name: the ground is the page", corner == ground, "${hx(corner)} vs ${hx(ground)}")
+        }
         val coral = image.getRGB(0, 0, image.width, image.height, null, 0, image.width).count { (it and 0xFFFFFF) == 0xC9553E }
         c.check("$name: no pixel is the logo's coral", coral == 0, "$coral pixels")
     }
@@ -143,4 +166,14 @@ class MapLensRenderTest {
 
     @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-notnight-xhdpi")
     @Test fun tabletLight() = render("tablet", dark = false)
+
+    @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
+    @Test fun tabletDark() = render("tablet", dark = true)
+
+    // a foldable, closed: the narrowest window, where the row is cut soonest
+    @Config(sdk = [35], qualifiers = "w360dp-h748dp-port-notnight-xxhdpi")
+    @Test fun foldableClosedLight() = render("foldable_closed", dark = false)
+
+    @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
+    @Test fun phoneOverSpace() = renderSpace("phone")
 }

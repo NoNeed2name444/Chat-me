@@ -35,8 +35,11 @@ extension IdeaLens {
     static let rowIdentifier = "map-lens-row"
 }
 
-/// The four chips in a row a gutter in from the edges and WardSpace.s under
-/// the strip, scrolling sideways where they don't fit. Each is the kit's
+/// The four chips a gutter in from the edges and WardSpace.s under the
+/// strip, in one line where they fit and on a second where they don't (a
+/// phone's width), so no lens is ever out of sight: a row that scrolled hid
+/// the fourth chip whole on a narrow phone (S06d review). As Android's
+/// FlowRow. Each is the kit's
 /// chip with its chosen state and its count (how many ideas show with it
 /// on), the count in the coral ink as the To sort chip's; VoiceOver reads
 /// its name and count, that it is selected, and what a tap does. A tap
@@ -48,17 +51,14 @@ struct MapLensRow: View {
 
     var body: some View {
         let counts: [IdeaLens: Int] = IdeaLens.counts(on, notes: notes.notes, edges: notes.allEdges())
-        ScrollView(.horizontal) {
-            HStack(spacing: WardSpace.s) {
-                ForEach(IdeaLens.allCases) { lens in
-                    chip(lens, count: counts[lens] ?? 0)
-                }
+        MapLensFlow(gap: WardSpace.s) {
+            ForEach(IdeaLens.allCases) { lens in
+                chip(lens, count: counts[lens] ?? 0)
             }
-            .padding(.horizontal, WardSpace.gutter)
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .padding(.horizontal, WardSpace.gutter)
         .padding(.top, WardSpace.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(IdeasWords.lenses)
         .accessibilityIdentifier(IdeaLens.rowIdentifier)
@@ -88,5 +88,56 @@ struct MapLensRow: View {
 
     private func toggle(_ lens: IdeaLens) {
         if on.contains(lens) { on.remove(lens) } else { on.insert(lens) }
+    }
+}
+
+/// Its children left to right at their own size, `gap` apart, starting a
+/// new line under the last when the next would pass the width offered.
+struct MapLensFlow: Layout {
+    var gap: CGFloat
+
+    private func lines(_ width: CGFloat, _ sizes: [CGSize]) -> [[Int]] {
+        var out: [[Int]] = [[]]
+        var x: CGFloat = 0
+        for (i, size) in sizes.enumerated() {
+            let start: CGFloat = out[out.count - 1].isEmpty ? 0 : x + gap
+            if !out[out.count - 1].isEmpty && start + size.width > width {
+                out.append([i])
+                x = size.width
+            } else {
+                out[out.count - 1].append(i)
+                x = start + size.width
+            }
+        }
+        return out
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes: [CGSize] = subviews.map { $0.sizeThatFits(.unspecified) }
+        let width: CGFloat = proposal.width ?? .infinity
+        var height: CGFloat = 0
+        var widest: CGFloat = 0
+        for (n, line) in lines(width, sizes).enumerated() where !line.isEmpty {
+            let w: CGFloat = line.map { sizes[$0].width }.reduce(0, +) + gap * CGFloat(line.count - 1)
+            widest = max(widest, w)
+            height += (n > 0 ? gap : 0) + (line.map { sizes[$0].height }.max() ?? 0)
+        }
+        // an unbounded offer (a scroll view's, say) gets the widest line, never infinity
+        return CGSize(width: width.isFinite ? width : widest, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes: [CGSize] = subviews.map { $0.sizeThatFits(.unspecified) }
+        var y: CGFloat = bounds.minY
+        for line in lines(bounds.width, sizes) where !line.isEmpty {
+            let tall: CGFloat = line.map { sizes[$0].height }.max() ?? 0
+            var x: CGFloat = bounds.minX
+            for i in line {
+                subviews[i].place(at: CGPoint(x: x, y: y + (tall - sizes[i].height) / 2), anchor: .topLeading,
+                                  proposal: ProposedViewSize(sizes[i]))
+                x += sizes[i].width + gap
+            }
+            y += tall + gap
+        }
     }
 }

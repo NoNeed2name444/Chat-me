@@ -60,14 +60,14 @@ enum SortaCapsule {
         static let linkedTo = "Linked to"
         static let emptyFolder = "No ideas here."
         static let picture = "Every idea on the board, joined by its links."
-        static let restore = "To bring these ideas back, open this file in Sorta with More, then Open a capsule."
+        static let restore = "To bring these ideas back, open Sorta, choose More, then Open a capsule…, and pick this file."
         static func saved(_ date: String) -> String { "Saved \(date)." }
         static func counts(ideas: Int, folders: Int) -> String {
             let i: String = ideas == 1 ? "1 idea" : "\(ideas) ideas"
             switch folders {
             case 0: return "\(i)."
-            case 1: return "\(i) in 1 folder."
-            default: return "\(i) in \(folders) folders."
+            case 1: return "\(i) and 1 folder."
+            default: return "\(i) and \(folders) folders."
             }
         }
         static func caught(_ kind: String, _ date: String) -> String { "\(kind), caught \(date)" }
@@ -165,10 +165,13 @@ enum SortaCapsule {
                 let f: UUID? = n.folderId.flatMap { folderIDs.contains($0) ? $0 : nil }
                 return f == id
             }
+            // newest first, as the app lists them
             .sorted { a, b in
-                a.createdAt != b.createdAt ? a.createdAt < b.createdAt : a.id.uuidString < b.id.uuidString
+                a.createdAt != b.createdAt ? a.createdAt > b.createdAt : a.id.uuidString < b.id.uuidString
             }
         }
+        let index: [String: String] = titleIndex(notes)
+        func anchor(_ n: Note) -> String { "<a href=\"#n-\(n.id.uuidString.lowercased())\">\(escape(title(n)))</a>" }
 
         var out = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
         out += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
@@ -182,18 +185,20 @@ enum SortaCapsule {
             out += " width=\"\(picture.width)\" height=\"\(picture.height)\" alt=\"\(escape(Words.picture))\"></figure>\n"
         }
         func section(_ heading: String, _ list: [Note], folder: Bool) {
+            // To sort with nothing in it is left out
+            if list.isEmpty && !folder { return }
             out += "<section>\n<h2>\(escape(heading))</h2>\n"
             if list.isEmpty && folder { out += "<p class=\"none\">\(escape(Words.emptyFolder))</p>\n" }
             for n in list {
                 let kind: String = n.kind == .page ? Words.page : Words.idea
-                out += "<article>\n<h3>\(escape(title(n)))</h3>\n<p class=\"meta\">"
+                out += "<article id=\"n-\(n.id.uuidString.lowercased())\">\n<h3>\(escape(title(n)))</h3>\n<p class=\"meta\">"
                 out += escape(Words.caught(kind, date(n.createdAt, zone: zone))) + "</p>\n"
                 let words: String = n.body.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !words.isEmpty { out += "<div class=\"words\">\(escape(words))</div>\n" }
+                if !words.isEmpty { out += "<div class=\"words\">\(Self.words(words, index: index))</div>\n" }
                 var seen = Set<UUID>()
-                let names: [String] = (linked[n.id] ?? []).filter { seen.insert($0).inserted }.compactMap { byID[$0].map(title) }
+                let names: [String] = (linked[n.id] ?? []).filter { seen.insert($0).inserted }.compactMap { byID[$0].map(anchor) }
                 if !names.isEmpty {
-                    out += "<p class=\"links\">\(escape(Words.linkedTo + " " + names.joined(separator: ", ")))</p>\n"
+                    out += "<p class=\"links\">\(escape(Words.linkedTo)) \(names.joined(separator: ", "))</p>\n"
                 }
                 out += "</article>\n"
             }
@@ -204,6 +209,49 @@ enum SortaCapsule {
         out += "<footer><p>\(escape(Words.restore))</p></footer>\n</main>\n"
         let json = String(decoding: try data(notes: notes, folders: folders, savedAt: savedAt), as: UTF8.self)
         out += "<script type=\"application/json\" id=\"\(blockID)\">\(scriptSafe(json))</script>\n</body>\n</html>\n"
+        return out
+    }
+
+    /// Each title, trimmed and lower-cased, to its note's lower-case id: what
+    /// `[[Title]]` finds. The oldest wins, as in the app (NoteStore.titleIndex).
+    static func titleIndex(_ notes: [Note]) -> [String: String] {
+        var index: [String: String] = [:]
+        let oldestFirst = notes.sorted { a, b in
+            a.createdAt != b.createdAt ? a.createdAt < b.createdAt : a.id.uuidString < b.id.uuidString
+        }
+        for n in oldestFirst {
+            let key = n.title.trimmingCharacters(in: CharacterSet(charactersIn: " \t")).lowercased()
+            if !key.isEmpty, index[key] == nil { index[key] = n.id.uuidString.lowercased() }
+        }
+        return index
+    }
+
+    /// An idea's words as the page shows them, HTML-escaped: each `[[Title]]`
+    /// (or `[[Title|shown]]`) as its words, not the brackets, and a link to
+    /// that idea on the page where `index` has the title. As Android's.
+    static func words(_ text: String, index: [String: String]) -> String {
+        var out = ""
+        var rest = Substring(text)
+        let blanks = CharacterSet(charactersIn: " \t")
+        while let open = rest.range(of: "[["), let close = rest.range(of: "]]", range: open.upperBound..<rest.endIndex) {
+            let inner = String(rest[open.upperBound..<close.lowerBound])
+            let parts = inner.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            let title = parts[0].trimmingCharacters(in: blanks)
+            let shown = (parts.count > 1 ? parts[1] : parts[0]).trimmingCharacters(in: blanks)
+            if inner.contains("\n") || title.isEmpty || shown.isEmpty {
+                out += escape(String(rest[..<open.upperBound]))
+                rest = rest[open.upperBound...]
+                continue
+            }
+            out += escape(String(rest[..<open.lowerBound]))
+            if let id = index[title.lowercased()] {
+                out += "<a href=\"#n-\(id)\">\(escape(shown))</a>"
+            } else {
+                out += escape(shown)
+            }
+            rest = rest[close.upperBound...]
+        }
+        out += escape(String(rest))
         return out
     }
 
@@ -326,6 +374,8 @@ enum SortaCapsule {
     .saved { margin: 0; }
     figure { margin: 24px 0 0; }
     figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; }
+    @media (prefers-color-scheme: dark) { figure img { filter: brightness(0.82); } }
+    a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 2px; }
     article { padding: 12px 0; border-bottom: 1px solid var(--line); }
     article:last-child { border-bottom: 0; }
     .meta, .links { margin: 2px 0 0; }

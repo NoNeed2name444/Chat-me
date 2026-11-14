@@ -127,16 +127,40 @@ class CapsuleTest {
         assertFalse("no markup from an idea", "<b>now" in html)
         assertEquals("one script block, the data, which closes once", 1, Regex("<script").findAll(html).count())
         assertEquals(1, Regex("</script").findAll(html).count())
-        for (words in listOf("<h1>Sorta capsule</h1>", "Saved 14 November 2026 at 7:05 PM. 3 ideas in 2 folders.", "<h2>To sort</h2>",
-                "<h2>Garden</h2>", "<h2>Garden › Bulbs</h2>", "Page, caught 6 October 2026 at 10:30 AM", "Linked to Buy brushes",
+        for (words in listOf("<h1>Sorta capsule</h1>", "Saved 14 November 2026 at 7:05 PM. 3 ideas and 2 folders.", "<h2>To sort</h2>",
+                "<h2>Garden</h2>", "<h2>Garden › Bulbs</h2>", "Page, caught 6 October 2026 at 10:30 AM",
+                "<article id=\"n-${brushes.id}\">", "Linked to <a href=\"#n-${brushes.id}\">Buy brushes</a>",
+                "Check <a href=\"#n-${brushes.id}\">Buy brushes</a> first.",
                 "Tulips first &lt;/script&gt; then crocus &amp; co?", "data:image/png;base64,AQID", "width=\"300\" height=\"200\"",
                 Capsule.Words.RESTORE)) assertTrue("the page has $words", words in html)
         // the folder sections come after To sort, Garden before its Bulbs
         assertTrue(html.indexOf("<h2>To sort</h2>") < html.indexOf("<h2>Garden</h2>") && html.indexOf("<h2>Garden</h2>") < html.indexOf("Garden › Bulbs"))
         assertEquals("Sorta capsule 2026-11-14.html", Capsule.fileName(ms("2026-11-14T19:05:00Z"), ZoneOffset.UTC))
         assertEquals("1 idea.", Capsule.Words.counts(1, 0))
-        assertEquals("2 ideas in 1 folder.", Capsule.Words.counts(2, 1))
+        assertEquals("2 ideas and 1 folder.", Capsule.Words.counts(2, 1))
+        assertEquals("2 ideas and 3 folders.", Capsule.Words.counts(2, 3))
+        assertFalse("no brackets on the page", "[[" in html.substringBefore("<script"))
         try { Capsule.read("<p>no data</p>"); fail() } catch (e: ImportRefused) { assertEquals(ImportRefusal.NOT_A_CAPSULE, e.refusal) }
+    }
+
+    /** The page as the app reads (S06d review): newest first, To sort left out when empty, `[[Title]]`s as words. */
+    @Test fun thePageReadsAsTheAppDoes() {
+        val newer = brushes.copy(id = id("4"), title = "Oil the gate", createdAt = ms("2026-10-09T07:00:00Z"))
+        val html = Capsule.html(listOf(brushes, newer), emptyList(), emptyList(), 0L, ZoneOffset.UTC, null)
+        assertTrue("the newer first", html.indexOf("Oil the gate") < html.indexOf("Buy brushes"))
+        val none = Capsule.html(listOf(shed), listOf(garden), emptyList(), 0L, ZoneOffset.UTC, null)
+        assertFalse("no To sort with nothing in it", "<h2>To sort</h2>" in none)
+        val index = Capsule.titleIndex(notes)
+        val cases = listOf(
+            "Check [[Buy brushes]] first." to "Check <a href=\"#n-${brushes.id}\">Buy brushes</a> first.",
+            "See [[ buy BRUSHES |the brushes]]." to "See <a href=\"#n-${brushes.id}\">the brushes</a>.",
+            "Ask [[Nobody here]] & then" to "Ask Nobody here &amp; then",
+            "Open [[ and more" to "Open [[ and more",
+            "[[]] stays" to "[[]] stays",
+            "[[two\nlines]]" to "[[two\nlines]]",
+            "<b>[[Buy brushes]]</b>" to "&lt;b&gt;<a href=\"#n-${brushes.id}\">Buy brushes</a>&lt;/b&gt;",
+        )
+        for ((text, shown) in cases) assertEquals(text, shown, Capsule.words(text, index))
     }
 
     @Test fun theDataCantCloseItsBlock() {

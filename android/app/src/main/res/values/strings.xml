@@ -314,7 +314,7 @@
     <string name="lens_late_night_hint">show only ideas caught between 11 PM and 4 AM</string>
     <string name="lens_unfinished_hint">show only ideas that stop mid-sentence</string>
     <string name="lens_alone_hint">show only ideas with no links</string>
-    <string name="lens_off_hint">show every idea again</string>
+    <string name="lens_off_hint">turn this lens off</string>
     <string name="map_lens_empty">No ideas match. Turn a lens off to see more.</string>
     <!-- S06d: the capsule (plugins-plan idea 11): the More menu, the monthly offer, the notices, the refusals -->
     <string name="more_save_capsule">Save a capsule…</string>

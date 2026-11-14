@@ -122,8 +122,10 @@ struct IdeasView: View {
         .fileExporter(isPresented: $exporting, document: capsuleFile, contentType: .html,
                       defaultFilename: capsuleName) { result in
             savedCapsule(result)
-        } onCancellation: {
-            capsuleFile = nil
+        }
+        // the save screen closed, saved or cancelled: let the page go
+        .onChange(of: exporting) { _, open in
+            if !open { capsuleFile = nil }
         }
         .alert(imported?.title ?? "", isPresented: importedShown, presenting: imported) { _ in
             Button(IdeasWords.importDone, role: .cancel) {}

@@ -1,14 +1,12 @@
 package com.cramdown.sorta.ui.ideas
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -54,18 +52,20 @@ internal val IdeaLens.hint: Int get() = when (this) {
     remember(book, version, book.notes, on) { IdeaLens.passing(on, book.notes, book.allEdges(), ZoneId.systemDefault()) }
 
 /**
- * The four chips in a row a gutter in from the edges and WardSpace.s under the strip, scrolling
- * sideways where they don't fit. Each is the kit's chip with its chosen state and its count (how
+ * The four chips a gutter in from the edges and WardSpace.s under the strip, in one line where they
+ * fit and on a second where they don't (a phone's width), so no lens is ever out of sight: a row
+ * that scrolled hid the fourth chip whole on a closed foldable (S06d review). Each is the kit's chip with its chosen state and its count (how
  * many ideas show with it on); TalkBack reads its name, count and whether it is checked.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable fun MapLensRow(book: IdeaBook, version: Int, on: Set<IdeaLens>, toggle: (IdeaLens) -> Unit, modifier: Modifier = Modifier) {
     val counts = remember(book, version, book.notes, on) { IdeaLens.counts(on, book.notes, book.allEdges(), ZoneId.systemDefault()) }
     val name = stringResource(R.string.map_lenses)
     val gap = WardSpace.s.wardDp
-    Row(modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+    FlowRow(modifier.fillMaxWidth()
         .semantics { isTraversalGroup = true; contentDescription = name; testTag = MapLensTags.ROW }
         .padding(horizontal = WardSpace.gutter.wardDp).padding(top = gap),
-        horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+        horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(gap)) {
         IdeaLens.entries.forEach { lens ->
             val chosen = lens in on
             val count = counts[lens] ?: 0

@@ -256,7 +256,10 @@ internal object IdeasBanner {
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
         if (uri != null) scope.launch {
             val now = System.currentTimeMillis()
-            val html = capsuleHtml(model.book, settings.lineStyle.isStraight, measurer, density, now)
+            // the book as it is now, drawn and compressed off the main thread
+            val snapshot = model.book
+            val straight = settings.lineStyle.isStraight
+            val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, straight, measurer, density, now) }
             val saved = withContext(Dispatchers.IO) {
                 runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(html.toByteArray(Charsets.UTF_8)) } != null }
                     .getOrDefault(false)
@@ -355,7 +358,7 @@ internal object IdeasBanner {
                     name = { naming = it }, deleteFolder = { deletingFolder = it },
                     onImport = { picker.launch(arrayOf("application/json")) },
                     offer = offering && hasIdeas, onSaveCapsule = ::saveCapsule, onLater = { offering = false },
-                    onOpenCapsule = { capsulePicker.launch(arrayOf("text/html")) },
+                    onOpenCapsule = { capsulePicker.launch(arrayOf("text/html", "application/octet-stream")) },
                 )
             }
         }

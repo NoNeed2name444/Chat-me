@@ -93,6 +93,21 @@ class MapPeekCardTest {
 
     private val mapNode = SemanticsMatcher.keyIsDefined(MapTapKey)
 
+    /**
+     * A point on empty map, in the map node's own coordinates: halfway between the lower of the top
+     * strip's foot and the card's (when it shows) and the mode switcher's top. In this small window
+     * (Robolectric's 320 by 470 dp) the lenses' row takes a second line (S06d), so the old fixed point,
+     * 0.3 of the height, now falls on a lens chip.
+     */
+    private fun emptyY(): Float {
+        fun bounds(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val map = compose.onNode(mapNode).fetchSemanticsNode().boundsInRoot
+        val over = listOfNotNull(bounds(MapPanelTags.TOP_STRIP)?.bottom, bounds(MapPanelTags.PEEK)?.bottom).maxOrNull() ?: map.top
+        val under = bounds(SortaMode.SORT.identifier)?.top ?: map.bottom
+        assertTrue("room on the map between $over and $under", under - over >= 24f)
+        return (over + under) / 2 - map.top
+    }
+
     private fun tapper(): MapTap? = compose.onAllNodes(mapNode).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapTapKey)
 
     /** A tap on [id]'s body, handed in as Map3DView's hit test hands it on. */
@@ -242,7 +257,8 @@ class MapPeekCardTest {
         launchOnSpace()
         tapBody(gate.id)
         cardFor(gate.title)
-        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }  // above the card, under the top strip
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }  // empty map, under the strip and the card
         run.until { !shown(MapPanelTags.PEEK) }
         assertTrue("the idea stays", stored().any { it.id == gate.id })
     }
@@ -293,7 +309,8 @@ class MapPeekCardTest {
         assertEquals("the camera stays", pose, drawnPose())
         // a new choice still cues: empty space lets it go, a tap chooses it again
         ShadowSystemClock.advanceBy(Duration.ofMillis(400))
-        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }
         run.until { !shown(MapPanelTags.PEEK) }
         ShadowSystemClock.advanceBy(Duration.ofMillis(400))
         tapBody(gate.id)
@@ -413,16 +430,17 @@ class MapPeekCardTest {
         // S05j item 3: Space's first view is iOS's, from yaw 0 looking down at GraphTilt's 45 degrees
         assertEquals("the first view's turn", listOf(0f, (45.0 * Math.PI / 180.0).toFloat()), home.drop(4))
         // a turn of the camera on empty space, then one tap there: no return home
-        compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, height * 0.3f), Offset(centerX + width * 0.3f, height * 0.3f)) }
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, y), Offset(centerX + width * 0.3f, y)) }
         compose.waitForIdle()
         ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
-        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }
         compose.waitForIdle()
         ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
         assertEquals("one tap on empty space is no return home", 1, drawn().homes)
-        compose.onNode(mapNode).performTouchInput { doubleClick(Offset(centerX, height * 0.3f)) }
+        compose.onNode(mapNode).performTouchInput { doubleClick(Offset(centerX, y)) }
         run.until { drawn().homes == 2 }
         assertEquals("two taps' pose is Recentre's first view", home, drawn().pose)
     }

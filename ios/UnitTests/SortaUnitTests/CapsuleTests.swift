@@ -167,8 +167,11 @@ final class CapsuleTests: XCTestCase {
         XCTAssertFalse(html.contains("<b>now"), "no markup from an idea")
         XCTAssertEqual(html.components(separatedBy: "<script").count - 1, 1, "one script block, the data")
         XCTAssertEqual(html.components(separatedBy: "</script").count - 1, 1, "which closes once")
-        for words in ["<h1>Sorta capsule</h1>", "Saved 14 November 2026 at 7:05 PM. 3 ideas in 2 folders.", "<h2>To sort</h2>",
-                      "<h2>Garden</h2>", "<h2>Garden \u{203A} Bulbs</h2>", "Page, caught 6 October 2026 at 10:30 AM", "Linked to Buy brushes",
+        let two: String = id("2").uuidString.lowercased()
+        for words in ["<h1>Sorta capsule</h1>", "Saved 14 November 2026 at 7:05 PM. 3 ideas and 2 folders.", "<h2>To sort</h2>",
+                      "<h2>Garden</h2>", "<h2>Garden \u{203A} Bulbs</h2>", "Page, caught 6 October 2026 at 10:30 AM",
+                      "<article id=\"n-\(two)\">", "Linked to <a href=\"#n-\(two)\">Buy brushes</a>",
+                      "Check <a href=\"#n-\(two)\">Buy brushes</a> first.",
                       "Tulips first &lt;/script&gt; then crocus &amp; co?", "data:image/png;base64,AQID", "width=\"300\" height=\"200\"",
                       SortaCapsule.Words.restore] {
             XCTAssertTrue(html.contains(words), "the page has \(words)")
@@ -180,8 +183,40 @@ final class CapsuleTests: XCTestCase {
         XCTAssertTrue(toSort < gardenAt && gardenAt < bulbsAt)
         XCTAssertEqual(SortaCapsule.fileName(at("2026-11-14T19:05:00Z"), zone: TimeZone(identifier: "UTC")!), "Sorta capsule 2026-11-14.html")
         XCTAssertEqual(SortaCapsule.Words.counts(ideas: 1, folders: 0), "1 idea.")
-        XCTAssertEqual(SortaCapsule.Words.counts(ideas: 2, folders: 1), "2 ideas in 1 folder.")
+        XCTAssertEqual(SortaCapsule.Words.counts(ideas: 2, folders: 1), "2 ideas and 1 folder.")
+        XCTAssertEqual(SortaCapsule.Words.counts(ideas: 2, folders: 3), "2 ideas and 3 folders.")
+        XCTAssertFalse(html.components(separatedBy: "<script")[0].contains("[["), "no brackets on the page")
         XCTAssertThrowsError(try SortaCapsule.read("<p>no data</p>")) { XCTAssertEqual($0 as? SortaCapsule.Failure, .notACapsule) }
+    }
+
+    /// The page as the app reads (S06d review), as Android's: newest first,
+    /// To sort left out when empty, `[[Title]]`s as words.
+    func testThePageReadsAsTheAppDoes() throws {
+        var newer = brushes
+        newer.id = id("4")
+        newer.title = "Oil the gate"
+        newer.createdAt = at("2026-10-09T07:00:00.000Z")
+        let utc = TimeZone(identifier: "UTC")!
+        let html = try SortaCapsule.html(notes: [brushes, newer], folders: [], edges: [], savedAt: Date(timeIntervalSince1970: 0),
+                                         zone: utc, picture: nil)
+        let gate = try XCTUnwrap(html.range(of: "Oil the gate")).lowerBound
+        let brush = try XCTUnwrap(html.range(of: "Buy brushes")).lowerBound
+        XCTAssertTrue(gate < brush, "the newer first")
+        let none = try SortaCapsule.html(notes: [shed], folders: [garden], edges: [], savedAt: Date(timeIntervalSince1970: 0),
+                                         zone: utc, picture: nil)
+        XCTAssertFalse(none.contains("<h2>To sort</h2>"), "no To sort with nothing in it")
+        let index = SortaCapsule.titleIndex(notes)
+        let two: String = id("2").uuidString.lowercased()
+        let cases: [(String, String)] = [
+            ("Check [[Buy brushes]] first.", "Check <a href=\"#n-\(two)\">Buy brushes</a> first."),
+            ("See [[ buy BRUSHES |the brushes]].", "See <a href=\"#n-\(two)\">the brushes</a>."),
+            ("Ask [[Nobody here]] & then", "Ask Nobody here &amp; then"),
+            ("Open [[ and more", "Open [[ and more"),
+            ("[[]] stays", "[[]] stays"),
+            ("[[two\nlines]]", "[[two\nlines]]"),
+            ("<b>[[Buy brushes]]</b>", "&lt;b&gt;<a href=\"#n-\(two)\">Buy brushes</a>&lt;/b&gt;"),
+        ]
+        for (text, shown) in cases { XCTAssertEqual(SortaCapsule.words(text, index: index), shown, text) }
     }
 
     func testTheDataCantCloseItsBlock() throws {

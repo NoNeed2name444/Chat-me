@@ -1088,7 +1088,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Shows every idea again."
+            "value" : "Turns this lens off."
           }
         }
       }
