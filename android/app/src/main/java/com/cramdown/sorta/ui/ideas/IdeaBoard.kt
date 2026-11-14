@@ -225,8 +225,10 @@ const val BOARD_PEEK_TAG = "board-peek"
             }
         }
 
-        // S06c: TalkBack's word for a tap on a card edged as like the open idea, which links it
-        val linkWord = stringResource(R.string.echoes_link_hint)
+        // S06c: TalkBack's words for a tap on a card edged as like the open idea, which links it to that
+        // idea, named; and for Open, kept as an action of its own there
+        val linkWord = stringResource(R.string.echoes_board_link, shapes?.editingLine() ?: "")
+        val openWord = stringResource(R.string.map_peek_open)
         // the cards, each centred on its spot and scaled with the board
         Layout(content = {
             notes.forEach { note ->
@@ -296,7 +298,7 @@ const val BOARD_PEEK_TAG = "board-peek"
                                 }
                                 onClick(action) { tapCard(note.id); true }
                                 onLongClick("Start a connection") { source = note.id; true }
-                                if (links) customActions = listOf(CustomAccessibilityAction("Open") { open(note.id); true })
+                                if (links) customActions = listOf(CustomAccessibilityAction(openWord) { open(note.id); true })
                             })
                 }
             }

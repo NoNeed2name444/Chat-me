@@ -509,6 +509,10 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// A note whose name shows without pausing the orbits (the design
     /// preview's chosen note).
     private var named: Int?
+    /// S06c: the idea a held one would be let go on. While there is one,
+    /// its name shows in place of the held and chosen ones': the held idea
+    /// sits on it, so two names there would cover each other.
+    private var dropNamed: Int?
     /// Show links: the chosen body and its neighbours (every other body
     /// dimmed, only their links drawn); nil for everything.
     private var focusSet: Set<Int>?
@@ -899,6 +903,17 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         if let i, i < 0 || i >= nodes.count { note = nil }
         lock.lock()
         hovered = note
+        lock.unlock()
+    }
+
+    /// Names the drop target `i` (nil: none) in place of the held idea
+    /// (S06c). Only noted here.
+    func nameDrop(_ i: Int?) {
+        var note: Int? = i
+        if let i, i < 0 || i >= nodes.count { note = nil }
+        lock.lock()
+        dropNamed = note
+        resting = false
         lock.unlock()
     }
 
@@ -2177,7 +2192,10 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// lock held.
     private func updateLabels(_ dt: Float, eye: SIMD3<Float>, up: SIMD3<Float>) {
         labelsWanted.removeAll(keepingCapacity: true)
-        if namesShown {
+        if namesShown, let drop = dropNamed {
+            // S06c: the idea a held one would be let go on, alone
+            wantLabel(drop)
+        } else if namesShown {
             wantLabel(hovered)
             wantLabel(pressedNote)
             wantLabel(grabbed)
@@ -2332,7 +2350,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         guard let i, i >= 0, i < nodes.count, visible[i], !ghost[i] else { return }
         // a name pill is interface and never half-fades: it shows only in
         // the Space depth fade's crisp zone, and on the chosen body
-        if let depth, i != selected, i < depth.crisp.count, !depth.crisp[i] { return }
+        if let depth, i != selected, i != dropNamed, i < depth.crisp.count, !depth.crisp[i] { return }
         if labelsWanted.contains(i) { return }
         labelsWanted.append(i)
     }

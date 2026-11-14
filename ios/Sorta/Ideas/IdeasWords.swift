@@ -202,6 +202,10 @@ enum IdeasWords {
     static func echoesLinked(_ title: String) -> String {
         String(localized: "echoes.linked %@", defaultValue: "Linked to \u{201C}\(title)\u{201D}.")
     }
+    /// VoiceOver, on a board card like the open idea: whom a tap links it to.
+    static func echoesBoardLink(_ title: String) -> String {
+        String(localized: "echoes.board.link %@", defaultValue: "Links it to \u{201C}\(title)\u{201D}.")
+    }
     static var collideTool: String { String(localized: "collide.tool", defaultValue: "Collide two ideas") }
     static var collideTitle: String { String(localized: "collide.title", defaultValue: "What if both?") }
     static var collideField: String { String(localized: "collide.field", defaultValue: "The idea they make") }
@@ -222,6 +226,7 @@ enum IdeasWords {
         String(localized: "split.hint", defaultValue: "Tap the last sentence of the first idea.")
     }
     static var splitFirst: String { String(localized: "split.first", defaultValue: "First idea") }
+    static var splitEndsHere: String { String(localized: "split.ends.here", defaultValue: "First idea ends here") }
     static var splitSecond: String { String(localized: "split.second", defaultValue: "Second idea") }
     static var splitConfirm: String { String(localized: "split.confirm", defaultValue: "Split idea") }
     static var splitDone: String { String(localized: "split.done", defaultValue: "Idea split in two.") }

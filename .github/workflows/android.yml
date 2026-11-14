@@ -226,11 +226,12 @@ jobs:
           echo "The board's look menu took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
           adb shell settings put system font_scale 1.0
           # S06c: on Space, an idea held onto another rings it twice and collides them, and the chosen idea
-          # pinched apart opens the split chooser; on the tablet the ideas like the open one are ringed
+          # pinched apart opens the split chooser, and pushed together with its nearest idea joins them;
+          # on the tablet the ideas like the open one are ringed
           shapes_source=app/src/androidTest/java/com/cramdown/sorta/IdeaShapesMapTest.kt
           shapes_tests=$(grep -c '@Test' "$shapes_source")
           [ "$shapes_tests" -eq 1 ]
-          echo "expecting OK (1 test), a drop and a pinch still, and on the tablet a still of the rings" | tee -a test-results/expected.txt
+          echo "expecting OK (1 test), a drop, a pinch and a push still, and on the tablet a still of the rings" | tee -a test-results/expected.txt
           started=$SECONDS
           adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.IdeaShapesMapTest \
             com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-shapes.txt
@@ -345,6 +346,7 @@ jobs:
           grep -qF "OK (1 test)" test-results/instrumentation-shapes.txt
           test "$(find renders -name 'shapes-drop-space-*.png' | wc -l)" -eq 1
           test "$(find renders -name 'shapes-pinch-split-space-*.png' | wc -l)" -eq 1
+          test "$(find renders -name 'shapes-push-join-space-*.png' | wc -l)" -eq 1
           if [ "$device" = tablet ]; then test "$(find renders -name 'shapes-glow-space-*.png' | wc -l)" -eq 1; fi
           if [ "$device" = phone ]; then
             # 0 is the three-button bar

@@ -328,7 +328,7 @@ data class MapDrawn(
      */
     val glows: List<Int> = emptyList(),
     val drop: Int = -1,
-    /** Added by Map3DView (S06c): an idea a test can hold, and while one is held the nearest other idea, each index, x, y; empty for none. */
+    /** Added by Map3DView (S06c): an idea a test can hold, and the nearest other idea to the held one (else the chosen one), each index, x, y; empty for none. */
     val ideaSpot: List<Float> = emptyList(),
     val near: List<Float> = emptyList(),
 ) {

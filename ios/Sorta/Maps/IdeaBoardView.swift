@@ -360,8 +360,9 @@ struct IdeaBoardView: View {
         .gesture(cardDrag(note))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
-        // S06c: what a tap does when it links, as the echoes strip says it
-        .accessibilityHint(links ? IdeasWords.echoesLinkHint : "")
+        // S06c: what a tap does when it links: to the open idea, named, since
+        // VoiceOver is on this card and "this idea" would read as itself
+        .accessibilityHint(links ? IdeasWords.echoesBoardLink(openLine) : "")
         .accessibilityAddTraits(.isButton)
         // its symbol and its stored place, which the board may draw it away
         // from (S05c), for the UI tests; VoiceOver doesn't read an identifier
@@ -380,6 +381,12 @@ struct IdeaBoardView: View {
     private func linksOnTap(_ id: UUID) -> Bool {
         guard source == nil, !connecting, let shapes, shapes.editing != nil else { return false }
         return shapes.glows(id)
+    }
+
+    /// The open idea's first line, which a linking card's hint names.
+    private var openLine: String {
+        guard let id = shapes?.editing, let note = notes.note(id) else { return IdeasWords.untitled }
+        return IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
     }
 
     /// The whole title over its card, at least 240 wide, inside the board's

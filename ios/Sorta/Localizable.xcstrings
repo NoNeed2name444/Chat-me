@@ -397,6 +397,18 @@
         }
       }
     },
+    "echoes.board.link %@" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.board.link",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Links it to “%@”."
+          }
+        }
+      }
+    },
     "echoes.link.hint" : {
       "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.link.hint",
       "extractionState" : "manual",
@@ -1497,6 +1509,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Idea split in two."
+          }
+        }
+      }
+    },
+    "split.ends.here" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.ends.here",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First idea ends here"
           }
         }
       }

@@ -562,6 +562,8 @@ private struct SplitChooser: View {
         .buttonStyle(.plain)
         .disabled(k >= count)
         .accessibilityAddTraits(ends ? [.isSelected] : [])
+        // what "selected" means here, for VoiceOver (review N4)
+        .accessibilityValue(ends ? IdeasWords.splitEndsHere : "")
         .accessibilityIdentifier("split-sentence")
         .wardRowBackground()
     }

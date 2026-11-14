@@ -304,6 +304,8 @@
     <!-- TalkBack: "Double-tap to link it to this idea" -->
     <string name="echoes_link_hint">link it to this idea</string>
     <string name="echoes_linked">Linked to “%1$s”.</string>
+    <!-- TalkBack, on a board card like the open idea: "Double-tap to link it to “Rain barrel”" -->
+    <string name="echoes_board_link">link it to “%1$s”</string>
     <string name="collide_tool">Collide two ideas</string>
     <string name="collide_title">What if both?</string>
     <string name="collide_field">The idea they make</string>
@@ -318,6 +320,8 @@
     <string name="shape_collide_title">Collide with</string>
     <string name="split_title">Split in two</string>
     <string name="split_hint">Tap the last sentence of the first idea.</string>
+    <!-- TalkBack, the chosen sentence row's state -->
+    <string name="split_ends_here">First idea ends here</string>
     <string name="split_first">First idea</string>
     <string name="split_second">Second idea</string>
     <string name="split_confirm">Split idea</string>

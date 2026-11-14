@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +105,9 @@ sealed interface ShapeSheet {
     private fun titleOf(id: String): String = book.note(id)?.let { n ->
         sequenceOf(n.title, n.body).mapNotNull { t -> t.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } }.firstOrNull()
     } ?: res.getString(R.string.idea_untitled)
+
+    /** The open idea's first line, for the words that name it (the board's link action). */
+    fun editingLine(): String? = editing?.let(::titleOf)
 
     /** Links the open idea to [to] by hand, with Undo; nothing when none is open, it is the same idea, or they are linked already. */
     fun link(to: String) {
@@ -336,8 +340,11 @@ private class EchoIndex { var version = -1; var index: IdeaEchoes.Index? = null 
  */
 @Composable private fun SentenceRow(text: String, ends: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(WardRadius.field.wardDp)
+    val endsWord = stringResource(R.string.split_ends_here)
     Box(Modifier.fillMaxWidth().padding(vertical = WardSpace.xs.wardDp)
         .selectable(ends, role = Role.RadioButton, onClick = onClick)
+        // what "selected" means here, for TalkBack (review N4)
+        .then(if (ends) Modifier.semantics { stateDescription = endsWord } else Modifier)
         .heightIn(min = WardControlSize.target.wardDp)
         .padding(WardSpace.s.wardDp)
         .wardRelief(shape, WardLift.low, control = true)

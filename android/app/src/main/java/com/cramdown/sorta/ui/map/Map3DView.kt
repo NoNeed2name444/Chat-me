@@ -710,7 +710,12 @@ data class MapFlyTo(val id: String, val serial: Int)
             LabelEstimate.measure(points, lights, backdrop) to shine(i).colour
         }
     }
-    val nameWanted: List<Int> = if (!pills) emptyList() else {
+    val drop = dropName
+    val nameWanted: List<Int> = if (!pills) emptyList()
+        // S06c: the idea a held one would be let go on is named alone: the held idea sits on it, so two
+        // names there would cover each other (iOS's GraphSim.nameDrop)
+        else if (drop != null && screenNodes.any { it.index == drop }) listOf(drop)
+        else {
         // a body picked up takes the chosen body's slot till the let-go, as iOS's grab does (MapNameShow.wanted)
         val asked = listOfNotNull(hoveredName, pressedName, heldName, grabbedName ?: chosenName)
         if (asked.isEmpty()) emptyList() else {
@@ -752,8 +757,9 @@ data class MapFlyTo(val id: String, val serial: Int)
             high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek, below = scene.perf?.graph?.noteCount ?: Int.MAX_VALUE)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
-    // S06c, for the tests too: an idea a finger can hold (as spot(), among the ideas only), and while one is
-    // held the nearest other idea on screen, each as its index, centre x and y; empty when there is none
+    // S06c, for the tests too: an idea a finger can hold (as spot(), among the ideas only), and the nearest
+    // other idea on screen to the one held (else to the chosen one, for a push together), each as its index,
+    // centre x and y; empty when there is none
     fun ideaSpot(): List<Float> {
         val r = reshape ?: return emptyList()
         val margin = with(density) { MapSpot.MARGIN_DP.dp.toPx() }
@@ -763,7 +769,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     }
     fun nearIdea(): List<Float> {
         val r = reshape ?: return emptyList()
-        val held = grabbedName ?: return emptyList()
+        val held = grabbedName ?: chosenIndex.takeIf { it >= 0 } ?: return emptyList()
         val at = screenNodes.firstOrNull { it.index == held } ?: return emptyList()
         val best = screenNodes.filter { it.index != held && it.pixels > 2f && r.takes(it.index) }
             .minByOrNull { (it.x - at.x) * (it.x - at.x) + (it.y - at.y) * (it.y - at.y) }

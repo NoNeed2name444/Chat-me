@@ -46,7 +46,8 @@ import java.util.UUID
  * open one are ringed (MapDrawn.glows; still shapes-glow-space-tablet.png). On both, an idea held and moved
  * onto another rings that one twice (MapDrawn.drop; still shapes-drop-space-<device>.png) and, let go
  * there, opens the collide card with the two, which Cancel puts away; then the idea chosen with a tap and
- * pinched apart opens the split chooser (shapes-pinch-split-space-<device>.png). Hold-to-move elsewhere
+ * pinched apart opens the split chooser (shapes-pinch-split-space-<device>.png); last, it and the idea nearest
+ * it, pushed together with two fingers, join, with Undo (shapes-push-join-space-<device>.png). Hold-to-move elsewhere
  * and the camera's pinch are MapModeSpaceRenderTest's, which still pass.
  */
 @RunWith(AndroidJUnit4::class)
@@ -112,6 +113,11 @@ class IdeaShapesMapTest {
         val held = checkNotNull(mapDrawn())
         shot("shapes-drop-space-$device")
         check(held.drop >= 0) { "No drop target was ringed after $tries moves: $held" }
+        // the target is named, alone: the held idea sits on it (review round 2, S1); the name is up by the still
+        val named = checkNotNull(mapDrawn())
+        check(named.drop == held.drop && named.names.map { it.index } == listOf(held.drop)) {
+            "The drop target ${held.drop} is not the one name shown: $named"
+        }
         compose.onNode(map).performTouchInput { up() }
         compose.waitUntil(10_000) { shown(IdeaShapeTags.COLLIDE) }
         compose.onNode(hasText(context.getString(R.string.sheet_cancel)) and hasAnyAncestor(hasTestTag(IdeaShapeTags.COLLIDE))).performClick()
@@ -140,6 +146,44 @@ class IdeaShapesMapTest {
         check(shown(IdeaShapeTags.SPLIT)) { "A pinch apart on chosen idea $index at $at opened no split chooser: ${mapDrawn()}" }
         compose.onNode(hasText(context.getString(R.string.sheet_cancel)) and hasAnyAncestor(hasTestTag(IdeaShapeTags.SPLIT))).performClick()
         compose.waitUntil(10_000) { !shown(IdeaShapeTags.SPLIT) }
+
+        // A6: the chosen idea and the idea nearest it, pushed together with two fingers, join; Undo parts them
+        compose.waitUntil(10_000) { mapDrawn()?.chosen == index }
+        try { compose.waitUntil(10_000) { mapDrawn()?.near?.size == 3 } } catch (_: ComposeTimeoutException) {}
+        val before = checkNotNull(mapDrawn())
+        val other = checkNotNull(before.near.takeIf { it.size == 3 }) { "No idea near the chosen one $index: $before" }
+        val from = before.names.firstOrNull { it.index == index }?.body?.let { Offset(it[0], it[1]) } ?: at
+        val to = Offset(other[1], other[2])
+        val gap = (to - from).getDistance()
+        check(gap / density >= 30f) { "The chosen idea $index and idea ${other[0].toInt()} are too close to push together: $gap px; $before" }
+        val mid = (from + to) / 2f
+        val way = (to - from) / gap
+        val endFrom = mid - way * (2f * density)
+        val endTo = mid + way * (2f * density)
+        compose.onNode(map).performTouchInput {
+            down(0, from)
+            down(1, to)
+            val steps = 12
+            for (k in 1..steps) {
+                val t = k / steps.toFloat()
+                updatePointerTo(0, from + (endFrom - from) * t)
+                updatePointerTo(1, to + (endTo - to) * t)
+                move()
+            }
+            up(0)
+            up(1)
+        }
+        val joined = context.getString(R.string.join_done)
+        try { compose.waitUntil(10_000) { compose.onAllNodes(hasText(joined)).fetchSemanticsNodes().isNotEmpty() } } catch (_: ComposeTimeoutException) {}
+        shot("shapes-push-join-space-$device")
+        check(compose.onAllNodes(hasText(joined)).fetchSemanticsNodes().isNotEmpty()) {
+            "Pushing chosen idea $index and idea ${other[0].toInt()} together (from $gap px) joined nothing: ${mapDrawn()}"
+        }
+        try { compose.waitUntil(15_000) { (mapDrawn()?.bodies ?: before.bodies) == before.bodies - 1 } } catch (_: ComposeTimeoutException) {}
+        check(mapDrawn()?.bodies == before.bodies - 1) { "The join left ${mapDrawn()?.bodies} bodies, not ${before.bodies - 1}: ${mapDrawn()}" }
+        compose.onNode(hasText(context.getString(R.string.undo_action))).performClick()
+        try { compose.waitUntil(15_000) { mapDrawn()?.bodies == before.bodies } } catch (_: ComposeTimeoutException) {}
+        check(mapDrawn()?.bodies == before.bodies) { "Undo did not bring both ideas back: ${mapDrawn()?.bodies} bodies, not ${before.bodies}" }
     }
 
     private fun putCardAway() {

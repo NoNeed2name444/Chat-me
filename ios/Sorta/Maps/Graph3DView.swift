@@ -2725,6 +2725,7 @@ struct GraphSCNView: UIViewRepresentable {
             if let sim, preview != shownDropPreview || (rebuilt && preview != nil) {
                 shownDropPreview = preview
                 dropIndex = preview.flatMap { sim.index[$0] }
+                sim.nameDrop(dropIndex)
                 changed = true
             }
             if changed { drawRings() }
@@ -2733,6 +2734,8 @@ struct GraphSCNView: UIViewRepresentable {
         private func setDrop(_ i: Int?) {
             guard i != dropIndex else { return }
             dropIndex = i
+            // its name shows in place of the held idea's (GraphSim.nameDrop)
+            sim?.nameDrop(i)
             if i != nil { light.impactOccurred() }
             drawRings()
         }

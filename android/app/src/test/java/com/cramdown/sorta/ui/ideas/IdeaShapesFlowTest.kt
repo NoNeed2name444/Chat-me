@@ -1,6 +1,8 @@
 package com.cramdown.sorta.ui.ideas
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -139,6 +141,9 @@ class IdeaShapesFlowTest {
         waitFor(IdeaShapeTags.SPLIT)
         // the second sentence ends the first idea
         inSheet(IdeaShapeTags.SPLIT, "Catch the rain from the gutter.").performClick()
+        // TalkBack hears what the chosen row means (review N4)
+        compose.onNode(hasText("Catch the rain from the gutter.") and
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, s(R.string.split_ends_here))).assertExists()
         compose.onNode(hasTestTag(IdeaShapeTags.SPLIT_CONFIRM)).performClick()
         waitForText(s(R.string.split_done))
         assertEquals("Catch the rain from the gutter.", model.book.note(ShapesFixture.barrel.id)?.body)
