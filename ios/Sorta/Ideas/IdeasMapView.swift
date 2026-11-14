@@ -52,12 +52,20 @@ struct IdeasMapView: View {
             // strip and the foot, so every sheet still follows the phone
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !empty {
-                    MapTopStrip(look: look, openLooks: { choosingLook = true },
-                                list: paned ? nil : { listing = true },
-                                days: daysShown ? { toggleDays() } : nil, daysOn: showingDays)
-                        .environment(\.colorScheme, night ? .dark : scheme)
-                        .mapTextCap()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
+                    // S06b: the moons row sits in the inset under the strip, so
+                    // the map and the board lay out below it, not under it
+                    VStack(spacing: 0) {
+                        MapTopStrip(look: look, openLooks: { choosingLook = true },
+                                    list: paned ? nil : { listing = true },
+                                    days: daysShown ? { toggleDays() } : nil, daysOn: showingDays)
+                            .environment(\.colorScheme, night ? .dark : scheme)
+                            .mapTextCap()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
+                        if showingDays && daysShown && !choosingLook {
+                            moonRow
+                                .mapTextCap()
+                        }
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -67,12 +75,6 @@ struct IdeasMapView: View {
             }
             // in the view itself, not a Menu or a popover: those closed when
             // the 3D map's scene replaced "Laying out your ideas"
-            .overlay(alignment: .top) {
-                if showingDays && daysShown && !choosingLook {
-                    moonRow
-                        .mapTextCap()
-                }
-            }
             .overlay(alignment: .topTrailing) {
                 if choosingLook && !empty {
                     lookList
@@ -149,7 +151,7 @@ struct IdeasMapView: View {
         let days: [MoonDays.Day] = MoonDays.days(created: notes.notes.map(\.createdAt), now: Date(),
                                                  count: Self.moonCount, calendar: .current)
         return MoonRow(days: days, lit: litDay, pick: { litDay = $0 }, close: { closeDays() })
-            .padding(.top, stripHeight)
+            .padding(.bottom, WardSpace.s)
             .padding(.horizontal, WardSpace.gutter)
             .environment(\.colorScheme, night ? .dark : scheme)
     }

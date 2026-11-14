@@ -364,23 +364,32 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
             Spacer(Modifier.width(WardSpace.s.wardDp))
             Icon(Icons.Outlined.KeyboardArrowUp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
         }
-        content.lines.forEach { line ->
-            Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        // S06b: the folder a loose idea leans towards, with File there; where a shared one came from
-        lean?.let { LeanRow(it, fileThere) }
-        sharedFrom?.let { SharedFromMark(it) }
-        if (content.chips.isNotEmpty()) {
-            // the row reaches WardSpace.s into the card's margin each side, its chips padded back, so a chip's
-            // edge scrolls out under the margin, not cut at the padding (S05j 8b; GraphMapPanels.swift:121-147)
-            Row(Modifier.intoMargin(WardSpace.s.wardDp).testTag(MapPanelTags.PEEK_CHIPS).horizontalScroll(rememberScrollState())
-                .padding(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
-                verticalAlignment = Alignment.CenterVertically) {
-                content.chips.forEach { item ->
-                    WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
-                }
-                if (content.moreLinks > 0) {
-                    Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+        // S06b: where the card meets the chrome above it (IdeasSpace keeps it under the strip), its middle
+        // scrolls, only then, so a swipe up anywhere still opens it. The scroll's clip reaches s into the
+        // card's margin, its words padded back, so the chip row still reaches there (S05j 8b), and 2 more
+        // above and below, so File there's 48 dp touch area is whole
+        val middle = rememberScrollState()
+        Column(Modifier.weight(1f, fill = false).intoMargin(WardSpace.s.wardDp).verticalScroll(middle, enabled = middle.maxValue > 0)
+            .padding(horizontal = WardSpace.s.wardDp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            content.lines.forEach { line ->
+                Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            // S06b: the folder a loose idea leans towards, with File there; where a shared one came from
+            lean?.let { LeanRow(it, fileThere) }
+            sharedFrom?.let { SharedFromMark(it) }
+            if (content.chips.isNotEmpty()) {
+                // the row reaches WardSpace.s into the card's margin each side, its chips padded back, so a chip's
+                // edge scrolls out under the margin, not cut at the padding (S05j 8b; GraphMapPanels.swift:121-147)
+                Row(Modifier.intoMargin(WardSpace.s.wardDp).testTag(MapPanelTags.PEEK_CHIPS).horizontalScroll(rememberScrollState())
+                    .padding(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    content.chips.forEach { item ->
+                        WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
+                    }
+                    if (content.moreLinks > 0) {
+                        Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+                    }
                 }
             }
         }

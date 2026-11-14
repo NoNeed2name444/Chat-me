@@ -244,7 +244,7 @@ struct GraphLegendContent {
                        text: "An idea linking ideas in two or more other folders. Its links pulse together.",
                        tint: pulsarTint, how: "Link an idea to ideas in two other folders."),
         GraphLegendRow(symbol: "sparkle", name: "Comet",
-                       text: "An idea in no folder. Its tail grows the longer it waits, at a day, a week and a month. It swings past the folder it links to most and leans towards one whose words it shares. File it and it settles into orbit. Ideas shared from the same place circle each other. Older ones wait in the far cloud.",
+                       text: "An idea in no folder. Its tail grows the longer it waits. It swings past the folder it links to most and leans towards one whose words it shares; file it and it settles into orbit. Older ones wait in the far cloud.",
                        tint: cometTint, how: "Move an idea out of its folder: Choose folder \u{203A} To sort."),
         GraphLegendRow(symbol: "point.3.connected.trianglepath.dotted", name: "Links",
                        text: "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.",

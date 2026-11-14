@@ -115,14 +115,15 @@ struct MoonRow: View {
         .accessibilityIdentifier("moon-\(back)")
     }
 
-    /// The SF Symbol for a phase: new, crescent, half, gibbous, full.
+    /// The SF Symbol for a phase, more ink for a busier day, as Android's
+    /// moonGlyph: a ring for none, a crescent, half, a solid disc for the
+    /// busiest. Not SF's moonphase set, which draws the full moon as a ring.
     static func glyph(_ phase: Int) -> String {
         switch phase {
-        case 1: return "moonphase.waxing.crescent"
-        case 2: return "moonphase.first.quarter"
-        case 3: return "moonphase.waxing.gibbous"
-        case 4: return "moonphase.full.moon"
-        default: return "moonphase.new.moon"
+        case 1: return "moon"
+        case 2: return "circle.lefthalf.filled"
+        case 3: return "circle.fill"
+        default: return "circle"
         }
     }
 }
@@ -184,6 +185,13 @@ struct ShareSheet: View {
                         .wardFont(.subheadline)
                         .foregroundStyle(Color.wardInkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    // one tap for all of them: leave all out to keep a few,
+                    // or keep all again (as Android's)
+                    Button(kept.count == words.count ? SkyWords.leaveAll : SkyWords.keepAll) {
+                        kept = kept.count == words.count ? [] : Set(words.indices)
+                    }
+                    .buttonStyle(.wardQuiet)
+                    .accessibilityIdentifier("share-all")
                     WordFlow(spacing: WardSpace.s) {
                         ForEach(Array(words.enumerated()), id: \.offset) { k, word in
                             chip(word, at: k)
@@ -225,6 +233,7 @@ struct ShareSheet: View {
             Text(verbatim: word)
                 .strikethrough(!on)
                 .lineLimit(1)
+                .truncationMode(.middle)
         }
         .buttonStyle(WardChipButtonStyle(on: on))
         .accessibilityValue(on ? SkyWords.kept : SkyWords.leftOut)

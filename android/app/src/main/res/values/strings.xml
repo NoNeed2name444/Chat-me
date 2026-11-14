@@ -311,15 +311,15 @@
     <!-- A loose idea's preview card in Space: "Shares ‘garden’ with Raised beds", and its button -->
     <string name="lean_shares">Shares ‘%1$s’ with %2$s</string>
     <string name="lean_file">File there</string>
-    <string name="lean_file_spoken">File in %1$s</string>
+    <string name="lean_file_spoken">File there, in %1$s</string>
     <!-- The map strip's Days chip and the moons row it opens -->
     <string name="moons_chip">Days</string>
     <string name="moons_chip_hint">show recent days as moons</string>
     <string name="moons_title">Recent days</string>
-    <string name="moons_pick">Choose a day to light its ideas.</string>
+    <string name="moons_pick">Choose a day to see its ideas.</string>
     <string name="moons_clear">Clear</string>
     <string name="moons_clear_spoken">Clear the chosen day</string>
-    <string name="moons_moon_hint">light that day’s ideas</string>
+    <string name="moons_moon_hint">show that day’s ideas</string>
     <!-- A moon, spoken and as the row's heading: "14 November, 3 ideas" -->
     <string name="moons_moon_none">%1$s, no ideas</string>
     <plurals name="moons_moon_spoken">
@@ -331,6 +331,8 @@
     <string name="share_hint">Tap a word to leave it out. The idea goes in To sort.</string>
     <string name="share_word_kept">Kept</string>
     <string name="share_word_out">Left out</string>
+    <string name="share_keep_all">Keep all</string>
+    <string name="share_leave_all">Leave all out</string>
     <!-- Where a shared idea came from: "From example.org", spoken "Shared from example.org" -->
     <string name="shared_from">From %1$s</string>
     <string name="shared_from_spoken">Shared from %1$s</string>

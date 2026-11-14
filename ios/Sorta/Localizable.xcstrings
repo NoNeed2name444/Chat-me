@@ -1004,7 +1004,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "File in %@"
+            "value" : "File there, in %@"
           }
         }
       }
@@ -1232,7 +1232,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lights that day’s ideas."
+            "value" : "Shows that day’s ideas."
           }
         }
       }
@@ -1268,7 +1268,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a day to light its ideas."
+            "value" : "Choose a day to see its ideas."
           }
         }
       }
@@ -1437,6 +1437,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tap a word to leave it out. The idea goes in To sort."
+          }
+        }
+      }
+    },
+    "share.keepAll" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.keepAll",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep all"
+          }
+        }
+      }
+    },
+    "share.leaveAll" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.leaveAll",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave all out"
           }
         }
       }

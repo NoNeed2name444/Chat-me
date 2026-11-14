@@ -205,7 +205,7 @@ nonisolated enum MoonDays {
 
     static func phase(count: Int, fill: Double) -> Int {
         guard count > 0 else { return 0 }
-        return min(max(Int((fill * 4).rounded()), 1), 4)
+        return min(max(Int((fill * 3).rounded()), 1), 3)
     }
 
     /// The ideas caught on the day starting at `start`.

@@ -96,7 +96,7 @@ final class SkyIdeasTests: XCTestCase {
                             today - day + 60, today - 3 * day + 10, today - 3 * day + 20]
         let days = MoonDays.days(created: made, now: now, count: 5, calendar: calendar)
         XCTAssertEqual(days.map(\.count), [4, 1, 0, 2, 0])
-        XCTAssertEqual(days.map(\.phase), [4, 1, 0, 2, 0])
+        XCTAssertEqual(days.map(\.phase), [3, 1, 0, 2, 0])
         XCTAssertEqual(days[0].start, today)
         XCTAssertEqual(MoonDays.days(created: [], now: now, count: 3, calendar: calendar).map(\.phase), [0, 0, 0])
         XCTAssertEqual(MoonDays.days(created: [], now: now, count: 500, calendar: calendar).count, MoonDays.most)

@@ -33,7 +33,7 @@ class MapLegendTest {
         LegendRow("dot.radiowaves.left.and.right", "Pulsar", "An idea linking ideas in two or more other folders. Its links pulse together.",
             LegendTint(0.7, 0.8, 1.0), "Link an idea to ideas in two other folders."),
         LegendRow("sparkle", "Comet",
-            "An idea in no folder. Its tail grows the longer it waits, at a day, a week and a month. It swings past the folder it links to most and leans towards one whose words it shares. File it and it settles into orbit. Ideas shared from the same place circle each other. Older ones wait in the far cloud.",
+            "An idea in no folder. Its tail grows the longer it waits. It swings past the folder it links to most and leans towards one whose words it shares; file it and it settles into orbit. Older ones wait in the far cloud.",
             LegendTint(0.55, 1.0, 0.9), "Move an idea out of its folder: Choose folder › To sort."),
         LegendRow("point.3.connected.trianglepath.dotted", "Links",
             "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.", LegendTint(1.0, 0.78, 0.5), MapLegend.LINK_IDEAS),
@@ -200,10 +200,9 @@ class MapLegendTest {
         assertEquals("To sort: the ideas in no folder share one cell, opened like the others. Move an idea into a folder and it joins " +
             "that folder’s cell. Choose folder › To sort.", MapLegend.spoken(toSort))
         val comet = MapLegend.of(GraphTheme.SPACE).rows[6]
-        assertEquals("Comet: an idea in no folder. Its tail grows the longer it waits, at a day, a week and a month. It swings past " +
-            "the folder it links to most and leans towards one whose words it shares. File it and it settles into orbit. Ideas " +
-            "shared from the same place circle each other. Older ones wait in the far cloud. Move an idea out of its folder: " +
-            "Choose folder › To sort.", MapLegend.spoken(comet))
+        assertEquals("Comet: an idea in no folder. Its tail grows the longer it waits. It swings past the folder it links to most " +
+            "and leans towards one whose words it shares; file it and it settles into orbit. Older ones wait in the far cloud. " +
+            "Move an idea out of its folder: Choose folder › To sort.", MapLegend.spoken(comet))
     }
 
     // S05j 7d: each [[ step says what to do and what it makes, with no colon joining two clauses;

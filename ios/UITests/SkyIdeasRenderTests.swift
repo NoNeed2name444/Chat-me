@@ -34,7 +34,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         XCTAssertEqual(lean.label, "Shares ‘garden’ with Raised beds")
         let fileThere = app.buttons["graphPeekFileThere"]
         XCTAssertTrue(fileThere.exists, "File there")
-        XCTAssertEqual(fileThere.label, "File in Raised beds")
+        XCTAssertEqual(fileThere.label, "File there, in Raised beds")
         assertTarget(fileThere.frame, "File there")
         sleep(1)
         keepShot("sky-2-lean-card")

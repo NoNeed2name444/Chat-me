@@ -89,7 +89,7 @@ class SpaceSkyRenderTest {
         val lean = node(SkyTags.LEAN)
         check(spoken(lean) == "Shares ‘garden’ with Raised beds") { "The lean line reads ${spoken(lean)} for $suffix" }
         val fileThere = node(SkyTags.FILE_THERE)
-        check(spoken(fileThere) == "File in Raised beds") { "File there reads ${spoken(fileThere)} for $suffix" }
+        check(spoken(fileThere) == "File there, in Raised beds") { "File there reads ${spoken(fileThere)} for $suffix" }
         target(fileThere, "File there, $suffix")
         settle(1_000)
         shot("sky-lean-card-$suffix")

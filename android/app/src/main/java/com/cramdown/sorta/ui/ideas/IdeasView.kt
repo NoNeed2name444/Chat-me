@@ -195,6 +195,8 @@ internal object IdeasBanner {
     /** The foot's height: the banner and the switch, which the list and the map keep above. */
     var footHeight by remember { mutableIntStateOf(0) }
     var stripHeight by remember { mutableIntStateOf(0) }
+    // S06b: the moons row's height while it is open, which the map keeps under too
+    var moonsHeight by remember { mutableIntStateOf(0) }
     /** Map mode's list sheet is up, and the folder it is browsing (nil: the top level). */
     var listing by rememberSaveable { mutableStateOf(false) }
     var listFolder by rememberSaveable { mutableStateOf<String?>(null) }
@@ -286,6 +288,10 @@ internal object IdeasBanner {
     // S06b: the Days chip and the moons are Space's and 2D's, over ideas; another look or no ideas puts them away
     val daysShown = book.notes.isNotEmpty() && (settings.look == MapLook.SPACE || settings.look == MapLook.TWO_D)
     LaunchedEffect(daysShown) { if (!daysShown) { showingDays = false; litDay = null } }
+    // Back puts the moons away and ends the lit day, as it closes the look list
+    BackHandler(enabled = daysShown && showingDays) { showingDays = false; litDay = null }
+    val moonsTop = with(LocalDensity.current) { (if (daysShown && showingDays) moonsHeight else 0).toDp() }
+    val mapTop = if (moonsTop > 0.dp) stripTop + WardSpace.s.wardDp + moonsTop else stripTop
     val litIdeas: Set<String>? = litDay?.let { day ->
         remember(book.notes, model.version, day) {
             MoonDays.lit(book.notes.map { it.id to it.createdAt }, LocalDate.ofEpochDay(day), ZoneId.systemDefault())
@@ -297,7 +303,7 @@ internal object IdeasBanner {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version,
+            choose = { choosing = it }, delete = ::deleteIdea, top = mapTop, version = model.version,
             lit = litIdeas, file = { id, to -> file(id, to) })
         // the top strip: the To sort chip (not on two panes), the Days chip and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
@@ -314,7 +320,7 @@ internal object IdeasBanner {
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     .padding(horizontal = WardSpace.gutter.wardDp), contentAlignment = Alignment.TopCenter) {
                     MoonRow(moons, litDay?.let { LocalDate.ofEpochDay(it) }, pick = { litDay = it?.toEpochDay() },
-                        close = { showingDays = false; litDay = null })
+                        close = { showingDays = false; litDay = null }, modifier = Modifier.onSizeChanged { moonsHeight = it.height })
                 }
             }
         }

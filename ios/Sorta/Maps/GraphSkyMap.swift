@@ -127,7 +127,7 @@ struct SharedFromMark: View {
         Label {
             Text(SkyWords.from(mark))
         } icon: {
-            Image(systemName: "square.and.arrow.down")
+            Image(systemName: "link")
                 .foregroundStyle(Color.wardGlyph)
         }
         .wardFont(.footnote)
@@ -167,17 +167,17 @@ enum SkyWords {
     }
     static var fileThere: String { String(localized: "lean.file", defaultValue: "File there") }
     static func fileThereSpoken(_ folder: String) -> String {
-        String(localized: "lean.file.spoken %@", defaultValue: "File in \(folder)")
+        String(localized: "lean.file.spoken %@", defaultValue: "File there, in \(folder)")
     }
 
     // MARK: the moons (A5, A6)
     static var days: String { String(localized: "moons.chip", defaultValue: "Days") }
     static var daysHint: String { String(localized: "moons.chip.hint", defaultValue: "Shows recent days as moons.") }
     static var recentDays: String { String(localized: "moons.title", defaultValue: "Recent days") }
-    static var pickADay: String { String(localized: "moons.pick", defaultValue: "Choose a day to light its ideas.") }
+    static var pickADay: String { String(localized: "moons.pick", defaultValue: "Choose a day to see its ideas.") }
     static var clear: String { String(localized: "moons.clear", defaultValue: "Clear") }
     static var clearSpoken: String { String(localized: "moons.clear.spoken", defaultValue: "Clear the chosen day") }
-    static var moonHint: String { String(localized: "moons.moon.hint", defaultValue: "Lights that day’s ideas.") }
+    static var moonHint: String { String(localized: "moons.moon.hint", defaultValue: "Shows that day’s ideas.") }
     /// "14 November, 3 ideas"; a day with none, "14 November, no ideas".
     static func moonSpoken(_ day: String, _ n: Int) -> String {
         if n == 0 { return String(localized: "moons.moon.none %@", defaultValue: "\(day), no ideas") }
@@ -192,6 +192,8 @@ enum SkyWords {
     }
     static var kept: String { String(localized: "share.word.kept", defaultValue: "Kept") }
     static var leftOut: String { String(localized: "share.word.out", defaultValue: "Left out") }
+    static var keepAll: String { String(localized: "share.keepAll", defaultValue: "Keep all") }
+    static var leaveAll: String { String(localized: "share.leaveAll", defaultValue: "Leave all out") }
     static func from(_ mark: String) -> String {
         String(localized: "shared.from %@", defaultValue: "From \(mark)")
     }

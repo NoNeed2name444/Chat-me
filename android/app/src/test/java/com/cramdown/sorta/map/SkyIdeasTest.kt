@@ -93,7 +93,7 @@ class SkyIdeasTest {
             today - day + 60_000, today - 3 * day + 10_000, today - 3 * day + 20_000)
         val days = MoonDays.days(made, now, 5, zone)
         assertEquals(listOf(4, 1, 0, 2, 0), days.map { it.count })
-        assertEquals(listOf(4, 1, 0, 2, 0), days.map { it.phase })
+        assertEquals(listOf(3, 1, 0, 2, 0), days.map { it.phase })
         assertEquals(listOf(0, 0, 0), MoonDays.days(emptyList(), now, 3, zone).map { it.phase })
         assertEquals(MoonDays.MOST, MoonDays.days(emptyList(), now, 500, zone).size)
         assertEquals(setOf("a"), MoonDays.lit(listOf("a" to today + 5, "b" to today - day), days[0].date, zone))

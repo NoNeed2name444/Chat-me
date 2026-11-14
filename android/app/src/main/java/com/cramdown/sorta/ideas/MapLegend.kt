@@ -127,7 +127,7 @@ object MapLegend {
             "An idea linking ideas in two or more other folders. Its links pulse together.", pulsarTint,
             "Link an idea to ideas in two other folders."),
         LegendRow("sparkle", "Comet",
-            "An idea in no folder. Its tail grows the longer it waits, at a day, a week and a month. It swings past the folder it links to most and leans towards one whose words it shares. File it and it settles into orbit. Ideas shared from the same place circle each other. Older ones wait in the far cloud.",
+            "An idea in no folder. Its tail grows the longer it waits. It swings past the folder it links to most and leans towards one whose words it shares; file it and it settles into orbit. Older ones wait in the far cloud.",
             cometTint, "Move an idea out of its folder: Choose folder › To sort."),
         LegendRow("point.3.connected.trianglepath.dotted", "Links",
             "Straight inside a folder, arched between folders, faint between galaxies. Links never pull.", beamTint, LINK_IDEAS),

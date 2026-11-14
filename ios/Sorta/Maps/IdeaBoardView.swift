@@ -79,7 +79,7 @@ struct IdeaBoardView: View {
 
     private static let space = "idea-board"
     /// A card outside the lit day: dimmed, its words still there to read.
-    static let unlit: Double = 0.3
+    static let unlit: Double = 0.5
     /// The UI tests' stand-in for a resting finger, which XCUITest can't
     /// hold while it takes a picture: `-SortaBoardPeek <title>` shows that
     /// idea's whole title until the board is moved.

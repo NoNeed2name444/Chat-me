@@ -76,7 +76,7 @@ const val BOARD_CARD_TAG = "board-card"
 const val BOARD_KIND_TAG = "board-kind-"
 const val BOARD_PEEK_TAG = "board-peek"
 /** S06b: a card outside the lit day (iOS IdeaBoardView.unlit). */
-const val UNLIT = 0.3f
+const val UNLIT = 0.5f
 
 /** The title's style on a card and over it. */
 @Composable private fun boardTitleStyle() = WardTextStyle.subheadline.textStyle().copy(fontWeight = FontWeight.Medium)

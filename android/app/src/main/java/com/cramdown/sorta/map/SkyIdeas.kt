@@ -145,7 +145,7 @@ object MoonDays {
     /** How far back the row scrolls. */
     const val MOST = 60
 
-    /** [phase]: 0 new (no ideas), 1 crescent, 2 half, 3 gibbous, 4 full. */
+    /** [phase]: 0 none (no ideas), 1 some, 2 half, 3 the busiest: more ink, a busier day. */
     data class Day(val date: LocalDate, val count: Int, val fill: Double, val phase: Int)
 
     /** The last [count] days to [now], newest first, in [zone]. */
@@ -164,7 +164,7 @@ object MoonDays {
         }
     }
 
-    fun phase(count: Int, fill: Double): Int = if (count <= 0) 0 else min(max((fill * 4).roundToInt(), 1), 4)
+    fun phase(count: Int, fill: Double): Int = if (count <= 0) 0 else min(max((fill * 3).roundToInt(), 1), 3)
 
     /** The ideas caught on [day]. */
     fun lit(notes: List<Pair<String, Long>>, day: LocalDate, zone: ZoneId): Set<String> =

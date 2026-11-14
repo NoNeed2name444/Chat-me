@@ -1,15 +1,16 @@
 package com.cramdown.sorta.ui.ideas
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brightness1
-import androidx.compose.material.icons.outlined.Brightness2
 import androidx.compose.material.icons.outlined.Brightness3
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Contrast
-import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.NightlightRound
 import androidx.compose.material.icons.outlined.NorthEast
@@ -31,10 +32,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.IdeaBook
@@ -70,6 +71,7 @@ object SkyTags {
     const val SHARE_SHEET = "share-sheet"
     const val SHARE_SAVE = "share-save"
     const val SHARE_CANCEL = "share-cancel"
+    const val SHARE_ALL = "share-all"
     /** The share sheet's word [k], in order. */
     fun shareWord(k: Int) = "share-word-$k"
 }
@@ -137,7 +139,7 @@ internal fun skySpace(plan: UniversePlan, book: IdeaBook, edges: List<Pair<Strin
     val spoken = stringResource(R.string.shared_from_spoken, mark)
     Row(modifier.testTag(SkyTags.SHARED_FROM).clearAndSetSemantics { contentDescription = spoken },
         horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Outlined.Download, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(15.0)))
+        Icon(Icons.Outlined.Link, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(15.0)))
         Text(stringResource(R.string.shared_from, mark), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary),
             maxLines = 1)
     }
@@ -161,12 +163,14 @@ fun moonDayName(day: LocalDate, locale: Locale = Locale.getDefault()): String =
         else pluralStringResource(R.plurals.moons_moon_spoken, day.count, name, day.count)
 }
 
-/** A phase's glyph: new, crescent, half, gibbous, full (Material's moons and circles; never drawn in code). */
+/**
+ * A phase's glyph, more ink for a busier day, as iOS's MoonRow.glyph: a ring for none, a crescent,
+ * half, a solid disc for the busiest (Material's moons and circles; never drawn in code).
+ */
 fun moonGlyph(phase: Int): ImageVector = when (phase) {
     1 -> Icons.Outlined.Brightness3
     2 -> Icons.Outlined.Contrast
-    3 -> Icons.Outlined.Brightness2
-    4 -> Icons.Filled.Brightness1
+    3 -> Icons.Filled.Brightness1
     else -> Icons.Outlined.Circle
 }
 
@@ -182,7 +186,7 @@ fun moonGlyph(phase: Int): ImageVector = when (phase) {
     val clearSpoken = stringResource(R.string.moons_clear_spoken)
     val doneWords = stringResource(R.string.ward_done)
     WardCardFace(modifier.widthIn(max = MapPanel.MAX_WIDTH.dp).fillMaxWidth().testTag(SkyTags.MOONS)
-        .semantics { customActions = listOf(CustomAccessibilityAction(doneWords) { close(); true }) },
+        .semantics { paneTitle = title; customActions = listOf(CustomAccessibilityAction(doneWords) { close(); true }) },
         lift = WardLift.high, spacing = WardSpace.s.wardDp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
             Text(heading, Modifier.weight(1f).testTag(SkyTags.MOONS_HEADING).semantics { this.heading() },
@@ -191,7 +195,7 @@ fun moonGlyph(phase: Int): ImageVector = when (phase) {
                 kind = WardButtonKind.quiet, fills = false) { Text(stringResource(R.string.moons_clear), maxLines = 1) }
             WardTextButton(doneWords, close, Modifier.testTag(SkyTags.MOONS_DONE), kind = WardButtonKind.compact, fills = false)
         }
-        LazyRow(Modifier.intoMargin(WardSpace.s.wardDp).semantics { contentDescription = title },
+        LazyRow(Modifier.intoMargin(WardSpace.s.wardDp),
             contentPadding = PaddingValues(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
             itemsIndexed(days, key = { _, day -> day.date.toEpochDay() }) { back, day -> Moon(day, back, on = day.date == lit) { pick(if (day.date == lit) null else day.date) } }
         }
@@ -243,14 +247,21 @@ data class ShareIntake(val text: String, val mark: String?) {
                     kind = WardButtonKind.quiet, fills = false) },
                 trailing = { WardTextButton(stringResource(R.string.sky_save), ::submit, Modifier.testTag(SkyTags.SHARE_SAVE),
                     kind = WardButtonKind.compact, fills = false, enabled = kept.isNotEmpty()) })
+            // a long share scrolls; a left-out word is struck through as well as unpicked
             Column(Modifier.align(Alignment.CenterHorizontally).widthIn(max = IdeasLayout.column.dp).fillMaxWidth()
+                .weight(1f, fill = false).verticalScroll(rememberScrollState())
                 .padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.m.wardDp),
                 verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
                 Text(stringResource(R.string.share_hint), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
+                // one tap for all of them: leave all out to keep a few, or keep all again
+                val all = kept.size == words.size
+                WardTextButton(stringResource(if (all) R.string.share_leave_all else R.string.share_keep_all),
+                    { kept = if (all) emptySet() else words.indices.toSet() }, Modifier.testTag(SkyTags.SHARE_ALL),
+                    kind = WardButtonKind.quiet, fills = false)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                     words.forEachIndexed { k, word ->
                         val on = k in kept
-                        WardChipButton(word, { kept = if (on) kept - k else kept + k }, on = on,
+                        WardChipButton(word, { kept = if (on) kept - k else kept + k }, on = on, struck = !on,
                             modifier = Modifier.testTag(SkyTags.shareWord(k)).semantics { stateDescription = if (on) keptWord else outWord })
                     }
                 }

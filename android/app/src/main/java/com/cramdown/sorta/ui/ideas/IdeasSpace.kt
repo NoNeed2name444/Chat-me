@@ -342,7 +342,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             }
             // the Link length bar and the peek card, bottom-centred beside the tools (bottomPanels,
             // Graph3DView.swift:349-380); the card steps aside while a body's options are up
+            // S06b: never above [top] (the strip, and the moons when open): a taller card scrolls its middle
             if (panelsShown) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()) + WardSpace.s.wardDp)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
                     bottom = hidden + WardSpace.l.wardDp),
@@ -363,7 +365,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                             chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
                             option = { pick(it, body) },
                             linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) },
-                            modifier = Modifier.onGloballyPositioned { peekBounds = it.boundsInRoot() },
+                            modifier = Modifier.weight(1f, fill = false).onGloballyPositioned { peekBounds = it.boundsInRoot() },
                             lean = lean?.first, fileThere = { if (idea != null && lean != null) file(idea.id, lean.second) },
                             sharedFrom = idea?.sharedFrom)
                     }

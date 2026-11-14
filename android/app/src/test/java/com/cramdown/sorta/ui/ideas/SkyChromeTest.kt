@@ -5,11 +5,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -116,7 +119,12 @@ class SkyChromeTest {
         assertEquals(s(R.string.lean_shares, "garden", "Raised beds"), spoken(SkyTags.LEAN))
         assertEquals("Shares ‘garden’ with Raised beds", spoken(SkyTags.LEAN))
         assertEquals(s(R.string.lean_file_spoken, "Raised beds"), spoken(SkyTags.FILE_THERE))
+        // in this small window the card meets the strip and its middle scrolls: File there is scrolled to, as a person would
+        node(SkyTags.FILE_THERE).performScrollTo()
         target(SkyTags.FILE_THERE)
+        val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
+        val card = compose.onNode(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNode().boundsInRoot
+        assertTrue("the card stays under the strip: $card, $strip", card.top >= strip.bottom)
         shot("sky_lean_card")
         node(SkyTags.FILE_THERE).performClick()
         run.until { IdeaStore(run.store).notes.first { it.id == leaning.id }.folderId == raisedBeds.id }
@@ -161,8 +169,18 @@ class SkyChromeTest {
         run.until { shown(SkyTags.MOONS_CLEAR) }
         node(SkyTags.moon(0)).performClick()
         run.until { !shown(SkyTags.MOONS_CLEAR) }
+        assertEquals("TalkBack names the row as a pane", s(R.string.moons_title),
+            node(SkyTags.MOONS).fetchSemanticsNode().config.getOrNull(SemanticsProperties.PaneTitle))
         node(SkyTags.MOONS_DONE).performClick()
         run.until { !shown(SkyTags.moon(0)) }
+        // Back puts the row away and ends the lit day, before it leaves the map
+        node(SkyTags.DAYS_CHIP).performClick()
+        run.until { shown(SkyTags.moon(0)) }
+        node(SkyTags.moon(0)).performClick()
+        run.until { shown(SkyTags.MOONS_CLEAR) }
+        run.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        run.until { !shown(SkyTags.moon(0)) }
+        assertTrue("still on the map", shown(SkyTags.DAYS_CHIP))
     }
 
     // A7
@@ -196,6 +214,15 @@ class SkyChromeTest {
         shared = ActivityScenario.launch(intent)
         run.until { shown(SkyTags.SHARE_SHEET) }
         assertFalse("no link and no app named: no source", shown(SkyTags.SHARED_FROM))
+        // Leave all out, then Keep all: one tap each for every word
+        fun state(k: Int) = node(SkyTags.shareWord(k)).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+        compose.onNode(hasTestTag(SkyTags.SHARE_ALL)).assert(hasText(s(R.string.share_leave_all))).performClick()
+        compose.waitForIdle()
+        assertEquals(List(3) { s(R.string.share_word_out) }, (0..2).map(::state))
+        node(SkyTags.SHARE_SAVE).assertIsNotEnabled()
+        compose.onNode(hasTestTag(SkyTags.SHARE_ALL)).assert(hasText(s(R.string.share_keep_all))).performClick()
+        compose.waitForIdle()
+        assertEquals(List(3) { s(R.string.share_word_kept) }, (0..2).map(::state))
         node(SkyTags.SHARE_CANCEL).performClick()
         run.until { !shown(SkyTags.SHARE_SHEET) }
         assertTrue(IdeaStore(run.store).notes.isEmpty())
