@@ -41,6 +41,12 @@ struct Note: Identifiable, Codable, Hashable {
     /// The question, card, case, station or lecture the note was saved from
     /// with Save to Ideas (SaveToIdeas.swift); nil for a note written here.
     var source: NoteSource? = nil
+    /// When the idea was last opened (S06a, tides); nil: not since this
+    /// field came. Its frost is counted from it, else from `createdAt`.
+    var openedAt: Date? = nil
+    /// Where the caret was when the idea was left mid-sentence, a UTF-16
+    /// offset into `body` (S06a, "You were saying…"); nil: not marked.
+    var stoppedAt: Int? = nil
 }
 
 /// A folder of notes. Folders nest: a folder with a parent sits inside it.
@@ -57,6 +63,7 @@ struct NoteFolder: Identifiable, Codable, Hashable {
 extension Note {
     private enum Keys: String, CodingKey {
         case id, title, body, folderId, kind, links, tags, boardX, boardY, createdAt, updatedAt, source
+        case openedAt, stoppedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -77,6 +84,8 @@ extension Note {
         // a source this version cannot read (a kind from a newer one) is
         // dropped, never the note
         source = try? c.decodeIfPresent(NoteSource.self, forKey: .source)
+        openedAt = try? c.decodeIfPresent(Date.self, forKey: .openedAt)
+        stoppedAt = try? c.decodeIfPresent(Int.self, forKey: .stoppedAt)
     }
 }
 
@@ -249,6 +258,10 @@ final class NoteStore: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
         var changed = note
         changed.updatedAt = notes[index].updatedAt
+        // written by markOpened and setStopped only, so an editor's older
+        // copy of the note leaves them as they are
+        changed.openedAt = notes[index].openedAt
+        changed.stoppedAt = notes[index].stoppedAt
         guard changed != notes[index] else { return }
         changed.updatedAt = Date()
         notes[index] = changed
@@ -329,6 +342,23 @@ final class NoteStore: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].boardX = x
         notes[index].boardY = y
+        save()
+    }
+
+    /// The idea was opened (S06a): its frost goes. Not an edit, so its
+    /// time is left alone.
+    func markOpened(_ id: UUID, at time: Date = Date()) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].openedAt = time
+        save()
+    }
+
+    /// Where the caret was when the idea was left mid-sentence, or nil
+    /// (IdeaStops). Not an edit, so its time is left alone.
+    func setStopped(_ id: UUID, at caret: Int?) {
+        guard let index = notes.firstIndex(where: { $0.id == id }),
+              notes[index].stoppedAt != caret else { return }
+        notes[index].stoppedAt = caret
         save()
     }
 

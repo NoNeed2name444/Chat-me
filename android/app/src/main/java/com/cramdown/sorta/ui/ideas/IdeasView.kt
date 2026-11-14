@@ -28,11 +28,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -59,6 +61,7 @@ import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.LocalWardLook
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlinx.coroutines.launch
@@ -109,6 +112,8 @@ object IdeasTags {
     const val BANNER = "notice"
     /** Map mode with no ideas yet. */
     const val MAP_EMPTY = "map-empty"
+    /** The map's pane on two panes (S05j item 1). */
+    const val MAP_PANE = "map-pane"
 }
 
 /**
@@ -148,10 +153,25 @@ internal sealed class FolderPrompt {
 }
 
 /**
- * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
- * launch extra): it goes to the same call the system picker's result does, once.
+ * How long the banner keeps a notice (S05h2 repair 3). A notice with Undo stays for
+ * SnackbarDuration.Long, or, when the tests ask ([undoStays]), until it is acted on or dismissed,
+ * as iOS keeps an Undo notice up when the tests ask (IdeasNoticeHost.stays, IdeasKit.swift:325-337);
+ * a new notice still replaces it. A notice without Undo is never kept.
  */
-@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart()) {
+internal object IdeasBanner {
+    fun duration(undo: Boolean, undoStays: Boolean): SnackbarDuration =
+        if (undo && undoStays) SnackbarDuration.Indefinite else SnackbarDuration.Long
+
+    /** Whether a launch that asks for Undo notices to stay is heeded: only in a debuggable build, so a release build ignores it. */
+    fun undoStays(asked: Boolean, debuggable: Boolean): Boolean = asked && debuggable
+}
+
+/**
+ * The Sort screen on [model]. [testImport] is the tests' file for the import (MainActivity's
+ * launch extra): it goes to the same call the system picker's result does, once. [undoStays]: the
+ * tests' launch extra that keeps Undo notices up (IdeasBanner), false in a release build.
+ */
+@Composable fun IdeasView(model: IdeasModel, testImport: File? = null, start: IdeasStart = IdeasStart(), undoStays: Boolean = false) {
     val context = LocalContext.current
     val res = context.resources
     val settings = remember(context) { IdeasSettings(context) }
@@ -182,7 +202,7 @@ internal sealed class FolderPrompt {
         scope.launch {
             banner.currentSnackbarData?.dismiss()
             val label = if (undo != null) res.getString(R.string.undo_action) else action
-            val result = banner.showSnackbar(message, actionLabel = label, duration = SnackbarDuration.Long)
+            val result = banner.showSnackbar(message, actionLabel = label, duration = IdeasBanner.duration(undo != null, undoStays))
             if (result == SnackbarResult.ActionPerformed) undo?.invoke()
         }
     }
@@ -204,6 +224,29 @@ internal sealed class FolderPrompt {
         model.book.delete(id)
         say(res.getString(R.string.undo_deleted), undo = { model.book.restore(removed) })
     }
+
+    // S06a: the deck's order, "You were saying…", and the low tide, asked once per launch
+    val deck = remember { DeckState() }
+    val frames = remember { mutableStateMapOf<String, Rect>() }
+    remember(model) { IdeasSession.startTide(settings, model.book); 0 }
+    var resuming by rememberSaveable { mutableStateOf(false) }
+    var linking by remember { mutableStateOf<String?>(null) }
+    val toSortIds = remember(book, model.version) { book.contents(null).map { it.id } }
+    val order = remember(toSortIds, deck.bump) { deck.deck.sync(toSortIds); deck.deck.order }
+    val offer = if (IdeasSession.offerDone) null else remember(book, model.version) { offerOf(book) }
+    val tide = IdeasSession.tide.filter { book.note(it) != null }
+
+    /** Later: to the deck's back, with Undo putting it on top again. */
+    fun later(id: String) {
+        deck.later(id)
+        say(res.getString(R.string.deck_later_done), undo = { deck.putBack(id) })
+    }
+    fun leaveTide(id: String) { IdeasSession.tide = IdeasSession.tide - id }
+    val sortActions = DeckActions.Sort(file = { id, to -> file(id, to) }, later = ::later, choose = { choosing = it })
+    val tideActions = DeckActions.Tide(
+        keep = { id -> model.book.markOpened(id, IdeaClock.now()); leaveTide(id) },
+        link = { id -> linking = id },
+        letGo = { id -> leaveTide(id); deleteIdea(id) })
 
     /** captureIdea: the words trimmed, nothing for an empty field, into the open folder; the field stays ready. */
     fun captureIdea(): Note? {
@@ -239,6 +282,8 @@ internal sealed class FolderPrompt {
 
     val open = editing?.takeIf { book.note(it) != null }
     val shape = currentWindowShape()
+    // the deck on To sort's top level (S06a): the tide's while it is up, else To sort's when chosen
+    val deckShown = folderId == null && open == null && (tide.isNotEmpty() || (settings.sortDeck && order.isNotEmpty()))
     BackHandler(enabled = (mode == SortaMode.SORT || IdeasSplit.of(shape) != null) && open == null && folderId != null) {
         folderId = book.folder(folderId)?.parentId
     }
@@ -246,6 +291,10 @@ internal sealed class FolderPrompt {
     // the map is on screen: Map mode, with no idea open over it, or beside the Sort screen on two
     // panes; its 3D looks are night, and the chrome over them is too (iOS's IdeasMapView)
     val split = IdeasSplit.of(shape)
+    // two panes with To sort's deck: the folders pane takes the map's place (S06a A2)
+    val paneTargets = if (split != null && deckShown && tide.isEmpty())
+        remember(book, model.version, shape, split) { deckTargets(book, paneSlots(shape.width - split.sort - split.gap - 2 * WardSpace.gutter, shape.height)) }
+        else null
     val mapShown = mode == SortaMode.MAP && open == null
     val mapNight = book.notes.isNotEmpty() && settings.look != MapLook.TWO_D
     val night = split == null && mapShown && mapNight
@@ -257,18 +306,18 @@ internal sealed class FolderPrompt {
     val outer = LocalWardLook.current
 
     /** The map, edge to edge: the tools and the empty page keep above the foot ([hidden]) and the navigation bar. */
-    @Composable fun MapPane(paned: Boolean) = WardTextCap {
+    @Composable fun MapPane(paned: Boolean) = WardTextCap { CompositionLocalProvider(LocalSortaBars provides !paned) {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop)
+            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version)
         // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
                 Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
         }
-    }
+    } }
 
     /** The Sort screen, or the editor open from it, in its column. */
     @Composable fun SortSide() {
@@ -276,8 +325,9 @@ internal sealed class FolderPrompt {
             Box(Modifier.widthIn(max = IdeasLayout.column.dp).fillMaxSize()) {
                 val bottom = foot + WardSpace.l.wardDp
                 if (open != null) {
-                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }) {
+                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }, resume = resuming) {
                         editing = null
+                        resuming = false
                     }
                 } else SortPage(
                     book = book, version = model.version, folderId = folderId, draft = draft, onDraft = { draft = it }, capture = capture, bottom = bottom,
@@ -286,6 +336,12 @@ internal sealed class FolderPrompt {
                     setFolder = { folderId = it }, open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea,
                     name = { naming = it }, deleteFolder = { deletingFolder = it },
                     onImport = { picker.launch(arrayOf("application/json")) },
+                    extras = SortExtras(
+                        offer = offer, openOffer = { id -> IdeasSession.offerDone = true; resuming = true; editing = id },
+                        dismissOffer = { IdeasSession.offerDone = true },
+                        deckOn = settings.sortDeck, setDeck = { settings.setSortDeck(it) }, deckShown = deckShown,
+                        order = order, tide = tide, closeTide = { IdeasSession.tide = emptyList() },
+                        sortActions = sortActions, tideActions = tideActions, paneTargets = paneTargets, frames = frames),
                 )
             }
         }
@@ -316,7 +372,11 @@ internal sealed class FolderPrompt {
                 Box(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) { Foot(switches = false) }
             }
             if (split.gap > 0) Spacer(Modifier.width(split.gap.dp).fillMaxHeight())
-            Box(Modifier.weight(1f).fillMaxHeight()) { MapPane(paned = true) }
+            // the map pane starts below the status bar, whose row shows the page across the window, and
+            // the bar's icons follow the page (S05j item 1, question 1's default; LocalSortaBars)
+            if (paneTargets != null) Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().navigationBarsPadding()) {
+                DeckFolderPane(paneTargets, frames, file = { to -> order.firstOrNull()?.let { file(it, to) } })
+            } else Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
         } else {
             if (mapShown) WardHingePane(shape, Modifier.fillMaxSize()) { MapPane(paned = false) }
             else WardHingePane(shape, Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) { SortSide() }
@@ -328,23 +388,24 @@ internal sealed class FolderPrompt {
 
     // first, so the chooser, the naming sheet and the dialog it opens come over it
     if (sheetUp) MapListSheet(book, model.version, banner, folderId = listFolder, setFolder = { listFolder = it }, onDone = { listing = false },
-        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it })
+        open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea, name = { naming = it }, deleteFolder = { deletingFolder = it },
+        overMap = night)
     choosing?.let { id ->
         val note = book.note(id)
         if (note == null) choosing = null
         else FolderChooser(book, note.folderId, version = model.version, onDismiss = { choosing = null },
-            onChoose = { to -> choosing = null; file(id, to) },
+            onChoose = { to -> choosing = null; file(id, to) }, overMap = night,
             // a new folder goes in the folder being browsed: the sheet's, while it is up
             onNewFolder = { choosing = null; naming = FolderPrompt.New(parent = if (sheetUp) listFolder else folderId, filing = id) })
     }
     when (val prompt = naming) {
         is FolderPrompt.New -> NameSheet(stringResource(R.string.name_new_title), stringResource(R.string.name_field), "",
-            stringResource(R.string.name_create), { naming = null }) { name ->
+            stringResource(R.string.name_create), { naming = null }, overMap = night) { name ->
             val folder = model.book.createFolder(name, prompt.parent)
             prompt.filing?.let { file(it, folder.id) }
         }
         is FolderPrompt.Rename -> NameSheet(stringResource(R.string.name_rename_title), stringResource(R.string.name_field), prompt.folder.name,
-            stringResource(R.string.name_rename), { naming = null }) { model.book.renameFolder(prompt.folder.id, it) }
+            stringResource(R.string.name_rename), { naming = null }, overMap = night) { model.book.renameFolder(prompt.folder.id, it) }
         null -> {}
     }
     deletingFolder?.let { folder ->
@@ -360,7 +421,21 @@ internal sealed class FolderPrompt {
             dismissButton = { TextButton({ deletingFolder = null }) { Text(stringResource(R.string.sheet_cancel), color = wardColor(WardToken.primaryInk)) } })
     }
     imported?.let { outcome -> ImportAlert(outcome, model.unreadable) { imported = null } }
+    // the tide's Link to…: the editor's chooser; done, the idea counts as kept
+    linking?.let { id ->
+        if (book.note(id) == null) linking = null
+        else LinkPicker(book, model.version, id) { linking = null; model.book.markOpened(id, IdeaClock.now()); leaveTide(id) }
+    }
 }
+
+/** What S06a adds to the Sort page: the offer, the list or deck toggle, the deck and the tide. */
+internal class SortExtras(
+    val offer: Note?, val openOffer: (String) -> Unit, val dismissOffer: () -> Unit,
+    val deckOn: Boolean, val setDeck: (Boolean) -> Unit, val deckShown: Boolean,
+    val order: List<String>, val tide: List<String>, val closeTide: () -> Unit,
+    val sortActions: DeckActions.Sort, val tideActions: DeckActions.Tide,
+    val paneTargets: List<NoteFolder>?, val frames: SnapshotStateMap<String, Rect>,
+)
 
 /**
  * The Sort / Map switch (S05b checklist 2): the kit's FloatingSwitcher with iOS's items and
@@ -413,6 +488,7 @@ internal sealed class FolderPrompt {
     book: IdeaBook, version: Int, folderId: String?, draft: String, onDraft: (String) -> Unit, capture: FocusRequester, bottom: Dp,
     onCapture: () -> Unit, onSortIt: () -> Unit, setFolder: (String?) -> Unit, open: (String) -> Unit, choose: (String) -> Unit,
     delete: (String) -> Unit, name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit, onImport: () -> Unit,
+    extras: SortExtras,
 ) {
     val list = rememberLazyListState()
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
@@ -421,7 +497,15 @@ internal sealed class FolderPrompt {
     val level = rememberIdeasListLevel(book, version, folderId)
     val fresh = remember(book, version) { book.notes.isEmpty() && book.folders.isEmpty() }
     val inset = WardSpace.s.wardDp
-    val more: @Composable () -> Unit = { MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) }) }
+    val top = folderId == null
+    // at the top level with ideas to sort, list or cards beside More (S06a A3)
+    val more: @Composable () -> Unit = {
+        if (top && extras.order.isNotEmpty()) DeckToggle(extras.deckOn, extras.setDeck)
+        MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) })
+    }
+    val offer: (@Composable () -> Unit)? = extras.offer?.takeIf { top }?.let { note ->
+        { ResumeOffer(note, open = { extras.openOffer(note.id) }, dismiss = extras.dismissOffer) }
+    }
     Column(Modifier.fillMaxSize().semantics { testTag = IdeasTags.SCREEN }) {
         // the pinned strip: the list scrolls under it and is cut at its edge, with a hairline while it is scrolled
         Box(Modifier.fillMaxWidth().background(wardColor(WardToken.background)).drawBehind {
@@ -429,6 +513,19 @@ internal sealed class FolderPrompt {
             if (scrolled) drawLine(hairline, Offset(0f, size.height - edge / 2), Offset(size.width, size.height - edge / 2), edge)
         }.padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = WardSpace.s.wardDp)) {
             CaptureWell(draft, onDraft, capture, onCapture, onSortIt)
+        }
+        if (extras.deckShown) {
+            // the deck in the list's place: the offer and the title row, then the cards (S06a)
+            Column(Modifier.fillMaxWidth().padding(horizontal = inset).padding(top = WardSpace.xs.wardDp),
+                verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                offer?.invoke()
+                if (extras.tide.isNotEmpty()) TideTitle(extras.closeTide) else TitleRow(null, level.count, more)
+            }
+            val tideUp = extras.tide.isNotEmpty()
+            DeckArea(book, version, if (tideUp) extras.tide else extras.order, if (tideUp) extras.tideActions else extras.sortActions,
+                paneTargets = if (tideUp) emptyList() else extras.paneTargets, frames = extras.frames, bottom = bottom,
+                modifier = Modifier.weight(1f).padding(top = WardSpace.m.wardDp))
+            return@Column
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list,
             contentPadding = PaddingValues(start = inset, end = inset, top = WardSpace.xs.wardDp, bottom = bottom)) {
@@ -447,6 +544,7 @@ internal sealed class FolderPrompt {
                 }
                 return@LazyColumn
             }
+            if (offer != null) item(key = "offer") { offer() }
             ideasList(book, level, inset, more, setFolder = setFolder, open = open, choose = choose, delete = delete,
                 name = name, deleteFolder = deleteFolder)
         }

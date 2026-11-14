@@ -606,9 +606,15 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
                 discs.append((p.x[k], p.y[k], p.radius[k]))
             }
         }
+        // Show links: names outside the focused body's own links dim to 0.15 (S05j 7a)
+        var focusLinks: ArraySlice<Int32> = []
+        if let f = engine.focus, let graph = renderer?.scene?.graph, f >= 0, f + 1 < graph.adjStart.count {
+            focusLinks = graph.adjacency[Int(graph.adjStart[f]) ..< Int(graph.adjStart[f + 1])]
+        }
         var used = 0
         for body in shown {
             let label: UILabel = nameLabel(used)
+            label.alpha = CGFloat(GraphPerfLOD.nameAlpha(body: body, focus: engine.focus, neighbours: focusLinks))
             let title: String = engine.title(body)
             if label.text != title {
                 label.text = title

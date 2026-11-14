@@ -195,4 +195,28 @@ enum IdeasWords {
         String(localized: "import.refused.unreadable.ios",
                defaultValue: "This backup didn't open. It may be damaged, so try another copy.")
     }
+
+    // MARK: the sorting deck, "You were saying…" and the low tide (S06a), from the strings pass of 14 Nov
+    static var showAsCards: String { String(localized: "deck.showCards", defaultValue: "Show as cards") }
+    static var showAsList: String { String(localized: "deck.showList", defaultValue: "Show as list") }
+    static var later: String { String(localized: "deck.later", defaultValue: "Later") }
+    static var keepForLater: String { String(localized: "deck.keepLater", defaultValue: "Keep for later") }
+    static var keptForLater: String { String(localized: "deck.laterDone", defaultValue: "Kept for later.") }
+    static var unfinished: String { String(localized: "deck.unfinished", defaultValue: "Unfinished") }
+    static var offerLabel: String { String(localized: "offer.label", defaultValue: "You were saying\u{2026}") }
+    static var carryOn: String { String(localized: "offer.carryOn", defaultValue: "Carry on") }
+    static var notNow: String { String(localized: "offer.notNow", defaultValue: "Not now") }
+    static var frostSpoken: String { String(localized: "frost.spoken", defaultValue: "not opened in a while") }
+    static var lowTide: String { String(localized: "tide.title", defaultValue: "Low tide") }
+    static var keep: String { String(localized: "tide.keep", defaultValue: "Keep") }
+    static var letGo: String { String(localized: "tide.letGo", defaultValue: "Let go") }
+    static var closeLowTide: String { String(localized: "tide.close", defaultValue: "Close low tide") }
+    /// A folder target, and the card's action for it: "File in Garden".
+    static func fileIn(_ folder: String) -> String {
+        String(localized: "deck.fileIn %@", defaultValue: "File in \(folder)")
+    }
+    /// "Carry on", read aloud with the idea.
+    static func carryOnWith(_ idea: String) -> String {
+        String(localized: "offer.carryOn.spoken %@", defaultValue: "Carry on with \(idea)")
+    }
 }

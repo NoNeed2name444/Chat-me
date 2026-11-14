@@ -287,4 +287,33 @@
     <string name="map_no_folder_neurons">No folders yet: every idea shares one cell. Add a folder to grow a cell of its own.</string>
     <string name="map_no_folder_performance">No folders yet: every idea shares one colour. Add a folder to give its ideas their own colour.</string>
     <string name="map_add_folder">Add folder</string>
+    <!-- S05i: the Filter tool and its menu (Graph3DView.swift:779, :824-841, :309), and the Neurons' cell states in Look (GraphNodeStyles.swift:224-243) -->
+    <string name="map_filter">Filter</string>
+    <string name="map_filter_show">Show</string>
+    <string name="map_filter_everything">Everything</string>
+    <string name="map_filter_pages">Pages</string>
+    <string name="map_filter_ideas">Ideas</string>
+    <string name="map_filter_linked">Linked ideas</string>
+    <string name="map_filter_folder">Folder</string>
+    <string name="map_filter_empty">Nothing here for this filter.</string>
+    <string name="map_cells">Cells</string>
+    <string name="map_cell_by_cell">Cell by cell</string>
+    <string name="map_same_as_all">Same as all</string>
+    <!-- S06a: the sorting deck, "You were saying…" and tides (iOS IdeasWords; the strings pass of 14 Nov) -->
+    <string name="deck_show_cards">Show as cards</string>
+    <string name="deck_show_list">Show as list</string>
+    <string name="deck_later">Later</string>
+    <string name="deck_keep_later">Keep for later</string>
+    <string name="deck_later_done">Kept for later.</string>
+    <string name="deck_file_in">File in %1$s</string>
+    <string name="deck_unfinished">Unfinished</string>
+    <string name="offer_label">You were saying…</string>
+    <string name="offer_carry_on">Carry on</string>
+    <string name="offer_carry_on_spoken">Carry on with %1$s</string>
+    <string name="offer_not_now">Not now</string>
+    <string name="frost_spoken">not opened in a while</string>
+    <string name="tide_title">Low tide</string>
+    <string name="tide_keep">Keep</string>
+    <string name="tide_let_go">Let go</string>
+    <string name="tide_close">Close low tide</string>
 </resources>

@@ -300,7 +300,8 @@ struct Graph3DView: View {
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
-                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp)
+                             labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp,
+                             frost: frostLevels, melt: !reduceMotion)
             }
             .ignoresSafeArea()
         }
@@ -365,7 +366,7 @@ struct Graph3DView: View {
     private var perfSpace: some View {
         GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
-                       touch: touchHandlers, bold: bold)
+                       touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
                 bottomPanels(nil)
             }
@@ -876,6 +877,18 @@ struct Graph3DView: View {
 
     /// Whether the notes are drawn as the Universe (GraphUniverse): the
     /// Space theme with any main look that is not one single style.
+    /// The frost on ideas left unopened, in Space only (S06a A6): each
+    /// frosted idea's level, 1 to 3.
+    private var frostLevels: [UUID: Int] {
+        guard theme == .space else { return [:] }
+        var levels: [UUID: Int] = [:]
+        for note in notes.notes {
+            let level: Int = IdeaFrostLook.level(note)
+            if level > 0 { levels[note.id] = level }
+        }
+        return levels
+    }
+
     private var isUniverse: Bool {
         theme == .space && GraphNodeStyle(rawValue: mainLook) == nil
     }
@@ -1638,6 +1651,10 @@ struct GraphSCNView: UIViewRepresentable {
     var touch = GraphTouchHandlers()
     /// A sheet is up over the map: it draws slowly under it (GraphPace).
     var covered: Bool = false
+    /// The frost on ideas left unopened (S06a A6), by id, 1 to 3; and
+    /// whether a change melts (not with Reduce Motion).
+    var frost: [UUID: Int] = [:]
+    var melt: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets, card: card)
@@ -1698,6 +1715,7 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
         coordinator.apply(filter)
+        coordinator.frost(frost, melt: false)
         // the design preview's hold is sent once the scene is built, and can
         // be sent before SwiftUI makes this view for it: the line above then
         // counts it as seen, and it is lost (Chat-me copy daa2707, maps re-run)
@@ -1720,6 +1738,7 @@ struct GraphSCNView: UIViewRepresentable {
             coordinator.syncChoice()
         }
         coordinator.apply(filter)
+        coordinator.frost(frost, melt: melt)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
             coordinator.run(command.kind)
@@ -2165,6 +2184,21 @@ struct GraphSCNView: UIViewRepresentable {
                 }
                 sim.release()
             }
+        }
+
+        /// The frost as last set, and the space it was set on (S06a A6).
+        private var shownFrost: [UUID: Int] = [:]
+        private weak var frostSim: GraphSim?
+
+        /// Sets the frost on the space's bodies; a space new to it takes it at once.
+        func frost(_ levels: [UUID: Int], melt: Bool) {
+            guard let sim else { return }
+            let fresh: Bool = frostSim !== sim
+            if !fresh && shownFrost == levels { return }
+            shownFrost = levels
+            frostSim = sim
+            sim.setFrost(levels, melt: melt && !fresh)
+            wake()
         }
 
         func apply(_ filter: GraphFilter) {

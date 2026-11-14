@@ -1,5 +1,7 @@
 package com.cramdown.sorta.ui.ideas
 
+import com.cramdown.sorta.map.NeuronState
+import com.cramdown.sorta.map.NeuronStateChoice
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,15 +25,19 @@ import com.cramdown.sorta.ui.wardColor
  * iOS's GraphPreviewRoot is: [look] is "space", "neurons" or "performance" for the 3D map, or
  * "board" for the flat board. MainActivity shows it only under its map-preview extra; no
  * screen a user reaches opens it. Until step 4 brings the editor, opening an idea does nothing.
+ * [cells] is the Neurons' state for every idea, as iOS's -graphPreviewCells (GraphPreview.swift:146-154):
+ * one of the six, else natural. [tour] beside "performance" shows the proof tour's map instead (S05i2,
+ * TourMap): 100,000 made-up ideas flying PerfTour's path by themselves, for the device's frame numbers.
  */
-@Composable fun MapPreview(look: String) {
+@Composable fun MapPreview(look: String, cells: String? = null, tour: Boolean = false) {
     val context = LocalContext.current
     val model = remember { SampleIdeas.book().let { IdeasModel(it.notes, it.folders) } }
     val settings = remember { IdeasSettings(context) }
     // what the navigation bar covers, which the tools stay above, as iOS's keep to its safe area
     val hidden = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
     Box(Modifier.fillMaxSize().background(wardColor(WardToken.background))) {
-        if (look == "board") {
+        if (tour && look == "performance") TourMap()
+        else if (look == "board") {
             // the board keeps clear of the status bar and any cutout, as iOS's stays in its safe
             // area, and runs on under the navigation bar
             Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
@@ -40,6 +46,8 @@ import com.cramdown.sorta.ui.wardColor
         } else {
             val theme = GraphTheme.entries.firstOrNull { it.rawValue == look } ?: GraphTheme.SPACE
             if (settings.theme != theme.rawValue) settings.setTheme(theme.rawValue)
+            val state = cells?.takeIf { NeuronState.raw(it) != null } ?: NeuronStateChoice.NATURAL_VALUE
+            if (settings.cellState != state) settings.setCellState(state)
             IdeasSpace(model.book, settings, covered = false, hidden = hidden, open = {}, openFolder = {})
         }
     }

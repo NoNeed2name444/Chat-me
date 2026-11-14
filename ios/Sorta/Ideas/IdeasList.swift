@@ -35,13 +35,16 @@ struct IdeasList<TitleEnd: View>: View {
     let actions: IdeasListActions
     /// What stands at the title row's end: More, on the Sort screen.
     let titleEnd: () -> TitleEnd
+    /// "You were saying…" (S06a), at the top level's top, on the Sort screen.
+    var offer: IdeasOffer?
     @Environment(\.dynamicTypeSize) private var typeSize
 
     init(folderId: Binding<UUID?>, scrolled: Binding<Bool> = .constant(false), actions: IdeasListActions,
-         @ViewBuilder titleEnd: @escaping () -> TitleEnd) {
+         offer: IdeasOffer? = nil, @ViewBuilder titleEnd: @escaping () -> TitleEnd) {
         self._folderId = folderId
         self._scrolled = scrolled
         self.actions = actions
+        self.offer = offer
         self.titleEnd = titleEnd
     }
 
@@ -54,7 +57,13 @@ struct IdeasList<TitleEnd: View>: View {
                 upRow(current)
                     .wardRowBackground()
             }
-            titleRow(current, count: current.map { notes.count(in: $0.id) } ?? here.count)
+            if current == nil, let offer {
+                ResumeOffer(note: offer.note, open: offer.open, dismiss: offer.dismiss)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(WardRowTile.cardInsets)
+                    .listRowSeparator(.hidden)
+            }
+            IdeasTitleRow(current: current, count: current.map { notes.count(in: $0.id) } ?? here.count, end: titleEnd)
                 .listRowBackground(Color.clear)
                 .listRowInsets(IdeasLayout.lineInsets)
                 .listRowSeparator(.hidden)
@@ -67,8 +76,11 @@ struct IdeasList<TitleEnd: View>: View {
                     .listRowSeparator(.hidden)
             } else {
                 ForEach(here) { note in
+                    // a marked idea (S06a): the tile's edge dotted
                     ideaRow(note)
-                        .wardRowBackground()
+                        .listRowBackground(WardRowTile().unfinishedEdge(note.stoppedAt != nil))
+                        .listRowInsets(WardRowTile.insets)
+                        .listRowSeparator(.hidden)
                 }
             }
             if !subfolders.isEmpty {
@@ -95,33 +107,6 @@ struct IdeasList<TitleEnd: View>: View {
         } action: { _, now in
             if now != scrolled { scrolled = now }
         }
-    }
-
-    /// "To sort" (or the open folder's name) and its count, as a header,
-    /// with `titleEnd` at its end.
-    private func titleRow(_ current: NoteFolder?, count: Int) -> some View {
-        let name: String = current?.name ?? IdeasWords.toSort
-        let spoken: String = current == nil ? IdeasWords.toSortSpoken(count) : IdeasWords.folderSpoken(name, count)
-        return HStack(alignment: .center, spacing: WardSpace.s) {
-            Text(Self.titleText(name, count))
-                .wardFont(.title1.monospacedDigit())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(spoken)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("ideas-title")
-            titleEnd()
-        }
-    }
-
-    /// The title in ink and its count in the coral ink (primaryInk), one
-    /// line of text, so it wraps as one.
-    private static func titleText(_ name: String, _ count: Int) -> AttributedString {
-        var title = AttributedString(name)
-        title.foregroundColor = Color.wardInk
-        var number = AttributedString(" \(count)")
-        number.foregroundColor = Color.wardPrimaryInk
-        return title + number
     }
 
     private func upRow(_ current: NoteFolder) -> some View {
@@ -205,6 +190,7 @@ struct IdeasList<TitleEnd: View>: View {
             .buttonStyle(.plain)
             .hoverEffect(.highlight)
             .accessibilityLabel(whole)
+            .accessibilityValue(note.stoppedAt != nil ? IdeasWords.unfinished : "")
             .accessibilityHint(IdeasWords.rowHint)
             .accessibilityIdentifier("idea-row")
             Button(IdeasWords.chooseFolder) { actions.chooseFolder(note.id) }
@@ -225,6 +211,47 @@ struct IdeasList<TitleEnd: View>: View {
             Button(IdeasWords.delete, systemImage: "trash", role: .destructive) { actions.delete(note.id) }
         }
     }
+}
+
+/// "To sort" (or the open folder's name) and its count, as a header, with
+/// `end` at its end: the list's, and the deck's (S06a) above its cards.
+struct IdeasTitleRow<End: View>: View {
+    let current: NoteFolder?
+    let count: Int
+    let end: () -> End
+
+    var body: some View {
+        let name: String = current?.name ?? IdeasWords.toSort
+        let spoken: String = current == nil ? IdeasWords.toSortSpoken(count) : IdeasWords.folderSpoken(name, count)
+        HStack(alignment: .center, spacing: WardSpace.s) {
+            Text(Self.titleText(name, count))
+                .wardFont(.title1.monospacedDigit())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(spoken)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("ideas-title")
+            end()
+        }
+    }
+
+    /// The title in ink and its count in the coral ink (primaryInk), one
+    /// line of text, so it wraps as one.
+    static func titleText(_ name: String, _ count: Int) -> AttributedString {
+        var title = AttributedString(name)
+        title.foregroundColor = Color.wardInk
+        var number = AttributedString(" \(count)")
+        number.foregroundColor = Color.wardPrimaryInk
+        return title + number
+    }
+}
+
+/// "You were saying…" as the list shows it: the idea, and what taking it
+/// and putting it away do.
+struct IdeasOffer {
+    let note: Note
+    let open: () -> Void
+    let dismiss: () -> Void
 }
 
 extension IdeasList where TitleEnd == EmptyView {

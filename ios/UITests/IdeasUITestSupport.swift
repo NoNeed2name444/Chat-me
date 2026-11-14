@@ -45,17 +45,20 @@ enum IdeasText {
 /// started again at each launch let each of them re-tap twice and pass. So
 /// every class that calls `launchIdeas` calls `reset()` in its `setUp`.
 /// `row` counts the same way for a tap on an idea's row made again
-/// (`openEditor`), and `intro` for a tap on the slide-to-type card's
-/// Continue made again (`clearSlideToTypeIntro`).
+/// (`openEditor`), `intro` for a tap on the slide-to-type card's
+/// Continue made again (`clearSlideToTypeIntro`), and `retype` for an idea
+/// typed into capture once more (`captureIdea`).
 enum Retaps {
     static var caret = 0
     static var row = 0
     static var intro = 0
+    static var retype = 0
 
     static func reset() {
         caret = 0
         row = 0
         intro = 0
+        retype = 0
     }
 }
 
@@ -74,7 +77,13 @@ extension XCTestCase {
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
         app.keepTraceOffConsole()
-        app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + more
+        // S06a: a fixed clock, a day after the made-up export's last idea, so
+        // no idea frosts on a still as the real days pass, and To sort as a
+        // list, whatever an earlier test chose; a test may set either
+        var pinned: [String] = []
+        if !more.contains("-SortaNow") { pinned += ["-SortaNow", "2026-09-21T12:00:00Z"] }
+        if !more.contains("-SortaDeck") { pinned += ["-SortaDeck", "off"] }
+        app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + pinned + more
         app.launch()
         XCTAssertTrue(app.textFields["idea-capture"].waitForExistence(timeout: 30),
                       "the Sort screen is open, with capture", file: file, line: line)
@@ -188,14 +197,42 @@ extension XCUIApplication {
     /// stalled runner the first tap after a launch can be lost: in run
     /// 41812442710 the app was busy 27 s after it and never took the caret.
     /// So a tap that brings no caret in 5 s is made once more; the well must
-    /// still have the caret, empty, before a key is typed.
+    /// still have the caret, empty, before a key is typed. If, 10 s after
+    /// Return, the well is not ready, is empty and no row holds the idea,
+    /// the idea was lost on its way in, and it is typed once more, as its
+    /// own activity, with the same checks; the well must then be ready in
+    /// 10 s. It may happen once in a test: a second time fails, so a well
+    /// that keeps losing ideas is still caught.
     func captureIdea(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
         typeDraft(text, file: file, line: line)
         takeCaretBack(capture, file: file, line: line)
         capture.typeText("\n")
+        let message = "capture took the caret back, empty, after \"\(text)\""
+        let first = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
+                                   timeout: 10)
+        guard first != .completed else { return }
+        guard captureIsEmpty, !ideaRow(text).exists else {
+            XCTAssertEqual(first, .completed, message, file: file, line: line)
+            return
+        }
+        Retaps.retype += 1
+        XCTAssertLessThanOrEqual(Retaps.retype, 1,
+                                 "an idea typed into capture was lost more than once in this test",
+                                 file: file, line: line)
+        XCTContext.runActivity(named: "capture is empty and no row holds \"\(text)\"; type it again") { _ in
+            typeDraft(text, file: file, line: line)
+            takeCaretBack(capture, file: file, line: line)
+            capture.typeText("\n")
+        }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: Self.captureReady, object: capture)],
                                       timeout: 10),
-                       .completed, "capture took the caret back, empty, after \"\(text)\"", file: file, line: line)
+                       .completed, message, file: file, line: line)
+    }
+
+    /// The well holds nothing: no words, or only its prompt.
+    private var captureIsEmpty: Bool {
+        let held = capture.value as? String ?? ""
+        return held.isEmpty || held == capture.placeholderValue
     }
 
     /// iOS's slide-to-type introduction ("Speed up your typing by sliding
@@ -450,12 +487,18 @@ enum MadeUpExport {
     /// Two more ideas with no board place, so at (0, 0), as an import leaves
     /// them (`base64(stacked: true)`, S05c).
     static let placeless = ["Oil the gate", "Ask about the allotment waiting list"]
+    /// One more in the stacked export, with a title of over 100 characters
+    /// and a clear place (S05m item 5), as Android's IdeasFixture.boiler.
+    static let long = "Ask the landlord when the boiler service is booked, and whether the hall light can be fixed the same day"
+    /// A page, under `page` only, so the board holds both kinds (S05m item 4).
+    static let page = "Plot plan for spring"
     /// Each idea's stored board place, as its board card's identifier names
-    /// it (`IdeaBoardView`, "board-card x y").
+    /// it (`IdeaBoardView`, "board-card <symbol> x y").
     static let places: [String: CGPoint] = [
         "Paint the shed green": CGPoint(x: 120, y: -40), "Seed swap list": .zero,
         "Try a rye starter": CGPoint(x: -75.5, y: 210.25), "A bell for the bike": CGPoint(x: 0, y: 33),
         "Oil the gate": .zero, "Ask about the allotment waiting list": .zero,
+        long: CGPoint(x: 0, y: -230), page: CGPoint(x: -330, y: 150),
     ]
 
     static let manifest = """
@@ -488,22 +531,32 @@ enum MadeUpExport {
     {"body":"","createdAt":"2026-09-06T10:00:00Z","id":"\(id(5))","kind":"idea","links":[],"tags":[],\
     "title":"Oil the gate","updatedAt":"2026-09-06T10:00:00Z"},\
     {"body":"","createdAt":"2026-09-07T10:00:00Z","id":"\(id(6))","kind":"idea","links":[],"tags":[],\
-    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"}
+    "title":"Ask about the allotment waiting list","updatedAt":"2026-09-07T10:00:00Z"},\
+    {"boardX":0,"boardY":-230,"body":"","createdAt":"2026-09-08T10:00:00Z","id":"\(id(7))","kind":"idea","links":[],\
+    "tags":[],"title":"\(long)","updatedAt":"2026-09-08T10:00:00Z"}
+    """
+
+    static let pageNote = """
+    {"boardX":-330,"boardY":150,"body":"Beds by the fence first.","createdAt":"2026-09-09T10:00:00Z",\
+    "id":"\(id(8))","kind":"page","links":[],"tags":[],"title":"\(page)","updatedAt":"2026-09-09T10:00:00Z"}
     """
 
     /// The backup as base64, for `-SortaImportFile`; `version` 2 is a newer
-    /// Stethoscore's; `stacked` adds the two `placeless` ideas.
-    static func base64(version: Int = 1, stacked: Bool = false) throws -> String {
+    /// Stethoscore's; `stacked` adds the two `placeless` ideas and the
+    /// `long` one; `page`, with `stacked`, adds the page.
+    static func base64(version: Int = 1, stacked: Bool = false, page: Bool = false) throws -> String {
         let last = "\"updatedAt\":\"2026-09-05T10:00:00Z\"}]}"
-        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + placelessNotes + "]}") : notes
-        precondition(!stacked || ideas != notes, "the stacked export adds its two ideas")
+        let more: String = placelessNotes + (stacked && page ? "," + pageNote : "")
+        let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + more + "]}") : notes
+        precondition(!stacked || ideas != notes, "the stacked export adds its ideas")
+        precondition(stacked || !page, "the page comes with the stacked export")
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorta-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let parts: [(String, String)] = [
             ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")
-                .replacingOccurrences(of: "NOTES", with: stacked ? "6" : "4")),
+                .replacingOccurrences(of: "NOTES", with: stacked ? (page ? "8" : "7") : "4")),
             ("notes.json", ideas),
         ]
         var files: [(name: String, file: URL)] = []

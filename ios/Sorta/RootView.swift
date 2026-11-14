@@ -54,6 +54,8 @@ struct IdeasRoot: View {
     @State private var mode: SortaMode = .sort
     @State private var draft = ""
     @State private var folderId: UUID?
+    /// To sort shown as cards (S06a): on two panes the folders pane takes the map's place.
+    @AppStorage(DeckKeys.sortDeck) private var sortDeck = false
 
     static var storeURL: URL? {
         #if DEBUG
@@ -61,6 +63,14 @@ struct IdeasRoot: View {
                                            temporary: FileManager.default.temporaryDirectory) else { return nil }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
+        // the test's made-up ideas, on a store that is new (S06a)
+        if let seed = IdeasDesk.seedFile(arguments: ProcessInfo.processInfo.arguments),
+           !FileManager.default.fileExists(atPath: url.path) {
+            try? seed.write(to: url, options: .atomic)
+        }
+        for (key, value) in IdeasDesk.deckDefaults(arguments: ProcessInfo.processInfo.arguments) {
+            UserDefaults.standard.set(value, forKey: key)
+        }
         return url
         #else
         return nil
@@ -86,8 +96,19 @@ struct IdeasRoot: View {
                     // frame, else it refits on every step of the keyboard's
                     // slide, which kept the app from ever going idle (a7054fe's
                     // iPad render, 60 s waiting after the capture field's tap)
-                    IdeasMapView(mode: $mode, openFolder: { folderId = $0 }, paned: true)
+                    if IdeasDeckRule.shown(folderId: folderId, sortDeck: sortDeck, filing: filing, notes: notes)
+                        && IdeasDeckRule.tide(filing, notes: notes).isEmpty {
+                        // the deck's folders beside it (S06a A2); a tap files the top card
+                        DeckFolderPane { folder in
+                            if let top = IdeasDeckRule.order(filing, notes: notes).first {
+                                filing.file(top, in: folder, notes: notes)
+                            }
+                        }
                         .ignoresSafeArea(.keyboard)
+                    } else {
+                        IdeasMapView(mode: $mode, openFolder: { folderId = $0 }, paned: true)
+                            .ignoresSafeArea(.keyboard)
+                    }
                 }
                 // the two panes keep to their sides of the band themselves
                 .preference(key: PostureClaimKey.self, value: true)

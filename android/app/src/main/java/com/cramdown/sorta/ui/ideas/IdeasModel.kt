@@ -47,6 +47,7 @@ import com.cramdown.sorta.ideas.NoteEditing
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.NoteKind
 import com.cramdown.sorta.ideas.NoteTone
+import com.cramdown.sorta.map.NeuronStateChoice
 import com.cramdown.sorta.map.SpaceStyle
 
 /**
@@ -210,6 +211,25 @@ class IdeasSettings(context: Context) {
     val folderStyles: String get() = heldFolderStyles
     fun setFolderStyles(value: String) { heldFolderStyles = value; put { putString(GraphStyleChoice.FOLDERS_KEY, value) } }
 
+    // the Neurons' cell states (S05i): one for every idea, and one per cell, under iOS's two keys
+    // (GraphNeuronStates.swift:187-188); "natural" is nothing chosen, every idea resting
+    private var heldCellState by mutableStateOf(str(NeuronStateChoice.KEY, NeuronStateChoice.NATURAL_VALUE))
+    val cellState: String get() = heldCellState
+    fun setCellState(value: String) { heldCellState = value; put { putString(NeuronStateChoice.KEY, value) } }
+
+    private var heldCellFolders by mutableStateOf(str(NeuronStateChoice.FOLDERS_KEY, ""))
+    val cellFolders: String get() = heldCellFolders
+    fun setCellFolders(value: String) { heldCellFolders = value; put { putString(NeuronStateChoice.FOLDERS_KEY, value) } }
+    /** The cell states in force, as the Neurons plan reads them. */
+    val cells: NeuronStateChoice get() = NeuronStateChoice.of(heldCellState, heldCellFolders)
+
+    // S06a: To sort shown as cards, and when the last low tide came, under iOS's keys
+    private var heldSortDeck by mutableStateOf(bool(SORT_DECK_KEY))
+    val sortDeck: Boolean get() = heldSortDeck
+    fun setSortDeck(value: Boolean) { heldSortDeck = value; put { putBoolean(SORT_DECK_KEY, value) } }
+    val lastTide: Long? get() = runCatching { prefs?.takeIf { it.contains(LAST_TIDE_KEY) }?.getLong(LAST_TIDE_KEY, 0L) }.getOrNull()
+    fun setLastTide(value: Long) { put { putLong(LAST_TIDE_KEY, value) } }
+
     private var heldPerfDemo by mutableIntStateOf(runCatching { prefs?.getInt(PERF_DEMO_KEY, 0) }.getOrNull() ?: 0)
     val perfDemo: Int get() = heldPerfDemo
     fun setPerfDemo(value: Int) { heldPerfDemo = value; put { putInt(PERF_DEMO_KEY, value) } }
@@ -227,6 +247,8 @@ class IdeasSettings(context: Context) {
         const val READOUT_KEY = "vignette.space.readout"
         const val SWITCHER_KEY = "vignette.ideas.switcherCollapsed"
         const val PERF_DEMO_KEY = "vignette.space.perfDemo"
+        const val SORT_DECK_KEY = "vignette.ideas.sortDeck"
+        const val LAST_TIDE_KEY = "vignette.ideas.lastTide"
         /**
          * The demo maps the readout offers (iOS GraphPerfDemo). Stethoscore's Android offered a
          * million too; Sorta offers it on neither platform until iOS's million map is traced

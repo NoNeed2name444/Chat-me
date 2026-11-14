@@ -119,7 +119,8 @@ class IdeaBook(
     fun update(note: Note) {
         val index = notes.indexOfFirst { it.id == note.id }
         if (index < 0) return
-        val kept = note.copy(updatedAt = notes[index].updatedAt)
+        // openedAt and stoppedAt are written by markOpened and setStopped only (S06a), so an editor's older copy leaves them
+        val kept = note.copy(updatedAt = notes[index].updatedAt, openedAt = notes[index].openedAt, stoppedAt = notes[index].stoppedAt)
         if (kept == notes[index]) return
         notes = notes.toMutableList().also { it[index] = kept.copy(updatedAt = now()) }
         changed()
@@ -163,6 +164,22 @@ class IdeaBook(
         val index = notes.indexOfFirst { it.id == id }
         if (index < 0) return
         notes = notes.toMutableList().also { it[index] = it[index].copy(boardX = x, boardY = y) }
+        changed()
+    }
+
+    /** The idea was opened (S06a): its frost goes. Not an edit, so its time is left alone. */
+    fun markOpened(id: String, time: Long = now()) {
+        val index = notes.indexOfFirst { it.id == id }
+        if (index < 0) return
+        notes = notes.toMutableList().also { it[index] = it[index].copy(openedAt = time) }
+        changed()
+    }
+
+    /** Where the caret was when the idea was left mid-sentence, or null (IdeaStops). Not an edit, so its time is left alone. */
+    fun setStopped(id: String, caret: Int?) {
+        val index = notes.indexOfFirst { it.id == id }
+        if (index < 0 || notes[index].stoppedAt == caret) return
+        notes = notes.toMutableList().also { it[index] = it[index].copy(stoppedAt = caret) }
         changed()
     }
 

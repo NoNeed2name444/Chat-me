@@ -313,6 +313,8 @@ struct IdeasNotice: Identifiable {
         case moved(idea: UUID, from: UUID?)
         /// An idea was deleted.
         case deleted(NoteStore.Removal)
+        /// A card was kept for later (S06a): Undo puts it back on top of the deck.
+        case later(UUID)
     }
 
     let id = UUID()

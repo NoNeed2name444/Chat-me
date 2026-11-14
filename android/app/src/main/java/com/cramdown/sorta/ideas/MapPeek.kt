@@ -106,14 +106,19 @@ object MapPeek {
         SpaceStyle.PULSAR -> "pulsar"
     }
 
+    /** Performance's folder body (S05i2): a folder's hub, picked as its folder. */
+    const val HUB = "hub"
+
     /**
-     * Whether a folder's or the home's card offers Fly in: every Neurons container, and in Space a
+     * Whether a folder's or the home's card offers Fly in: every Neurons container, in Space a
      * Universe black hole, star or home (S05h; GraphMapPanels.swift:155-157, isFolder,
-     * Graph3DView.swift:663-665). Under one single style Space has no folder bodies, so none.
+     * Graph3DView.swift:663-665), and in Performance a folder's hub (S05i2; GraphPerfTheme.swift:344-346, a
+     * hub's pick selects its folder). Under one single style Space has no folder bodies, so none.
      */
     fun fliesIn(theme: String, role: String): Boolean = when (theme) {
         "neurons" -> true
         "space" -> role == "galaxy" || role == "star" || role == "home"
+        "performance" -> role == HUB
         else -> false
     }
 
@@ -137,7 +142,8 @@ object MapPeek {
             while (line.isNotEmpty() && line[0] in "#-*>") line = line.drop(1).trim()
             line = line.replace("[[", "").replace("]]", "").replace("**", "")
             if (line.isEmpty()) continue
-            if (line.length > 140) line = line.take(139) + "…"
+            // by code point, so an emoji across the cut stays whole (S05j 6c)
+            if (line.codePointCount(0, line.length) > 140) line = line.substring(0, line.offsetByCodePoints(0, 139)) + "…"
             out.add(line)
             if (out.size == LINE_LIMIT) break
         }

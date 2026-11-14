@@ -109,7 +109,18 @@ class MapPeekTest {
             assertFalse("an idea drawn as $role has no Fly in", idea.flyIn)
             assertFalse(MapPeek.content(idea, words).secondary.contains(words.flyIn))
         }
-        assertFalse("Performance never flies in", MapPeek.fliesIn("performance", "galaxy"))
+        // S05i2: in Performance a folder's hub flies in, as iOS's hub tap flies to its folder (GraphPerfTheme.swift:344-346);
+        // no other Performance body does
+        assertFalse("a Performance body that is not a hub does not fly in", MapPeek.fliesIn("performance", "galaxy"))
+        assertTrue("a Performance hub flies in", MapPeek.fliesIn("performance", MapPeek.HUB))
+        val hub = mapPeekInput(book, MapBody(garden.id, ThemeBodyKind.FOLDER, MapPeek.HUB), GraphTheme.PERFORMANCE, words)!!
+        assertTrue("a hub's card is its folder's", hub.folder)
+        assertTrue("a hub flies in", hub.flyIn)
+        val hubCard = MapPeek.content(hub, words)
+        assertEquals("Garden", hubCard.title)
+        assertEquals("Folder", hubCard.kind)
+        assertEquals(words.openFolder, hubCard.primary)
+        assertEquals("Fly in, no Show links", listOf(words.flyIn), hubCard.secondary)
         // the Universe's own role words (GraphTouchModel.swift:276-277)
         assertEquals("Moon · Idea", MapPeek.content(mapPeekInput(book, MapBody(gate.id, ThemeBodyKind.NOTE, "moon"), GraphTheme.SPACE, words)!!, words).kind)
         assertEquals("Oort comet · Idea", MapPeek.content(mapPeekInput(book, MapBody(gate.id, ThemeBodyKind.NOTE, "oort"), GraphTheme.SPACE, words)!!, words).kind)
@@ -125,6 +136,9 @@ class MapPeekTest {
         assertEquals(3, lines.size)
         assertEquals("x".repeat(139) + "…", lines[0])
         assertEquals(listOf("Two", "three"), lines.drop(1))
+        // S05j 6c: by code point, so an emoji across the cut stays whole
+        val seedling = "🌱"
+        assertEquals("x".repeat(138) + seedling + "…", MapPeek.firstLines("x".repeat(138) + seedling.repeat(3)).single())
     }
 
     @Test fun everyBodyHasItsThemesWord() {

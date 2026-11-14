@@ -48,13 +48,20 @@ struct NoteEditorView: View {
     @State private var confirmingDelete = false
     /// Which field has the caret, if any.
     @FocusState private var editing: EditorField?
+    /// The details' caret (S06a): where the person stopped is kept from it.
+    @State private var selection: TextSelection?
+    /// Opened from "You were saying…": the details take the caret where the
+    /// person stopped, once, for the idea it opened on.
+    private let resume: Bool
+    @State private var resumed = false
 
     enum EditorField: Hashable { case title, body }
 
-    init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void) {
+    init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void, resume: Bool = false) {
         _current = State(initialValue: noteID)
         self.file = file
         self.delete = delete
+        self.resume = resume
     }
 
     var body: some View {
@@ -143,7 +150,10 @@ struct NoteEditorView: View {
         .onAppear {
             if !loaded { load() }
         }
-        .onDisappear { commit() }
+        .onDisappear {
+            commit()
+            markStop()
+        }
         // saved a moment after typing stops, not on every key
         .task(id: draftKey) {
             guard loaded else { return }
@@ -188,7 +198,7 @@ struct NoteEditorView: View {
                 } else {
                     // the details are a reading surface - read, re-read and
                     // edited in place - so they sit flat on their tile
-                    TextEditor(text: $text)
+                    TextEditor(text: $text, selection: $selection)
                         .wardFont(.body)
                         .foregroundStyle(Color.wardInk)
                         .tint(Color.wardPrimaryInk)
@@ -363,6 +373,38 @@ struct NoteEditorView: View {
         text = note.body
         folderId = note.folderId
         loaded = true
+        // opened (S06a): its frost goes
+        notes.markOpened(current, at: IdeasClock.now)
+        // from "You were saying…", the caret where the person stopped
+        if resume && !resumed && !reading, let stop = note.stoppedAt {
+            resumed = true
+            selection = TextSelection(insertionPoint: Self.index(in: text, utf16: stop))
+            Task { @MainActor in editing = .body }
+        } else {
+            selection = nil
+        }
+    }
+
+    /// Left mid-sentence, the idea is marked with the caret's place; a
+    /// finished sentence, or no details, clears it (IdeaStops).
+    private func markStop() {
+        guard loaded, notes.note(current) != nil else { return }
+        notes.setStopped(current, at: IdeaStops.stoppedAt(body: text, caret: caret))
+    }
+
+    /// The caret's place in the details, as a UTF-16 offset, when it is known.
+    private var caret: Int? {
+        guard let selection, case .selection(let range) = selection.indices else { return nil }
+        let end = range.upperBound
+        guard end >= text.startIndex, end <= text.endIndex else { return nil }
+        return text.utf16.distance(from: text.utf16.startIndex, to: end)
+    }
+
+    /// The place `utf16` code units into `text`, held to a whole character.
+    static func index(in text: String, utf16 offset: Int) -> String.Index {
+        let utf16 = text.utf16
+        let at = utf16.index(utf16.startIndex, offsetBy: min(max(offset, 0), utf16.count))
+        return at.samePosition(in: text) ?? text.indices.last(where: { $0 < at }) ?? text.startIndex
     }
 
     /// Files the idea on screen through the Sort screen: what was typed is
@@ -386,6 +428,7 @@ struct NoteEditorView: View {
     private func follow(_ id: UUID) {
         guard id != current else { return }
         commit()
+        markStop()
         trail.append(current)
         current = id
         load()
@@ -394,6 +437,7 @@ struct NoteEditorView: View {
     private func goBack() {
         guard let previous = trail.popLast() else { return }
         commit()
+        markStop()
         current = previous
         load()
     }

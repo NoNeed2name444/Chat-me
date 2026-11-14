@@ -313,6 +313,90 @@
         }
       }
     },
+    "deck.fileIn %@" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.fileIn %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File in %@"
+          }
+        }
+      }
+    },
+    "deck.keepLater" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.keepLater",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep for later"
+          }
+        }
+      }
+    },
+    "deck.later" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.later",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
+          }
+        }
+      }
+    },
+    "deck.laterDone" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.laterDone",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept for later."
+          }
+        }
+      }
+    },
+    "deck.showCards" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.showCards",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show as cards"
+          }
+        }
+      }
+    },
+    "deck.showList" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.showList",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show as list"
+          }
+        }
+      }
+    },
+    "deck.unfinished" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.unfinished",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfinished"
+          }
+        }
+      }
+    },
     "editor.body" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key editor.body",
       "extractionState" : "manual",
@@ -681,6 +765,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "frost.spoken" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key frost.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not opened in a while"
           }
         }
       }
@@ -1141,6 +1237,54 @@
         }
       }
     },
+    "offer.carryOn" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.carryOn",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carry on"
+          }
+        }
+      }
+    },
+    "offer.carryOn.spoken %@" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.carryOn.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carry on with %@"
+          }
+        }
+      }
+    },
+    "offer.label" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were saying…"
+          }
+        }
+      }
+    },
+    "offer.notNow" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.notNow",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
     "picker.none %@" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key picker.none",
       "extractionState" : "manual",
@@ -1377,6 +1521,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Show modes. Now showing %@"
+          }
+        }
+      }
+    },
+    "tide.close" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.close",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close low tide"
+          }
+        }
+      }
+    },
+    "tide.keep" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.keep",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep"
+          }
+        }
+      }
+    },
+    "tide.letGo" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.letGo",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let go"
+          }
+        }
+      }
+    },
+    "tide.title" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low tide"
           }
         }
       }

@@ -12,7 +12,7 @@
 name: iOS
 on:
   push:
-    branches: [sorta, sorta-b]
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
 permissions:
   contents: read
 concurrency:
@@ -175,9 +175,12 @@ jobs:
   # legends brought the iPhone's step to about 36 minutes on copy ca4797f
   # (boot 104 s), and on copy 93ca857 (boot 145 s) it met its limit of 40 in
   # the last test, every test before it passed: so 60, and the job 125.
+  # S05m adds the largest text size by night and the whole-title test by
+  # day and by night on the iPhone, about 8 minutes more: so 70, and the
+  # job 135.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 125
+    timeout-minutes: 135
     steps:
       - uses: actions/checkout@v7
         with:
@@ -206,7 +209,7 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 60
+        timeout-minutes: 70
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}

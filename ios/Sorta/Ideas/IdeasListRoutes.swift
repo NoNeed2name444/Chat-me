@@ -9,6 +9,8 @@ import SwiftUI
 final class IdeasListRoutes {
     /// The idea open in the editor.
     var opening: NoteRef?
+    /// Opened from "You were saying…" (S06a): the editor puts the caret where the person stopped.
+    var resuming: UUID?
     /// The idea whose folder is being chosen.
     var choosing: NoteRef?
     var naming: FolderPrompt?
@@ -56,9 +58,12 @@ private struct IdeasListSheets: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $routes.opening, onDismiss: { filing.offerEditorUndo(notes: notes) }) { ref in
+            .sheet(item: $routes.opening, onDismiss: {
+                routes.resuming = nil
+                filing.offerEditorUndo(notes: notes)
+            }) { ref in
                 NoteEditorView(noteID: ref.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
-                               delete: { filing.deleteIdea($0, notes: notes) })
+                               delete: { filing.deleteIdea($0, notes: notes) }, resume: routes.resuming == ref.id)
             }
             .sheet(item: $routes.choosing) { ref in
                 FolderChooser(current: notes.note(ref.id)?.folderId,

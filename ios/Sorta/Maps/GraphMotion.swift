@@ -2414,3 +2414,58 @@ nonisolated struct GraphDrawnCount: Sendable, Equatable {
 
     var line: String { "frames \(frames), bodies \(bodies), links \(links)" }
 }
+
+// MARK: frost (S06a A6)
+
+extension GraphSim {
+    /// The frost shell's name, a child of a frosted body's node.
+    static let frostName = "frost"
+
+    /// The frost on ideas left unopened, in Space: a pale shell a little
+    /// larger than each frosted body, lit by nothing and added over it,
+    /// deeper by step (IdeaFrostLook). A level that falls melts away over
+    /// IdeaFrostLook.melt when `melt` is on (not with Reduce Motion), and
+    /// goes at once otherwise. Shells are never picked (category 2).
+    func setFrost(_ levels: [UUID: Int], melt: Bool) {
+        for (i, id) in ids.enumerated() where i < nodes.count {
+            let level: Int = max(0, min(3, levels[id] ?? 0))
+            let body: SCNNode = nodes[i]
+            let shell: SCNNode? = body.childNode(withName: Self.frostName, recursively: false)
+            let opacity = CGFloat(IdeaFrostLook.opacity[level])
+            guard level > 0 else {
+                guard let shell else { continue }
+                shell.removeAllActions()
+                if melt {
+                    shell.runAction(.sequence([.fadeOut(duration: IdeaFrostLook.melt), .removeFromParentNode()]))
+                } else {
+                    shell.removeFromParentNode()
+                }
+                continue
+            }
+            let held: SCNNode = shell ?? {
+                let sphere = SCNSphere(radius: CGFloat(noteRadius(i)) * 1.18)
+                sphere.segmentCount = 24
+                let material = SCNMaterial()
+                material.lightingModel = .constant
+                material.diffuse.contents = UIColor(red: 0xD6 / 255, green: 0xE8 / 255, blue: 0xF5 / 255, alpha: 1)
+                material.blendMode = .add
+                material.writesToDepthBuffer = false
+                material.isDoubleSided = false
+                sphere.firstMaterial = material
+                let made = SCNNode(geometry: sphere)
+                made.name = Self.frostName
+                made.categoryBitMask = 2
+                made.renderingOrder = 5
+                made.opacity = 0
+                body.addChildNode(made)
+                return made
+            }()
+            held.removeAllActions()
+            if melt && shell != nil {
+                held.runAction(.fadeOpacity(to: opacity, duration: IdeaFrostLook.melt))
+            } else {
+                held.opacity = opacity
+            }
+        }
+    }
+}

@@ -115,7 +115,8 @@ const val NAME_SHEET_TAG = "name-sheet"
 
 /** A sheet asking for one name (NameSheet): Cancel, the field, and the confirming word. */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+@Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit,
+                          overMap: Boolean = false, onConfirm: (String) -> Unit) {
     var name by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     val source = remember { MutableInteractionSource() }
@@ -124,6 +125,8 @@ const val NAME_SHEET_TAG = "name-sheet"
     fun submit() { if (!blank) { onConfirm(name); onDismiss() } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // over a 3D look, night in light mode too, the status icons stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         Column(Modifier.fillMaxWidth().semantics { testTag = NAME_SHEET_TAG }) {
             ReaderNavBar(title,
                 leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) },
@@ -164,10 +167,13 @@ const val FOLDER_CHOOSER_TAG = "folder-chooser"
  * the sheet follows its changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun FolderChooser(book: IdeaBook, current: String?, version: Int = 0, onDismiss: () -> Unit, onChoose: (String?) -> Unit, onNewFolder: () -> Unit) {
+@Composable fun FolderChooser(book: IdeaBook, current: String?, version: Int = 0, onDismiss: () -> Unit, onChoose: (String?) -> Unit,
+                              overMap: Boolean = false, onNewFolder: () -> Unit) {
     // all the way up, so a short window shows every row it can rather than half a sheet
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // over a 3D look, night in light mode too, the status icons stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         Column(Modifier.fillMaxWidth().semantics { testTag = FOLDER_CHOOSER_TAG }) {
             ReaderNavBar(stringResource(R.string.chooser_title),
                 leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) })

@@ -42,6 +42,10 @@ struct IdeasView: View {
     /// The field has the caret, held a moment after it lets go: the switch
     /// is folded meanwhile (IdeasFoot).
     @State private var typing = false
+    /// To sort shown as cards (S06a), remembered.
+    @AppStorage(DeckKeys.sortDeck) private var sortDeck = false
+    /// The tide's idea being linked, in the editor's chooser.
+    @State private var linking: NoteRef?
 
     /// The test-only import file (`-SortaImportFile`), opened by Import
     /// from Stethoscore… in place of the system's picker.
@@ -68,6 +72,8 @@ struct IdeasView: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollEdgeEffectHidden(true, for: .top)
+            } else if IdeasDeckRule.shown(folderId: folderId, sortDeck: sortDeck, filing: filing, notes: notes) {
+                deck
             } else {
                 list
             }
@@ -92,6 +98,17 @@ struct IdeasView: View {
             Text(outcome.message)
         }
         .onAppear(perform: tellReadProblem)
+        // S06a: the tide is asked for once a launch; the deck follows To sort
+        .onAppear { filing.startTide(notes: notes) }
+        .onChange(of: notes.contents(of: nil).map(\.id), initial: true) { _, ids in filing.deck.sync(ids) }
+        // the tide's Link to an idea…: the editor's chooser; closed, the idea counts as kept
+        .sheet(item: $linking) { ref in
+            LinkPickerView(noteID: ref.id)
+                .onDisappear {
+                    notes.markOpened(ref.id, at: IdeasClock.now)
+                    filing.leaveTide(ref.id)
+                }
+        }
         .task(id: capturing) {
             if capturing {
                 typing = true
@@ -178,9 +195,81 @@ struct IdeasView: View {
     /// S05's list (IdeasList), with More at the title row's end; the
     /// sheets, dialogs and Undo it leads to are this screen's.
     private var list: some View {
-        IdeasList(folderId: $folderId, scrolled: $scrolled, actions: routes.actions(filing: filing, notes: notes)) {
+        IdeasList(folderId: $folderId, scrolled: $scrolled, actions: routes.actions(filing: filing, notes: notes), offer: offer) {
+            titleEnd
+        }
+    }
+
+    /// The title row's end: at the top level with ideas to sort, the list
+    /// or cards switch (S06a), then More.
+    private var titleEnd: some View {
+        HStack(spacing: WardSpace.s) {
+            if folderId == nil && !notes.contents(of: nil).isEmpty {
+                DeckToggle()
+            }
             moreMenu
         }
+    }
+
+    // MARK: S06a: "You were saying…", the deck and the low tide
+
+    /// "You were saying…": the marked idea changed last, until it is taken
+    /// or put away in this launch; opened, the caret goes where it stopped.
+    private var offer: IdeasOffer? {
+        guard folderId == nil, !filing.offerDone, let note = IdeasDeckRule.offer(notes) else { return nil }
+        return IdeasOffer(note: note, open: {
+            filing.offerDone = true
+            routes.resuming = note.id
+            routes.opening = NoteRef(id: note.id)
+        }, dismiss: { filing.offerDone = true })
+    }
+
+    /// To sort as cards, or the tide while it is up: the offer and the title
+    /// row, then the deck in the list's place. On two panes the folders are
+    /// the pane's beside it (IdeasRoot).
+    private var deck: some View {
+        let tide: [UUID] = IdeasDeckRule.tide(filing, notes: notes)
+        let order: [UUID] = IdeasDeckRule.order(filing, notes: notes)
+        return VStack(alignment: .leading, spacing: 0) {
+            if let offer {
+                ResumeOffer(note: offer.note, open: offer.open, dismiss: offer.dismiss)
+                    .padding(.horizontal, WardSpace.gutter)
+                    .padding(.top, WardSpace.s)
+            }
+            Group {
+                if tide.isEmpty {
+                    IdeasTitleRow(current: nil, count: order.count) { titleEnd }
+                } else {
+                    TideTitle { filing.tide = [] }
+                }
+            }
+            .padding(.horizontal, WardSpace.gutter)
+            .padding(.vertical, WardSpace.s)
+            if tide.isEmpty {
+                DeckArea(order: order, actions: sortActions,
+                         paneTargets: paned ? IdeasDeckRule.targets(notes, slots: DeckLayout.paneCap) : nil)
+            } else {
+                DeckArea(order: tide, actions: tideActions, paneTargets: [])
+            }
+        }
+    }
+
+    private var sortActions: DeckActions {
+        .sort(file: { id, folder in filing.file(id, in: folder, notes: notes) },
+              later: { filing.later($0) },
+              choose: { routes.choosing = NoteRef(id: $0) })
+    }
+
+    private var tideActions: DeckActions {
+        .tide(keep: { id in
+                  notes.markOpened(id, at: IdeasClock.now)
+                  filing.leaveTide(id)
+              },
+              link: { linking = NoteRef(id: $0) },
+              letGo: { id in
+                  filing.leaveTide(id)
+                  filing.deleteIdea(id, notes: notes)
+              })
     }
 
     private var moreMenu: some View {

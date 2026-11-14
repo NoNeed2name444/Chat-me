@@ -2,9 +2,11 @@ package com.cramdown.sorta.ui.map
 
 import android.opengl.GLES30
 import android.util.Log
+import com.cramdown.sorta.map.FilterPop
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.LinkGrowth
 import com.cramdown.sorta.map.MapDrag
+import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.MapFocus
 import com.cramdown.sorta.map.MapMark
 import com.cramdown.sorta.map.NeuronBodyLook
@@ -18,9 +20,11 @@ import com.cramdown.sorta.map.NeuronPalette
 import com.cramdown.sorta.map.NeuronPulses
 import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.NeuronShaders
+import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.map.NeuronSphere
 import com.cramdown.sorta.map.NeuronTissue
 import com.cramdown.sorta.map.Quat
+import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.Vec3
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -70,6 +74,34 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
     private val shown = FloatArray(growth.size) { 1f }
     /** The links (ghosts included) drawn in the latest frame (MapDrawn.links). */
     @Volatile var linksDrawn = 0; private set
+
+    /**
+     * The filter (S05i), set on the GL thread; null shows everything. A body it hides shrinks away and
+     * one it shows again grows back on iOS's spring (FilterPop), at once without motion; a link it
+     * hides draws back into its first cell (LinkGrowth.step), at once without motion.
+     */
+    var filter: MapFilterView? = null
+        set(value) {
+            if (field === value) return
+            field = value
+            pop.apply(value?.shown, value?.instant ?: false)
+        }
+    private val pop = FilterPop(plan.bodies.size, lively)
+    /** True while a body the filter hid or showed is still on its spring. */
+    val popping: Boolean get() = pop.moving
+    /** The ideas drawn in the latest frame, by state (NeuronState's order), and the bodies the filter left undrawn (MapDrawn). */
+    @Volatile var statesDrawn: List<Int> = emptyList(); private set
+    @Volatile var hiddenDrawn = 0; private set
+    /**
+     * The ideas whose own halo the latest frame drew, by the state it drew (NeuronState's order; S05i
+     * repair 6): a resting idea inside a cell has none, any other state keeps one with its process
+     * (GraphNeuronLook.swift:340); the chosen body's hot halo is not counted (MapDrawn.halos).
+     */
+    @Volatile var halosDrawn: List<Int> = emptyList(); private set
+    /** Each frame's ideas by state and bodies' opacity, kept so a frame allocates neither. */
+    private val stateCounts = IntArray(NeuronState.entries.size)
+    private val haloCounts = IntArray(NeuronState.entries.size)
+    private val opacityNow = FloatArray(plan.bodies.size)
 
     /** The chosen body (its index, the scene's), or −1; set on the GL thread before [draw]. */
     var chosen = -1
@@ -171,8 +203,16 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         if (openedAt < 0 || clock < openedAt) openedAt = clock
         val step = if (lastClock >= 0 && clock > lastClock) clock - lastClock else 0f
         lastClock = clock
-        // every cell is there from the first frame, so each link's wait starts with it
+        pop.step(step)
+        // every cell is there from the first frame, so each link's wait starts with it; a link the
+        // filter takes away draws back (S05i)
+        val kept = filter?.links
+        val instant = filter?.instant ?: false
         for (i in 0 until growth.size) {
+            if (kept != null && i < growth.links && i < kept.size && !kept[i]) {
+                if (lively && !instant) { growth.step(i, false, step); shown[i] = growth.shown(i) } else shown[i] = 0f
+                continue
+            }
             growth.tick(i, true, step)
             shown[i] = growth.shown(i)
         }
@@ -214,18 +254,47 @@ class NeuronGl(private val scene: NeuronScene, private val lively: Boolean,
         // bodies (iOS rendering order 6), then halos (7), then arrival glows (8)
         val opening = NeuronPulses.opening(0f, 1f, clock - openedAt)
         val near = focus
-        val opacity = FloatArray(count) { i -> if (near == null || MapFocus.holdsAny(near, i, i + 1)) 1f else MapMark.FADED }
+        val opacity = opacityNow
+        for (i in 0 until count) opacity[i] = if (near == null || MapFocus.holdsAny(near, i, i + 1)) 1f else MapMark.FADED
         fadedDrawn = opacity.count { it < 1f }
         hotDrawn = false
-        for (b in look.bodies) drawBody(b, places[b.index], view, proj, clock, opening, fade,
-            if (b.index == marked) chosenScale else 1f, opacity.getOrElse(b.index) { 1f })
+        // the filter: a body gone is not drawn, one on its spring at its size, a ghost at 0.3
+        val ghosts = filter?.ghost
+        for (i in 0 until count) if (ghosts != null && i < ghosts.size && ghosts[i]) opacity[i] *= MapFilterView.GHOST_ALPHA
+        val states = stateCounts
+        states.fill(0)
+        var hidden = 0
         for (b in look.bodies) {
-            val hot = b.index == marked
-            if (b.standingHalo || hot) drawHalo(b, places[b.index], view, proj, clock, fade, hot, opacity.getOrElse(b.index) { 1f })
+            if (pop.gone(b.index)) { hidden++; continue }
+            if (plan.bodies[b.index].kind == ThemeBodyKind.NOTE) states[b.state.code]++
+            drawBody(b, places[b.index], view, proj, clock, opening, fade,
+                (if (b.index == marked) chosenScale else 1f) * pop.scale(b.index), opacity.getOrElse(b.index) { 1f })
         }
+        // a new list only when a count changed: a settled frame makes none
+        val last = statesDrawn
+        var changed = last.size != states.size
+        var k = 0
+        while (!changed && k < states.size) { if (last[k] != states[k]) changed = true; k++ }
+        if (changed) statesDrawn = states.toList()
+        hiddenDrawn = hidden
+        val halos = haloCounts
+        halos.fill(0)
         for (b in look.bodies) {
+            if (pop.gone(b.index)) continue
+            val hot = b.index == marked
+            if (b.standingHalo && !hot && plan.bodies[b.index].kind == ThemeBodyKind.NOTE) halos[b.state.code]++
+            if (b.standingHalo || hot) drawHalo(b, places[b.index], view, proj, clock, fade, hot,
+                opacity.getOrElse(b.index) { 1f } * min(pop.scale(b.index), 1f) * (1f + pop.bloom(b.index)))
+        }
+        val lastHalos = halosDrawn
+        var halosChanged = lastHalos.size != halos.size
+        var h = 0
+        while (!halosChanged && h < halos.size) { if (lastHalos[h] != halos[h]) halosChanged = true; h++ }
+        if (halosChanged) halosDrawn = halos.toList()
+        for (b in look.bodies) {
+            if (pop.gone(b.index)) continue
             val level = pulses.shown(b.index)
-            if (level > 0f) drawArrival(b, places[b.index], level * opacity.getOrElse(b.index) { 1f }, view, proj, fade)
+            if (level > 0f) drawArrival(b, places[b.index], level * opacity.getOrElse(b.index) { 1f } * min(pop.scale(b.index), 1f), view, proj, fade)
         }
         drawBridges(places, radius, view, proj, eye, clock, fade)
         GLES30.glBindVertexArray(0)

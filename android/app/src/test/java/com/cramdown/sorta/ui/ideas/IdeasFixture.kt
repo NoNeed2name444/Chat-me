@@ -41,25 +41,43 @@ object IdeasFixture {
     }
     val folders = listOf(garden, kitchen, bulbs)
 
+    /** The made-up export's folders (MadeUpExport in IdeasUITestSupport.swift): Raised beds in Garden, Bread in Kitchen. */
+    val exportGarden = NoteFolder(id = id(301), name = "Garden", createdAt = T)
+    val raisedBeds = NoteFolder(id = id(302), name = "Raised beds", parentId = exportGarden.id, createdAt = T + 1)
+    val exportKitchen = NoteFolder(id = id(303), name = "Kitchen", createdAt = T + 2)
+    val breadFolder = NoteFolder(id = id(304), name = "Bread", parentId = exportKitchen.id, createdAt = T + 3)
+    val stackedFolders = listOf(exportGarden, raisedBeds, exportKitchen, breadFolder)
+
     /**
-     * The places of iOS's made-up export (MadeUpExport in IdeasUITestSupport.swift), set on a fresh
-     * store: the shed clear, the seed swap at (0, 0) with the bell 33 below it, the rye starter
-     * clear, and two more with no board place, at (0, 0), as an import leaves them (S05c).
+     * The places and folders of iOS's made-up export (MadeUpExport in IdeasUITestSupport.swift), set
+     * on a fresh store: the shed clear, the seed swap at (0, 0) with the bell 33 below it, the rye
+     * starter clear, two more with no board place, at (0, 0), as an import leaves them (S05c), and
+     * the boiler's long title at a clear place (S05m item 5, MadeUpExport.long).
      */
     val stacked = listOf(
-        Note(id = id(21), title = "Paint the shed green", boardX = 120.0, boardY = -40.0, createdAt = T),
-        Note(id = id(22), title = "Seed swap list", boardX = 0.0, boardY = 0.0, createdAt = T + 1),
-        Note(id = id(23), title = "Try a rye starter", boardX = -75.5, boardY = 210.25, createdAt = T + 2),
+        Note(id = id(21), title = "Paint the shed green", boardX = 120.0, boardY = -40.0, folderId = exportGarden.id, createdAt = T),
+        Note(id = id(22), title = "Seed swap list", boardX = 0.0, boardY = 0.0, folderId = raisedBeds.id, createdAt = T + 1),
+        Note(id = id(23), title = "Try a rye starter", boardX = -75.5, boardY = 210.25, folderId = breadFolder.id, createdAt = T + 2),
         Note(id = id(24), title = "A bell for the bike", boardX = 0.0, boardY = 33.0, createdAt = T + 3),
         Note(id = id(25), title = "Oil the gate", createdAt = T + 4),
         Note(id = id(26), title = "Ask about the allotment waiting list", createdAt = T + 5),
+        Note(id = id(27), title = boiler.title, boardX = 0.0, boardY = -230.0, createdAt = T + 6),
     )
 
-    /** A store in a new directory under [parent], holding [ideas] (the made-up ideas), or empty when [filled] is false. */
-    fun store(parent: File, filled: Boolean = true, ideas: List<Note> = notes): IdeaStore {
+    /** The renders' clock (S06a): a day after the ideas were made, so no frost moves a still as the real days pass. */
+    const val NOW = T + 24 * HOUR
+    const val DAY = 24 * HOUR
+
+    /**
+     * A store in a new directory under [parent], holding [ideas] (the made-up ideas) and their folders,
+     * or empty when [filled] is false. It fixes the ideas' clock (IdeaClock) at [NOW].
+     */
+    fun store(parent: File, filled: Boolean = true, ideas: List<Note> = notes,
+              folderList: List<NoteFolder> = if (ideas === stacked) stackedFolders else folders): IdeaStore {
+        IdeaClock.fixed = NOW
         val dir = File(parent, "fixture-" + UUID.randomUUID()).also { it.mkdirs() }
         val store = IdeaStore(dir)
-        if (filled) store.replaceIdeas(ideas, folders)
+        if (filled) store.replaceIdeas(ideas, folderList)
         return store
     }
 }
