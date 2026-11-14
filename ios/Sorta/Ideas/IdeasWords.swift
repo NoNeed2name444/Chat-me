@@ -200,14 +200,14 @@ enum IdeasWords {
     static var showAsCards: String { String(localized: "deck.showCards", defaultValue: "Show as cards") }
     static var showAsList: String { String(localized: "deck.showList", defaultValue: "Show as list") }
     static var later: String { String(localized: "deck.later", defaultValue: "Later") }
-    static var keepForLater: String { String(localized: "deck.keepLater", defaultValue: "Keep for later") }
-    static var keptForLater: String { String(localized: "deck.laterDone", defaultValue: "Kept for later.") }
+    static var movedToBack: String { String(localized: "deck.laterDone", defaultValue: "Moved to the back.") }
     static var unfinished: String { String(localized: "deck.unfinished", defaultValue: "Unfinished") }
     static var offerLabel: String { String(localized: "offer.label", defaultValue: "You were saying\u{2026}") }
     static var carryOn: String { String(localized: "offer.carryOn", defaultValue: "Carry on") }
     static var notNow: String { String(localized: "offer.notNow", defaultValue: "Not now") }
     static var frostSpoken: String { String(localized: "frost.spoken", defaultValue: "not opened in a while") }
     static var lowTide: String { String(localized: "tide.title", defaultValue: "Low tide") }
+    static var lowTideLine: String { String(localized: "tide.line", defaultValue: "Ideas you haven't opened in a while.") }
     static var keep: String { String(localized: "tide.keep", defaultValue: "Keep") }
     static var letGo: String { String(localized: "tide.letGo", defaultValue: "Let go") }
     static var closeLowTide: String { String(localized: "tide.close", defaultValue: "Close low tide") }

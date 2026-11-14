@@ -314,7 +314,7 @@ struct IdeaBoardView: View {
             ZStack {
                 WardReliefFace(shape: shape, lift: lifted ? .high : .low)
                 shape.fill(wash)
-                shape.fill(IdeaFrostLook.ice.opacity(IdeaFrostLook.opacity[frost]))
+                shape.fill(IdeaFrostLook.wash(frost))
                     .animation(reduceMotion ? nil : .easeOut(duration: IdeaFrostLook.melt), value: frost)
             }
         }

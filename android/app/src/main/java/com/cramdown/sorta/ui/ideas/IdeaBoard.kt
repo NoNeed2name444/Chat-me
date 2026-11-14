@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.cramdown.sorta.ui.LocalWardDark
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.BoardPoint
@@ -376,7 +377,9 @@ const val BOARD_PEEK_TAG = "board-peek"
     // the frost (S06a A6): deeper with each step since it was last opened; opened, it melts, at once with animations off
     val frost = frostOf(note)
     val reduce = wardReduceMotion()
-    val wash by animateFloatAsState(IdeaFrostLook.opacity[frost], wardEaseOut(WardMotion.longest, reduce), label = "frost")
+    // by night a deep ice, so a forgotten idea never outshines the rest
+    val night = LocalWardDark.current
+    val wash by animateFloatAsState(IdeaFrostLook.opacity(night)[frost], wardEaseOut(WardMotion.longest, reduce), label = "frost")
     val frostWords = if (frost > 0) stringResource(R.string.frost_spoken) else null
     // read as drawn, the whole title first
     val spoken = listOfNotNull(title, if (oneKind) null else kind.label, folder, frostWords).joinToString(", ")
@@ -387,7 +390,7 @@ const val BOARD_PEEK_TAG = "board-peek"
         .heightIn(min = CARD_HEIGHT.dp)
         .wardRaised(WardRadius.card, if (lifted) WardLift.high else WardLift.low, fill = WardToken.raised)
         .clip(shape).background(tone.copy(alpha = 0.14f))
-        .background(IdeaFrostLook.ice.copy(alpha = wash))
+        .background(IdeaFrostLook.ice(night).copy(alpha = wash))
         .then(if (chosen) Modifier.border(2.dp, chosenInk, shape) else Modifier)
         .padding(WardSpace.m.wardDp)
         .semantics { testTag = BOARD_CARD_TAG; contentDescription = spoken },

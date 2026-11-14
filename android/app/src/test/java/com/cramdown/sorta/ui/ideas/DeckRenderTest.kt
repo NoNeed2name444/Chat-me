@@ -98,14 +98,14 @@ class DeckRenderTest {
             val file = File("build/outputs/roborazzi/$name.png")
             captureScreenRoboImage(file.path)
             look(this, name, file, dark)
-            parts(this, name, shot, broad = window != "phone")
+            parts(this, name, shot, broad = !window.startsWith("phone"), short = window == "phone_short")
         }
     }
 
     private fun tagged(tag: String) = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes()
 
     /** What each shot must hold, by its tags and words. */
-    private fun parts(c: WardChecks, name: String, shot: Shot, broad: Boolean) {
+    private fun parts(c: WardChecks, name: String, shot: Shot, broad: Boolean, short: Boolean) {
         val density = compose.activity.resources.displayMetrics.density
         fun tall(tag: String) = tagged(tag).all { it.boundsInRoot.height / density >= 47.5f && it.boundsInRoot.width / density >= 47.5f }
         when (shot.name) {
@@ -114,11 +114,15 @@ class DeckRenderTest {
                 c.check("$name: one card is up", card.size == 1, "${card.size}")
                 val actions = card.firstOrNull()?.config?.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
                 val garden = compose.activity.getString(R.string.deck_file_in, IdeasFixture.garden.name)
-                c.check("$name: TalkBack offers File in Garden and Keep for later", garden in actions && compose.activity.getString(R.string.deck_keep_later) in actions, "$actions")
+                c.check("$name: TalkBack offers File in Garden and Later", garden in actions && compose.activity.getString(R.string.deck_later) in actions, "$actions")
                 c.check("$name: the top card is the unfinished one, and says so",
                     card.firstOrNull()?.config?.getOrNull(SemanticsProperties.StateDescription) == compose.activity.getString(R.string.deck_unfinished))
                 val targets = tagged(DeckTags.TARGET)
-                c.check("$name: folders stand round the card", targets.size >= 3, "${targets.size}")
+                val cardTop = card.firstOrNull()?.boundsInRoot?.top ?: 0f
+                c.check("$name: folders stand round the card", targets.size >= (if (short) 1 else 3), "${targets.size}")
+                // round the card on a phone (the pane's stand beside it): above it, clear of it
+                c.check("$name: ${if (broad) "the Later well stands" else "the targets and the Later well stand"} clear above the card",
+                    ((if (broad) emptyList() else targets) + tagged(DeckTags.LATER)).all { it.boundsInRoot.bottom <= cardTop + 0.5f }, "card top $cardTop")
                 c.check("$name: every target and the Later well is 48 dp or more", tall(DeckTags.TARGET) && tall(DeckTags.LATER))
                 c.check("$name: ${if (broad) "the folders pane is beside the deck" else "a phone keeps the edge layout"}",
                     tagged(DeckTags.FOLDERS).isNotEmpty() == broad)
@@ -159,6 +163,10 @@ class DeckRenderTest {
 
     @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-night-xxhdpi")
     @Test fun phoneDark() = render("phone", dark = true, names = listOf("deck", "offer", "tide"))
+
+    // a short window (half a phone's screen, or the keyboard up): the card keeps its room, and what fits above it stands clear
+    @Config(sdk = [35], qualifiers = "w411dp-h560dp-port-notnight-xxhdpi")
+    @Test fun phoneShortLight() = render("phone_short", dark = false, names = listOf("deck", "offer", "tide"))
 
     @Config(sdk = [35], qualifiers = "w841dp-h701dp-land-notnight-xhdpi")
     @Test fun foldableOpenLight() = render("foldable_open", dark = false, names = listOf("deck", "frost", "tide"))

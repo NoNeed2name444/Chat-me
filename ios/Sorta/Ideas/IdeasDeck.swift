@@ -28,6 +28,27 @@ enum DeckKeys {
     static let sortDeck = "vignette.ideas.sortDeck"
     /// When the last low tide came, in seconds since 1970 (Double).
     static let lastTide = "vignette.ideas.lastTide"
+
+    /// `-SortaDeck on|off` and `-SortaLastTide <ISO date>`, a UI test's: the
+    /// two choices set before the screen reads them, so each test starts on
+    /// the list (or the deck) and on a known last tide, whatever an earlier
+    /// test left. Empty without the arguments (IdeasRoot.storeURL, DEBUG only).
+    static func launchDefaults(arguments: [String]) -> [String: Any] {
+        func value(after flag: String) -> String? {
+            guard let at = arguments.firstIndex(of: flag), at + 1 < arguments.count else { return nil }
+            return arguments[at + 1]
+        }
+        var out: [String: Any] = [:]
+        switch value(after: "-SortaDeck") {
+        case "on": out[sortDeck] = true
+        case "off": out[sortDeck] = false
+        default: break
+        }
+        if let text = value(after: "-SortaLastTide"), let date = ISO8601DateFormatter().date(from: text) {
+            out[lastTide] = date.timeIntervalSince1970
+        }
+        return out
+    }
 }
 
 /// The deck's measures the kit has no entry for, as Android's DeckLayout.
@@ -47,9 +68,27 @@ enum DeckLayout {
 /// The frost's look (A6): a cool wash over a card, deeper by step. The kit
 /// has no cool tone, so it is named here, as Android's IdeaFrostLook.
 enum IdeaFrostLook {
-    static let ice = Color(red: 0xD6 / 255, green: 0xE8 / 255, blue: 0xF5 / 255)
-    /// The wash's opacity at each level, 0 to 3.
+    /// The ice by day: pale, over bone.
+    static let dayIce: UInt32 = 0xD6E8F5
+    /// The ice by night: a deep blue that cools a card without lifting it,
+    /// so a forgotten idea never outshines the rest, and every ink on it
+    /// keeps its contrast.
+    static let nightIce: UInt32 = 0x1A3048
+    /// The board's wash at each level, 0 to 3, by day and by night.
+    static let dayOpacity: [Double] = [0, 0.20, 0.40, 0.60]
+    static let nightOpacity: [Double] = [0, 0.30, 0.50, 0.70]
+    /// The shell's strength in Space, at each level, 0 to 3.
     static let opacity: [Double] = [0, 0.18, 0.32, 0.46]
+
+    /// The board's wash at `level`, in the scheme it is drawn in.
+    static func wash(_ level: Int) -> Color {
+        let step: Int = max(0, min(3, level))
+        return Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? Color.uiColor(nightIce, alpha: nightOpacity[step])
+                : Color.uiColor(dayIce, alpha: dayOpacity[step])
+        })
+    }
     /// The melt, in seconds (the kit's longest change).
     static let melt: Double = 0.32
 
@@ -193,7 +232,6 @@ struct ResumeOffer: View {
         .padding(.horizontal, WardSpace.m)
         .padding(.vertical, WardSpace.m)
         .background { WardRowTile().padding(-WardSpace.s) }
-        .unfinishedEdge(true, inset: 0)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("resume-offer")
     }
@@ -214,13 +252,18 @@ struct TideTitle: View {
     let close: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: WardSpace.s) {
-            Text(IdeasWords.lowTide)
-                .wardFont(.title1)
-                .foregroundStyle(Color.wardInk)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("low-tide")
+        HStack(alignment: .top, spacing: WardSpace.s) {
+            VStack(alignment: .leading, spacing: WardSpace.xs) {
+                Text(IdeasWords.lowTide)
+                    .wardFont(.title1)
+                    .foregroundStyle(Color.wardInk)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("low-tide")
+                Text(IdeasWords.lowTideLine)
+                    .wardFont(.subheadline)
+                    .foregroundStyle(Color.wardInkSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: close) {
                 Image(systemName: "xmark")
             }
@@ -240,8 +283,12 @@ enum DeckActions {
 
 /// The deck: the top card low in the area, under the thumb, the Later well
 /// above it. With `paneTargets` nil (a phone held upright), the most-used
-/// folders that fit stand in two columns round the well; else they are the
-/// folders pane's, beside it, and only their frames come here (IdeasFiling).
+/// folders that fit stand in two columns round the well, at its foot, a
+/// thumb's reach above the card; else they are the folders pane's, beside
+/// it, only their frames come here (IdeasFiling), and the card and its well
+/// stand in the middle. Where there is no room above the card (a phone on
+/// its side, the keyboard up), the card stands alone: its buttons and its
+/// spoken actions still do everything.
 struct DeckArea: View {
     let order: [UUID]
     let actions: DeckActions
@@ -252,22 +299,40 @@ struct DeckArea: View {
     var body: some View {
         GeometryReader { geometry in
             let height = geometry.size.height
-            let cardZone = min(height * 0.5, DeckLayout.cardHeight + WardSpace.l * 3)
+            // the card's zone: half the area at most, but never less than the card and the cards under it
+            let cardZone = max(min(height * 0.5, DeckLayout.cardHeight + WardSpace.l * 3), DeckLayout.cardHeight + WardSpace.s * 2)
             let above = max(0, height - cardZone - WardSpace.m)
+            let roomy: Bool = above >= WardControlSize.target * 2
             let sorting: Bool = { if case .sort = actions { return true } else { return false } }()
-            let edges = paneTargets == nil && sorting
+            let centred: Bool = sorting && paneTargets != nil
+            let edges = paneTargets == nil && sorting && roomy
             let slots = edges ? DeckFolders.slots(height: Double(above), row: Double(DeckLayout.row), columns: 2, cap: DeckLayout.phoneCap) : 0
             let targets: [NoteFolder] = paneTargets ?? (edges ? IdeasDeckRule.targets(notes, slots: slots) : [])
             if let top = order.first.flatMap({ notes.note($0) }) {
-                ZStack(alignment: .bottom) {
-                    VStack(spacing: 0) {
-                        wells(top: top, targets: edges ? targets : [], width: geometry.size.width)
-                            .frame(height: above, alignment: .top)
+                let behind: Int = min(order.count - 1, 2)
+                let card = DeckCard(note: top, behind: behind, actions: actions, targets: sorting ? targets : [])
+                    .id(top.id)
+                    .padding(.bottom, WardSpace.s * CGFloat(behind))
+                if centred {
+                    VStack(spacing: WardSpace.l) {
+                        Spacer(minLength: 0)
+                        if roomy {
+                            wells(top: top, targets: [], width: geometry.size.width, height: WardControlSize.target * 2)
+                        }
+                        card
                         Spacer(minLength: 0)
                     }
-                    DeckCard(note: top, behind: min(order.count - 1, 2), actions: actions, targets: sorting ? targets : [])
-                        .id(top.id)
-                        .frame(height: cardZone, alignment: .bottom)
+                    .frame(maxWidth: .infinity)
+                } else {
+                    VStack(spacing: WardSpace.m) {
+                        if roomy {
+                            wells(top: top, targets: edges ? targets : [], width: geometry.size.width, height: above)
+                                .frame(height: above, alignment: .top)
+                        }
+                        Spacer(minLength: 0)
+                        card
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             } else {
                 Text(IdeasWords.allSorted)
@@ -278,13 +343,14 @@ struct DeckArea: View {
             }
         }
         .padding(.horizontal, WardSpace.gutter)
-        .padding(.bottom, WardSpace.s)
+        .padding(.bottom, WardSpace.l)
     }
 
-    /// The edge columns, leading and trailing, the well between them at the
-    /// top; or the well alone (two panes, and the tide, where it is Keep).
+    /// The edge columns, leading and trailing, at the foot of the room above
+    /// the card, the well between them at its top; or the well alone (two
+    /// panes, and the tide, where it is Keep).
     @ViewBuilder
-    private func wells(top: Note, targets: [NoteFolder], width: CGFloat) -> some View {
+    private func wells(top: Note, targets: [NoteFolder], width: CGFloat, height: CGFloat) -> some View {
         let well = LaterWell(words: {
             if case .tide = actions { return IdeasWords.keep } else { return IdeasWords.later }
         }()) {
@@ -294,14 +360,18 @@ struct DeckArea: View {
             }
         }
         if case let .sort(file, _, _) = actions, !targets.isEmpty {
-            let sides = max(0, (width - WardSpace.gutter * 2 - DeckLayout.wellWidth - WardSpace.m * 2) / 2)
+            let sides = max(0, (width - DeckLayout.wellWidth - WardSpace.m * 2) / 2)
             HStack(alignment: .top, spacing: WardSpace.m) {
                 column(targets.enumerated().filter { $0.offset % 2 == 0 }.map(\.element), top: top, file: file)
                     .frame(width: sides)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
                 well.frame(width: DeckLayout.wellWidth)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 column(targets.enumerated().filter { $0.offset % 2 == 1 }.map(\.element), top: top, file: file)
                     .frame(width: sides)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
             }
+            .frame(height: height)
         } else {
             well.frame(width: DeckLayout.wellWidth)
                 .frame(maxWidth: .infinity)
@@ -382,11 +452,12 @@ struct DeckTarget: View {
     }
 }
 
-/// The card under the thumb: its first line and its buttons. A drag carries
-/// it; let go, it files where it was flung (DeckFlick), goes to Later (is
-/// kept, in the tide), or springs back. VoiceOver reads its words, then
-/// offers each folder's "File in …", Keep for later and Choose folder (the
-/// tide's Keep, Link to an idea… and Let go).
+/// The card under the thumb: its first line, and its buttons at its foot. A
+/// drag carries it; let go, it files where the finger was flung (DeckFlick),
+/// goes to Later (is kept, in the tide), or springs back. Filed or put
+/// back, it flies off first, unless Reduce Motion is on. VoiceOver reads its
+/// words, then offers each folder's "File in …", Later and Choose folder
+/// (the tide's Keep, Link to an idea… and Let go).
 struct DeckCard: View {
     let note: Note
     let behind: Int
@@ -395,13 +466,37 @@ struct DeckCard: View {
     @Environment(IdeasFiling.self) private var filing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var offset: CGSize = .zero
-    @State private var centre: CGPoint = .zero
+    @State private var leaving = false
 
     var body: some View {
         let line: String = IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
-        ZStack(alignment: .top) {
-            // the cards under it, a step down each: the deck's depth, not its count
+        VStack(alignment: .leading, spacing: 0) {
+            Text(line)
+                .wardFont(.body)
+                .foregroundStyle(Color.wardInk)
+                .lineLimit(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(line)
+                .accessibilityValue(note.stoppedAt != nil ? IdeasWords.unfinished : "")
+                .accessibilityActions { spokenActions }
+                .accessibilityIdentifier("deck-card")
+            // the buttons at the card's foot, the room above them where a thumb grabs
+            Spacer(minLength: WardSpace.m)
+            buttons
+        }
+        .frame(maxWidth: .infinity, minHeight: DeckLayout.cardHeight - WardSpace.l * 2, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(WardSpace.l)
+        .wardRaised(in: shape, lift: .high, fill: .wardRaised)
+        .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
+        .scaleEffect(leaving ? 0.6 : 1)
+        .opacity(leaving ? 0 : 1)
+        .offset(offset)
+        .rotationEffect(.degrees(reduceMotion ? 0 : Double(max(-8, min(8, offset.width / 40)))))
+        .gesture(drag)
+        // the cards under it, a step down each, the top card's size: the deck's depth, not its count
+        .background {
             ForEach(Array(stride(from: behind, through: 1, by: -1)), id: \.self) { k in
                 Color.clear
                     .wardRaised(in: shape, lift: .low, fill: .wardRaised)
@@ -409,31 +504,8 @@ struct DeckCard: View {
                     .offset(y: WardSpace.s * CGFloat(k))
                     .accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: WardSpace.m) {
-                Text(line)
-                    .wardFont(.body)
-                    .foregroundStyle(Color.wardInk)
-                    .lineLimit(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel(line)
-                    .accessibilityValue(note.stoppedAt != nil ? IdeasWords.unfinished : "")
-                    .accessibilityActions { spokenActions }
-                    .accessibilityIdentifier("deck-card")
-                buttons
-            }
-            .padding(WardSpace.l)
-            .frame(maxWidth: .infinity, minHeight: DeckLayout.cardHeight, alignment: .topLeading)
-            .wardRaised(in: shape, lift: .high, fill: .wardRaised)
-            .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
-            .offset(offset)
-            .rotationEffect(.degrees(reduceMotion ? 0 : Double(max(-8, min(8, offset.width / 40)))))
         }
         .frame(maxWidth: DeckLayout.cardWidth)
-        .onGeometryChange(for: CGPoint.self) { proxy in
-            let f = proxy.frame(in: .global)
-            return CGPoint(x: f.midX, y: f.midY)
-        } action: { centre = $0 }
-        .gesture(drag)
     }
 
     @ViewBuilder
@@ -448,7 +520,7 @@ struct DeckCard: View {
     private var buttonRow: some View {
         switch actions {
         case let .sort(_, later, choose):
-            Button(IdeasWords.keepForLater) { later(note.id) }
+            Button(IdeasWords.later) { later(note.id) }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("deck-keep-later")
             Button(IdeasWords.chooseFolder) { choose(note.id) }
@@ -461,8 +533,12 @@ struct DeckCard: View {
             Button(IdeasWords.linkTo) { link(note.id) }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-link")
-            // compact as its neighbours; Undo brings the idea back
-            Button(IdeasWords.letGo) { letGo(note.id) }
+            // compact as its neighbours, its word in the danger red, as the rows' Delete; Undo brings the idea back
+            Button {
+                letGo(note.id)
+            } label: {
+                Text(IdeasWords.letGo).foregroundStyle(Color.wardDanger)
+            }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-let-go")
         }
@@ -475,7 +551,7 @@ struct DeckCard: View {
             ForEach(targets) { folder in
                 Button(IdeasWords.fileIn(folder.name)) { file(note.id, folder.id) }
             }
-            Button(IdeasWords.keepForLater) { later(note.id) }
+            Button(IdeasWords.later) { later(note.id) }
             Button(IdeasWords.chooseFolder) { choose(note.id) }
         case let .tide(keep, link, letGo):
             Button(IdeasWords.keep) { keep(note.id) }
@@ -484,7 +560,9 @@ struct DeckCard: View {
         }
     }
 
-    private func outcome(_ translation: CGSize) -> DeckFlick.Outcome<UUID> {
+    /// Where the card goes, judged from the finger: from where it took hold
+    /// (`start`, in the window) to `translation` past it.
+    private func outcome(from start: CGPoint, _ translation: CGSize) -> DeckFlick.Outcome<UUID> {
         var flicks: [DeckFlick.Target<UUID>] = []
         if case .sort = actions {
             for folder in targets {
@@ -494,41 +572,71 @@ struct DeckCard: View {
                 }
             }
         }
-        return DeckFlick.outcome(fromX: Double(centre.x), fromY: Double(centre.y),
-                                 toX: Double(centre.x + translation.width), toY: Double(centre.y + translation.height),
+        return DeckFlick.outcome(fromX: Double(start.x), fromY: Double(start.y),
+                                 toX: Double(start.x + translation.width), toY: Double(start.y + translation.height),
                                  targets: flicks)
     }
 
     private var drag: some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
+                guard !leaving else { return }
                 offset = value.translation
-                if case let .folder(id) = outcome(value.translation) { filing.hoveredTarget = id } else { filing.hoveredTarget = nil }
+                if case let .folder(id) = outcome(from: value.startLocation, value.translation) {
+                    filing.hoveredTarget = id
+                } else {
+                    filing.hoveredTarget = nil
+                }
             }
             .onEnded { value in
                 filing.hoveredTarget = nil
+                guard !leaving else { return }
                 let landing = DeckFlick.landing(x: Double(value.translation.width), y: Double(value.translation.height),
                                                 vx: Double(value.velocity.width), vy: Double(value.velocity.height))
-                let result = outcome(CGSize(width: landing.x, height: landing.y))
-                switch result {
+                let carried = CGSize(width: landing.x, height: landing.y)
+                switch outcome(from: value.startLocation, carried) {
                 case let .folder(id):
-                    if case let .sort(file, _, _) = actions { file(note.id, id) }
-                    offset = .zero
+                    leave(to: carried) { if case let .sort(file, _, _) = actions { file(note.id, id) } }
                 case .later:
-                    switch actions {
-                    case let .sort(_, later, _): later(note.id)
-                    case let .tide(keep, _, _): keep(note.id)
+                    leave(to: CGSize(width: carried.width, height: min(carried.height, -DeckLayout.cardHeight * 2))) {
+                        switch actions {
+                        case let .sort(_, later, _): later(note.id)
+                        case let .tide(keep, _, _): keep(note.id)
+                        }
                     }
-                    offset = .zero
                 case .back:
                     withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) { offset = .zero }
                 }
             }
     }
+
+    /// Flies the card off toward `place` and fades it, then does `done`; with
+    /// Reduce Motion, does it at once.
+    private func leave(to place: CGSize, _ done: @escaping () -> Void) {
+        guard !reduceMotion else {
+            offset = .zero
+            done()
+            return
+        }
+        withAnimation(.easeIn(duration: 0.2)) {
+            leaving = true
+            offset = place
+        } completion: {
+            done()
+            // the same card still on top (the deck's only one, put back): back in its place
+            var still = Transaction()
+            still.disablesAnimations = true
+            withTransaction(still) {
+                leaving = false
+                offset = .zero
+            }
+        }
+    }
 }
 
 /// The folders pane (A2): beside the deck on two panes, the most-used
-/// folders as targets in a grid; a tap files the deck's top card.
+/// folders as targets in a grid, in the pane's middle, as the card is in
+/// its own; a tap files the deck's top card.
 struct DeckFolderPane: View {
     let file: (UUID) -> Void
     @EnvironmentObject private var notes: NoteStore
@@ -547,8 +655,9 @@ struct DeckFolderPane: View {
                 }
             }
             .padding(.horizontal, WardSpace.gutter)
-            .padding(.top, WardSpace.l)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.vertical, WardSpace.l)
+            // in the middle, level with the card beside it
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .background { WardBackground() }
         .accessibilityElement(children: .contain)

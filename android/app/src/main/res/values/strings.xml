@@ -303,8 +303,7 @@
     <string name="deck_show_cards">Show as cards</string>
     <string name="deck_show_list">Show as list</string>
     <string name="deck_later">Later</string>
-    <string name="deck_keep_later">Keep for later</string>
-    <string name="deck_later_done">Kept for later.</string>
+    <string name="deck_later_done">Moved to the back.</string>
     <string name="deck_file_in">File in %1$s</string>
     <string name="deck_unfinished">Unfinished</string>
     <string name="offer_label">You were saying…</string>
@@ -313,6 +312,7 @@
     <string name="offer_not_now">Not now</string>
     <string name="frost_spoken">not opened in a while</string>
     <string name="tide_title">Low tide</string>
+    <string name="tide_line">Ideas you haven\'t opened in a while.</string>
     <string name="tide_keep">Keep</string>
     <string name="tide_let_go">Let go</string>
     <string name="tide_close">Close low tide</string>

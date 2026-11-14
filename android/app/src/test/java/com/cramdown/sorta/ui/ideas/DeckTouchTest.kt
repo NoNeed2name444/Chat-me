@@ -1,6 +1,7 @@
 package com.cramdown.sorta.ui.ideas
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -30,7 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * S06a A1, A3, A5 and A7 by touch on a phone: a flick up keeps the card for later and Undo puts it
+ * S06a A1, A3, A5 and A7 by touch on a phone: a flick up moves the card to the back and Undo puts it
  * back; a drag onto a folder files it; the card's buttons and TalkBack's actions do the same; the
  * header's toggle is remembered; the offer opens and goes; the tide's Let go deletes with Undo.
  */
@@ -85,8 +86,10 @@ class DeckTouchTest {
         val card = compose.onNodeWithTag(DeckTags.CARD, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag(DeckTags.CARD, useUnmergedTree = true).performTouchInput {
             val end = target - card.topLeft
-            down(center)
-            for (k in 1..12) { advanceEventTime(16); moveTo(center + (end - center) * (k / 12f)) }
+            // taken off its middle, by its words: where the finger lands is what counts, not the card's centre
+            val grip = center + Offset(0f, -36.dp.toPx())
+            down(grip)
+            for (k in 1..12) { advanceEventTime(16); moveTo(grip + (end - grip) * (k / 12f)) }
             // held still a moment: no fling carries it past the folder
             advanceEventTime(120)
             moveTo(end + Offset(0.5f, 0f))
@@ -99,7 +102,7 @@ class DeckTouchTest {
     @Test fun theButtonsAndTalkBacksActionsDoTheSame() {
         val model = open()
         val first = topCard()
-        compose.onNode(hasText(string(R.string.deck_keep_later)) and hasClickAction() and hasAnyAncestor(hasTestTag(DeckTags.CARD))).performClick()
+        compose.onNode(hasText(string(R.string.deck_later)) and hasClickAction() and hasAnyAncestor(hasTestTag(DeckTags.CARD))).performClick()
         compose.waitForIdle()
         assertTrue("Later, by its button", topCard() != first)
         val next = topCard()
@@ -139,9 +142,11 @@ class DeckTouchTest {
         compose.onNode(hasText(string(R.string.undo_action))).performClick()
         compose.waitForIdle()
         assertNotNull("Undo brings it back", model.book.note(IdeasFixture.bread.id))
+        assertEquals("Undo puts it back on the tide, where it was", IdeasFixture.bread.title, topCard())
         compose.onNode(hasText(string(R.string.tide_keep)) and hasClickAction() and hasAnyAncestor(hasTestTag(DeckTags.CARD))).performClick()
         compose.waitForIdle()
-        assertEquals("kept, it counts as opened", DeckIdeas.LATER, model.book.note(IdeasFixture.tulips.id)?.openedAt)
+        assertEquals("kept, it counts as opened", DeckIdeas.LATER, model.book.note(IdeasFixture.bread.id)?.openedAt)
+        assertEquals("kept, the next of the three", IdeasFixture.tulips.title, topCard())
     }
 
     private fun hasClickAction() = androidx.compose.ui.test.hasClickAction()

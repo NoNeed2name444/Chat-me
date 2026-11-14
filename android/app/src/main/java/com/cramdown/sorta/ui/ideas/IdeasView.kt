@@ -219,15 +219,17 @@ internal object IdeasBanner {
         say(message, undo = { model.book.move(id, before) })
     }
 
-    fun deleteIdea(id: String) {
+    fun deleteIdea(id: String, undone: () -> Unit = {}) {
         val removed = model.book.removal(id) ?: return
         model.book.delete(id)
-        say(res.getString(R.string.undo_deleted), undo = { model.book.restore(removed) })
+        say(res.getString(R.string.undo_deleted), undo = { model.book.restore(removed); undone() })
     }
 
     // S06a: the deck's order, "You were saying…", and the low tide, asked once per launch
     val deck = remember { DeckState() }
     val frames = remember { mutableStateMapOf<String, Rect>() }
+    // the folder a dragged card is over, pressed in, round the card or in the pane beside it
+    var hovered by remember { mutableStateOf<String?>(null) }
     remember(model) { IdeasSession.startTide(settings, model.book); 0 }
     var resuming by rememberSaveable { mutableStateOf(false) }
     var linking by remember { mutableStateOf<String?>(null) }
@@ -246,7 +248,15 @@ internal object IdeasBanner {
     val tideActions = DeckActions.Tide(
         keep = { id -> model.book.markOpened(id, IdeaClock.now()); leaveTide(id) },
         link = { id -> linking = id },
-        letGo = { id -> leaveTide(id); deleteIdea(id) })
+        // Undo brings the idea back onto the tide, where it was
+        letGo = { id ->
+            val at = IdeasSession.tide.indexOf(id)
+            leaveTide(id)
+            deleteIdea(id) {
+                val now = IdeasSession.tide.toMutableList()
+                if (id !in now) { now.add(at.coerceIn(0, now.size), id); IdeasSession.tide = now }
+            }
+        })
 
     /** captureIdea: the words trimmed, nothing for an empty field, into the open folder; the field stays ready. */
     fun captureIdea(): Note? {
@@ -341,7 +351,8 @@ internal object IdeasBanner {
                         dismissOffer = { IdeasSession.offerDone = true },
                         deckOn = settings.sortDeck, setDeck = { settings.setSortDeck(it) }, deckShown = deckShown,
                         order = order, tide = tide, closeTide = { IdeasSession.tide = emptyList() },
-                        sortActions = sortActions, tideActions = tideActions, paneTargets = paneTargets, frames = frames),
+                        sortActions = sortActions, tideActions = tideActions, paneTargets = paneTargets, frames = frames,
+                        hovered = hovered, hover = { hovered = it }),
                 )
             }
         }
@@ -375,7 +386,7 @@ internal object IdeasBanner {
             // the map pane starts below the status bar, whose row shows the page across the window, and
             // the bar's icons follow the page (S05j item 1, question 1's default; LocalSortaBars)
             if (paneTargets != null) Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().navigationBarsPadding()) {
-                DeckFolderPane(paneTargets, frames, file = { to -> order.firstOrNull()?.let { file(it, to) } })
+                DeckFolderPane(paneTargets, frames, hovered, file = { to -> order.firstOrNull()?.let { file(it, to) } })
             } else Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
         } else {
             if (mapShown) WardHingePane(shape, Modifier.fillMaxSize()) { MapPane(paned = false) }
@@ -435,6 +446,7 @@ internal class SortExtras(
     val order: List<String>, val tide: List<String>, val closeTide: () -> Unit,
     val sortActions: DeckActions.Sort, val tideActions: DeckActions.Tide,
     val paneTargets: List<NoteFolder>?, val frames: SnapshotStateMap<String, Rect>,
+    val hovered: String?, val hover: (String?) -> Unit,
 )
 
 /**
@@ -523,7 +535,7 @@ internal class SortExtras(
             }
             val tideUp = extras.tide.isNotEmpty()
             DeckArea(book, version, if (tideUp) extras.tide else extras.order, if (tideUp) extras.tideActions else extras.sortActions,
-                paneTargets = if (tideUp) emptyList() else extras.paneTargets, frames = extras.frames, bottom = bottom,
+                paneTargets = if (tideUp) emptyList() else extras.paneTargets, frames = extras.frames, hovered = extras.hovered, hover = extras.hover, bottom = bottom,
                 modifier = Modifier.weight(1f).padding(top = WardSpace.m.wardDp))
             return@Column
         }

@@ -325,18 +325,6 @@
         }
       }
     },
-    "deck.keepLater" : {
-      "comment" : "Ideas screens (S06a), from the strings pass; key deck.keepLater",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep for later"
-          }
-        }
-      }
-    },
     "deck.later" : {
       "comment" : "Ideas screens (S06a), from the strings pass; key deck.later",
       "extractionState" : "manual",
@@ -356,7 +344,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kept for later."
+            "value" : "Moved to the back."
           }
         }
       }
@@ -1557,6 +1545,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Let go"
+          }
+        }
+      }
+    },
+    "tide.line" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas you haven't opened in a while."
           }
         }
       }

@@ -216,7 +216,9 @@ jobs:
         run: bash ../tools/run_ui_tests.sh iphone ideas
       - name: The Ideas renders on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 35
+        # 20 to 35 minutes before the deck renders (runs 43591609208 and the
+        # green ones before it), and about 6 for DeckRenderTests by day and by night
+        timeout-minutes: 50
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}

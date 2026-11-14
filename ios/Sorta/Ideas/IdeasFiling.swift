@@ -63,12 +63,21 @@ final class IdeasFiling {
     /// Keeps the deck's card for later, at the back, with Undo.
     func later(_ id: UUID) {
         deck.later(id)
-        notice = IdeasNotice(text: IdeasWords.keptForLater, undo: .later(id))
+        notice = IdeasNotice(text: IdeasWords.movedToBack, undo: .later(id))
     }
 
     /// The tide's idea leaves it.
     func leaveTide(_ id: UUID) {
         tide.removeAll { $0 == id }
+    }
+
+    /// The tide's idea is deleted, with Undo, which brings it back to the
+    /// tide where it stood.
+    func letGo(_ id: UUID, notes: NoteStore) {
+        let at: Int = tide.firstIndex(of: id) ?? 0
+        leaveTide(id)
+        guard let removal = notes.remove(id) else { return }
+        notice = IdeasNotice(text: IdeasWords.ideaDeleted, undo: .letGo(removal, idea: id, at: at))
     }
 
     /// Asks once per launch whether the tide is due (the first open 7 days
@@ -94,6 +103,9 @@ final class IdeasFiling {
             notes.move(idea, to: notes.folder(from)?.id)
         case let .deleted(removal):
             notes.undo(removal)
+        case let .letGo(removal, idea, at):
+            notes.undo(removal)
+            if !tide.contains(idea) { tide.insert(idea, at: min(at, tide.count)) }
         }
     }
 }

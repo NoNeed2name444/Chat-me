@@ -100,24 +100,6 @@ enum IdeasDesk {
         return Data(base64Encoded: text)
     }
 
-    /// `-SortaDeck on|off` and `-SortaLastTide <ISO date>` (S06a): the
-    /// deck's two stored choices, set before the screen reads them, so each
-    /// UI test starts on the list (or the deck) and on a known last tide,
-    /// whatever an earlier test left. Empty without the arguments.
-    static func deckDefaults(arguments: [String]) -> [String: Any] {
-        var out: [String: Any] = [:]
-        switch value(after: "-SortaDeck", in: arguments) {
-        case "on": out[DeckKeys.sortDeck] = true
-        case "off": out[DeckKeys.sortDeck] = false
-        default: break
-        }
-        if let text = value(after: "-SortaLastTide", in: arguments),
-           let date = ISO8601DateFormatter().date(from: text) {
-            out[DeckKeys.lastTide] = date.timeIntervalSince1970
-        }
-        return out
-    }
-
     /// `-SortaNoticesStay`: a notice stays until the next one, as it does
     /// under VoiceOver, so a slow simulator can still reach its Undo.
     static func noticesStay(arguments: [String]) -> Bool {

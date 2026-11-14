@@ -266,10 +266,7 @@ struct IdeasView: View {
                   filing.leaveTide(id)
               },
               link: { linking = NoteRef(id: $0) },
-              letGo: { id in
-                  filing.leaveTide(id)
-                  filing.deleteIdea(id, notes: notes)
-              })
+              letGo: { filing.letGo($0, notes: notes) })
     }
 
     private var moreMenu: some View {

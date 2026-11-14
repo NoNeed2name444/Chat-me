@@ -68,7 +68,7 @@ struct IdeasRoot: View {
            !FileManager.default.fileExists(atPath: url.path) {
             try? seed.write(to: url, options: .atomic)
         }
-        for (key, value) in IdeasDesk.deckDefaults(arguments: ProcessInfo.processInfo.arguments) {
+        for (key, value) in DeckKeys.launchDefaults(arguments: ProcessInfo.processInfo.arguments) {
             UserDefaults.standard.set(value, forKey: key)
         }
         return url

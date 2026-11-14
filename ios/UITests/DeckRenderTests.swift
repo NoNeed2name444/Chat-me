@@ -3,8 +3,8 @@ import XCTest
 /// S06a A8 on iOS: the sorting deck, "You were saying…", the low tide and
 /// the frost, rendered for real on made-up ideas (DeckSeed) and kept as
 /// named screenshots, with each shot's own parts checked: the offer and its
-/// Carry on, the card and its targets (44 points at least), Keep for later
-/// with Undo, a drag onto a folder, the tide's Let go with Undo and Keep,
+/// Carry on, the card and its targets (44 points at least), Later with
+/// Undo, a drag onto a folder, the tide's Let go with Undo and Keep,
 /// and a board card at each frost step. CI runs it by day and by night on
 /// the iPhone and the iPad (tools/run_ui_tests.sh, the ideas set). None of
 /// the ideas is medical.
@@ -52,7 +52,7 @@ final class DeckRenderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(targets.count, 3, "folders stand round the card")
         for target in targets { assertTarget(target, "the target \(target.label)") }
         assertTarget(app.descendants(matching: .any)["deck-later"].firstMatch, "the Later well")
-        assertTarget(app.buttons["deck-keep-later"].firstMatch, "Keep for later")
+        assertTarget(app.buttons["deck-keep-later"].firstMatch, "the card's Later")
         assertTarget(app.buttons["deck-choose"].firstMatch, "Choose folder")
         let pane = app.descendants(matching: .any)["deck-folders"].firstMatch
         if window.width >= 700 {
@@ -63,10 +63,10 @@ final class DeckRenderTests: XCTestCase {
         sleep(1)
         keepShot("deck-2-deck")
 
-        // Keep for later, then Undo puts it back on top
+        // Later, then Undo puts it back on top
         app.buttons["deck-keep-later"].firstMatch.tap()
         XCTAssertTrue(app.notice.waitForExistence(timeout: 10), "a notice")
-        XCTAssertTrue(app.notice.label.contains("Kept for later."), "the notice: \(app.notice.label)")
+        XCTAssertTrue(app.notice.label.contains("Moved to the back."), "the notice: \(app.notice.label)")
         XCTAssertTrue(waitFor { card.label != DeckSeed.gate }, "the next card is up")
         app.tapUndo()
         XCTAssertTrue(waitFor { card.label == DeckSeed.gate }, "Undo puts it back on top: \(card.label)")
@@ -93,6 +93,7 @@ final class DeckRenderTests: XCTestCase {
                                                  "-SortaNow", DeckSeed.later, "-SortaLastTide", DeckSeed.before(8)])
         app.keyboards.buttons["Done"].firstMatch.tapIfThere()
         XCTAssertTrue(app.descendants(matching: .any)["low-tide"].firstMatch.waitForExistence(timeout: 10), "the low tide is up")
+        XCTAssertTrue(app.staticTexts["Ideas you haven't opened in a while."].firstMatch.exists, "the tide says what it holds")
         let card = app.descendants(matching: .any)["deck-card"].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 10), "the tide's card")
         XCTAssertEqual(card.label, DeckSeed.bread, "the idea left longest comes first")

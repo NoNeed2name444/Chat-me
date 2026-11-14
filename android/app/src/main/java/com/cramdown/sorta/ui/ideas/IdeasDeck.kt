@@ -11,7 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Style
+import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
@@ -37,6 +37,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -47,6 +48,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -119,11 +121,17 @@ object DeckTags {
     const val TIDE = "low-tide"
 }
 
-/** The frost's look (S06a A6): a cool wash over a card, deeper by step. The kit has no cool tone, so it is named here. */
+/** The frost's look (S06a A6): a cool wash over a card, deeper by step. The kit has no cool tone, so it is named here, as iOS's. */
 object IdeaFrostLook {
-    val ice = Color(0xFFD6E8F5)
-    /** The wash's opacity at each level, 0 to 3. */
-    val opacity = floatArrayOf(0f, 0.18f, 0.32f, 0.46f)
+    /** The ice by day: pale, over bone. */
+    val dayIce = Color(0xFFD6E8F5)
+    /** The ice by night: a deep blue that cools a card without lifting it, so a forgotten idea never outshines the rest, and every ink on it keeps its contrast. */
+    val nightIce = Color(0xFF1A3048)
+    /** The wash at each level, 0 to 3, by day and by night. */
+    val dayOpacity = floatArrayOf(0f, 0.20f, 0.40f, 0.60f)
+    val nightOpacity = floatArrayOf(0f, 0.30f, 0.50f, 0.70f)
+    fun ice(dark: Boolean): Color = if (dark) nightIce else dayIce
+    fun opacity(dark: Boolean): FloatArray = if (dark) nightOpacity else dayOpacity
 }
 
 /** The deck's measures the kit has no entry for. */
@@ -158,7 +166,7 @@ internal fun Modifier.unfinishedEdge(marked: Boolean, inset: Dp = WardSpace.s.wa
 /** List or cards, at To sort's title row's end, beside More. */
 @Composable internal fun DeckToggle(on: Boolean, set: (Boolean) -> Unit) {
     val words = stringResource(if (on) R.string.deck_show_list else R.string.deck_show_cards)
-    WardCircleButton(if (on) Icons.AutoMirrored.Rounded.List else Icons.Outlined.Style, words, { set(!on) },
+    WardCircleButton(if (on) Icons.AutoMirrored.Rounded.List else Icons.Outlined.ViewAgenda, words, { set(!on) },
         Modifier.semantics { testTag = DeckTags.TOGGLE })
 }
 
@@ -169,7 +177,7 @@ internal fun Modifier.unfinishedEdge(marked: Boolean, inset: Dp = WardSpace.s.wa
     val stop = note.stoppedAt?.coerceIn(0, note.body.length) ?: note.body.length
     // the last words before the caret, as the person left them
     val before = note.body.substring(0, stop).trimEnd().lines().lastOrNull { it.isNotBlank() }?.trim()?.takeLast(80)
-    Row(modifier.fillMaxWidth().unfinishedEdge(true).wardRowTile().semantics { testTag = DeckTags.OFFER },
+    Row(modifier.fillMaxWidth().wardRowTile().semantics { testTag = DeckTags.OFFER },
         horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
             Text(stringResource(R.string.offer_label), Modifier.semantics { heading() }, style = WardTextStyle.footnote.textStyle(WardWeight.semibold),
@@ -185,12 +193,15 @@ internal fun Modifier.unfinishedEdge(marked: Boolean, inset: Dp = WardSpace.s.wa
     }
 }
 
-/** The tide's head: "Low tide" as the title, and its close at the end. */
+/** The tide's head: "Low tide" as the title, the line under it that says what it holds, and its close at the end. */
 @Composable internal fun TideTitle(close: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = WardSpace.s.wardDp), verticalAlignment = Alignment.CenterVertically,
+    Row(Modifier.fillMaxWidth().padding(start = WardSpace.s.wardDp), verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-        Text(stringResource(R.string.tide_title), Modifier.weight(1f).semantics { heading(); testTag = DeckTags.TIDE },
-            style = WardTextStyle.title.textStyle(WardWeight.bold), color = wardColor(WardToken.ink))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+            Text(stringResource(R.string.tide_title), Modifier.semantics { heading(); testTag = DeckTags.TIDE },
+                style = WardTextStyle.title.textStyle(WardWeight.bold), color = wardColor(WardToken.ink))
+            Text(stringResource(R.string.tide_line), style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
+        }
         WardCircleButton(Icons.Rounded.Close, stringResource(R.string.tide_close), close)
     }
 }
@@ -204,19 +215,26 @@ internal sealed class DeckActions {
 /**
  * The deck: the top card of [order] low in the area, under the thumb, and the Later well above it.
  * With [paneTargets] null (a phone held upright), the most-used folders that fit stand in two
- * columns round it; else they are the folders pane's, beside it, and only their frames come here,
- * in [frames], which every target keeps in the root's coordinates.
+ * columns round the well, at its foot, a thumb's reach above the card; else they are the folders
+ * pane's, beside it, only their frames come here, in [frames], which every target keeps in the
+ * root's coordinates, and the card and its well stand in the middle. [hovered]: the target a
+ * dragged card is over, wherever it stands. Where there is no room above the card (a phone on its
+ * side, the keyboard up), the card stands alone: its buttons and its spoken actions still do everything.
  */
 @Composable internal fun DeckArea(book: IdeaBook, version: Int, order: List<String>, actions: DeckActions, paneTargets: List<NoteFolder>?,
-                                  frames: SnapshotStateMap<String, Rect>, bottom: Dp, modifier: Modifier = Modifier) {
+                                  frames: SnapshotStateMap<String, Rect>, hovered: String?, hover: (String?) -> Unit, bottom: Dp,
+                                  modifier: Modifier = Modifier) {
     val top = order.firstOrNull()?.let { book.note(it) }
     val sort = actions as? DeckActions.Sort
     val density = LocalDensity.current
-    var hovered by remember { mutableStateOf<String?>(null) }
     BoxWithConstraints(modifier.fillMaxSize().padding(horizontal = WardSpace.gutter.wardDp).padding(bottom = bottom)) {
-        val cardZone = min(maxHeight.value * 0.5f, (DeckLayout.cardHeight + WardSpace.l * 3).toFloat()).dp
+        // the card's zone: half the area at most, but never less than the card and the cards under it
+        val cardZone = max(min(maxHeight.value * 0.5f, (DeckLayout.cardHeight + WardSpace.l * 3).toFloat()),
+            (DeckLayout.cardHeight + WardSpace.s * 2).toFloat()).dp
         val above = maxHeight - cardZone - WardSpace.m.wardDp
-        val edges = paneTargets == null && actions is DeckActions.Sort
+        val roomy = above >= (WardControlSize.target * 2).dp
+        val centred = sort != null && paneTargets != null
+        val edges = paneTargets == null && sort != null && roomy
         val slots = if (edges) DeckFolders.slots(above.value.toDouble(), DeckLayout.row, 2, DeckLayout.phoneCap) else 0
         val targets = paneTargets ?: remember(book, version, slots) { deckTargets(book, slots) }
         if (top == null) {
@@ -224,30 +242,46 @@ internal sealed class DeckActions {
                 style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary))
             return@BoxWithConstraints
         }
-        if (edges && sort != null) {
-            // the edge columns, leading and trailing, the Later well between them at the top
-            val sides = (maxWidth - DeckLayout.wellWidth.dp - WardSpace.m.wardDp * 2) / 2
-            val (leading, trailing) = targets.withIndex().partition { it.index % 2 == 0 }
-            Row(Modifier.fillMaxWidth().height(above), horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-                Column(Modifier.width(sides), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-                    leading.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
+        val keep = (actions as? DeckActions.Tide)?.keep ?: sort?.later
+        val wellWords = if (sort == null) R.string.tide_keep else R.string.deck_later
+        val behind = min(order.size - 1, 2)
+        val card: @Composable () -> Unit = {
+            key(top.id) {
+                // the cards under it show below it, so they have their room
+                Box(Modifier.padding(bottom = (WardSpace.s * behind).dp)) {
+                    DeckCard(book, version, top, behind, actions, if (sort != null) targets else emptyList(), frames, density.density, hover)
                 }
-                LaterWell(Modifier.width(DeckLayout.wellWidth.dp)) { sort.later(top.id) }
-                Column(Modifier.width(sides), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-                    trailing.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
-                }
-            }
-        } else {
-            val keep = (actions as? DeckActions.Tide)?.keep ?: sort?.later
-            Box(Modifier.fillMaxWidth().height(above), contentAlignment = Alignment.TopCenter) {
-                if (keep != null) LaterWell(Modifier.width(DeckLayout.wellWidth.dp), words = if (sort == null) R.string.tide_keep else R.string.deck_later) { keep(top.id) }
             }
         }
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(cardZone), contentAlignment = Alignment.BottomCenter) {
-            key(top.id) {
-                DeckCard(book, version, top, behind = min(order.size - 1, 2), actions, targets, frames, density.density,
-                    hover = { hovered = it })
+        if (centred) {
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(WardSpace.l.wardDp, Alignment.CenterVertically)) {
+                if (roomy && keep != null) LaterWell(Modifier.width(DeckLayout.wellWidth.dp), wellWords) { keep(top.id) }
+                card()
             }
+            return@BoxWithConstraints
+        }
+        val sides = (maxWidth - DeckLayout.wellWidth.dp - WardSpace.m.wardDp * 2) / 2
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+            if (edges && sort != null && targets.isNotEmpty()) {
+                // the edge columns, leading and trailing, at the foot of the room above the card; the Later well between them at its top
+                val (leading, trailing) = targets.withIndex().partition { it.index % 2 == 0 }
+                Row(Modifier.fillMaxWidth().height(above), horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
+                    Column(Modifier.width(sides).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.Bottom)) {
+                        leading.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
+                    }
+                    LaterWell(Modifier.width(DeckLayout.wellWidth.dp)) { sort.later(top.id) }
+                    Column(Modifier.width(sides).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.Bottom)) {
+                        trailing.forEach { (_, f) -> DeckTarget(f, hovered == f.id, frames) { sort.file(top.id, f.id) } }
+                    }
+                }
+            } else if (roomy) {
+                Box(Modifier.fillMaxWidth().height(above), contentAlignment = Alignment.TopCenter) {
+                    if (keep != null) LaterWell(Modifier.width(DeckLayout.wellWidth.dp), wellWords) { keep(top.id) }
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            card()
         }
     }
 }
@@ -293,10 +327,11 @@ internal sealed class DeckActions {
 }
 
 /**
- * The card under the thumb: its first line, and its buttons. A drag carries it; let go, it files
- * where it was flung (DeckFlick), goes to Later (or is kept, in the tide), or springs back. TalkBack
- * reads its words, then offers each folder's "File in …", Later and Choose folder (the tide's Keep,
- * Link to… and Let go). [behind]: how many cards show under it.
+ * The card under the thumb: its first line, and its buttons at its foot. A drag carries it; let go,
+ * it files where the finger was flung (DeckFlick), goes to Later (or is kept, in the tide), or
+ * springs back. Filed or put back, it flies off first, unless animations are off. TalkBack reads its
+ * words, then offers each folder's "File in …", Later and Choose folder (the tide's Keep, Link to…
+ * and Let go). [behind]: how many cards show under it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable private fun DeckCard(book: IdeaBook, @Suppress("UNUSED_PARAMETER") version: Int, note: Note, behind: Int, actions: DeckActions,
@@ -306,14 +341,18 @@ internal sealed class DeckActions {
     val reduce = wardReduceMotion()
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
-    var centre by remember { mutableStateOf(Offset.Zero) }
-    val shape = RoundedCornerShape(WardRadius.card.wardDp)
+    val fade = remember { Animatable(1f) }
+    // the card's corner in the root, and where the finger took hold of it there
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var grab by remember { mutableStateOf(Offset.Zero) }
+    var leaving by remember { mutableStateOf(false) }
     val unfinished = stringResource(R.string.deck_unfinished)
-    val laterWords = stringResource(R.string.deck_keep_later)
+    val laterWords = stringResource(R.string.deck_later)
     val chooseWords = stringResource(R.string.row_choose_folder)
     val keepWords = stringResource(R.string.tide_keep)
     val linkWords = stringResource(R.string.editor_link_to)
     val letGoWords = stringResource(R.string.tide_let_go)
+    val danger = wardColor(WardToken.danger)
     val fileIn = targets.map { it to stringResource(R.string.deck_file_in, it.name) }
     val spokenActions = when (actions) {
         is DeckActions.Sort -> fileIn.map { (f, words) -> CustomAccessibilityAction(words) { actions.file(note.id, f.id); true } } +
@@ -323,49 +362,73 @@ internal sealed class DeckActions {
             CustomAccessibilityAction(linkWords) { actions.link(note.id); true },
             CustomAccessibilityAction(letGoWords) { actions.letGo(note.id); true })
     }
+    // where the card goes, judged from the finger: from where it took hold to [at] past it
     fun landing(at: Offset): DeckFlick.Outcome<String> {
         val ts = if (actions is DeckActions.Sort) targets.mapNotNull { f -> frames[f.id]?.let { r ->
             DeckFlick.Target(f.id, (r.left / density).toDouble(), (r.top / density).toDouble(), (r.right / density).toDouble(), (r.bottom / density).toDouble()) } }
             else emptyList()
-        return DeckFlick.outcome((centre.x / density).toDouble(), (centre.y / density).toDouble(),
-            ((centre.x + at.x) / density).toDouble(), ((centre.y + at.y) / density).toDouble(), ts)
+        return DeckFlick.outcome((grab.x / density).toDouble(), (grab.y / density).toDouble(),
+            ((grab.x + at.x) / density).toDouble(), ((grab.y + at.y) / density).toDouble(), ts)
     }
-    fun settle(outcome: DeckFlick.Outcome<String>) {
-        when (outcome) {
-            is DeckFlick.Outcome.Folder -> (actions as? DeckActions.Sort)?.file?.invoke(note.id, outcome.id)
-            DeckFlick.Outcome.Later -> when (actions) { is DeckActions.Sort -> actions.later(note.id); is DeckActions.Tide -> actions.keep(note.id) }
-            DeckFlick.Outcome.Back -> {}
+    fun settle(outcome: DeckFlick.Outcome<String>, at: Offset) {
+        fun act() {
+            when (outcome) {
+                is DeckFlick.Outcome.Folder -> (actions as? DeckActions.Sort)?.file?.invoke(note.id, outcome.id)
+                DeckFlick.Outcome.Later -> when (actions) { is DeckActions.Sort -> actions.later(note.id); is DeckActions.Tide -> actions.keep(note.id) }
+                DeckFlick.Outcome.Back -> {}
+            }
         }
-        scope.launch { if (reduce || outcome != DeckFlick.Outcome.Back) offset.snapTo(Offset.Zero) else offset.animateTo(Offset.Zero, wardSpring(WardMotion.travel, reduce)) }
+        scope.launch {
+            when {
+                outcome == DeckFlick.Outcome.Back ->
+                    if (reduce) offset.snapTo(Offset.Zero) else offset.animateTo(Offset.Zero, wardSpring(WardMotion.travel, reduce))
+                reduce -> { offset.snapTo(Offset.Zero); act() }
+                else -> {
+                    // off toward where it was flung, or up past the top for Later, fading as it goes
+                    val place = if (outcome == DeckFlick.Outcome.Later) Offset(at.x, min(at.y, -(DeckLayout.cardHeight * 2 * density).toFloat())) else at
+                    leaving = true
+                    launch { fade.animateTo(0f, wardEaseOut(WardMotion.shortest, reduce)) }
+                    offset.animateTo(place, wardEaseOut(WardMotion.shortest, reduce))
+                    act()
+                    // the same card still on top (the deck's only one, put back): back in its place
+                    offset.snapTo(Offset.Zero); fade.snapTo(1f); leaving = false
+                }
+            }
+        }
     }
     Box(Modifier.widthIn(max = DeckLayout.cardWidth.dp).fillMaxWidth()
-        .onGloballyPositioned { centre = it.boundsInRoot().center }
+        .onGloballyPositioned { origin = it.positionInRoot() }
         .pointerInput(note.id) {
             val tracker = VelocityTracker()
             detectDragGestures(
-                onDragStart = { tracker.resetTracking() },
+                onDragStart = { tracker.resetTracking(); grab = origin + it },
                 onDragEnd = {
                     val v = tracker.calculateVelocity()
                     val (x, y) = DeckFlick.landing(offset.value.x.toDouble(), offset.value.y.toDouble(), v.x.toDouble(), v.y.toDouble())
+                    val at = Offset(x.toFloat(), y.toFloat())
                     hover(null)
-                    settle(landing(Offset(x.toFloat(), y.toFloat())))
+                    if (!leaving) settle(landing(at), at)
                 },
                 onDragCancel = { hover(null); scope.launch { offset.snapTo(Offset.Zero) } },
             ) { change, amount ->
                 change.consume()
+                if (leaving) return@detectDragGestures
                 tracker.addPosition(change.uptimeMillis, change.position)
                 val now = offset.value + amount
                 scope.launch { offset.snapTo(now) }
                 hover((landing(now) as? DeckFlick.Outcome.Folder)?.id)
             }
         }) {
-        // the cards under it, a step down each: the deck's depth, not its count
+        // the cards under it, a step down each, the top card's size: the deck's depth, not its count
         for (k in behind downTo 1) Box(Modifier.matchParentSize().padding(horizontal = (WardSpace.s * k).dp)
             .offset(y = (WardSpace.s * k).dp).wardRaised(WardRadius.card, WardLift.low, fill = WardToken.raised))
         Column(Modifier.fillMaxWidth().heightIn(min = DeckLayout.cardHeight.dp)
             .graphicsLayer {
                 translationX = offset.value.x; translationY = offset.value.y
                 rotationZ = if (reduce) 0f else (offset.value.x / density / 40f).coerceIn(-8f, 8f)
+                alpha = fade.value
+                val shrink = 0.6f + 0.4f * fade.value
+                scaleX = shrink; scaleY = shrink
             }
             .wardRaised(WardRadius.card, WardLift.high, fill = WardToken.raised)
             .unfinishedEdge(marked, inset = 0.dp)
@@ -376,9 +439,10 @@ internal sealed class DeckActions {
                 testTag = DeckTags.CARD
             }
             .padding(WardSpace.l.wardDp),
-            verticalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
-            Text(line, Modifier.weight(1f, fill = false), style = WardType.body.textStyle(), color = wardColor(WardToken.ink),
+            verticalArrangement = Arrangement.SpaceBetween) {
+            Text(line, Modifier.padding(bottom = WardSpace.m.wardDp), style = WardType.body.textStyle(), color = wardColor(WardToken.ink),
                 maxLines = 4, overflow = TextOverflow.Ellipsis)
+            // the buttons at the card's foot, the room above them where a thumb grabs
             FlowRow(horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
                 when (actions) {
                     is DeckActions.Sort -> {
@@ -388,8 +452,10 @@ internal sealed class DeckActions {
                     is DeckActions.Tide -> {
                         WardTextButton(keepWords, { actions.keep(note.id) }, kind = WardButtonKind.compact, fills = false)
                         WardTextButton(linkWords, { actions.link(note.id) }, kind = WardButtonKind.compact, fills = false)
-                        // compact as its neighbours (the kit has no small destructive kind); Undo brings the idea back
-                        WardTextButton(letGoWords, { actions.letGo(note.id) }, kind = WardButtonKind.compact, fills = false)
+                        // compact as its neighbours, its words in the danger red, as the rows' Delete; Undo brings the idea back
+                        WardButtonBox({ actions.letGo(note.id) }, kind = WardButtonKind.compact, fills = false) {
+                            Text(letGoWords, textAlign = TextAlign.Center, color = danger)
+                        }
                     }
                 }
             }
@@ -397,18 +463,17 @@ internal sealed class DeckActions {
     }
 }
 
-/** The folders pane (S06a A2): beside the deck on two panes, the most-used folders as targets in a grid. */
+/** The folders pane (S06a A2): beside the deck on two panes, the most-used folders as targets in a grid, in the pane's middle, as the card is in its own; each presses in while a card is over it ([hovered]). */
 @OptIn(ExperimentalLayoutApi::class)
-@Composable internal fun DeckFolderPane(targets: List<NoteFolder>, frames: SnapshotStateMap<String, Rect>, file: (String) -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.l.wardDp).semantics { testTag = DeckTags.FOLDERS },
-        verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+@Composable internal fun DeckFolderPane(targets: List<NoteFolder>, frames: SnapshotStateMap<String, Rect>, hovered: String?, file: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxSize().padding(horizontal = WardSpace.gutter.wardDp).padding(vertical = WardSpace.l.wardDp).semantics { testTag = DeckTags.FOLDERS },
+        verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp, Alignment.CenterVertically)) {
         WardSectionLabel(stringResource(R.string.sort_folders))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
-            targets.forEach { f -> DeckTarget(f, false, frames, Modifier.width(DeckLayout.paneTarget.dp)) { file(f.id) } }
+            targets.forEach { f -> DeckTarget(f, hovered == f.id, frames, Modifier.width(DeckLayout.paneTarget.dp)) { file(f.id) } }
         }
     }
 }
-
 /** The most-used folders, as many as [slots] (DeckFolders). */
 internal fun deckTargets(book: IdeaBook, slots: Int): List<NoteFolder> {
     val counts = book.notes.groupingBy { it.folderId }.eachCount()
