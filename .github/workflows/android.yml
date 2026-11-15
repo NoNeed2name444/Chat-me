@@ -96,10 +96,14 @@ jobs:
   # 13 Nov: the combined version (v13) runs every task's sets in one job. On
   # their own, S05h2's tablet renders took about 23 min and S05i's about 21,
   # so the old 35/30 left no room for both; 50/45 is about twice that.
+  # 15 Nov: v14 joins four lanes' emulator sets. On copy b4bfd31 the renders
+  # took 26 min (tablet) and 24 (phone); each lane's green run added 9, 3, 6
+  # and 4 on the tablet and 4, 2, 3 and 1 on the phone, so about 48 and 34
+  # together, which 50/45 would cut short: 75/55.
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.device == 'tablet' && 50 || 45 }}
+    timeout-minutes: ${{ matrix.device == 'tablet' && 75 || 55 }}
     strategy:
       fail-fast: false
       matrix:
