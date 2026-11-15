@@ -26,7 +26,9 @@ import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.GraphTheme
@@ -651,9 +653,33 @@ class MapSpaceLivelyTest {
             compose.onNode(item).performClick()
             compose.waitUntil(60_000) { drawn()?.let { it.build != built && framed(it) } == true }
         } else {
-            tapOnScreen(compose.onNode(item).fetchSemanticsNode(), "The Look menu's $label")
+            tapShown(label, "The Look menu's $label")
             compose.waitUntil(30_000) { drawn()?.build?.let { it != built } == true }
         }
+    }
+
+    /**
+     * A tap through UiAutomation on the clickable [text] as the screen shows it: once its window is
+     * up and its place has held still for 250 ms. Compose's tree has a menu's items before its
+     * window takes touches: on Chat-me copy cfb48d0's phone (run 43694499795, attempt 2) the tap on
+     * Comets came 0.3 s after the Look menu's window was made (0.6 to 1.4 s in the runs that
+     * passed), the menu closed as if tapped outside, no new scene was built, and the wait for
+     * Comets' scene ran out.
+     */
+    private fun tapShown(text: String, what: String) {
+        val shown = By.text(text).clickable(true)
+        var last = checkNotNull(ui.wait(Until.findObject(shown), 10_000)) { "$what is not on screen" }.visibleBounds
+        val until = SystemClock.uptimeMillis() + 5_000
+        while (SystemClock.uptimeMillis() < until) {
+            SystemClock.sleep(250)
+            val now = checkNotNull(ui.findObject(shown)) { "$what went from the screen" }.visibleBounds
+            if (now == last) {
+                check(ui.click(now.centerX(), now.centerY())) { "$what could not be tapped" }
+                return
+            }
+            last = now
+        }
+        error("$what never held still on screen: last at $last")
     }
 
     /** A tap in the middle of [node], through UiAutomation: no wait for Compose to be idle. */
