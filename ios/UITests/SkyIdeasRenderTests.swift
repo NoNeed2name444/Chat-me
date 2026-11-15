@@ -39,7 +39,10 @@ final class SkyIdeasRenderTests: XCTestCase {
         sleep(1)
         keepShot("sky-2-lean-card")
 
-        // A8: a shared idea's card names where it came from
+        // A8: a shared idea's card names where it came from. The lean card
+        // goes first, as a person puts it away: on the iPhone it covers the
+        // shared pair, and the tap meant for one landed on the card (CI, 15 Nov)
+        putCardAway(app)
         tapClear(app, body(app, SkyExport.shared[1]))
         let mark = app.descendants(matching: .any)["sharedFromMark"].firstMatch
         XCTAssertTrue(mark.waitForExistence(timeout: 15), "the card's source mark")
@@ -180,6 +183,39 @@ final class SkyIdeasRenderTests: XCTestCase {
         }
         let away = CGVector(dx: (centre.x - near.x) / apart(near) * 8, dy: (centre.y - near.y) / apart(near) * 8)
         target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(away).tap()
+    }
+
+    /// The open card put away as a person does: a tap on the empty sky,
+    /// between the lens row and the card, left of the tool circles, where
+    /// no body is within a finger's reach (the space picks within 28 points).
+    private func putCardAway(_ app: XCUIApplication) {
+        let card = app.descendants(matching: .any)["graphPeekCard"].firstMatch
+        guard card.exists else { return }
+        let window: CGRect = app.windows.firstMatch.frame
+        let row = app.descendants(matching: .any)["map-lens-row"].firstMatch
+        let top: CGFloat = (row.exists ? row.frame.maxY : window.minY + 200) + 24
+        let bottom: CGFloat = card.frame.minY - 24
+        let bodies: [CGPoint] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }
+        var best = CGPoint(x: window.midX, y: (top + bottom) / 2)
+        var room: CGFloat = -1
+        var y: CGFloat = top
+        while y <= bottom {
+            var x: CGFloat = window.minX + 40
+            while x <= window.maxX - 90 {
+                let point = CGPoint(x: x, y: y)
+                let near: CGFloat = bodies.map { hypot($0.x - point.x, $0.y - point.y) }.min() ?? .greatestFiniteMagnitude
+                if near > room {
+                    room = near
+                    best = point
+                }
+                x += 16
+            }
+            y += 16
+        }
+        XCTAssertGreaterThan(room, 44, "an empty patch of sky to tap, at \(best)")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: best.x, dy: best.y)).tap()
+        XCTAssertTrue(gone(card), "a tap on the empty sky puts the card away")
     }
 
     private func gone(_ element: XCUIElement) -> Bool {

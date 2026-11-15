@@ -105,7 +105,10 @@ final class LensCapsuleRenderTests: XCTestCase {
         XCTAssertFalse(offer.exists, "the offer went with Save a capsule")
         XCTAssertFalse(app.staticTexts["Capsule saved."].exists, "nothing saved, so no notice")
 
-        // the More menu offers both
+        // the More menu offers both. The list's scroll bar shows for a moment
+        // as the offer's row goes, and its element lies over More's middle,
+        // so More has no hit point until it fades (CI, 15 Nov: iPhone, dark)
+        assertHittable(app, app.more, "More takes a tap once the list's scroll bar has faded")
         app.more.tap()
         XCTAssertTrue(app.buttons[CapsuleText.saveMore].firstMatch.waitForExistence(timeout: 10), "More has Save a capsule…")
         XCTAssertTrue(app.buttons[CapsuleText.openMore].firstMatch.exists, "More has Open a capsule…")
@@ -149,6 +152,20 @@ final class LensCapsuleRenderTests: XCTestCase {
     private func assertGone(_ app: XCUIApplication, _ element: XCUIElement, _ message: String,
                             file: StaticString = #filePath, line: UInt = #line) {
         if waitGone(element) { return }
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "tree when \(message)"
+        tree.lifetime = .keepAlways
+        add(tree)
+        XCTFail(message, file: file, line: line)
+    }
+
+    /// `element` takes a tap within ten seconds; if not, the failure keeps
+    /// the app's tree, to show what covers it.
+    private func assertHittable(_ app: XCUIApplication, _ element: XCUIElement, _ message: String,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        let start = Date()
+        while !(element.exists && element.isHittable) && Date().timeIntervalSince(start) < 10 { usleep(200_000) }
+        if element.exists && element.isHittable { return }
         let tree = XCTAttachment(string: app.debugDescription)
         tree.name = "tree when \(message)"
         tree.lifetime = .keepAlways
