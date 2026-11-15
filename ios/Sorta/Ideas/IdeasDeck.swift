@@ -493,8 +493,6 @@ struct DeckCard: View {
         .padding(WardSpace.l)
         .wardRaised(in: shape, lift: .high, fill: .wardRaised)
         .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
-        // flying off, it takes no more taps
-        .allowsHitTesting(!leaving)
         .scaleEffect(leaving ? 0.6 : 1)
         .opacity(leaving ? 0 : 1)
         .offset(offset)
@@ -525,22 +523,22 @@ struct DeckCard: View {
     private var buttonRow: some View {
         switch actions {
         case let .sort(_, later, choose):
-            Button(IdeasWords.later) { later(note.id) }
+            Button(IdeasWords.later) { act { later(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("deck-keep-later")
-            Button(IdeasWords.chooseFolder) { choose(note.id) }
+            Button(IdeasWords.chooseFolder) { act { choose(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("deck-choose")
         case let .tide(keep, link, letGo):
-            Button(IdeasWords.keep) { keep(note.id) }
+            Button(IdeasWords.keep) { act { keep(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-keep")
-            Button(IdeasWords.linkTo) { link(note.id) }
+            Button(IdeasWords.linkTo) { act { link(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-link")
             // compact as its neighbours, its word in the danger red, as the rows' Delete; Undo brings the idea back
             Button {
-                letGo(note.id)
+                act { letGo(note.id) }
             } label: {
                 Text(IdeasWords.letGo).foregroundStyle(Color.wardDanger)
             }
@@ -554,15 +552,24 @@ struct DeckCard: View {
         switch actions {
         case let .sort(file, later, choose):
             ForEach(targets) { folder in
-                Button(IdeasWords.fileIn(folder.name)) { file(note.id, folder.id) }
+                Button(IdeasWords.fileIn(folder.name)) { act { file(note.id, folder.id) } }
             }
-            Button(IdeasWords.later) { later(note.id) }
-            Button(IdeasWords.chooseFolder) { choose(note.id) }
+            Button(IdeasWords.later) { act { later(note.id) } }
+            Button(IdeasWords.chooseFolder) { act { choose(note.id) } }
         case let .tide(keep, link, letGo):
-            Button(IdeasWords.keep) { keep(note.id) }
-            Button(IdeasWords.linkTo) { link(note.id) }
-            Button(IdeasWords.letGo) { letGo(note.id) }
+            Button(IdeasWords.keep) { act { keep(note.id) } }
+            Button(IdeasWords.linkTo) { act { link(note.id) } }
+            Button(IdeasWords.letGo) { act { letGo(note.id) } }
         }
+    }
+
+    /// Flying off, the card takes no more taps (S06a): each of its buttons
+    /// and spoken actions does nothing while it leaves, as its drag. Not
+    /// `.allowsHitTesting` on the card: with it, XCUITest found no point on
+    /// the card or its buttons, on the iPhone and the iPad (CI, 15 Nov).
+    private func act(_ action: () -> Void) {
+        guard !leaving else { return }
+        action()
     }
 
     /// Where the card goes, judged from the finger: from where it took hold

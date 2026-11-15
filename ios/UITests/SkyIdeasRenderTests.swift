@@ -28,7 +28,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         // A4: the leaning idea's card says what it shares, and with which folder
         let leaning = body(app, SkyExport.leaning)
         XCTAssertTrue(leaning.waitForExistence(timeout: 20), "the leaning idea on the map")
-        leaning.tap()
+        tapClear(app, leaning)
         let lean = app.descendants(matching: .any)["graphPeekLean"].firstMatch
         XCTAssertTrue(lean.waitForExistence(timeout: 15), "the card's lean line")
         XCTAssertEqual(lean.label, "Shares ‘garden’ with Raised beds")
@@ -40,7 +40,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         keepShot("sky-2-lean-card")
 
         // A8: a shared idea's card names where it came from
-        body(app, SkyExport.shared[1]).tap()
+        tapClear(app, body(app, SkyExport.shared[1]))
         let mark = app.descendants(matching: .any)["sharedFromMark"].firstMatch
         XCTAssertTrue(mark.waitForExistence(timeout: 15), "the card's source mark")
         XCTAssertEqual(mark.label, "Shared from example.org")
@@ -89,7 +89,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         // just was, so it is tapped again until its card shows
         let fileThere = app.buttons["graphPeekFileThere"]
         for _ in 0..<6 where !fileThere.exists {
-            body(app, SkyExport.leaning).tap()
+            tapClear(app, body(app, SkyExport.leaning))
             _ = fileThere.waitForExistence(timeout: 3)
         }
         XCTAssertTrue(fileThere.exists, "File there, on the leaning comet's card")
@@ -160,6 +160,26 @@ final class SkyIdeasRenderTests: XCTestCase {
     private func body(_ app: XCUIApplication, _ title: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: "graphBody")
             .matching(NSPredicate(format: "label == %@", title)).firstMatch
+    }
+
+    /// A tap on `target` that no other body can take. Map mode's lens row
+    /// (S06d) takes room from Space's first view, so two comets can sit
+    /// closer than a finger: on an iPhone, the leaning one 10 points from
+    /// A bell for the bike, and the space gives a tap on its centre to the
+    /// smaller (CI, 15 Nov). Within 28 points of another body's centre, the
+    /// tap lands 8 points from its centre, on the side away from that body.
+    private func tapClear(_ app: XCUIApplication, _ target: XCUIElement) {
+        let mine: CGRect = target.frame
+        let centre = CGPoint(x: mine.midX, y: mine.midY)
+        let others: [CGPoint] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .map(\.frame).filter { $0 != mine }.map { CGPoint(x: $0.midX, y: $0.midY) }
+        func apart(_ p: CGPoint) -> CGFloat { hypot(p.x - centre.x, p.y - centre.y) }
+        guard let near = others.min(by: { apart($0) < apart($1) }), apart(near) > 0, apart(near) < 28 else {
+            target.tap()
+            return
+        }
+        let away = CGVector(dx: (centre.x - near.x) / apart(near) * 8, dy: (centre.y - near.y) / apart(near) * 8)
+        target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(away).tap()
     }
 
     private func gone(_ element: XCUIElement) -> Bool {

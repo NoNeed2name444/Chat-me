@@ -407,12 +407,10 @@ struct IdeaBoardView: View {
         .accessibilityIdentifier("board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
         // as Android's hold names it, and as both hints say it
         .accessibilityAction(named: "Start a connection") { source = note.id }
-        // S06c: when a tap links it, Open stays an action of its own
-        .accessibilityActions {
-            if links {
-                Button("Open") { open(note.id) }
-            }
-        }
+        // S06c: when a tap links it, Open stays an action of its own. A named
+        // action, not the actions builder: with the builder the card's parts
+        // were read and the lenses' hiding below was undone (CI, 15 Nov)
+        .modifier(OpenWhileLinking(on: links) { open(note.id) })
         // a card the lenses leave out is not read (S06d A2): hidden on its own
         // element, which the card makes here; hidden from outside it, the
         // faded card was still found (CI, 14 Nov: iPhone and iPad)
@@ -647,5 +645,21 @@ final class BoardSpreadMemo {
             drawn = IdeaBoardSpread.places(now)
         }
         return drawn
+    }
+}
+
+/// S06c: the card's own Open action while a tap on it links instead of
+/// opening; none otherwise, since a tap opens it.
+private struct OpenWhileLinking: ViewModifier {
+    let on: Bool
+    let open: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if on {
+            content.accessibilityAction(named: Text("Open"), open)
+        } else {
+            content
+        }
     }
 }
