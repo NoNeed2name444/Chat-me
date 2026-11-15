@@ -471,12 +471,15 @@ struct DeckCard: View {
     let targets: [NoteFolder]
     @Environment(IdeasFiling.self) private var filing
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var offset: CGSize = .zero
+    /// Where the drag has the card: only DeckCardMove reads it, so a drag moves the card without
+    /// building its face again on every touch (perf, 15 Nov).
+    @State private var mover = DeckCardMover()
     @State private var leaving = false
 
     var body: some View {
         let line: String = IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
+        DeckCardMove(mover: mover, reduceMotion: reduceMotion) {
         VStack(alignment: .leading, spacing: 0) {
             Text(line)
                 .wardFont(.body)
@@ -498,8 +501,7 @@ struct DeckCard: View {
         .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
         .scaleEffect(leaving ? 0.6 : 1)
         .opacity(leaving ? 0 : 1)
-        .offset(offset)
-        .rotationEffect(.degrees(reduceMotion ? 0 : Double(max(-8, min(8, offset.width / 40)))))
+        }
         .gesture(drag)
         // the cards under it, a step down each, the top card's size: the deck's depth, not its count
         .background {
@@ -596,15 +598,14 @@ struct DeckCard: View {
         DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
                 guard !leaving else { return }
-                offset = value.translation
-                if case let .folder(id) = outcome(from: value.startLocation, value.translation) {
-                    filing.hoveredTarget = id
-                } else {
-                    filing.hoveredTarget = nil
-                }
+                mover.offset = value.translation
+                // written only as it changes: each write tells every target to look again
+                var over: UUID?
+                if case let .folder(id) = outcome(from: value.startLocation, value.translation) { over = id }
+                if filing.hoveredTarget != over { filing.hoveredTarget = over }
             }
             .onEnded { value in
-                filing.hoveredTarget = nil
+                if filing.hoveredTarget != nil { filing.hoveredTarget = nil }
                 guard !leaving else { return }
                 let landing = DeckFlick.landing(x: Double(value.translation.width), y: Double(value.translation.height),
                                                 vx: Double(value.velocity.width), vy: Double(value.velocity.height))
@@ -620,7 +621,7 @@ struct DeckCard: View {
                         }
                     }
                 case .back:
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) { offset = .zero }
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) { mover.offset = .zero }
                 }
             }
     }
@@ -629,13 +630,13 @@ struct DeckCard: View {
     /// Reduce Motion, does it at once.
     private func leave(to place: CGSize, _ done: @escaping () -> Void) {
         guard !reduceMotion else {
-            offset = .zero
+            mover.offset = .zero
             done()
             return
         }
         withAnimation(.easeIn(duration: 0.2)) {
             leaving = true
-            offset = place
+            mover.offset = place
         } completion: {
             done()
             // the same card still on top (the deck's only one, put back): back in its place
@@ -643,9 +644,37 @@ struct DeckCard: View {
             still.disablesAnimations = true
             withTransaction(still) {
                 leaving = false
-                offset = .zero
+                mover.offset = .zero
             }
         }
+    }
+}
+
+/// Where a dragged deck card is (DeckCard.mover).
+@Observable
+final class DeckCardMover {
+    var offset: CGSize = .zero
+}
+
+/// The deck card's face, moved and tilted as the drag has it. Only this reads the drag's offset, so
+/// each touch of a drag re-reads this alone, never the card's words and buttons (perf, 15 Nov).
+struct DeckCardMove<Face: View>: View {
+    let mover: DeckCardMover
+    let reduceMotion: Bool
+    /// Built once, by the card: a drag's touch re-reads this view's body, which only moves it.
+    let face: Face
+
+    init(mover: DeckCardMover, reduceMotion: Bool, @ViewBuilder face: () -> Face) {
+        self.mover = mover
+        self.reduceMotion = reduceMotion
+        self.face = face()
+    }
+
+    var body: some View {
+        let offset: CGSize = mover.offset
+        face
+            .offset(offset)
+            .rotationEffect(.degrees(reduceMotion ? 0 : Double(max(-8, min(8, offset.width / 40)))))
     }
 }
 

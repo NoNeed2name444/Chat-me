@@ -13,7 +13,19 @@ import XCTest
 /// draws on the Mac's GPU at the Mac's pace, so its numbers are read against
 /// each other, before and after a change, and by the work a frame takes,
 /// never as a phone's. Every phase must time frames, or fails.
+///
+/// The guards hold each phase to about 4 ms of work a frame, the share of an
+/// 8.3 ms refresh the app keeps for itself: the main thread's median pass
+/// under `budget`, and its 95th percentile pass, and with the map the median
+/// render-thread step, under `budget` times `ciScale`. CI's simulator runs a
+/// phone's work four times slower or more (its render thread drives the
+/// Mac's GPU through a virtual machine: a render step's median was 6.6 to
+/// 9.2 ms there before these fixes, run 43726420703), so a guard fails only
+/// on a real regression, never on the runner's pace.
 final class FramePerfUITests: XCTestCase {
+    static let budget: Double = 4
+    static let ciScale: Double = 4
+
     override func setUp() {
         continueAfterFailure = false
         Retaps.reset()
@@ -140,6 +152,26 @@ final class FramePerfUITests: XCTestCase {
             XCTAssertTrue(lines.contains { $0.contains("render-work frames=") && !$0.contains("frames=0 ") },
                           "\(name): the map's render thread timed no frame: \(report)", file: file, line: line)
         }
+        let scaled: Double = Self.budget * Self.ciScale
+        if let p50 = Self.percentile("p50", of: "main-work", in: lines) {
+            XCTAssertLessThanOrEqual(p50, Self.budget, "\(name): the main thread's median pass took \(p50) ms", file: file, line: line)
+        }
+        if let p95 = Self.percentile("p95", of: "main-work", in: lines) {
+            XCTAssertLessThanOrEqual(p95, scaled, "\(name): the main thread's 95th percentile pass took \(p95) ms", file: file, line: line)
+        }
+        if render, let p50 = Self.percentile("p50", of: "render-work", in: lines) {
+            XCTAssertLessThanOrEqual(p50, scaled, "\(name): the map's median render step took \(p50) ms", file: file, line: line)
+        }
+    }
+
+    /// `key` (p50, p95, p99) of `measure` in the meter's lines; nil when the
+    /// measure timed nothing.
+    static func percentile(_ key: String, of measure: String, in lines: [String]) -> Double? {
+        guard let found = lines.first(where: { $0.contains(" \(measure) frames=") }), !found.contains(" frames=0 ") else { return nil }
+        for word in found.split(separator: " ") where word.hasPrefix(key + "=") {
+            return Double(word.dropFirst(key.count + 1))
+        }
+        return nil
     }
 
     private func post(_ name: String) {

@@ -148,7 +148,7 @@ final class GraphPerfMapView: UIView, UIGestureRecognizerDelegate {
         // readable: the million map measures what it showed (the share at 250+)
         view.framebufferOnly = false
         view.enableSetNeedsDisplay = false
-        view.preferredFramesPerSecond = 60
+        // the screen's own rate, asked for below (applyRate)
         metal = view
         renderer = GraphPerfRenderer(view: view)
         super.init(frame: frame)

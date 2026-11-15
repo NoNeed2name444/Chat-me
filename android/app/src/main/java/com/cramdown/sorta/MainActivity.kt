@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -13,6 +14,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.cramdown.sorta.data.IdeaStore
+import com.cramdown.sorta.ui.MotionRefresh
 import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ideas.IdeaClock
 import com.cramdown.sorta.ui.ideas.IdeasBanner
@@ -54,6 +56,18 @@ class MainActivity : ComponentActivity() {
         // a share is taken once: a turn or a fold rebuilds the activity with the same intent
         if (savedInstanceState == null) shared.value = shareOf(intent)
         setContent { SortaRoot(store, testImport, undoStays, shared) }
+    }
+
+    // a touch or a wheel's turn asks for the display's fastest mode while what it moves settles
+    // (MotionRefresh; perf, 15 Nov), and the window asks for nothing once all is still
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        MotionRefresh.touch(this, ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_SCROLL) MotionRefresh.touch(this, ev)
+        return super.dispatchGenericMotionEvent(ev)
     }
 
     override fun onNewIntent(intent: Intent) {

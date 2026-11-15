@@ -77,8 +77,8 @@ struct Graph3DView: View {
     /// a star or black hole in the Universe.
     var openFolder: (UUID?) -> Void = { _ in }
     /// A sheet from the screen around the map is up over it (the Ideas
-    /// bar's note or name): the map draws slowly under it (GraphPace), as
-    /// under its own sheets.
+    /// bar's note or name): a still map rests at GraphPace's floor, 60,
+    /// under it, and a lively one keeps its rate, as under its own sheets.
     var covered: Bool = false
     /// S06b: the ideas of the day picked in the moons row (IdeasMapView),
     /// lit where they are while the rest dim; nil, none picked.
@@ -1048,7 +1048,7 @@ struct Graph3DView: View {
     }
 
     /// One of the map's own sheets is up over it (every one dims the map
-    /// and takes its touches): it draws slowly under them (GraphPace).
+    /// and takes its touches): a still map rests at 60 under them (GraphPace).
     private var sheetUp: Bool {
         reading != nil || renaming != nil || linkingFrom != nil || movingNote != nil || addingInto != nil
             || addingFolder || showingLegend || shapes?.sheet != nil
@@ -1747,7 +1747,7 @@ struct GraphSCNView: UIViewRepresentable {
     var linksFor: UUID? = nil
     var labels = GraphLabelSettings()
     var touch = GraphTouchHandlers()
-    /// A sheet is up over the map: it draws slowly under it (GraphPace).
+    /// A sheet is up over the map: a still map rests at 60 under it (GraphPace).
     var covered: Bool = false
     /// The frost on ideas left unopened (S06a A6), by id, 1 to 3; and
     /// whether a change melts (not with Reduce Motion).
@@ -1771,8 +1771,8 @@ struct GraphSCNView: UIViewRepresentable {
         view.backgroundColor = .black
         view.allowsCameraControl = true
         view.autoenablesDefaultLighting = false
-        // High: 4x multisampling, and every frame the screen shows (120 a
-        // second on ProMotion); Smooth: 2x, and 60 (GraphQuality)
+        // High: 4x multisampling; Smooth: 2x; both at the screen's own rate
+        // (120 a second on ProMotion) while the map moves (GraphQuality, GraphPace)
         view.antialiasingMode = Self.antialiasing()
         view.preferredFramesPerSecond = GraphQuality.frameRate
         view.rendersContinuously = true
@@ -2601,10 +2601,9 @@ struct GraphSCNView: UIViewRepresentable {
         // MARK: the frame rate
 
         /// Any touch, press, pan, tap or hover, a new choice, filter,
-        /// framing or fly-in: the fast rate again, stepping down as the map
-        /// goes quiet (GraphPace: the budget's rate, then 60, then 30 for a
-        /// lively map; 60, then 20 for one that holds still - Reduce
-        /// Motion, Low Power Mode, a hot device).
+        /// framing or fly-in: the fast rate again (GraphPace: the budget's
+        /// rate, 120 on ProMotion; a map that holds still steps down to 60
+        /// after 3 s, and nothing ever draws under 60).
         func wake() {
             lastWake = CACurrentMediaTime()
             pace()
@@ -2873,6 +2872,8 @@ struct GraphSCNView: UIViewRepresentable {
             host.isHidden = false
             if ringLink == nil {
                 let link = CADisplayLink(target: GraphRingTicker(self), selector: #selector(GraphRingTicker.tick))
+                // the rings pulse while they show: 120 a second where the screen has it (MotionRate)
+                link.preferredFrameRateRange = MotionRate.moving
                 link.add(to: .main, forMode: .common)
                 ringLink = link
             }

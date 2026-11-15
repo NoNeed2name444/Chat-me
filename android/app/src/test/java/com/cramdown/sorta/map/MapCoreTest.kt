@@ -584,6 +584,24 @@ class FrameBudgetTest {
         assertTrue(b.detail < at60)
     }
 
+    // perf, 15 Nov (the owner's 120 a second): the map's work may take a little over half a
+    // 120 Hz refresh, 4.6 ms of 8.3, so the page over it and the system keep their room
+    @Test fun theMapsWorkKeepsToALittleOverHalfARefresh() {
+        val heavy = FrameBudget(120f, 1f)
+        repeat(10) { heavy.onFrame(intervalMs = 8.3, workMs = 5.0) } // on time, but 5 ms of work
+        assertTrue("5 ms of work at 120 Hz cuts detail", heavy.detail < 1f)
+        val fits = FrameBudget(120f, 1f)
+        repeat(10) { fits.onFrame(intervalMs = 8.3, workMs = 4.4) }
+        assertEquals("4.4 ms fits", 1f, fits.detail, 0f)
+        val notEasy = FrameBudget(120f, 1f)
+        repeat(200) { notEasy.onFrame(intervalMs = 8.3, workMs = 3.0) }
+        assertEquals("3 ms is not easy enough to open more", 1f, notEasy.detail, 0f)
+        val easy = FrameBudget(120f, 1f)
+        repeat(200) { easy.onFrame(intervalMs = 8.3, workMs = 2.0) }
+        assertTrue("2 ms frames open more", easy.detail > 1f)
+        assertEquals(4.58, FrameBudget(120f).targetMs * FrameBudget.HEAVY_SHARE, 0.01)
+    }
+
     @Test fun statsReportRateAndMedians() {
         val s = FrameStats()
         var t = 0L
@@ -601,6 +619,91 @@ class FrameBudgetTest {
         assertEquals(144f, RefreshRate.maxHz(modes), 0f)
         assertEquals("1,000,000", grouped(1_000_000))
         assertEquals("999", grouped(999))
+    }
+
+    // the vote's mode: the fastest at this resolution the display reaches without a blink
+    @Test fun theFastestSeamlessModeAtThisResolution() {
+        val current = DisplayModeInfo(1, 1080, 2400, 60f)
+        val modes = listOf(current, DisplayModeInfo(2, 1080, 2400, 120f), DisplayModeInfo(3, 1440, 3200, 144f), DisplayModeInfo(4, 1080, 2400, 90f))
+        assertEquals(2, RefreshRate.fastest(modes, current)?.id)
+        assertEquals("only 90 is seamless", 4, RefreshRate.fastest(modes, current, seamless = listOf(90f))?.id)
+        assertNull("none is: no choice, no vote", RefreshRate.fastest(modes, current, seamless = emptyList()))
+        assertNull("one mode, as an emulator's", RefreshRate.fastest(listOf(current), current))
+        assertEquals("already the fastest", 2, RefreshRate.fastest(modes, modes[1], seamless = listOf(60f, 90f))?.id)
+        assertNull(RefreshRate.fastest(emptyList(), current))
+    }
+
+    // perf, 15 Nov: the window and the map's surface ask for the top rate only while something moves
+    @Test fun theVotesStandOnlyWhileSomethingMoves() {
+        val fast = DisplayModeInfo(2, 1080, 2400, 120f)
+        assertTrue(RefreshRate.moving(loops = 1, down = false, sinceTouchMs = Long.MAX_VALUE))
+        assertTrue(RefreshRate.moving(loops = 0, down = true, sinceTouchMs = 60_000))
+        assertTrue(RefreshRate.moving(loops = 0, down = false, sinceTouchMs = 0))
+        assertTrue(RefreshRate.moving(loops = 0, down = false, sinceTouchMs = RefreshRate.LINGER_MS - 1))
+        assertFalse(RefreshRate.moving(loops = 0, down = false, sinceTouchMs = RefreshRate.LINGER_MS))
+        assertFalse(RefreshRate.moving(loops = 0, down = false, sinceTouchMs = Long.MAX_VALUE))
+        assertEquals(2, RefreshRate.windowVote(true, fast))
+        assertEquals(0, RefreshRate.windowVote(false, fast))
+        assertEquals(0, RefreshRate.windowVote(true, null))
+        assertEquals(120f, RefreshRate.surfaceVote(true, 120f), 0f)
+        assertEquals(0f, RefreshRate.surfaceVote(false, 120f), 0f)
+    }
+}
+
+/** The window's vote through a gesture and a map's loop (perf, 15 Nov). */
+class MotionVoteTest {
+    private val fast = DisplayModeInfo(2, 1080, 2400, 120f)
+    private val applied = mutableListOf<Int>()
+    private var due = -1L
+    private var reads = 0
+    private val vote = MotionVote(fastest = { reads++; fast }, apply = { applied += it }, later = { due = it })
+
+    @Test fun aGestureVotesAsItStartsAndUntilItsLingerRunsOut() {
+        vote.touch(down = true, nowMs = 1_000)
+        repeat(50) { vote.touch(down = true, nowMs = 1_000L + it * 8) } // the finger's moves
+        assertEquals("written once as it starts", listOf(2), applied)
+        assertEquals("the modes read once", 1, reads)
+        vote.touch(down = false, nowMs = 1_500)
+        assertEquals(1_500 + RefreshRate.LINGER_MS, due)
+        vote.check(due - 1)
+        assertEquals(listOf(2), applied)
+        vote.check(due)
+        assertEquals("no vote once still", listOf(2, 0), applied)
+        assertFalse(vote.moving)
+    }
+
+    @Test fun aTouchInTheLingerKeepsTheVote() {
+        vote.touch(down = true, nowMs = 0)
+        vote.touch(down = false, nowMs = 100)
+        vote.touch(down = true, nowMs = 1_000)
+        vote.touch(down = false, nowMs = 1_200)
+        vote.check(100 + RefreshRate.LINGER_MS) // the first lift's check
+        assertEquals(listOf(2), applied)
+        assertEquals(1_200 + RefreshRate.LINGER_MS, due)
+        vote.check(due)
+        assertEquals(listOf(2, 0), applied)
+    }
+
+    @Test fun aRunningMapKeepsTheVotePastAnyLinger() {
+        vote.loop(running = true, nowMs = 0)
+        assertEquals(listOf(2), applied)
+        vote.touch(down = true, nowMs = 10)
+        vote.touch(down = false, nowMs = 20)
+        vote.check(60_000)
+        assertEquals(listOf(2), applied)
+        vote.loop(running = false, nowMs = 60_000)
+        assertEquals("the loop at rest, the touch long past", listOf(2, 0), applied)
+        vote.loop(running = false, nowMs = 60_001) // a stop with no start counts nothing
+        vote.loop(running = true, nowMs = 60_002)
+        assertEquals(listOf(2, 0, 2), applied)
+    }
+
+    @Test fun aDisplayWithNoModeVotesNothing() {
+        val none = MotionVote(fastest = { null }, apply = { applied += it }, later = {})
+        none.touch(down = true, nowMs = 0)
+        none.loop(running = true, nowMs = 1)
+        assertTrue(none.moving)
+        assertEquals(emptyList<Int>(), applied)
     }
 }
 

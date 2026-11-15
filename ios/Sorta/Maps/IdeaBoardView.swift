@@ -75,6 +75,8 @@ struct IdeaBoardView: View {
     /// The places the cards are drawn at, worked out again only when a
     /// stored place, a card or a size changes.
     @State private var spread = BoardSpreadMemo()
+    /// The links' lanes, made again only as the links change (perf, 15 Nov).
+    @State private var laneMemo = BoardLanesMemo()
     /// The width of 20 letters of a card's title font (S05m item 5).
     @State private var titleWidth: CGFloat = 0
     /// The card whose whole title shows over it: a pointer over it, or a
@@ -207,7 +209,7 @@ struct IdeaBoardView: View {
             let edges = notes.allEdges()
             let lineWidth: CGFloat = max(1, 1.5 * scale)
             let style: GraphLineStyle = GraphLineStyle.inForce(still?.straight ?? straightLines)
-            let lanes: [(lane: Int, lanes: Int)] = Self.lanes(edges)
+            let lanes: [(lane: Int, lanes: Int)] = laneMemo.lanes(edges, Self.lanes)
             // a board of one kind keeps each card's symbol but drops the kind's
             // word (S05m item 4); worked out once a pass, not once a card
             let oneKind: Bool = Set(notes.notes.map(\.kind)).count <= 1
@@ -610,7 +612,8 @@ struct IdeaBoardView: View {
             .updating($panning) { value, state, _ in
                 state = value.translation
             }
-            .onChanged { _ in peek = nil }
+            // written only while a peek shows: the board is read again on every touch of a pan
+            .onChanged { _ in if peek != nil { peek = nil } }
             .onEnded { value in
                 pan.width += value.translation.width
                 pan.height += value.translation.height
@@ -634,8 +637,8 @@ struct IdeaBoardView: View {
     private func cardDrag(_ note: Note) -> some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.space))
             .onChanged { value in
-                peek = nil
-                dragged = note.id
+                if peek != nil { peek = nil }
+                if dragged != note.id { dragged = note.id }
                 dragOffset = value.translation
             }
             .onEnded { value in
@@ -687,6 +690,24 @@ final class BoardSpreadMemo {
             drawn = IdeaBoardSpread.places(now)
         }
         return drawn
+    }
+}
+
+/// Each link's lane among those joining the same two cards, worked out again
+/// only when the links change: a pan or a pinch reads the board again on
+/// every touch, and the lanes built a string for every link (perf, 15 Nov).
+final class BoardLanesMemo {
+    private var edges: [(UUID, UUID)] = []
+    private var made: [(lane: Int, lanes: Int)] = []
+
+    func lanes(_ now: [(UUID, UUID)], _ make: ([(UUID, UUID)]) -> [(lane: Int, lanes: Int)]) -> [(lane: Int, lanes: Int)] {
+        let same: Bool = now.count == edges.count && made.count == now.count
+            && zip(now, edges).allSatisfy { pair in pair.0.0 == pair.1.0 && pair.0.1 == pair.1.1 }
+        if !same {
+            edges = now
+            made = make(now)
+        }
+        return made
     }
 }
 

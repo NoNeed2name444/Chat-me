@@ -6,12 +6,12 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.opengl.GLSurfaceView
 import android.os.Build
+import android.os.SystemClock
 import android.view.Choreographer
 import android.view.Display
 import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.SurfaceHolder
-import android.view.WindowManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -33,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.cramdown.sorta.map.MapReshape
+import com.cramdown.sorta.map.MapAsReleased
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -78,7 +80,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.cramdown.sorta.map.DisplayModeInfo
 import com.cramdown.sorta.map.LabelBackdrop
 import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.LabelEstimate
@@ -111,6 +112,7 @@ import com.cramdown.sorta.map.NeuronLookPlan
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.RefreshRate
+import com.cramdown.sorta.map.MotionVote
 import com.cramdown.sorta.map.SkySpace
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.SpaceStyle
@@ -137,6 +139,9 @@ import com.cramdown.sorta.ui.ward.WardType
 import com.cramdown.sorta.ui.ward.textStyle
 import com.cramdown.sorta.ui.ward.wardDp
 import com.cramdown.sorta.ui.wardColor
+import com.cramdown.sorta.ui.MotionRefresh
+import com.cramdown.sorta.ui.displayOf
+import com.cramdown.sorta.ui.info
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.first
@@ -342,8 +347,6 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
-private fun Display.Mode.info() = DisplayModeInfo(modeId, physicalWidth, physicalHeight, refreshRate)
-
 /**
  * The map's [MapDrawn] record on its node, for tests (ScreenshotTest waits on it before it looks
  * at the screen). A key of its own: accessibility services do not read it.
@@ -476,12 +479,7 @@ data class MapFlyTo(val id: String, val serial: Int)
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val display: Display? = remember(context) {
-        // a context the system gave no display of its own throws here (Robolectric's activity does),
-        // so the window manager's default display stands in
-        (if (Build.VERSION.SDK_INT >= 30) runCatching { context.display }.getOrNull() else null)
-            ?: @Suppress("DEPRECATION") (context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay
-    }
+    val display: Display? = remember(context) { displayOf(context) }
     val modes = remember(display) { display?.supportedModes?.map { it.info() } ?: emptyList() }
     val maxHz = remember(modes) { RefreshRate.maxHz(modes, display?.refreshRate ?: 60f) }
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
@@ -525,6 +523,11 @@ data class MapFlyTo(val id: String, val serial: Int)
     // what the map counts over its life, across its scenes (S05h2); and whether the test clocks may be read
     val totals = remember { MapTotals() }
     val testHooks = remember(context) { context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
+    // the tests' records want every frame's bodies and record; a released app's page only what it shows
+    // (NodesFeed), unless the frame tests ask for the released app's pace (MapAsReleased)
+    val everyFrame = remember(scene, testHooks) { testHooks && !MapAsReleased.on }
+    val feed = remember(scene) { NodesFeed(everyFrame) }
+    val takeNodes = remember(feed) { Runnable { val (nodes, pose) = feed.take(); screenNodes = nodes; screenPose = pose } }
     val renderer = remember(scene) {
         val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
         // only the links new since the scene on screen grow in; every link when there is none (LinkMemory);
@@ -534,10 +537,18 @@ data class MapFlyTo(val id: String, val serial: Int)
         GlMapRenderer(
             scene.tree, camera, scene.nodeRadius, displayHz = { hz[0] }, displayMaxHz = maxHz,
             onReadout = { r -> mainHandler.post { readout = r } },
-            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes, pose -> mainHandler.post { screenNodes = nodes; screenPose = pose } },
+            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes, pose ->
+                when (val wait = feed.offer(nodes, pose, System.nanoTime())) {
+                    NodesFeed.NOW -> mainHandler.post(takeNodes)
+                    NodesFeed.LATER -> {}
+                    else -> mainHandler.postDelayed(takeNodes, (wait + 999_999) / 1_000_000)
+                }
+            },
             theme = scene.theme, assets = context.assets,
             density = context.resources.displayMetrics.density, contrast = increaseContrast(context),
-            onDrawn = { d -> mainHandler.post { drawn = d } },
+            // a released app's page reads the record for its first drawn frame (firstDrawn), so it takes
+            // it only as its counts move; the tests take every one (NodesFeed.Drawn). The renderer's thread only
+            onDrawn = NodesFeed.Drawn(everyFrame).let { take -> { d: MapDrawn -> if (take.takes(d)) mainHandler.post { drawn = d } } },
             viewRadius = scene.viewRadius,
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
@@ -547,7 +558,9 @@ data class MapFlyTo(val id: String, val serial: Int)
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
-    val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera) { display?.refreshRate?.let { hz[0] = it } } }
+    // the window asks for the display's fastest mode while the loop runs, and its surface for the top rate
+    val motion = remember(activity) { activity?.let { MotionRefresh.of(it) } }
+    val loop = remember(renderer) { FrameLoop(renderer, continuous, autoOrbit, camera, maxHz, motion) { display?.refreshRate?.let { hz[0] = it } } }
     // Lines: the renderer reads it each frame, so a change only needs a frame drawn
     LaunchedEffect(renderer, straight) {
         if (renderer.straight != straight) { renderer.straight = straight; loop.moved() }
@@ -647,16 +660,6 @@ data class MapFlyTo(val id: String, val serial: Int)
         fitHome(viewSize, follow)
     }
 
-    // Ask the window for the highest refresh mode at this resolution while the map is shown.
-    DisposableEffect(activity, modes) {
-        val window = activity?.window
-        val previous = window?.attributes?.preferredDisplayModeId ?: 0
-        val current = display?.mode?.info()
-        val best = current?.let { RefreshRate.bestMode(modes, it) }
-        if (window != null && best != null) window.attributes = window.attributes.also { it.preferredDisplayModeId = best.id }
-        onDispose { if (window != null && best != null) window.attributes = window.attributes.also { it.preferredDisplayModeId = previous } }
-    }
-
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val drawnNow = drawn
     val homesNow = homes
@@ -713,6 +716,14 @@ data class MapFlyTo(val id: String, val serial: Int)
         }
     }
     val drawPaint = remember(namePaint) { android.graphics.Paint(namePaint) }
+    // the plain theme's names' paint, made once rather than on every frame drawn (perf, 15 Nov)
+    val plainPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(225, 235, 249); textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        }
+    }
+    val plainMetrics = remember(plainPaint) { PaintMetrics(plainPaint) }
     // each name's words, cut as iOS's, and their box at full size, measured the first time it shows
     val nameTexts = remember(scene, namePaint) { HashMap<Int, Pair<String, NameText>>() }
     fun nameText(i: Int): Pair<String, NameText> = nameTexts.getOrPut(i) {
@@ -750,6 +761,15 @@ data class MapFlyTo(val id: String, val serial: Int)
             for (n in screenNodes) if (n.index in asked) bodies[n.index] = nameBody(n)
             MapNameShow.wanted(hoveredName, pressedName, heldName, chosenName, bodies, grabbedName)
         }
+    }
+    // what follows the bodies on screen takes them every frame (NodesFeed): the plain theme's names, a
+    // name asked for, the drop and the rings; once one is wanted, the page takes the latest at once
+    val follows = (!pills && scene.titles.isNotEmpty()) || drop != null || glowNames.isNotEmpty() ||
+        (pills && (hoveredName != null || pressedName != null || heldName != null || grabbedName != null || chosenName != null))
+    SideEffect {
+        val was = feed.eager
+        feed.eager = follows
+        if (follows && !was) takeNodes.run()
     }
     // a name goes up at once and pops in, its style eases, frame by frame while either moves; then it
     // waits for the bodies to move (a turn, a zoom) before it measures again
@@ -839,7 +859,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                 var menu = false
                 var liftedAt = down.uptimeMillis
                 val reach = MapNameShow.PICK_DP.dp.toPx()
-                val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
+                val hit = MapNameShow.pick(feed.nodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
                 val menuMillis = kotlin.math.ceil(MapTouchRules.HOLD_FOR_MENU * holdScale * 1000).toLong()
                 // hold to move (S05g2): in Space and the Neurons a finger still on a body to the pick-up
                 // time picks it up (held, Graph3DView.swift:2553-2610); not in Performance
@@ -948,7 +968,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                             val apart = (p0 - p1).getDistance().toDp().value.toDouble()
                             if (r != null && shape == null) {
                                 // the fingers' ideas as they land: a split or a join in waiting only on the chosen idea
-                                val bodies = screenNodes.filter { r.takes(it.index) }.map(::nameBody)
+                                val bodies = feed.nodes.filter { r.takes(it.index) }.map(::nameBody)
                                 val within = MapReshape.REACH.toFloat().dp.toPx()
                                 val mid = (p0 + p1) / 2f
                                 val start = MapReshape.start(MapNameShow.pick(bodies, p0.x, p0.y, within)?.index, MapNameShow.pick(bodies, p1.x, p1.y, within)?.index,
@@ -1009,7 +1029,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                                     val r = latestReshape
                                     val held = grabbedName
                                     if (r != null && held != null && r.takes(held)) {
-                                        val under = screenNodes.filter { it.index != held && r.takes(it.index) }.map(::nameBody)
+                                        val under = feed.nodes.filter { it.index != held && r.takes(it.index) }.map(::nameBody)
                                             .firstOrNull { b -> (Offset(b.x, b.y) - finger).getDistance() <= max(b.radius, MapReshape.DROP_DP.dp.toPx()) }?.index
                                         if (under != dropName) dropName = under
                                     }
@@ -1081,8 +1101,8 @@ data class MapFlyTo(val id: String, val serial: Int)
                         setRenderer(renderer)
                         renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
                         holder.addCallback(object : SurfaceHolder.Callback {
-                            override fun surfaceCreated(h: SurfaceHolder) = requestFrameRate(h.surface, maxHz)
-                            override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) = requestFrameRate(h.surface, maxHz)
+                            override fun surfaceCreated(h: SurfaceHolder) = requestFrameRate(h.surface, loop.surfaceHz())
+                            override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) = requestFrameRate(h.surface, loop.surfaceHz())
                             override fun surfaceDestroyed(h: SurfaceHolder) {}
                         })
                         loop.view = this
@@ -1120,7 +1140,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                         if (change.type == PointerType.Touch) continue
                         val buttonDown = event.changes.any { it.pressed }
                         val picked = if (kind == MapNameShow.HoverEvent.EXIT || buttonDown) null
-                            else MapNameShow.pick(screenNodes.map(::nameBody), change.position.x, change.position.y, MapNameShow.PICK_DP.dp.toPx())?.index
+                            else MapNameShow.pick(feed.nodes.map(::nameBody), change.position.x, change.position.y, MapNameShow.PICK_DP.dp.toPx())?.index
                         val next = MapNameShow.hover(hoveredName, kind, buttonDown, picked)
                         if (next != hoveredName) hoveredName = next
                     }
@@ -1160,11 +1180,9 @@ data class MapFlyTo(val id: String, val serial: Int)
             // the other bodies, under its body or else beside it; one with no room waits
             if (scene.titles.isEmpty()) return@Canvas
             drawIntoCanvas { canvas ->
-                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                    color = android.graphics.Color.rgb(225, 235, 249); textAlign = android.graphics.Paint.Align.CENTER
-                    typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                }
-                val metrics = PaintMetrics(paint)
+                // made once (plainPaint): each name sets its size and alpha before it is measured or drawn
+                val paint = plainPaint
+                val metrics = plainMetrics
                 // a word's room beside a name, so two in a row read as two; iOS's 2-point nudge
                 // (GraphPerfLabelRoom.gap), doubled, above and below and round links and bodies
                 val rules = MapNames.Rules(largest = 12.sp.toPx(), gapX = 8.dp.toPx(), gapY = 4.dp.toPx(), line = 1.dp.toPx())
@@ -1219,11 +1237,16 @@ private fun increaseContrast(context: Context): Boolean {
     return runCatching { modes.contrast >= 0.5f }.getOrDefault(false)
 }
 
+/**
+ * The map surface's rate (RefreshRate.surfaceVote): [hz] while its frame loop runs, 0 (the
+ * system's choice) once it rests. The rate changes only where the display moves to it without a
+ * blink, as the vote comes and goes with every drag.
+ */
 private fun requestFrameRate(surface: Surface, hz: Float) {
     if (!surface.isValid) return
     runCatching {
         when {
-            Build.VERSION.SDK_INT >= 31 -> surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ALWAYS)
+            Build.VERSION.SDK_INT >= 31 -> surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS)
             Build.VERSION.SDK_INT >= 30 -> surface.setFrameRate(hz, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
         }
     }
@@ -1339,6 +1362,8 @@ private class FrameLoop(
     private val continuous: Boolean,
     private var autoOrbit: Boolean,
     private val camera: OrbitCamera,
+    private val maxHz: Float,
+    private val motion: MotionVote?,
     private val sampleDisplay: () -> Unit,
 ) : Choreographer.FrameCallback {
     var view: GLSurfaceView? = null
@@ -1349,8 +1374,18 @@ private class FrameLoop(
     private var lastFrame = 0L
     private var frames = 0
 
-    fun start() { if (!running) { running = true; active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
-    fun stop() { running = false; Choreographer.getInstance().removeFrameCallback(this) }
+    fun start() { if (!running) { run(true); active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
+    fun stop() { run(false); Choreographer.getInstance().removeFrameCallback(this) }
+    /** The surface's rate now: the display's top while the loop runs, the system's choice at rest. */
+    fun surfaceHz() = RefreshRate.surfaceVote(running, maxHz)
+
+    /** Running or at rest: the window's and the surface's votes follow (perf, 15 Nov). */
+    private fun run(on: Boolean) {
+        if (running == on) return
+        running = on
+        motion?.loop(on, SystemClock.uptimeMillis())
+        view?.holder?.surface?.let { requestFrameRate(it, surfaceHz()) }
+    }
     fun touched() { autoOrbit = false; moved() }
     /** The camera moved by itself (HomeView.fit): draw again, and keep any orbit going. */
     fun moved() { active(System.nanoTime()); if (!running && view != null) start() }
@@ -1367,7 +1402,7 @@ private class FrameLoop(
         if (renderer.animating || autoOrbit) active(frameTimeNanos)
         if (continuous || !FrameQuiet.settled(frameTimeNanos - lastActive, renderer.finished - finishedAtActive)) {
             Choreographer.getInstance().postFrameCallback(this)
-        } else running = false
+        } else run(false)
     }
 }
 

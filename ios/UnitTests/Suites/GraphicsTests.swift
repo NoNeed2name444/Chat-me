@@ -291,21 +291,64 @@ func pace(_ fast: Int = 120, lively: Bool = true, covered: Bool = false, quiet: 
     GraphPace.rate(fast: fast, lively: lively, covered: covered, quiet: quiet, busy: busy)
 }
 
+// The owner (15 Nov): at least 60 frames a second, consistently, then 120 on
+// a 120 Hz screen. These checks were 30 and 20 before; whatever moves runs at
+// the screen's rate, and the floor is 60 wherever the screen has it.
 check("G7a touched, a lively map draws at the budget's rate", pace(quiet: 0) == 120, "\(pace(quiet: 0))")
-check("G7b ...a map that holds still at 60", pace(lively: false, quiet: 0) == 60)
-check("G7c a lively map 5 s after the last touch: 60", pace(quiet: 5) == 60)
-check("G7d ...and after 20 s: 30", pace(quiet: 25) == 30)
-check("G7e a map that holds still, 5 s after: 20", pace(lively: false, quiet: 5) == 20)
-check("G7f under a sheet: 20, even while touched", pace(covered: true, quiet: 0, busy: true) == 20)
+check("G7b ...and so does a map that holds still, while touched (120 on ProMotion)",
+      pace(lively: false, quiet: 0) == 120)
+check("G7c a lively map 5 s after the last touch: still the budget's rate", pace(quiet: 5) == 120)
+check("G7d ...and after 20 s: still the budget's rate, never 30", pace(quiet: 25) == 120)
+check("G7e a map that holds still, 5 s after: 60, never 20", pace(lively: false, quiet: 5) == 60)
+check("G7f under a sheet, a lively map still moves at the budget's rate; a still one rests at 60 at once",
+      pace(covered: true, quiet: 0) == 120 && pace(covered: true, quiet: 25) == 120
+      && pace(lively: false, covered: true, quiet: 0) == 60 && pace(lively: false, covered: true, quiet: 25) == 60)
 check("G7g a body held long after the last wake: still fast",
-      pace(quiet: 25, busy: true) == 120 && pace(lively: false, quiet: 25, busy: true) == 60)
-check("G7h Smooth (60): 60, 60, 30, and 20 when still",
-      pace(60, quiet: 0) == 60 && pace(60, quiet: 5) == 60 && pace(60, quiet: 25) == 30
-      && pace(60, lively: false, quiet: 5) == 20)
+      pace(quiet: 25, busy: true) == 120 && pace(lively: false, quiet: 25, busy: true) == 120)
+check("G7h a 60 Hz screen: 60 in every case",
+      pace(60, quiet: 0) == 60 && pace(60, quiet: 5) == 60 && pace(60, quiet: 25) == 60
+      && pace(60, lively: false, quiet: 5) == 60 && pace(60, covered: true, quiet: 0) == 60)
 check("G7i never above the budget's rate (a 30 a second screen)",
-      pace(30, quiet: 0) == 30 && pace(30, quiet: 5) == 30 && pace(30, covered: true, quiet: 0) == 20)
+      pace(30, quiet: 0) == 30 && pace(30, quiet: 5) == 30 && pace(30, covered: true, quiet: 0) == 30)
 check("G7j a NaN or backwards clock counts as just touched",
       pace(quiet: Double.nan) == 120 && pace(quiet: -4) == 120)
+
+do {
+    // the floor: no case, at any time, asks for less than 60 on a screen that has 60
+    var slow: [String] = []
+    for fast in [60, 120] {
+        for lively in [true, false] {
+            for covered in [true, false] {
+                for busy in [true, false] {
+                    for quiet in stride(from: -1.0, through: 120, by: 0.25) {
+                        let r: Int = pace(fast, lively: lively, covered: covered, quiet: quiet, busy: busy)
+                        if r < 60 { slow.append("\(fast) \(lively) \(covered) \(busy) \(quiet): \(r)") }
+                    }
+                }
+            }
+        }
+    }
+    check("G7v never under 60 where the screen has 60", slow.isEmpty, slow.prefix(3).joined(separator: "; "))
+}
+
+do {
+    // 120 on a 120 Hz screen (the owner, 15 Nov): whatever moves - a lively
+    // map, a body held, a touch within 3 s - asks for the screen's full rate,
+    // a sheet up or not; only a map with nothing moving asks for less
+    var short: [String] = []
+    for covered in [true, false] {
+        for quiet in stride(from: -1.0, through: 120, by: 0.25) {
+            let moving: [(Bool, Bool)] = [(true, false), (true, true), (false, true)]
+            for (lively, busy) in moving where pace(120, lively: lively, covered: covered, quiet: quiet, busy: busy) != 120 {
+                short.append("lively \(lively) busy \(busy) covered \(covered) \(quiet)")
+            }
+            if !covered && quiet < GraphPace.settleAfter && pace(120, lively: false, covered: false, quiet: quiet) != 120 {
+                short.append("touched \(quiet)")
+            }
+        }
+    }
+    check("G7w whatever moves on a 120 Hz screen asks for 120", short.isEmpty, short.prefix(3).joined(separator: "; "))
+}
 
 do {
     // every rate it can ask for is a whole number of pacer ticks, 6 at most
@@ -329,7 +372,7 @@ do {
     let at20 = paced(rate: 20, wobble: 0.002, frames: 200)
     check("G7l at 20 a second each frame is a whole step, not a stall", at20.worst < 0.0002, "\(at20.worst)")
     let at15 = paced(rate: 15, wobble: 0.002, frames: 150)
-    check("G7m ...where at 15 every frame would be a capped stall (so 20 is the floor)", at15.worst > 0.01,
+    check("G7m ...where at 15 every frame would be a capped stall (the pacer's limit is 20)", at15.worst > 0.01,
           "\(at15.worst)")
 }
 
@@ -337,10 +380,11 @@ func look(lively: Bool = true, covered: Bool = false, quiet: Double, busy: Bool 
     GraphPace.recheck(lively: lively, covered: covered, quiet: quiet, busy: busy)
 }
 
-check("G7n just touched: look again just past 3 s", look(quiet: 0).map { abs($0 - 3.05) < 0.000_1 } == true)
-check("G7o 2 s after: in about 1 s", look(quiet: 2).map { abs($0 - 1.05) < 0.000_1 } == true)
-check("G7p a lively map 5 s after: just past 20 s", look(quiet: 5).map { abs($0 - 15.05) < 0.000_1 } == true)
-check("G7q nothing more to change: no look (still and settled, resting, under a sheet)",
+check("G7n just touched, a still map: look again just past 3 s",
+      look(lively: false, quiet: 0).map { abs($0 - 3.05) < 0.000_1 } == true)
+check("G7o 2 s after: in about 1 s", look(lively: false, quiet: 2).map { abs($0 - 1.05) < 0.000_1 } == true)
+check("G7p a lively map: no look, it stays at the budget's rate", look(quiet: 0) == nil && look(quiet: 5) == nil)
+check("G7q nothing more to change: no look (still and settled, under a sheet)",
       look(lively: false, quiet: 5) == nil && look(quiet: 25) == nil && look(covered: true, quiet: 0) == nil)
 check("G7r a body held: once a second", look(quiet: 30, busy: true) == 1)
 
@@ -357,11 +401,11 @@ do {
     }
     let lively: [Int] = steps(lively: true)
     let still: [Int] = steps(lively: false)
-    check("G7s a lively map: fast, 60, then 30, and the looks stop", lively == [120, 60, 30], "\(lively)")
-    check("G7t a still map: 60, then 20, and the looks stop", still == [60, 20], "\(still)")
+    check("G7s a lively map: fast, and no look", lively == [120], "\(lively)")
+    check("G7t a still map: fast, then 60, and the looks stop", still == [120, 60], "\(still)")
     var shortest: Double = 99
     for quiet in stride(from: -1.0, through: 30, by: 0.01) {
-        if let wait = look(quiet: quiet) { shortest = min(shortest, wait) }
+        if let wait = look(lively: false, quiet: quiet) { shortest = min(shortest, wait) }
     }
     check("G7u a look is never sooner than 0.1 s (no spinning)", shortest >= 0.1, "\(shortest)")
 }

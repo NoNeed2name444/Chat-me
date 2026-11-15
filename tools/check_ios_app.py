@@ -26,6 +26,8 @@ WANTED = {
     "MinimumOSVersion": "26.0",
     "UIDeviceFamily": [1, 2],
     "UILaunchScreen": {"UIColorName": "Page"},
+    # ProMotion's 120 Hz on an iPhone (ios/project.yml)
+    "CADisableMinimumFrameDurationOnPhone": True,
     "UISupportedInterfaceOrientations": [
         "UIInterfaceOrientationPortrait",
         "UIInterfaceOrientationLandscapeLeft",

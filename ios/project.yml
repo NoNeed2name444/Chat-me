@@ -63,6 +63,11 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         ITSAppUsesNonExemptEncryption: false
+        # ProMotion on an iPhone: without this key iOS holds an iPhone app's
+        # display links, SceneKit and Metal views to 60 frames a second
+        # whatever they ask for (the iPad needs no key). The maps ask for the
+        # screen's own rate while touched or lively (GraphPace), 120 there.
+        CADisableMinimumFrameDurationOnPhone: true
         # The kit's type (WardFont): Nunito, with Arabic in Baloo Bhaijaan 2,
         # both SIL OFL 1.1 (their OFL files are beside them in Sorta/Fonts)
         UIAppFonts:

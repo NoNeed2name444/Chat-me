@@ -79,6 +79,24 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
          * MapPop.glow; vMark.w is b.
          */
         const val BLOOM_LINE = "    rp_col = rp_col * (min(0.85 + 0.35 * max(-vMark.w, 0.0), 1.0) / 0.85);\n"
+        /**
+         * The bodies' draw order (perf, 15 Nov): the first [n] [entries] by [styles], then far to near by
+         * [depths], the three kept in step; equal ones keep their order. The same order as a stable
+         * sortedWith(compareBy({ style }, { −depth })), with no list or boxed number made: an insertion
+         * sort, as there are at most a frame's bodies (96).
+         */
+        fun drawOrder(entries: IntArray, styles: IntArray, depths: FloatArray, n: Int) {
+            for (i in 1 until n) {
+                val e = entries[i]; val s = styles[i]; val d = depths[i]
+                var j = i - 1
+                while (j >= 0 && (styles[j] > s || (styles[j] == s && java.lang.Float.compare(-depths[j], -d) > 0))) {
+                    entries[j + 1] = entries[j]; styles[j + 1] = styles[j]; depths[j + 1] = depths[j]
+                    j--
+                }
+                entries[j + 1] = e; styles[j + 1] = s; depths[j + 1] = d
+            }
+        }
+
         /** Where every glow of a body's shader passes (SpaceShaders' rpFadedGlow), which the bloom brightens. */
         const val GLOW_HEAD = "vec3 rpFadedGlow(vec3 rp_col, float rp_dfF) {\n"
 
@@ -207,6 +225,11 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         for (i in 0 until tree.nodeCount) if (tree.groups[i].toInt() == SpaceStyle.SUN.code) suns.add(i)
         if (suns.size > MAX_LIGHTS) IntArray(0) else suns.toArray()
     }
+    // the frame's draw order (update) with each entry's style and depth, kept from frame to frame so
+    // none is made per frame (perf, 15 Nov)
+    private var order = IntArray(capacity)
+    private var orderStyle = IntArray(capacity)
+    private var orderDepth = FloatArray(capacity)
     private val heapNode = IntArray(capacity)
     private val heapDepth = FloatArray(capacity)
     private var heapSize = 0
@@ -262,13 +285,18 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         val dying = chooseDying(viewProj, frustum, band, capacity - heapSize)
         // the chosen, by style, far to near (each style is drawn far to near over what is behind); a
         // dying body is −(k + 1)
-        val order = ((0 until heapSize) + dying).sortedWith(compareBy<Int>({ styleOfEntry(it) }, { -depthOfEntry(it) }))
+        val n = heapSize + dying.size
+        if (order.size < n) { order = IntArray(n); orderStyle = IntArray(n); orderDepth = FloatArray(n) }
+        for (h in 0 until heapSize) { order[h] = h; orderStyle[h] = styleOfEntry(h); orderDepth[h] = depthOfEntry(h) }
+        for ((k, e) in dying.withIndex()) { order[heapSize + k] = e; orderStyle[heapSize + k] = styleOfEntry(e); orderDepth[heapSize + k] = depthOfEntry(e) }
+        drawOrder(order, orderStyle, orderDepth, n)
         for (k in 0 until previousCount) previous[k].let { if (it >= 0) slot[it] = -1 }
-        count = order.size
+        count = n
         liveCount = heapSize
         styleStart.fill(0)
         fadedCount = 0
-        for ((j, h) in order.withIndex()) {
+        for (j in 0 until n) {
+            val h = order[j]
             if (h < 0) {
                 val k = -h - 1
                 nodes[j] = -1

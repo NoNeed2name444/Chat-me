@@ -23,7 +23,7 @@ func check(_ label: String, _ ok: Bool, _ detail: String = "") {
 
 let pro = GraphPerfFrameBudget(screenFPS: 120)
 check("B1 ProMotion: 120 a second, 8.3 ms a refresh", pro.screenFPS == 120 && abs(pro.period - 1.0 / 120) < 1e-9)
-check("B1 the map's share of a 120 Hz refresh is 6.25 ms", abs(pro.target - 0.75 / 120) < 1e-9)
+check("B1 the map's share of a 120 Hz refresh is 4.6 ms, a little over half", abs(pro.target - 0.55 / 120) < 1e-9)
 check("B1 a 60 Hz screen: 60", GraphPerfFrameBudget(screenFPS: 60).screenFPS == 60)
 check("B1 a 144 Hz screen is not held to 120", GraphPerfFrameBudget(screenFPS: 144).screenFPS == 144)
 check("B1 never under 30 (an unknown screen reads 0)", GraphPerfFrameBudget(screenFPS: 0).screenFPS == 30)
@@ -49,7 +49,7 @@ func run(_ budget: inout GraphPerfFrameBudget, speed: Double, frames: Int) -> [D
 // MARK: - B2 a slow device cuts detail and keeps the rate
 
 var slow = GraphPerfFrameBudget(screenFPS: 120)
-let slowCosts = run(&slow, speed: 0.15, frames: 600)
+let slowCosts = run(&slow, speed: 0.2, frames: 600)
 let settled = slowCosts.suffix(100)
 check("B2 a slow device opens cells later (summaries sooner)", slow.split > GraphPerfFrameBudget.startingSplit(.high),
       "split \(slow.split)")
@@ -62,6 +62,10 @@ check("B2 a fast device keeps more detail than a slow one", fast.split < slow.sp
 var hopeless = GraphPerfFrameBudget(screenFPS: 120)
 _ = run(&hopeless, speed: 0.02, frames: 2_000)
 check("B2 however slow, the split stops at its coarsest", hopeless.split == GraphPerfFrameBudget.coarsest)
+var slower = GraphPerfFrameBudget(screenFPS: 120)
+_ = run(&slower, speed: 0.15, frames: 2_000)
+check("B2 a device whose fixed cost alone is over the share (5.3 ms) cuts all it can",
+      slower.split == GraphPerfFrameBudget.coarsest, "split \(slower.split)")
 
 // MARK: - B3 detail comes back slowly, without see-sawing
 
@@ -89,7 +93,7 @@ check("B3 two in a row coarsen once, then it waits out the frames in flight",
 // MARK: - B4 missed refreshes count, a pause does not
 
 var missing = GraphPerfFrameBudget(screenFPS: 120)
-for _ in 0..<20 { missing.record(cpu: 0.001, gpu: 0.005, interval: 2.0 / 120) }
+for _ in 0..<20 { missing.record(cpu: 0.001, gpu: 0.004, interval: 2.0 / 120) }
 check("B4 frames within their share that missed a refresh anyway (the system's, the simulator's) cut nothing",
       missing.split == GraphPerfFrameBudget.startingSplit(.high) && missing.bundleShare == 1, "split \(missing.split)")
 var missedAndOver = GraphPerfFrameBudget(screenFPS: 120)

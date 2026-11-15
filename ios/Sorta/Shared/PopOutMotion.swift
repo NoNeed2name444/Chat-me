@@ -201,9 +201,10 @@ final class PopOutMotion {
         smooth = .zero
     }
 
-    /// Up to 120 a second (the screen's own rate; a 60 Hz screen keeps 60).
+    /// 120 a second while it moves, 80 at the least (MotionRate; a 60 Hz
+    /// screen keeps 60).
     private static func fullRate() -> CAFrameRateRange {
-        CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        MotionRate.moving
     }
     private static let idleRate = CAFrameRateRange(minimum: 10, maximum: 15, preferred: 15)
 

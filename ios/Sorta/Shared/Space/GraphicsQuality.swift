@@ -154,7 +154,7 @@ nonisolated struct GraphicsBudget: Sendable, Equatable {
 /// forth against a steady display: a stutter, worst at 120 frames a second.
 ///
 /// The screen only ever shows frames on a 1/120 s grid (every rate the app
-/// runs at - 120, 60, 40, 30, 20 - is a whole number of those ticks), so this
+/// can run at - 120, 60, 40, 30, 20 - is a whole number of those ticks), so this
 /// keeps its own frame clock on that grid: each call moves it on by the
 /// whole number of ticks nearest to where the call says it should be (and
 /// a twentieth of the call's wobble, so it settles on the calls' middle).
@@ -204,55 +204,54 @@ nonisolated struct GraphFramePacer: Sendable {
 
 // MARK: - How fast the map draws
 
-/// How many frames a second the 3D map asks for, from what it is doing. The
-/// Chat-me audit (row 109) found a still map drawing 60 frames a second for
-/// ever, and the map drawing at full rate under the note's sheet:
+/// How many frames a second the 3D map asks for, from what it is doing.
+///
+/// The owner (15 Nov): "20 fps is soooo unusable ... it should AT LEAST be
+/// 60 fps consistently", then "since most phones now are 120hz make it 120
+/// fps not 60". The map used to step down to 30 (a lively map 20 s after a
+/// touch) and 20 (a still map after 3 s, or under a sheet), and the shaders'
+/// twinkle, the orbits and a sheet's slide over the map all showed it. Now
+/// whatever moves on it moves at the screen's own rate, and only a map with
+/// nothing moving rests, at 60:
 ///
 ///   touched, or within 3 s of a touch,    the budget's rate (120 on a
-///   a choice, a filter or a fly-in        ProMotion screen at High);
-///                                         60 for a map that holds still
-///   a lively map, 3 to 20 s after         60
-///   a lively map, after 20 s              30
-///   a map that holds still, after 3 s     20
-///   under a sheet                         20
+///   a choice, a filter, a fly-in, a       ProMotion screen, either tier)
+///   body held, or a lively map, a sheet
+///   up over it or not
+///   a map that holds still, after 3 s     60, to save the battery
+///   a still map under a sheet             60 at once
 ///
-/// Never above the budget's own rate. 20 is the floor: a frame every 6 of
-/// GraphFramePacer's ticks is the longest step the pacer (and the motion's
-/// 0.05 s clamp) still takes as a frame, not a stall, so nothing slows down.
-/// The view keeps drawing continuously at the slow rates rather than
-/// stopping, so nothing waits on a frame that never comes.
+/// Never above the budget's own rate (a 30 a second screen stays at 30).
+/// Every rate is a whole number of GraphFramePacer's ticks.
 nonisolated enum GraphPace {
-    /// This long after the last touch, the map leaves the fast rate.
+    /// This long after the last touch, a still map leaves the fast rate.
     static let settleAfter: Double = 3
-    /// This long after, a lively map drops to the resting rate.
-    static let restAfter: Double = 20
+    /// The floor: what a map with nothing moving draws at.
     static let settled: Int = 60
-    static let resting: Int = 30
-    static let idle: Int = 20
+    /// A still map under a sheet: the floor too.
+    static let idle: Int = settled
 
     /// The rate to ask for: `fast` is the budget's rate for this screen
     /// (GraphicsBudget.frameRate), `quiet` the seconds since the last
     /// touch or change, `busy` a body held under the finger.
     static func rate(fast: Int, lively: Bool, covered: Bool, quiet: Double, busy: Bool) -> Int {
         let quiet: Double = quiet.isNaN ? 0 : max(quiet, 0)
-        if covered { return min(idle, fast) }
-        if busy || quiet < settleAfter { return lively ? fast : min(settled, fast) }
-        if !lively { return min(idle, fast) }
-        if quiet < restAfter { return min(settled, fast) }
-        return min(resting, fast)
+        let floor: Int = min(settled, fast)
+        // seen past a sheet (an iPad's, a phone's half sheet), a moving map moves at the screen's rate
+        if busy || lively { return fast }
+        if covered { return floor }
+        return quiet < settleAfter ? fast : floor
     }
 
     /// Seconds until the rate next changes with nothing else happening, to
     /// look again then; nil when it will not change (a sheet up, a still
-    /// map settled, a lively one resting). While a body is held, once a
-    /// second.
+    /// map settled, a lively map). While a body is held, once a second.
     static func recheck(lively: Bool, covered: Bool, quiet: Double, busy: Bool) -> Double? {
         let quiet: Double = quiet.isNaN ? 0 : max(quiet, 0)
-        if covered { return nil }
         if busy { return 1 }
+        if lively || covered { return nil }
         // a little after the change is due, so the look lands past it
         if quiet < settleAfter { return max(settleAfter + 0.05 - quiet, 0.1) }
-        if lively && quiet < restAfter { return max(restAfter + 0.05 - quiet, 0.1) }
         return nil
     }
 }

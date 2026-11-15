@@ -62,6 +62,8 @@ final class FrameMeter {
     func start() {
         guard Self.isOn, link == nil else { return }
         let link = CADisplayLink(target: FrameMeterTicker(), selector: #selector(FrameMeterTicker.tick(_:)))
+        // as fast as what it times may go: a link left at its default would tick at 60 on an iPhone
+        link.preferredFrameRateRange = MotionRate.moving
         link.add(to: .main, forMode: .common)
         self.link = link
         let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue | CFRunLoopActivity.beforeWaiting.rawValue,

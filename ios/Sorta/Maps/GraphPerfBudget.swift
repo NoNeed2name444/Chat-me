@@ -5,7 +5,8 @@
 // Each frame reports what it cost, stage by stage (its CPU time, and the GPU
 // time of the near stage - notes and links - and of the far stage - bundles
 // and glows - once the GPU is done) and how long since the last one. A frame
-// over its share of the refresh (`share` of 1/rate: 6.25 ms of 8.33 at 120)
+// over its share of the refresh (`share` of 1/rate: 4.6 ms of 8.33 at 120,
+// the rest left to the system and the screen around the map; perf, 15 Nov)
 // counts against the stage that took the time (a refresh missed by a frame
 // within its share is the system's, not the map's); two in a row and that stage
 // draws less: the near one opens cells later (`split` x 1.2, so a slow phone
@@ -28,8 +29,9 @@ import Foundation
 nonisolated struct GraphPerfFrameBudget: Sendable, Equatable {
     /// The screen's fastest rate (UIScreen.maximumFramesPerSecond).
     let screenFPS: Int
-    /// The share of a refresh the map may spend (the rest is the system's).
-    var share: Double = 0.75
+    /// The share of a refresh the map may spend (the rest is the system's):
+    /// a little over half, so a 120 Hz frame keeps room for the UI over it.
+    var share: Double = 0.55
     /// The split size (points, radius): a cell opens once it is this big on screen.
     private(set) var split: Float
     static let finest: Float = 16

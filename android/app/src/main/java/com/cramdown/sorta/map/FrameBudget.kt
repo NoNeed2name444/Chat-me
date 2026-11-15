@@ -1,5 +1,6 @@
 package com.cramdown.sorta.map
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -33,18 +34,19 @@ class FrameBudget(refreshHz: Float, initialDetail: Float = 0.6f) {
     /**
      * One finished frame: [intervalMs] since the previous vsync this map drew on, and
      * [workMs], the time spent preparing and submitting it. A frame that missed a refresh,
-     * or work that eats most of the frame, cuts detail; a steady run of easy frames raises it.
+     * or work over [HEAVY_SHARE] of the frame, cuts detail; a steady run of easy frames
+     * (work under [EASY_SHARE]) raises it.
      */
     fun onFrame(intervalMs: Double, workMs: Double) {
         val target = targetMs
         val missed = intervalMs > target * 1.45
-        val heavy = workMs > target * 0.75
+        val heavy = workMs > target * HEAVY_SHARE
         if (missed || heavy) {
             fastStreak = 0
             if (++slowStreak >= 2) { detail = max(MIN_DETAIL, detail * 0.88f); slowStreak = 0 }
         } else {
             slowStreak = 0
-            val easy = intervalMs < target * 1.2 && workMs < target * 0.4
+            val easy = intervalMs < target * 1.2 && workMs < target * EASY_SHARE
             if (easy && ++fastStreak >= 24) { detail = min(MAX_DETAIL, detail * 1.05f); fastStreak = 0 }
             if (!easy) fastStreak = 0
         }
@@ -56,6 +58,14 @@ class FrameBudget(refreshHz: Float, initialDetail: Float = 0.6f) {
          * map's structure (hundreds of summaries) and never one dot for the whole library.
          */
         const val MIN_DETAIL = 0.3f
+        /**
+         * The share of a refresh the map's work may take (perf, 15 Nov: the owner's 120 a
+         * second): a little over half, 4.6 ms of 8.3 at 120 Hz, so the frame keeps room for
+         * the page over the map and the system; as iOS's GraphPerfFrameBudget.share.
+         */
+        const val HEAVY_SHARE = 0.55
+        /** Work under this share of a refresh is easy: detail may grow (2.5 ms at 120 Hz). */
+        const val EASY_SHARE = 0.3
         const val MAX_DETAIL = 4f
         const val BASE_OPEN_PIXELS = 36f
         const val BASE_DETAIL_NODES = 600_000
@@ -116,6 +126,34 @@ object RefreshRate {
     }
 
     fun maxHz(modes: List<DisplayModeInfo>, fallback: Float = 60f) = modes.maxOfOrNull { it.refreshHz } ?: fallback
+
+    /**
+     * The fastest mode the display can move to without a blink: at the current resolution and,
+     * where the system names the rates it reaches seamlessly from the current mode ([seamless],
+     * Android 12+), at one of those. Null when there is no choice to make (one mode, as an
+     * emulator's), so a vote never writes the window for nothing.
+     */
+    fun fastest(modes: List<DisplayModeInfo>, current: DisplayModeInfo, seamless: Collection<Float>? = null): DisplayModeInfo? =
+        modes.filter { m ->
+            m.width == current.width && m.height == current.height &&
+                (m.id == current.id || seamless == null || seamless.any { abs(it - m.refreshHz) < 0.5f })
+        }.takeIf { it.size > 1 }?.maxByOrNull { it.refreshHz }
+
+    /**
+     * Something on screen moves (perf, 15 Nov): a map's frame loop runs, a finger is down, or one
+     * lifted (or a wheel turned) under [LINGER_MS] ago, which covers the fling, the sheet or the
+     * transition it set off.
+     */
+    fun moving(loops: Int, down: Boolean, sinceTouchMs: Long): Boolean =
+        loops > 0 || down || sinceTouchMs in 0 until LINGER_MS
+
+    /** The window's vote: the fastest mode while something moves, else 0, no preference (the system's own rate). */
+    fun windowVote(moving: Boolean, fastest: DisplayModeInfo?): Int = if (moving) fastest?.id ?: 0 else 0
+
+    /** The map surface's vote: the display's top rate while its frame loop runs, else 0 (the system's choice). */
+    fun surfaceVote(running: Boolean, maxHz: Float): Float = if (running) maxHz else 0f
+
+    const val LINGER_MS = 1_500L
 }
 
 /** Thousands with commas, the same in every locale (the readout is a meter). */

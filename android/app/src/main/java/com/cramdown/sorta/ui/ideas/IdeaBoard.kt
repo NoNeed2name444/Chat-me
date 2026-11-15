@@ -193,6 +193,11 @@ const val UNLIT = 0.5f
     Box(Modifier.fillMaxSize().clipToBounds().onSizeChanged { size = it }) {
         val ink = wardColor(WardToken.inkSecondary)
         val chosenInk = wardColor(WardToken.primaryInk)
+        // the links' notes by id and their lanes, made when they change rather than on every frame a pan
+        // or a pinch draws; one path, drawn and begun again for each link (perf, 15 Nov)
+        val linkNotes = remember(notes) { notes.associateBy { it.id } }
+        val linkLanes = remember(edges) { IdeaLinkShape.lanes(edges.map { (a, b) -> "$a|$b" }) }
+        val linkPath = remember { Path() }
         // the board itself: pan, pinch, double-tap
         Canvas(Modifier.fillMaxSize()
             .pointerInput(size, hidden) {
@@ -215,9 +220,9 @@ const val UNLIT = 0.5f
                 }, onTap = { if (source != null && !connecting) source = null })
             }) {
             val d = density.density
-            val byId = notes.associateBy { it.id }
-            val keys = edges.map { (a, b) -> "$a|$b" }
-            val lanes = IdeaLinkShape.lanes(keys)
+            val byId = linkNotes
+            val lanes = linkLanes
+            val stroke = Stroke(width = max(1.0, 1.5 * zoom).toFloat() * d, cap = StrokeCap.Round)
             edges.forEachIndexed { k, (a, b) ->
                 val na = byId[a] ?: return@forEachIndexed
                 val nb = byId[b] ?: return@forEachIndexed
@@ -225,7 +230,7 @@ const val UNLIT = 0.5f
                 val (lane, count) = lanes[k]
                 fun px(v: Double) = (v * d).toFloat()
                 // as iOS's IdeaBoardView.line: Straight one segment, Curved one quadratic
-                val path = Path()
+                val path = linkPath.apply { rewind() }
                 if (straight) {
                     val (from, to) = IdeaLinkShape.straightEnds(p, q, lane, count)
                     path.moveTo(px(from.x), px(from.y))
@@ -236,7 +241,7 @@ const val UNLIT = 0.5f
                     path.quadraticTo(px(curve.control.x), px(curve.control.y), px(curve.end.x), px(curve.end.y))
                 }
                 val faded = lens != null && (a.uppercase() !in lens || b.uppercase() !in lens)
-                drawPath(path, if (faded) ink.copy(alpha = ink.alpha * MapFilterView.GHOST_ALPHA) else ink, style = Stroke(width = max(1.0, 1.5 * zoom).toFloat() * d, cap = StrokeCap.Round))
+                drawPath(path, if (faded) ink.copy(alpha = ink.alpha * MapFilterView.GHOST_ALPHA) else ink, style = stroke)
             }
         }
 
@@ -249,7 +254,7 @@ const val UNLIT = 0.5f
             notes.forEach { note ->
                 key(note.id) {
                     val faded = lens != null && note.id.uppercase() !in lens
-                    BoardCard(book, version, note, chosen = note.id == source, lifted = note.id == dragging, zoom = zoom, chosenInk = chosenInk,
+                    BoardCard(book, version, note, chosen = note.id == source, lifted = note.id == dragging, zoom = { zoom }, chosenInk = chosenInk,
                         // no edge while connecting: there a tap connects, and the edge would read as chosen
                         width = cardWidth, oneKind = oneKind, glows = !connecting && shapes?.glows(note.id) == true,
                         modifier = Modifier.layoutId(note.id)
@@ -422,7 +427,7 @@ data class BoardStill(val zoom: Double, val panX: Double, val panY: Double, val 
  * One card: its kind and folder in small type, the title, washed in its folder's colour. [version] is
  * the book's, read by no line here: a folder renamed in place reaches the card by it.
  */
-@Composable private fun BoardCard(book: IdeaBook, @Suppress("UNUSED_PARAMETER") version: Int, note: Note, chosen: Boolean, lifted: Boolean, zoom: Double,
+@Composable private fun BoardCard(book: IdeaBook, @Suppress("UNUSED_PARAMETER") version: Int, note: Note, chosen: Boolean, lifted: Boolean, zoom: () -> Double,
                                   chosenInk: androidx.compose.ui.graphics.Color, width: Double, oneKind: Boolean, modifier: Modifier, glows: Boolean = false) {
     val shape = RoundedCornerShape(WardRadius.card.wardDp)
     val tone = toneColor(note.folderId, book)
@@ -440,8 +445,9 @@ data class BoardStill(val zoom: Double, val panX: Double, val panY: Double, val 
     val frostWords = if (frost > 0) stringResource(R.string.frost_spoken) else null
     // read as drawn, the whole title first
     val spoken = listOfNotNull(title, if (oneKind) null else kind.label, folder, frostWords).joinToString(", ")
-    val scale = (zoom * if (lifted) 1.04 else 1.0).toFloat()
-    Column(modifier.graphicsLayer { scaleX = scale; scaleY = scale }
+    // the board's zoom is read where the layer is drawn, so a pinch scales the cards with none built again (perf, 15 Nov)
+    val lift = if (lifted) 1.04 else 1.0
+    Column(modifier.graphicsLayer { val scale = (zoom() * lift).toFloat(); scaleX = scale; scaleY = scale }
         .width(width.dp)
         // the height the first view fits by, so its floor keeps a one-line card a target tall
         .heightIn(min = CARD_HEIGHT.dp)

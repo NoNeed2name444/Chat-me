@@ -273,7 +273,7 @@ final class WardLookDriver: NSObject {
         start = CACurrentMediaTime()
         if link == nil {
             let link = CADisplayLink(target: self, selector: #selector(step))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+            link.preferredFrameRateRange = MotionRate.moving
             link.add(to: .main, forMode: .common)
             self.link = link
         }
