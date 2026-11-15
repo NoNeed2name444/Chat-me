@@ -397,23 +397,27 @@ struct IdeaBoardView: View {
         }
         .gesture(cardDrag(note))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        // A card the lenses leave out (S06d A2) carries nothing at all: no
+        // words, no role, no name and no actions, as Android's
+        // clearAndSetSemantics { } leaves its card, and it is hidden too.
+        // Hidden alone, it kept its label, button role and identifier, and
+        // the system's accessibility tree still listed it under the lens
+        // (CI, 14 and 15 Nov: iPhone and iPad), as it lists the board's
+        // hidden title sample above.
+        .accessibilityLabel(faded ? "" : spoken)
         // S06c: what a tap does when it links: to the open idea, named, since
         // VoiceOver is on this card and "this idea" would read as itself
-        .accessibilityHint(links ? IdeasWords.echoesBoardLink(openLine) : "")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(links && !faded ? IdeasWords.echoesBoardLink(openLine) : "")
+        .accessibilityAddTraits(faded ? AccessibilityTraits() : .isButton)
         // its symbol and its stored place, which the board may draw it away
         // from (S05c), for the UI tests; VoiceOver doesn't read an identifier
-        .accessibilityIdentifier("board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
-        // as Android's hold names it, and as both hints say it
-        .accessibilityAction(named: "Start a connection") { source = note.id }
-        // S06c: when a tap links it, Open stays an action of its own. A named
-        // action, not the actions builder: with the builder the card's parts
-        // were read and the lenses' hiding below was undone (CI, 15 Nov)
-        .modifier(OpenWhileLinking(on: links) { open(note.id) })
-        // a card the lenses leave out is not read (S06d A2): hidden on its own
-        // element, which the card makes here; hidden from outside it, the
-        // faded card was still found (CI, 14 Nov: iPhone and iPad)
+        .accessibilityIdentifier(faded ? "" : "board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
+        // Start a connection, as Android's hold names it and as both hints
+        // say it; S06c: and when a tap links it, Open as an action of its
+        // own. Named actions, not the actions builder: with the builder the
+        // card's parts were read and the lenses' hiding was undone (CI, 15 Nov)
+        .modifier(CardActions(shown: !faded, links: links,
+                              connect: { source = note.id }, open: { open(note.id) }))
         .accessibilityHidden(faded)
     }
 
@@ -648,18 +652,25 @@ final class BoardSpreadMemo {
     }
 }
 
-/// S06c: the card's own Open action while a tap on it links instead of
-/// opening; none otherwise, since a tap opens it.
-private struct OpenWhileLinking: ViewModifier {
-    let on: Bool
+/// A board card's spoken actions: Start a connection; and S06c: its own
+/// Open while a tap on it links instead of opening, none otherwise, since a
+/// tap opens it. None at all on a card the lenses leave out (S06d A2).
+private struct CardActions: ViewModifier {
+    let shown: Bool
+    let links: Bool
+    let connect: () -> Void
     let open: () -> Void
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if on {
-            content.accessibilityAction(named: Text("Open"), open)
-        } else {
+        if !shown {
             content
+        } else if links {
+            content
+                .accessibilityAction(named: Text("Start a connection"), connect)
+                .accessibilityAction(named: Text("Open"), open)
+        } else {
+            content.accessibilityAction(named: Text("Start a connection"), connect)
         }
     }
 }

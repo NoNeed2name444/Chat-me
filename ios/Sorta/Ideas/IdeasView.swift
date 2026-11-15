@@ -116,11 +116,15 @@ struct IdeasView: View {
         .wardMasthead()
         .background { WardBackground() }
         .lineSpacing(WardSpace.leading)
-        // under the editor beside the map, the list is not read out either
-        .accessibilityHidden(paned && routes.opening != nil)
         // S06c: on two panes the editor opens here, over the Sort screen
         // and its foot, so the map beside it stays in sight and in reach:
-        // the ideas like the open one glow there, and a tap links one
+        // the ideas like the open one glow there, and a tap links one.
+        // Under the editor the list is not read out either: the editor is
+        // modal within the Sort screen's own container (below), so VoiceOver
+        // leaves the list behind it and still reaches the map beside it.
+        // Not `.accessibilityHidden(paned && editing)` on the screen: its
+        // explicit false, with no editor up, left the deck's card with no
+        // hit point (DeckRenderTests on the iPhone and the iPad, CI, 15 Nov)
         .overlay {
             if paned, let ref = routes.opening {
                 NoteEditorView(noteID: ref.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
@@ -134,9 +138,14 @@ struct IdeasView: View {
                     .id(ref.id)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background { WardBackground() }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityAddTraits(.isModal)
                     .transition(.identity)
             }
         }
+        // the Sort screen's own container: the modal editor hides only what
+        // is in it, not the map beside it
+        .accessibilityElement(children: .contain)
         .ideasListSheets(routes, folderId: $folderId, inline: paned)
         .fileImporter(isPresented: $importing,
                       allowedContentTypes: importKind == .capsule ? [UTType.html] : [IdeaImportFlow.backupType]) { result in

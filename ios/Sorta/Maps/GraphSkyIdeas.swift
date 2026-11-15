@@ -117,6 +117,59 @@ nonisolated enum Leaning {
         return folder + way * least
     }
 
+    /// The least gap between a leaning comet's disc and its folder's on
+    /// screen: a tap target (44 points; Android 48 dp).
+    static let screenGap: Float = 44
+
+    /// v14: the camera a leaning comet is kept clear on screen for: its
+    /// eye, the unit way it looks (`ahead`), a unit way across the screen
+    /// (`aside`) for a comet right on its folder, its focal length in
+    /// points (points across per unit at depth 1) and the gap to keep.
+    struct View: Equatable {
+        let eye: SIMD3<Float>
+        let ahead: SIMD3<Float>
+        let aside: SIMD3<Float>
+        let focal: Float
+        var gap: Float = Leaning.screenGap
+    }
+
+    /// v14: where a leaning comet drawn at `comet` (`cometRadius` in
+    /// radius) goes so that, seen from `view`, its disc clears its
+    /// folder's (`folder`, `folderRadius`) by `view.gap`: `keep` radii
+    /// apart in space can still be one behind the other on screen, where
+    /// the folder's disc takes the comet's taps. Short of that it moves
+    /// across the screen at its own depth, out along its lean as the
+    /// screen shows it (from the folder's centre to its own), so its size
+    /// on screen stays; a comet right on the folder goes along
+    /// `view.aside`. Either one behind the eye: where it was (Android's
+    /// Leaning.clearOnScreen).
+    static func clearOnScreen(comet: SIMD3<Float>, cometRadius: Float, folder: SIMD3<Float>, folderRadius: Float,
+                              view: View) -> SIMD3<Float> {
+        let ahead: SIMD3<Float> = view.ahead
+        let fromEyeC: SIMD3<Float> = comet - view.eye
+        let fromEyeF: SIMD3<Float> = folder - view.eye
+        let depthC: Float = (fromEyeC * ahead).sum()
+        let depthF: Float = (fromEyeF * ahead).sum()
+        guard depthC > 1e-4, depthF > 1e-4, view.focal > 0 else { return comet }
+        // each one's place across the screen, in points from its middle
+        let acrossC: SIMD3<Float> = (fromEyeC - ahead * depthC) * (view.focal / depthC)
+        let acrossF: SIMD3<Float> = (fromEyeF - ahead * depthF) * (view.focal / depthF)
+        let need: Float = max(folderRadius, 0) * view.focal / depthF + max(cometRadius, 0) * view.focal / depthC + view.gap
+        let apart: SIMD3<Float> = acrossC - acrossF
+        let off: Float = (apart * apart).sum().squareRoot()
+        if off >= need { return comet }
+        let way: SIMD3<Float>
+        if off > 1e-4 {
+            way = apart / off
+        } else {
+            let lean: SIMD3<Float> = comet - folder
+            let flat: SIMD3<Float> = lean - ahead * (lean * ahead).sum()
+            let length: Float = (flat * flat).sum().squareRoot()
+            way = length > 1e-6 ? flat / length : view.aside
+        }
+        return view.eye + ahead * depthC + (acrossF + way * need) * (depthC / view.focal)
+    }
+
     struct Folder {
         let id: UUID
         let name: String

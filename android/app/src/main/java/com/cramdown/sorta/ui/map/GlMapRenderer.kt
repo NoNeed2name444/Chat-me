@@ -688,6 +688,14 @@ class GlMapRenderer(
     private var liveTime = Double.NaN
     /** S06b: the Universe's leans, circles and tails ([sky]), by the plan's body index; null elsewhere. */
     private val skyPlan: SkySpace? = sky?.takeIf { uplan != null && it.tails.size == tree.nodeCount }
+    /** v14: whether a loose idea here leans to a folder, so its comet is kept clear of the folder on screen. */
+    private val leaning: Boolean = skyPlan?.leanTo?.any { it >= 0 } == true
+    /**
+     * v14: the camera this frame keeps the leaning comets clear of their folders for (Leaning.clearOnScreen), and
+     * the one [live] was last written for; null before the first frame, and where nothing leans.
+     */
+    @Volatile private var leanView: Leaning.View? = null
+    private var liveView: Leaning.View? = null
     /** How far a circling idea sits from the one it circles, by body index: three of the larger one's radii. */
     private val circleRadius: FloatArray = skyPlan?.let { s ->
         val b = uplan!!.bodies
@@ -974,8 +982,11 @@ class GlMapRenderer(
         val l = live ?: return false
         val t = drag?.orbitTime ?: 0.0
         val settling = settleFrom.isNotEmpty() && !settleDone
-        if (t == liveTime && !settling) return false
+        // v14: a leaning comet's place follows the camera too (skyHome)
+        val view = leanView
+        if (t == liveTime && !settling && view == liveView) return false
         liveTime = t
+        liveView = view
         for (k in 0 until tree.nodeCount) {
             val p = skyHome(tree.order[k], t)
             l[3 * k] = p.x; l[3 * k + 1] = p.y; l[3 * k + 2] = p.z
@@ -1007,7 +1018,14 @@ class GlMapRenderer(
             if (place.leader in 0 until i) return skyHome(place.leader, t) + SharedCircle.offset(place, circleRadius[i], t)
         }
         val j = s.leanTo.getOrElse(i) { -1 }
-        if (j >= 0 && j != i && j < plan.bodies.size) return Leaning.place(own, plan.position(j, t), UniverseBeams.radius(plan.bodies[j]))
+        if (j >= 0 && j != i && j < plan.bodies.size) {
+            val folder = plan.position(j, t)
+            val size = UniverseBeams.radius(plan.bodies[j])
+            val at = Leaning.place(own, folder, size)
+            // v14: and clear of the folder's disc on screen, where the camera has them one behind the other
+            val view = leanView ?: return at
+            return Leaning.clearOnScreen(at, UniverseBeams.radius(plan.bodies[i]), folder, size, view)
+        }
         return own
     }
 
@@ -1285,6 +1303,7 @@ class GlMapRenderer(
             eye = camera.eye(); target = camera.target
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
+            if (leaning) leanView = Leaning.View(eye, forward, camera.right(), focal, Leaning.SCREEN_GAP_DP * max(density, 0.1f))
             if (onScreenNodes != null) framePose = MapDrawn.poseOf(camera)
             frustum = if (perf != null) camera.frustum(width.toFloat(), height.toFloat()) else null
         }

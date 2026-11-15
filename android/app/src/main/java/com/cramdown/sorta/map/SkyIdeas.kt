@@ -111,6 +111,46 @@ object Leaning {
         return folder + way * least
     }
 
+    /** The least gap between a leaning comet's disc and its folder's on screen: a tap target (48 dp; iOS 44 pt). */
+    const val SCREEN_GAP_DP = 48f
+
+    /**
+     * v14: the camera a leaning comet is kept clear on screen for: [eye], the unit way it looks ([ahead]), a unit
+     * way across the screen ([aside]) for a comet right on its folder, its focal length in pixels ([focal]: pixels
+     * across per unit at depth 1) and the gap to keep in pixels.
+     */
+    data class View(val eye: Vec3, val ahead: Vec3, val aside: Vec3, val focal: Float, val gap: Float)
+
+    /**
+     * v14: where a leaning comet drawn at [comet] ([cometRadius] in radius) goes so that, seen from [view], its
+     * disc clears its folder's ([folder], [folderRadius]) by [View.gap]: [KEEP] radii apart in space can still be
+     * one behind the other on screen, where the folder's disc takes the comet's taps. Short of that it moves
+     * across the screen at its own depth, out along its lean as the screen shows it (from the folder's centre to
+     * its own), so its size on screen stays; a comet right on the folder goes along [View.aside]. Either one
+     * behind the eye: where it was (iOS Leaning.clearOnScreen).
+     */
+    fun clearOnScreen(comet: Vec3, cometRadius: Float, folder: Vec3, folderRadius: Float, view: View): Vec3 {
+        val ahead = view.ahead
+        val fromEyeC = comet - view.eye
+        val fromEyeF = folder - view.eye
+        val depthC = fromEyeC.dot(ahead)
+        val depthF = fromEyeF.dot(ahead)
+        if (depthC <= 1e-4f || depthF <= 1e-4f || view.focal <= 0f) return comet
+        // each one's place across the screen, in pixels from its middle
+        val acrossC = (fromEyeC - ahead * depthC) * (view.focal / depthC)
+        val acrossF = (fromEyeF - ahead * depthF) * (view.focal / depthF)
+        val need = maxOf(folderRadius, 0f) * view.focal / depthF + maxOf(cometRadius, 0f) * view.focal / depthC + view.gap
+        val apart = acrossC - acrossF
+        val off = apart.length()
+        if (off >= need) return comet
+        val way = if (off > 1e-4f) apart * (1f / off) else {
+            val lean = comet - folder
+            val flat = lean - ahead * lean.dot(ahead)
+            if (flat.length() > 1e-6f) flat.normalized() else view.aside
+        }
+        return view.eye + ahead * depthC + (acrossF + way * need) * (depthC / view.focal)
+    }
+
     data class Folder(val id: String, val name: String, val words: List<String>)
     /** [word]: the first of the folder's words the idea shares, as the folder has it. */
     data class Lean(val folder: String, val word: String, val shared: Int)

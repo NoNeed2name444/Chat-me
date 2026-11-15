@@ -1704,6 +1704,12 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         let labelStep: Float = min(max(rawStep, 0.001), 0.05)
         updateLabels(labelStep, eye: eye, up: up)
         if resting && grabbed == nil {
+            // v14: a leaning comet the turn put behind its folder on screen
+            // moves clear of it, even at rest
+            if turned && universe && keepLeansClear(eye: eye, right: right, up: up) {
+                for i in leanOf.indices where i < nodes.count && leanOf[i] >= 0 { nodes[i].simdPosition = position[i] }
+                linksStale = true
+            }
             // the ribbons face the camera and the rings are sized for it, so
             // both follow it even when nothing else moves; the styles first,
             // so the links bend into this frame's disks
@@ -1739,6 +1745,8 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
             fastest = universe ? integrateOrbits(h, first: piece == 0) : integrate(h)
         }
         if universe { swap(&offsets, &nextOffsets) }
+        // v14: a leaning comet clear of its folder on screen, not only in space
+        if universe { keepLeansClear(eye: eye, right: right, up: up) }
         if let s = closeUpSubject { keepClear(of: s, eye: eye) }
 
         for i in nodes.indices {
@@ -1766,6 +1774,45 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
 
         // still, and nothing will set it moving by itself: stop working
         if !lively && grabbed == nil && fastest < 0.000_01 { resting = true }
+    }
+
+    /// v14: keeps each leaning comet's disc clear of its folder's on screen
+    /// by a tap target (Leaning.clearOnScreen): `keep` radii apart in space,
+    /// the camera can still see one behind the other, and the folder's disc
+    /// took the comet's taps (the iOS ideas red on Chat-me run 43676492822).
+    /// Each moves across the screen at its own depth and stops heading back
+    /// in, as keepClear's bodies do; not while it is held or being filed.
+    /// The space's coordinates, as the step's. Whether any moved.
+    @discardableResult
+    private func keepLeansClear(eye: SIMD3<Float>, right: SIMD3<Float>, up: SIMD3<Float>) -> Bool {
+        guard leanOf.contains(where: { $0 >= 0 }) else { return false }
+        let aside: SIMD3<Float> = Self.axis(right, or: SIMD3<Float>(1, 0, 0))
+        let ahead: SIMD3<Float> = Self.axis(simd_cross(Self.axis(up, or: SIMD3<Float>(0, 1, 0)), aside),
+                                            or: SIMD3<Float>(0, 0, -1))
+        // points across per unit at depth 1: the view's height over the
+        // vertical field of view
+        let focal: Float = viewHeight * 0.5 / max(tan(fovY * 0.5), 0.0001)
+        let view = Leaning.View(eye: eye, ahead: ahead, aside: aside, focal: focal)
+        var any: Bool = false
+        for i in leanOf.indices where i < position.count {
+            let j: Int = leanOf[i]
+            guard j >= 0, j < position.count, j != i, i != grabbed, settleFrom[i] == nil,
+                  visible[i], visible[j] else { continue }
+            let at: SIMD3<Float> = Leaning.clearOnScreen(comet: position[i],
+                                                         cometRadius: pickRadius[i] * max(popScale[i], 0.05),
+                                                         folder: position[j],
+                                                         folderRadius: pickRadius[j] * max(popScale[j], 0.05),
+                                                         view: view)
+            let shift: SIMD3<Float> = at - position[i]
+            let length: Float = simd_length(shift)
+            guard length > 0.000_001 else { continue }
+            position[i] = at
+            let out: SIMD3<Float> = shift / length
+            let inward: Float = simd_dot(velocity[i], out)
+            if inward < 0 { velocity[i] -= out * inward }
+            any = true
+        }
+        return any
     }
 
     /// Moves every body whose disc on screen crosses the close-up subject's

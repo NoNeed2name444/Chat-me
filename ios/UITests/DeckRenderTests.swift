@@ -64,6 +64,7 @@ final class DeckRenderTests: XCTestCase {
         keepShot("deck-2-deck")
 
         // Later, then Undo puts it back on top
+        recordCover(app, app.buttons["deck-keep-later"].firstMatch, "the card's Later")
         app.buttons["deck-keep-later"].firstMatch.tap()
         XCTAssertTrue(app.notice.waitForExistence(timeout: 10), "a notice")
         XCTAssertTrue(app.notice.label.contains("Moved to the back."), "the notice: \(app.notice.label)")
@@ -75,6 +76,7 @@ final class DeckRenderTests: XCTestCase {
         let garden = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == %@ AND label == %@",
                                                                           "deck-target", "File in Garden")).firstMatch
         XCTAssertTrue(garden.waitForExistence(timeout: 10), "the Garden target")
+        recordCover(app, card, "the card")
         card.press(forDuration: 0.3, thenDragTo: garden, withVelocity: .slow, thenHoldForDuration: 0.3)
         XCTAssertTrue(waitFor { card.label != DeckSeed.gate }, "dropped on Garden, the card is filed")
         XCTAssertTrue(waitFor { app.notice.exists && app.notice.label.contains("Garden") }, "filed in Garden: \(app.notice.label)")
@@ -147,6 +149,30 @@ final class DeckRenderTests: XCTestCase {
         let frame = element.frame
         XCTAssertGreaterThanOrEqual(frame.height, 43.5, "\(name) is 44 points tall: \(frame)", file: file, line: line)
         XCTAssertGreaterThanOrEqual(frame.width, 43.5, "\(name) is 44 points wide: \(frame)", file: file, line: line)
+    }
+
+    /// Only when `element` has no hit point (the step after it then fails):
+    /// every element whose frame holds its middle, deepest last, and the
+    /// whole tree, kept with the result, to show what covers it (the deck's
+    /// card on CI, 15 Nov). Checks nothing itself.
+    private func recordCover(_ app: XCUIApplication, _ element: XCUIElement, _ name: String) {
+        guard element.exists, !element.isHittable else { return }
+        let frame: CGRect = element.frame
+        let middle = CGPoint(x: frame.midX, y: frame.midY)
+        var lines: [String] = ["\(name) has no hit point; its frame \(frame)", "elements whose frames hold \(middle):"]
+        func walk(_ node: XCUIElementSnapshot, _ depth: Int) {
+            if node.frame.contains(middle) {
+                lines.append(String(repeating: "  ", count: depth)
+                             + "\(node.elementType.rawValue) id '\(node.identifier)' label '\(node.label)' \(node.frame)")
+            }
+            for child in node.children { walk(child, depth + 1) }
+        }
+        if let snapshot = try? app.snapshot() { walk(snapshot, 0) }
+        lines.append(app.debugDescription)
+        let tree = XCTAttachment(string: lines.joined(separator: "\n"))
+        tree.name = "tree when \(name) has no hit point"
+        tree.lifetime = .keepAlways
+        add(tree)
     }
 
     private func waitFor(_ timeout: TimeInterval = 10, _ condition: @escaping () -> Bool) -> Bool {
