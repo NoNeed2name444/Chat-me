@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.res.Resources
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,7 +23,7 @@ import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddCircleOutline
 import androidx.compose.material.icons.rounded.Adjust
-import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.DropdownMenu
@@ -52,6 +53,9 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapMenuItem
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.automirrored.outlined.CallMerge
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.MapPeekContent
 import com.cramdown.sorta.ideas.MapPeekInput
@@ -81,6 +85,13 @@ object MapPanel {
     const val EMPTY_HINT_WIDTH = 340
 }
 
+/**
+ * Show links' glyph on the card and the legend's Links row (S05j 7c): Material's Hub, a node graph as
+ * iOS's point.3.connected.trianglepath.dotted (GraphMapPanels.swift:159), not Link's chain; not Share,
+ * which reads as sharing.
+ */
+internal val SHOW_LINKS_GLYPH: androidx.compose.ui.graphics.vector.ImageVector get() = Icons.Rounded.Hub
+
 /** iOS's accessibility identifiers, as test tags. */
 object MapPanelTags {
     const val PEEK = "graphPeekCard"
@@ -88,6 +99,7 @@ object MapPanelTags {
     const val PEEK_OPEN = "graphPeekOpen"
     /** The card's Show links (All links while shown), iOS's identifier (S05g). */
     const val PEEK_LINKS = "graphPeekLinks"
+    const val PEEK_CHIPS = "graphPeekChips"
     const val MENU = "graphNodeMenu"
     const val LINK_BAR = "linkLengthBar"
     const val LINK_SLIDER = "linkLengthSlider"
@@ -102,8 +114,25 @@ object MapPanelTags {
     /** Map mode's top strip: the To sort chip and the look chip (MapTopStrip), for the tests. */
     const val TOP_STRIP = "mapTopStrip"
 
+    /** The Filter tool, its empty line and the Look menu's Cell by cell row and sheet (S05i). */
+    const val FILTER_TOOL = "mapFilterTool"
+    const val FILTER_EMPTY = "mapFilterEmpty"
+    const val LOOK_CELL_BY_CELL = "lookCellByCell"
+    const val CELL_BY_CELL = "cellByCellSheet"
+    /** A row of the Filter menu. */
+    fun filterRow(filter: com.cramdown.sorta.map.MapFilter): String = when (filter) {
+        com.cramdown.sorta.map.MapFilter.All -> "filterAll"
+        com.cramdown.sorta.map.MapFilter.Pages -> "filterPages"
+        com.cramdown.sorta.map.MapFilter.Ideas -> "filterIdeas"
+        com.cramdown.sorta.map.MapFilter.Linked -> "filterLinked"
+        is com.cramdown.sorta.map.MapFilter.Folder -> "filterFolder-" + filter.id
+    }
+
     /** The legend's touch help, its last line (S05g). */
     const val LEGEND_TOUCH = "legendTouch"
+
+    /** An icon's own tag, by its Material name ("Rounded.Hub"), so a test can tell which is drawn (S05j 7c). */
+    fun glyph(icon: androidx.compose.ui.graphics.vector.ImageVector): String = "glyph:" + icon.name
 
     /** A theme's legend sheet, iOS's identifiers (GraphLegendSheet): universeLegend, neuronsLegend, performanceLegend. */
     fun legend(theme: GraphTheme): String = if (theme == GraphTheme.SPACE) "universeLegend" else theme.rawValue + "Legend"
@@ -130,6 +159,9 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     rename = res.getString(R.string.map_menu_rename),
     moveToFolder = res.getString(R.string.map_menu_move),
     delete = res.getString(R.string.map_menu_delete),
+    split = res.getString(R.string.shape_split),
+    joinWith = res.getString(R.string.shape_join),
+    collideWith = res.getString(R.string.shape_collide),
     // GraphPeek.roleWord (GraphTouchModel.swift:267-281): Space's bodies, and Neurons' roles by number
     roles = mapOf(
         "space:galaxy" to res.getString(R.string.map_role_black_hole),
@@ -290,18 +322,30 @@ class MapPanelSettings(context: Context) {
 
 // MARK: - The peek card
 
+/** Widens a row by [by] each side into its parent's padding (SwiftUI's negative padding). */
+internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = this.then(androidx.compose.ui.Modifier.layout { measurable, constraints ->
+    val extra = by.roundToPx() * 2
+    val wide = if (constraints.hasBoundedWidth) constraints.copy(maxWidth = constraints.maxWidth + extra,
+        minWidth = constraints.minWidth + extra) else constraints
+    val placeable = measurable.measure(wide)
+    val width = (placeable.width - extra).coerceAtLeast(0)
+    layout(width, placeable.height) { placeable.place(-extra / 2, 0) }
+})
+
 /**
  * A small card raised high at the bottom (GraphPeekCardView): what the chosen body is, its first
  * lines and its links (an idea), or its counts and latest ideas (a folder). Tapping it, swiping it
  * up or Open reads it; a chip selects that idea; Show links, for an idea, keeps its own links on the
  * map ([linksShown]: All links brings the rest back, S05g); More opens the same options a hold does.
- * Fly in, for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]).
+ * Fly in, for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]). S06b: [lean], a
+ * loose idea's lean in the Universe, with [fileThere]; [sharedFrom], a shared idea's sharedFrom.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable fun MapPeekCard(
     content: MapPeekContent, folder: Boolean, words: MapPeekWords,
     open: () -> Unit, flyIn: () -> Unit, chip: (String) -> Unit, option: (MapMenuItem) -> Unit,
     modifier: Modifier = Modifier, linksShown: Boolean = false, showLinks: () -> Unit = {},
+    lean: SkyLean? = null, fileThere: () -> Unit = {}, sharedFrom: String? = null,
 ) {
     val source = remember { MutableInteractionSource() }
     var swiped by remember { mutableFloatStateOf(0f) }
@@ -326,17 +370,32 @@ class MapPanelSettings(context: Context) {
             Spacer(Modifier.width(WardSpace.s.wardDp))
             Icon(Icons.Outlined.KeyboardArrowUp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
         }
-        content.lines.forEach { line ->
-            Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        if (content.chips.isNotEmpty()) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
-                verticalAlignment = Alignment.CenterVertically) {
-                content.chips.forEach { item ->
-                    WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
-                }
-                if (content.moreLinks > 0) {
-                    Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+        // S06b: where the card meets the chrome above it (IdeasSpace keeps it under the strip), its middle
+        // scrolls, only then, so a swipe up anywhere still opens it. The scroll's clip reaches s into the
+        // card's margin, its words padded back, so the chip row still reaches there (S05j 8b), and 2 more
+        // above and below, so File there's 48 dp touch area is whole
+        val middle = rememberScrollState()
+        Column(Modifier.weight(1f, fill = false).intoMargin(WardSpace.s.wardDp).verticalScroll(middle, enabled = middle.maxValue > 0)
+            .padding(horizontal = WardSpace.s.wardDp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            content.lines.forEach { line ->
+                Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            // S06b: the folder a loose idea leans towards, with File there; where a shared one came from
+            lean?.let { LeanRow(it, fileThere) }
+            sharedFrom?.let { SharedFromMark(it) }
+            if (content.chips.isNotEmpty()) {
+                // the row reaches WardSpace.s into the card's margin each side, its chips padded back, so a chip's
+                // edge scrolls out under the margin, not cut at the padding (S05j 8b; GraphMapPanels.swift:121-147)
+                Row(Modifier.intoMargin(WardSpace.s.wardDp).testTag(MapPanelTags.PEEK_CHIPS).horizontalScroll(rememberScrollState())
+                    .padding(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    content.chips.forEach { item ->
+                        WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
+                    }
+                    if (content.moreLinks > 0) {
+                        Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+                    }
                 }
             }
         }
@@ -357,7 +416,7 @@ class MapPanelSettings(context: Context) {
             if (words.showLinks in content.secondary) {
                 // iOS's point.3.connected.trianglepath.dotted; the legend's Links row's stand-in (S05f)
                 WardButtonBox(showLinks, Modifier.testTag(MapPanelTags.PEEK_LINKS), kind = WardButtonKind.quiet, fills = false) {
-                    Icon(Icons.Rounded.Link, null, Modifier.size(wardGlyph(17.0)))
+                    Icon(SHOW_LINKS_GLYPH, null, Modifier.size(wardGlyph(17.0)).testTag(MapPanelTags.glyph(SHOW_LINKS_GLYPH)))
                     Text(if (linksShown) words.allLinks else words.showLinks, maxLines = 1)
                 }
             }
@@ -402,6 +461,9 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
     MapMenuItem.OPEN -> Icons.Outlined.Description
     MapMenuItem.RENAME -> Icons.Outlined.Edit
     MapMenuItem.MOVE -> Icons.Outlined.Folder
+    MapMenuItem.SPLIT -> Icons.AutoMirrored.Outlined.CallSplit
+    MapMenuItem.JOIN -> Icons.AutoMirrored.Outlined.CallMerge
+    MapMenuItem.COLLIDE -> Icons.Outlined.Bolt
     MapMenuItem.DELETE -> Icons.Outlined.Delete
 }
 
@@ -464,8 +526,8 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
 /**
  * The first-run card (GraphUniverseHint, GraphLegend.swift:372-418): [title] (the theme's cardTitle
  * while its [steps] are unseen, else "Touching the map"); how to touch the map while [touch] is
- * unseen, in Android's own lines (the hold's is iOS's, "Hold to move or for options"); then the theme's
- * steps, each with a plus in the secondary ink. Full list opens the theme's legend; either button
+ * unseen and no [steps] show, in Android's own lines (the hold's is iOS's, "Hold to move or for
+ * options"); then the theme's steps, each with a plus in the secondary ink. Full list opens the theme's legend; either button
  * puts it away for this theme, steps and touch lines both.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -473,11 +535,15 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
                              title: String? = null, touch: Boolean = true, steps: List<String> = emptyList()) {
     WardCardFace(modifier.widthIn(max = MapPanel.HINT_WIDTH.dp).testTag(MapPanelTags.HINT), lift = WardLift.high) {
         Text(title ?: stringResource(R.string.map_touch_title), style = WardType.headline.textStyle(), color = wardColor(WardToken.ink))
+        // at most a third of a phone's height (S05j item 4): with the theme's steps the touch lines are left
+        // out, and putting the card away marks them seen too (markCardSeen), so a new user finds them in the
+        // legend's Full list; the same on iOS
+        val touchLines = touch && steps.isEmpty()
         // the lines between the title and the buttons, spaced as the card spaces them, scroll where the card
         // would outgrow the room (a folded phone at the largest text): the buttons stay whole and in view
-        if (touch || steps.isNotEmpty()) Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+        if (touchLines || steps.isNotEmpty()) Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(WardScale.m.dp)) {
-            if (touch) Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            if (touchLines) Column(Modifier.testTag(MapPanelTags.TOUCH_HINT), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                 // iOS's hand.tap, doc.text and a hand held still
                 listOf(Icons.Outlined.TouchApp to R.string.map_touch_tap, Icons.Outlined.Description to R.string.map_touch_again,
                     Icons.Outlined.PanTool to R.string.map_touch_hold).forEach { (icon, words) ->

@@ -41,6 +41,9 @@ import com.cramdown.sorta.ui.ward.wardDp
  * ellipsis when that is too little. [inset] is the room at the bar's sides,
  * none where the page's own column already keeps its gutter (ScreenHeader).
  * ReaderNavBar and ScreenHeader are this bar.
+ * A title too long for the middle moves into the free room at the side
+ * with less in it before it is cut, as UIKit places an inline title
+ * (S05j 8c: a legend's title beside Done alone).
  */
 @Composable internal fun StudyTitleBar(title: String, onBack: (() -> Unit)?, leading: (@Composable () -> Unit)? = null,
                                        inset: Dp = WardSpace.m.wardDp, trailing: @Composable RowScope.() -> Unit = {}) {
@@ -60,13 +63,19 @@ import com.cramdown.sorta.ui.ward.wardDp
     ) { (start, name, end), constraints ->
         val free = constraints.copy(minWidth = 0, minHeight = 0)
         val ends = listOf(start.measure(free), end.measure(free))
-        val widest = ends.maxOf { it.width }
-        val side = if (widest == 0) 0 else widest + WardSpace.s.wardDp.roundToPx()
-        val words = name.measure(free.copy(maxWidth = (constraints.maxWidth - 2 * side).coerceAtLeast(0)))
+        val gap = WardSpace.s.wardDp.roundToPx()
+        // each end's room, with the gap the title keeps from it
+        val lead = if (ends[0].width == 0) 0 else ends[0].width + gap
+        val tail = if (ends[1].width == 0) 0 else ends[1].width + gap
+        // centred between equal sides while it fits there; else it takes the free room beside the
+        // smaller end before its ellipsis (UIKit's inline title, S05j 8c)
+        val words = name.measure(free.copy(maxWidth = (constraints.maxWidth - lead - tail).coerceAtLeast(0)))
+        val centred = (constraints.maxWidth - words.width) / 2
+        val x = centred.coerceAtMost(constraints.maxWidth - tail - words.width).coerceAtLeast(lead)
         val height = maxOf(constraints.minHeight, words.height, ends.maxOf { it.height })
         layout(constraints.maxWidth, height) {
             ends[0].place(0, (height - ends[0].height) / 2)
-            words.place((constraints.maxWidth - words.width) / 2, (height - words.height) / 2)
+            words.place(x, (height - words.height) / 2)
             ends[1].place(constraints.maxWidth - ends[1].width, (height - ends[1].height) / 2)
         }
     }

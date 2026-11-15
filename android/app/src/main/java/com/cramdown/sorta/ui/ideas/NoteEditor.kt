@@ -46,6 +46,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
@@ -55,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.IdeaBook
+import com.cramdown.sorta.ideas.IdeaStops
 import com.cramdown.sorta.ideas.NoteEditing
 import com.cramdown.sorta.ideas.NoteMarkdown
 import com.cramdown.sorta.ui.sources.ReaderDoneButton
@@ -84,8 +89,13 @@ const val LINK_PICKER_TAG = "link-picker"
 const val EDITOR_BACK_TAG = "editor-back"
 const val EDITOR_LINK_TAG = "editor-link"
 
+/**
+ * The editor on [noteId]. [resume]: opened from "You were saying…" (S06a), so the details take the
+ * caret where the person stopped.
+ */
 @Composable fun NoteEditor(model: IdeasModel, settings: IdeasSettings, noteId: String, bottom: Dp,
-                           choose: (String) -> Unit, delete: (String) -> Unit, onClose: () -> Unit) {
+                           choose: (String) -> Unit, delete: (String) -> Unit, resume: Boolean = false,
+                           notice: @Composable () -> Unit = {}, onClose: () -> Unit) {
     var trail by rememberSaveable { mutableStateOf(listOf<String>()) }
     var currentId by rememberSaveable { mutableStateOf(noteId) }
     val book = model.book
@@ -93,7 +103,7 @@ const val EDITOR_LINK_TAG = "editor-link"
     if (note == null) { LaunchedEffect(currentId) { if (trail.isEmpty()) onClose() else { currentId = trail.last(); trail = trail.dropLast(1) } }; return }
 
     key(currentId) {
-        NoteEditorPage(model, settings, note, bottom, backTitle = trail.lastOrNull()?.let { book.note(it) }?.let { ideaLine(it) },
+        NoteEditorPage(model, settings, note, bottom, notice, resume = resume && currentId == noteId, backTitle = trail.lastOrNull()?.let { book.note(it) }?.let { ideaLine(it) },
             go = { id -> if (id != currentId) { trail = trail + currentId; currentId = id } },
             back = { if (trail.isEmpty()) onClose() else { currentId = trail.last(); trail = trail.dropLast(1) } },
             choose = choose, delete = { delete(it); onClose() }, done = onClose)
@@ -101,12 +111,22 @@ const val EDITOR_LINK_TAG = "editor-link"
 }
 
 @Composable private fun NoteEditorPage(
-    model: IdeasModel, settings: IdeasSettings, note: Note, bottom: Dp, backTitle: String?,
+    model: IdeasModel, settings: IdeasSettings, note: Note, bottom: Dp, notice: @Composable () -> Unit, resume: Boolean, backTitle: String?,
     go: (String) -> Unit, back: () -> Unit, choose: (String) -> Unit, delete: (String) -> Unit, done: () -> Unit,
 ) {
     val id = note.id
-    var title by rememberSaveable(id) { mutableStateOf(note.title) }
-    var body by rememberSaveable(id) { mutableStateOf(note.body) }
+    val shapes = LocalIdeaShapes.current
+    // S06c: a split or a join of this idea (or its Undo) changes its words from outside: read afresh then,
+    // so the next save never puts the old words back (the menu items save before they ask)
+    val reshaped = shapes?.reshaped ?: 0
+    var title by rememberSaveable(id, reshaped) { mutableStateOf(model.book.note(id)?.title ?: note.title) }
+    // the details with their caret (S06a): a marked idea opens with it where the person stopped
+    var bodyField by rememberSaveable(id, reshaped, stateSaver = TextFieldValue.Saver) {
+        val now = model.book.note(id) ?: note
+        mutableStateOf(TextFieldValue(now.body, TextRange((now.stoppedAt ?: now.body.length).coerceIn(0, now.body.length))))
+    }
+    val body = bodyField.text
+    val bodyFocus = remember { FocusRequester() }
     var menu by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
@@ -116,11 +136,21 @@ const val EDITOR_LINK_TAG = "editor-link"
 
     fun save() {
         val now = model.book.note(id) ?: return
-        model.book.update(now.copy(title = title, body = body))
+        // the field's state as it is now: a save from the page's going (onDispose) runs long after this composition
+        model.book.update(now.copy(title = title, body = bodyField.text))
     }
     // half a second after the last key, and whenever the page goes
     LaunchedEffect(title, body) { delay(500); save() }
-    DisposableEffect(id) { onDispose { save() } }
+    // opened (S06a): its frost goes; left mid-sentence, it is marked with the caret's place, and a finished sentence clears it
+    LaunchedEffect(id) {
+        model.book.markOpened(id, IdeaClock.now())
+        if (resume && !reading) runCatching { bodyFocus.requestFocus() }
+    }
+    val leftAt by rememberUpdatedState(bodyField)
+    // the save of the latest composition (S06c): after a split or a join the words are new state, and the
+    // first composition's save would put the old words back as the page goes
+    val saveLatest by rememberUpdatedState { save() }
+    DisposableEffect(id) { onDispose { saveLatest(); model.book.setStopped(id, IdeaStops.stoppedAt(leftAt.text, leftAt.selection.end)) } }
     fun leave(then: () -> Unit) { save(); then() }
     fun openTitle(name: String) {
         save()
@@ -144,6 +174,12 @@ const val EDITOR_LINK_TAG = "editor-link"
                 Box {
                     WardCircleButton(Icons.Rounded.MoreHoriz, stringResource(R.string.sort_more), { menu = true })
                     DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
+                        // S06c: Split…, Join with… and Collide with…, the plain ways to the map's gestures
+                        if (shapes != null) {
+                            MenuItem(stringResource(R.string.shape_split), tag = IdeaShapeTags.MENU_SPLIT) { menu = false; save(); shapes.askSplit(id) }
+                            MenuItem(stringResource(R.string.shape_join), tag = IdeaShapeTags.MENU_JOIN) { menu = false; save(); shapes.askJoin(id) }
+                            MenuItem(stringResource(R.string.shape_collide), tag = IdeaShapeTags.MENU_COLLIDE) { menu = false; save(); shapes.askCollide(id) }
+                        }
                         MenuItem(stringResource(R.string.editor_delete), destructive = true) { menu = false; deleting = true }
                     }
                 }
@@ -155,18 +191,23 @@ const val EDITOR_LINK_TAG = "editor-link"
             // the title, in a well
             EditorField(title, { title = it }, stringResource(R.string.editor_title), WardType.title, Modifier.fillMaxWidth(), well = true)
             FolderChip(book, note) { save(); choose(id) }
+            // S06b: where a shared idea came from, under its folder
+            note.sharedFrom?.let { SharedFromMark(it) }
 
             EditorSection(stringResource(R.string.editor_body))
             if (reading) MarkdownReader(body, Modifier.fillMaxWidth().wardRowTile(), openTitle = ::openTitle)
             else {
                 Box(Modifier.fillMaxWidth().wardRowTile()) {
-                    EditorField(body, { body = it }, stringResource(R.string.editor_body), WardType.body,
-                        Modifier.fillMaxWidth().heightIn(min = IdeasLayout.bodyMinHeight.dp), well = false)
+                    EditorBodyField(bodyField, { bodyField = it }, stringResource(R.string.editor_body),
+                        Modifier.fillMaxWidth().heightIn(min = IdeasLayout.bodyMinHeight.dp).focusRequester(bodyFocus))
                 }
                 val suggestions = NoteEditing.suggestions(body, book.notes, id)
-                if (suggestions.isNotEmpty()) FlowRowOf(suggestions.map { it.title }) { name -> body = NoteEditing.complete(body, name) }
+                if (suggestions.isNotEmpty()) FlowRowOf(suggestions.map { it.title }) { name -> NoteEditing.complete(body, name).let { bodyField = TextFieldValue(it, TextRange(it.length)) } }
             }
             Text(stringResource(R.string.editor_hint), style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
+            // S06c: the older ideas that share a rare word with this one; a tap links it. Under the details'
+            // hint, which is about the field, and over the links, which it adds to
+            EchoesStrip(book, model.version, note, title, body, shapes)
 
             // the ideas this one links to, shown once there is one; "Link to an idea…" is offered once,
             // in the bar with Write / Read, never as a row here as well (S05's next step, item 8; as iOS)
@@ -218,6 +259,9 @@ const val EDITOR_LINK_TAG = "editor-link"
             WardTextButton(stringResource(R.string.editor_link_to), { save(); picking = true },
                 Modifier.semantics { testTag = EDITOR_LINK_TAG }, kind = WardButtonKind.compact, fills = false)
         }
+        // the app's banner ("Ideas joined.", Undo) over the bar, as the Sort screen has it over the Sort / Map
+        // switch and iOS's editor over its bar (IdeasView's Foot leaves it out while the editor is open)
+        notice()
         if (ax) Column(Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), horizontalAlignment = Alignment.CenterHorizontally) { bar(Modifier.fillMaxWidth()) }
         else Row(Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = bottom),
@@ -261,6 +305,21 @@ const val EDITOR_LINK_TAG = "editor-link"
         decorationBox = { inner ->
             Box(if (well) Modifier.fillMaxWidth().wardField() else Modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
                 if (value.isEmpty()) Text(label, style = type.textStyle(), color = wardDisabledInk())
+                inner()
+            }
+        })
+}
+
+/** The details as EditorField writes them, flat on their tile, holding the caret's place (S06a). */
+@Composable private fun EditorBodyField(value: TextFieldValue, onValue: (TextFieldValue) -> Unit, label: String, modifier: Modifier) {
+    BasicTextField(value, onValue,
+        modifier.heightIn(min = WardControlSize.target.wardDp).semantics { contentDescription = label },
+        textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
+        cursorBrush = SolidColor(wardColor(WardToken.primaryInk)),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
+                if (value.text.isEmpty()) Text(label, style = WardType.body.textStyle(), color = wardDisabledInk())
                 inner()
             }
         })
@@ -348,7 +407,7 @@ private fun inline(line: String, link: Color, openTitle: (String) -> Unit): Anno
 
 /** Link to an idea (NoteLinkPicker): every other idea, found by title; a tick joins or parts. [version] as FolderChooser's. */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun LinkPicker(book: IdeaBook, version: Int, id: String, onDone: () -> Unit) {
+@Composable internal fun LinkPicker(book: IdeaBook, version: Int, id: String, onDone: () -> Unit) {
     var query by remember { mutableStateOf("") }
     // read again whenever the book changes: the book is changed in place, so [version] is what moves
     val others = remember(book, version, id) { book.notes.filter { it.id != id }.sortedByDescending { it.updatedAt } }

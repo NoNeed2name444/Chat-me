@@ -14,6 +14,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sorta" />
             </intent-filter>
+            <!-- S06b: text shared to Sorta from another app (plugins plan idea 10): the share sheet keeps the words chosen as a new idea in To sort -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

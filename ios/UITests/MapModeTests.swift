@@ -14,6 +14,7 @@ final class MapModeTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     /// The look stored as 2D before launch, through the argument domain
@@ -182,19 +183,33 @@ enum MapText {
     static let emptyLine = "Add ideas in Sort, and they appear here."
     static let lookChip = "map-look"
     static let looks = ["look-space", "look-neuron", "look-2d", "look-performance"]
-    /// The switch's folded disc, as it is at the accessibility text sizes.
+    /// The switch's folded disc, as it is at the accessibility text sizes
+    /// and while capture holds the caret; the open strip's fold chevron
+    /// carries it too (SortaMode.toggleIdentifier).
     static let switchDisc = "modeSwitcherToggle"
 }
 
 extension XCUIApplication {
-    /// Taps the switch's segment `identifier`, opening the switch first when
-    /// it is folded (as it is while the keyboard is up).
+    /// Taps the switch's segment `identifier`, opening the switch from its
+    /// disc first when it is folded: while capture holds the caret
+    /// (IdeasFoot's `typing`, IdeasFiling.swift:79-90), as after every
+    /// captureIdea, and at the accessibility text sizes. Which one is on show
+    /// is read, not guessed from a short wait: the strip's fold chevron
+    /// carries the disc's identifier too, so a strip slow to show, found
+    /// after a 3 s wait for its segment, had its chevron tapped and was
+    /// folded away. Open, the segment and the chevron show together; folded,
+    /// only the disc does.
     func switchMode(to identifier: String, file: StaticString = #filePath, line: UInt = #line) {
         let segment = descendants(matching: .any)[identifier].firstMatch
-        if !segment.waitForExistence(timeout: 3) {
-            let toggle = descendants(matching: .any)["modeSwitcherToggle"].firstMatch
-            XCTAssertTrue(toggle.waitForExistence(timeout: 10), "the switch's folded disc", file: file, line: line)
-            toggle.tap()
+        let toggle = descendants(matching: .any)[MapText.switchDisc].firstMatch
+        let shown = NSPredicate { _, _ in segment.exists || toggle.exists }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: shown, object: nil)], timeout: 10),
+                       .completed, "the switch, open or folded", file: file, line: line)
+        if !segment.exists {
+            XCTAssertTrue(toggle.exists, "the switch's folded disc", file: file, line: line)
+            XCTContext.runActivity(named: "the switch is folded; open it from its disc") { _ in
+                toggle.tap()
+            }
         }
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the switch's \(identifier)", file: file, line: line)
         segment.tap()

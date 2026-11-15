@@ -72,6 +72,15 @@ nonisolated enum GraphPerfLOD {
         if focus == .elsewhere { a *= 0.15 }
         return min(a, 1)
     }
+
+    /// A name's alpha under Show links (S05j 7a): with a focus, a name
+    /// outside the focused body's own links dims to the links' 0.15; the
+    /// focused body's own name and its neighbours' stay whole, and every
+    /// name is whole with no focus. Points do not change.
+    static func nameAlpha(body: Int, focus: Int?, neighbours: ArraySlice<Int32>) -> Float {
+        guard let focus, body != focus else { return 1 }
+        return neighbours.contains(Int32(body)) ? 1 : 0.15
+    }
 }
 
 /// Which bodies carry a label: the nearest few on screen, always the

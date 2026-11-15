@@ -79,4 +79,43 @@ class LinkMemoryTest {
         LinkMemory.forget(2)
         assertNull(LinkMemory.recall(ids, first, true).fresh)
     }
+
+    /** S05h2: the scene on screen's departures, given the ids kept: here every id it had and the next lacks. */
+    private fun source(had: List<String>): (Set<String>) -> List<MapDeparture> = { keeping ->
+        had.filter { it !in keeping }.map { MapDeparture(it, had.indexOf(it), Vec3.ZERO, 1f, 1f, 1f, DeathKind.ROCKY, 0, 1, 0f, emptyList()) }
+    }
+
+    @Test fun aSceneOfTheSameKindIsHandedTheBodiesItLacks() {
+        LinkMemory.remember(1, ids, first, "universe", source(ids))
+        // leaf deleted
+        val left = listOf("seed", "root", "bud")
+        val recall = LinkMemory.recall(left, intArrayOf(0, 1), lively = true, key = "universe")
+        assertEquals(listOf("leaf"), recall.departures.map { it.id })
+        assertTrue("its links are not shrunk as gone links", recall.gone.isEmpty())
+    }
+
+    @Test fun noneAcrossTheUniverseAndASingleLookNorAfterForgetOrClear() {
+        val left = listOf("seed", "root", "bud")
+        LinkMemory.remember(1, ids, first, "universe", source(ids))
+        assertTrue(LinkMemory.recall(left, intArrayOf(0, 1), true, "look").departures.isEmpty())
+        assertTrue("no kind, no deaths", LinkMemory.recall(left, intArrayOf(0, 1), true, null).departures.isEmpty())
+        LinkMemory.forget(1)
+        assertTrue(LinkMemory.recall(left, intArrayOf(0, 1), true, "universe").departures.isEmpty())
+        LinkMemory.remember(2, ids, first, "look", source(ids))
+        LinkMemory.clear()
+        assertTrue(LinkMemory.recall(left, intArrayOf(0, 1), true, "look").departures.isEmpty())
+        // a later scene of another kind drops the source
+        LinkMemory.remember(3, ids, first, "look", source(ids))
+        LinkMemory.remember(4, ids, first)
+        assertTrue(LinkMemory.recall(left, intArrayOf(0, 1), true, "look").departures.isEmpty())
+    }
+
+    @Test fun departuresComeWithAnimationsOffToo() {
+        LinkMemory.remember(1, ids, first, "look", source(ids))
+        val recall = LinkMemory.recall(listOf("seed", "bud"), intArrayOf(0, 1), lively = false, key = "look")
+        assertEquals(listOf("root", "leaf"), recall.departures.map { it.id })
+        // and the links stay drawn whole, as before
+        assertNull(recall.fresh)
+        assertTrue(recall.gone.isEmpty())
+    }
 }

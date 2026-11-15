@@ -501,4 +501,36 @@ class SpaceStyleTest {
         assertTrue("a giant's ring only when ringed", SpaceShaders.fragment(SpaceStyle.GAS_GIANT).contains("rpRingedNow = abs(vMark.z - 8.0) < 0.5 ? 0.0 : rpRingedSet();")
             && SpaceShaders.gasBody.contains("#define rpRinged rpRingedNow"))
     }
+
+    @Test fun theSparkShaderIsIosSpark() {
+        // S05h2: GraphArt.spark (GraphLook.swift:437-444), computed: glow e^(−7 r²) at 0.7, core e^(−40 r²) at 0.3, additive
+        val fs = SpaceShaders.spark
+        assertTrue(fs.contains("float rp_r2 = dot(rp_q, rp_q);"))
+        assertTrue(fs.contains("exp(-rp_r2 * 7.0)") && fs.contains("exp(-rp_r2 * 40.0)"))
+        assertTrue(fs.contains("rp_glow * 0.7 + rp_core * 0.3"))
+        assertTrue("additive: no alpha", fs.contains("fragColor = vec4(vColour * (rp_glow * 0.7 + rp_core * 0.3), 0.0);"))
+        assertTrue("its size by its depth", SpaceShaders.sparkVertex.contains("gl_PointSize = clamp(px, 1.0, uMaxPoint);"))
+    }
+
+    @Test fun aDyingRockyBodyStretchesAlongItsTidalAxis() {
+        // S05h2: the planet's ray cast at an ellipsoid stretched vMark.w times along vB.xyz; round for a live body
+        val rocky = SpaceShaders.fragment(SpaceStyle.ROCKY)
+        assertTrue(rocky.contains("vec3 rp_tide = dot(vB.xyz, vB.xyz) > 0.25 ? normalize(vB.xyz) : vec3(0.0, 1.0, 0.0);"))
+        assertTrue(rocky.contains("float rp_k = max(vMark.w, 1.0);"))
+        assertTrue(rocky.contains("float t = rpEllipsoid(rd, c, R, rp_tide, rp_k, n, cover);"))
+        assertTrue("the normal scaled back", rocky.contains("n = normalize(pS + ax * (dot(pS, ax) * k));"))
+        // repair 8: the whole copy is stretched, as iOS scales its holder (GraphDeathScene.swift:228-249)
+        assertTrue("the moon's place stretched with it", rocky.contains("rp_mo = rp_mo + rp_tide * (dot(rp_mo, rp_tide) * (rp_k - 1.0));"))
+        assertTrue("the moon stretched with it", rocky.contains("float mt = rpEllipsoid(rd, c + rp_mo, R * 0.27, rp_tide, rp_k, mn, mcover);"))
+        assertFalse("no round moon is left", rocky.contains("rpSphere(rd, c + vA.xyz * r"))
+        assertTrue("the halo's plane squeezed back along the tide as seen",
+            rocky.contains("vec2 rp_ta = vec2(dot(rp_tide, uRight), dot(rp_tide, uUp));")
+                && rocky.contains("float rp_hs = sqrt(1.0 + (rp_k * rp_k - 1.0) * rp_ta2);")
+                && rocky.contains("rp_hq = rp_hq + rp_tu * (dot(rp_hq, rp_tu) * (1.0 / rp_hs - 1.0));"))
+        assertTrue("the halo drawn from the squeezed plane", rocky.contains("halo(rp_hq, rpSeen(vLight.xyz, c)"))
+        assertFalse("no round halo is left", rocky.contains("halo(rpPlane(c, R * 1.5)"))
+        assertTrue("its billboard grows with it", SpaceShaders.bodyVertex.contains("(uExtent * aCenter.w * max(aMark.w, 1.0))"))
+        // and SpaceBodies hands a live body none
+        for (style in SpaceStyle.entries) if (style != SpaceStyle.ROCKY) assertFalse(SpaceShaders.fragment(style).contains("rpEllipsoid(rd"))
+    }
 }

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.cramdown.sorta.ideas.MapLook
 import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ward.WardChecks
@@ -39,7 +40,9 @@ import java.io.File
 // drawn apart): on a phone and a closed foldable, Map mode with its switch; on a tablet and an
 // open foldable, the two panes, Sort beside the map. A7's font scale 2.0 on a phone takes the board
 // with the switch, the look chip's menu open, the list sheet and the stacked board
-// (mapmode_*_phone_scale2_light.png).
+// (mapmode_*_phone_scale2_light.png), by night too (S05m item 6). S05m item 5: on the phone and the
+// tablet, the stacked board with a finger resting on the boiler's card, its whole title over it
+// (mapmode_whole_title_*.png).
 // Each PNG is read back as SortRenderTest's are: the window's size, the page's colour as its ground
 // (under the sheet the scrim darkens it), and no pixel the logo's coral.
 @RunWith(RobolectricTestRunner::class)
@@ -52,17 +55,22 @@ class MapModeRenderTest {
     }
 
     /** A screen: its name in the file, whether its store is filled, and what is opened over the map. */
-    private enum class Over { NONE, LOOKS, LIST }
-    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE, val stacked: Boolean = false)
+    private enum class Over { NONE, LOOKS, LIST, PEEK }
+    private class Shot(val name: String, val filled: Boolean, val over: Over = Over.NONE, val stacked: Boolean = false,
+                       val straight: Boolean = false)
 
     // "stacked": the board with S05c's places (IdeasFixture.stacked), cards on one place and at (0, 0)
     private val shots = listOf(Shot("board", true), Shot("empty", false), Shot("looks", true, Over.LOOKS), Shot("list", true, Over.LIST),
-        Shot("stacked", true, stacked = true))
+        Shot("stacked", true, stacked = true),
+        // S05j item 5: the Board with Lines: Straight, beside iOS's 49-1-board-straight-lines
+        Shot("board_straight", true, straight = true),
+        // S05m item 5: a finger resting on the long title's card
+        Shot("whole_title", true, Over.PEEK, stacked = true))
 
     private var which by mutableIntStateOf(0)
 
     @OptIn(ExperimentalRoborazziApi::class)
-    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty", "stacked"), scale: Float = 1f) = checks {
+    private fun render(window: String, dark: Boolean, names: List<String> = listOf("board", "empty", "stacked", "board_straight"), scale: Float = 1f) = checks {
         val list = shots.filter { it.name in names }
         val models = list.map {
             IdeasModel.open(IdeasFixture.store(compose.activity.cacheDir, it.filled, if (it.stacked) IdeasFixture.stacked else IdeasFixture.notes))
@@ -77,12 +85,14 @@ class MapModeRenderTest {
             }
         }
         for (i in list.indices) {
-            which = i
             val shot = list[i]
+            IdeasSettings(compose.activity).setStraightLines(shot.straight)
+            which = i
             val name = "mapmode_${shot.name}_${window}_${if (dark) "dark" else "light"}"
             open(this, name, shot)
             val file = File("build/outputs/roborazzi/$name.png")
             captureScreenRoboImage(file.path)
+            if (shot.over == Over.PEEK) lift()
             look(this, name, file, dark, shot.over == Over.LIST)
         }
     }
@@ -110,6 +120,15 @@ class MapModeRenderTest {
         when (shot.over) {
             Over.LOOKS -> compose.onNode(hasTestTag(MapLook.CHIP)).performClick()
             Over.LIST -> compose.onNode(hasTestTag(MapTags.LIST_CHIP)).performClick()
+            Over.PEEK -> {
+                // a finger down and resting, the clock held short of the hold that starts a connection
+                compose.mainClock.autoAdvance = false
+                boiler().performTouchInput { down(center) }
+                compose.mainClock.advanceTimeByFrame()
+                compose.mainClock.advanceTimeByFrame()
+                c.check("$name: the whole title over the card", shown(BOARD_PEEK_TAG))
+                return
+            }
             Over.NONE -> {}
         }
         compose.waitForIdle()
@@ -122,6 +141,15 @@ class MapModeRenderTest {
             Over.NONE -> c.check("$name: ${if (paned) "two panes, Sort beside the map" else "the switch is there"}",
                 if (paned) shown(IdeasTags.CAPTURE) else shown(SortaMode.SORT.identifier) || shown(SortaMode.TOGGLE))
         }
+    }
+
+    private fun boiler() = compose.onNode(hasTestTag(BOARD_CARD_TAG) and hasContentDescription(IdeasFixture.boiler.title, substring = true))
+
+    /** The resting finger lifted, the clock running again. */
+    private fun lift() {
+        boiler().performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
     }
 
     private fun look(c: WardChecks, name: String, file: File, dark: Boolean, scrim: Boolean) {
@@ -145,16 +173,16 @@ class MapModeRenderTest {
     private fun luma(x: Int): Int = ((x shr 16) and 0xFF) * 299 + ((x shr 8) and 0xFF) * 587 + (x and 0xFF) * 114
 
     @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
-    @Test fun phoneLight() = render("phone", dark = false)
+    @Test fun phoneLight() = render("phone", dark = false, names = listOf("board", "empty", "stacked", "board_straight", "whole_title"))
 
     @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-night-xxhdpi")
-    @Test fun phoneDark() = render("phone", dark = true)
+    @Test fun phoneDark() = render("phone", dark = true, names = listOf("board", "empty", "stacked", "board_straight", "whole_title"))
 
     @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-notnight-xhdpi")
-    @Test fun tabletLight() = render("tablet", dark = false)
+    @Test fun tabletLight() = render("tablet", dark = false, names = listOf("board", "empty", "stacked", "board_straight", "whole_title"))
 
     @Config(sdk = [35], qualifiers = "w1280dp-h800dp-land-night-xhdpi")
-    @Test fun tabletDark() = render("tablet", dark = true)
+    @Test fun tabletDark() = render("tablet", dark = true, names = listOf("board", "empty", "stacked", "board_straight", "whole_title"))
 
     // a book-style foldable: closed, its outer screen; open, its inner screen (as SortRenderTest)
     @Config(sdk = [35], qualifiers = "w360dp-h748dp-port-notnight-xxhdpi")
@@ -172,6 +200,10 @@ class MapModeRenderTest {
     // A7: font scale 2.0 on a phone: the switch (on the board), the look menu open, the list sheet
     @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-notnight-xxhdpi")
     @Test fun phoneAtFontScaleTwo() = render("phone_scale2", dark = false, names = listOf("board", "looks", "list", "stacked"), scale = 2f)
+
+    // S05m item 6: the same by night
+    @Config(sdk = [35], qualifiers = "w411dp-h914dp-port-night-xxhdpi")
+    @Test fun phoneAtFontScaleTwoDark() = render("phone_scale2", dark = true, names = listOf("board", "looks", "list", "stacked"), scale = 2f)
 
     private companion object {
         /** The logo's coral (work/T0137: the light icon's fill). */

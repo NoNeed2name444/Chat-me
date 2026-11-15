@@ -280,4 +280,12 @@ class MapNameShowTest {
         assertEquals("28 code points, 29 chars, kept whole", whole, MapNameShow.cut(whole))
         assertFalse("no lone surrogate", MapNameShow.cut("a".repeat(26) + seedling.repeat(3)).let { it.isNotEmpty() && Character.isHighSurrogate(it[it.length - 2]) })
     }
+
+    // S05j 6c: a folder's name is counted and cut by code point too: an emoji across the 20th place stays whole
+    @Test fun aFoldersEmojiAcrossTheCutStaysWhole() {
+        val seedling = "🌱"
+        assertEquals("a".repeat(19) + seedling + "… · 2 ideas", UniverseTree.folderLabel("a".repeat(19) + seedling + seedling + "x", 2))
+        val whole = "a".repeat(19) + seedling
+        assertEquals("20 code points, 21 chars, kept whole", "$whole · 1 idea", UniverseTree.folderLabel(whole, 1))
+    }
 }

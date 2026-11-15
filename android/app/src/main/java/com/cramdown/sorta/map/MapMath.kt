@@ -1,5 +1,6 @@
 package com.cramdown.sorta.map
 
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.cos
@@ -95,7 +96,10 @@ class Frustum(viewProj: FloatArray) {
 /**
  * An orbit camera: it looks at [target] from [distance] along yaw and pitch. Its velocity
  * (world units a second, of the eye) feeds the guard band, so chunks ahead of a pan are
- * prepared before they reach the screen.
+ * prepared before they reach the screen. [roll] turns its whole frame (where the eye sits, where
+ * it looks, the screen's right and up) about the world's z through the target: a wide window's
+ * first view takes a quarter turn, so the map's long spread (its y) runs across, as iOS's
+ * worldTurn (Graph3DView.swift:2271-2274) turns the world the other way (S05j item 3).
  */
 class OrbitCamera(
     var target: Vec3 = Vec3.ZERO,
@@ -103,18 +107,21 @@ class OrbitCamera(
     var yaw: Float = 0.6f,
     var pitch: Float = 0.35f,
     val fovY: Float = (50.0 * Math.PI / 180).toFloat(),
+    var roll: Float = 0f,
 ) {
     var minDistance = 0.05f
     var maxDistance = 1e6f
 
     fun eye(): Vec3 {
-        val cp = cos(pitch); return target + Vec3(cp * sin(yaw), sin(pitch), cp * cos(yaw)) * distance
+        val cp = cos(pitch); return target + turned(Vec3(cp * sin(yaw), sin(pitch), cp * cos(yaw))) * distance
     }
 
     /** Where it looks (eye to target), unit length; the screen's right and up in the world. */
-    fun forward(): Vec3 { val cp = cos(pitch); return Vec3(-cp * sin(yaw), -sin(pitch), -cp * cos(yaw)) }
-    fun right(): Vec3 = Vec3(cos(yaw), 0f, -sin(yaw))
+    fun forward(): Vec3 { val cp = cos(pitch); return turned(Vec3(-cp * sin(yaw), -sin(pitch), -cp * cos(yaw))) }
+    fun right(): Vec3 = turned(Vec3(cos(yaw), 0f, -sin(yaw)))
     fun up(): Vec3 = right().cross(forward())
+
+    private fun turned(v: Vec3): Vec3 = if (roll == 0f) v else MapFirstView.rotZ(roll, v)
 
     /** Its view volume for a screen this shape (SpaceDepth's culling). */
     fun frustum(width: Float, height: Float, near: Float = near(), far: Float = far()): ViewFrustum =
@@ -128,17 +135,16 @@ class OrbitCamera(
 
     /** Moves the target in the screen plane by a fraction of the view height. */
     fun pan(dxFraction: Float, dyFraction: Float) {
-        val eye = eye()
-        val forward = (target - eye).normalized()
-        val right = forward.cross(Vec3(0f, 1f, 0f)).normalized()
-        val up = right.cross(forward)
+        // the screen's own right and up, so a rolled camera slides as the finger does
+        val right = right()
+        val up = up()
         val worldPerScreen = 2 * distance * tan(fovY / 2)
         target = target + right * (-dxFraction * worldPerScreen) + up * (dyFraction * worldPerScreen)
     }
 
     fun near() = max(distance * 0.002f, 1e-4f)
     fun far() = distance * 4f + 1e4f
-    fun view() = Mat4.lookAt(eye(), target)
+    fun view() = if (roll == 0f) Mat4.lookAt(eye(), target) else Mat4.lookAt(eye(), target, up())
     fun projection(aspect: Float) = Mat4.perspective(fovY, aspect, near(), far())
 
     /**
@@ -198,6 +204,26 @@ class OrbitCamera(
         val up = (insets.bottom - insets.top) / 2
         val target = centre - (right() * across + up() * up) * (distance / focal)
         return MapFit(distance, target)
+    }
+
+    /**
+     * iOS's GraphPerfCamera.framing (GraphPerfCamera.swift:232-250), as Performance flies to a folder's
+     * ball and the tour frames its hub (S05i2): the ball of [radius] round [centre], from this camera's
+     * yaw and pitch, its silhouette filling [fill] of the narrower side of the window the [insets] leave
+     * on a [width] x [height] view (pixels), its centre in that window's middle.
+     */
+    fun framing(centre: Vec3, radius: Float, width: Float, height: Float, insets: MapInsets = MapInsets.NONE,
+                fill: Float = 0.9f): MapFit {
+        val w = max(width - insets.left - insets.right, 1f)
+        val h = max(height - insets.top - insets.bottom, 1f)
+        val f = focalPixels(height)
+        val half = max(min(w, h) / 2 * fill, 1f)
+        // the ball's silhouette at distance D has half-width R f / sqrt(D² − R²)
+        val ratio = f / half
+        val distance = max(radius, 1e-3f) * sqrt(1 + ratio * ratio)
+        val ox = (insets.left + w / 2) - width / 2
+        val oy = height / 2 - (insets.top + h / 2)
+        return MapFit(distance, centre - (right() * ox + up() * oy) * (distance / f))
     }
 }
 
@@ -339,6 +365,140 @@ object MapCardCover {
 
 /** A first view ([OrbitCamera.fitWindow]): how far back the camera stands, and what it looks at. */
 data class MapFit(val distance: Float, val target: Vec3)
+
+/** A whole camera pose: a first view ([MapFirstView]) that Recentre and the double tap go back to. */
+data class MapPose(val target: Vec3, val distance: Float, val yaw: Float, val pitch: Float, val roll: Float = 0f) {
+    fun applyTo(camera: OrbitCamera) {
+        camera.target = target; camera.distance = distance; camera.yaw = yaw; camera.pitch = pitch; camera.roll = roll
+    }
+
+    fun isAt(camera: OrbitCamera) = camera.target == target && camera.distance == distance && camera.yaw == yaw &&
+        camera.pitch == pitch && camera.roll == roll
+}
+
+/**
+ * Android's first view takes iOS's camera and fit (S05j item 3). Space and Neurons: a 55 degree field,
+ * yaw 0 and GraphTilt's pitch (45 and 35 degrees; Android's camera looks down from +y, so iOS's tilt
+ * is [OrbitCamera.pitch]'s negative), the map turned a quarter on a wide window ([roll]), fitted by
+ * GraphTilt.fit on the plan's envelope with a pad of [PAD] at GraphFit.of's fill and depth, aimed
+ * at the box's middle (Graph3DView.frame, Graph3DView.swift:2295-2330). Performance: a 60 degree
+ * field, yaw 0.55 and pitch 0.32, fitted by GraphPerfCamera.framing on the bodies with 0.6 of the
+ * spacing round each, or on the ball for a map too big to look at body by body, at 0.9
+ * (GraphPerfCamera.swift:192-248; GraphPerfMapView.swift:455-470).
+ */
+object MapFirstView {
+    private const val FPI = PI.toFloat()
+    /** Space's and Neurons' field (GraphTilt.fieldOfView, GraphTilt.swift:116), degrees. */
+    const val TILTED_FIELD_DEGREES = 55f
+    /** Performance's (GraphPerfCamera.swift:85). */
+    const val FAST_FIELD_DEGREES = 60f
+    const val FAST_YAW = 0.55f
+    const val FAST_PITCH = 0.32f
+    const val FAST_FILL = 0.9f
+    /** Room round each body, as a share of the spacing (GraphPerfMapView.swift:466). */
+    const val FAST_MARGIN = 0.6f
+    /** Up to this many bodies are framed one by one (GraphPerfLabelSpots.limit). */
+    const val FAST_LIMIT = 2000
+    /** The pad round each envelope point (GraphThemeScene.swift:299; GraphUniverseScene.swift:233). */
+    const val PAD = 0.3f
+
+    fun radians(degrees: Float) = degrees * FPI / 180f
+
+    /** `v` turned by [angle] about z. */
+    fun rotZ(angle: Float, v: Vec3): Vec3 {
+        val c = cos(angle)
+        val s = sin(angle)
+        return Vec3(v.x * c - v.y * s, v.x * s + v.y * c, v.z)
+    }
+
+    /** The quarter turn on a wide window (iOS's worldTurn, the other way round), else none. */
+    fun roll(width: Float, height: Float): Float = if (width > height) FPI / 2 else 0f
+
+    /** The middle of the points' box (GraphMapBounds.centre); the origin for none. */
+    fun boxMiddle(points: List<Vec3>): Vec3 {
+        if (points.isEmpty()) return Vec3.ZERO
+        var lx = Float.POSITIVE_INFINITY; var ly = lx; var lz = lx
+        var hx = Float.NEGATIVE_INFINITY; var hy = hx; var hz = hx
+        for (p in points) {
+            lx = min(lx, p.x); ly = min(ly, p.y); lz = min(lz, p.z)
+            hx = max(hx, p.x); hy = max(hy, p.y); hz = max(hz, p.z)
+        }
+        return Vec3((lx + hx) / 2, (ly + hy) / 2, (lz + hz) / 2)
+    }
+
+    /**
+     * Space's and Neurons' first view of [points] (each with [pad] round it) in a [width] x [height] view
+     * under [insets], looking down at [pitch] with a [fieldDegrees] field: [fill] of the window, the
+     * points' depth counted at [depth] (GraphFit).
+     */
+    fun tilted(points: List<Vec3>, pad: Float, fill: Float, depth: Float, pitch: Float, width: Float, height: Float,
+               insets: MapInsets = MapInsets.NONE, fieldDegrees: Float = TILTED_FIELD_DEGREES): MapPose {
+        val roll = roll(width, height)
+        val turned = if (roll == 0f) points else points.map { rotZ(-roll, it) }
+        val middle = boxMiddle(turned)
+        val counted = turned.map { Vec3(it.x - middle.x, it.y - middle.y, (it.z - middle.z) * depth) }
+        val window = GraphTilt.window(width, height, insets.top, insets.left, insets.bottom, insets.right)
+        val fit = GraphTilt.fit(counted, List(counted.size) { pad }, window, fill, -pitch, fieldDegrees)
+        val aim = middle + GraphTilt.rotX(-pitch, Vec3(fit.shiftX, fit.shiftY, 0f))
+        return MapPose(if (roll == 0f) aim else rotZ(roll, aim), fit.distance, 0f, pitch, roll)
+    }
+
+    /**
+     * Performance's first view (GraphPerfCamera.framing on points): every one of [points], with [margin]
+     * round each, fills [fill] of the window under [insets] on whichever side they reach first, seen
+     * from [yaw] and [pitch] with a [fieldDegrees] field. Null for no points.
+     */
+    fun framing(points: List<Vec3>, margin: Float, width: Float, height: Float, insets: MapInsets = MapInsets.NONE,
+                fill: Float = FAST_FILL, yaw: Float = FAST_YAW, pitch: Float = FAST_PITCH,
+                fieldDegrees: Float = FAST_FIELD_DEGREES): MapPose? {
+        if (points.isEmpty()) return null
+        val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = radians(fieldDegrees))
+        val r = lens.right(); val u = lens.up(); val b = lens.forward() * -1f
+        var lo = Vec3(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+        var hi = Vec3(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY)
+        for (p in points) {
+            val q = Vec3(p.dot(r), p.dot(u), p.dot(b))
+            lo = Vec3(min(lo.x, q.x), min(lo.y, q.y), min(lo.z, q.z))
+            hi = Vec3(max(hi.x, q.x), max(hi.y, q.y), max(hi.z, q.z))
+        }
+        val mid = (lo + hi) * 0.5f
+        val w = max(width - insets.left - insets.right, 1f)
+        val h = max(height - insets.top - insets.bottom, 1f)
+        val f = lens.focalPixels(height)
+        val halfW = max(w / 2 * fill, 1f)
+        val halfH = max(h / 2 * fill, 1f)
+        val m = max(margin, 0f)
+        // a point at x across and z towards the eye fits while |x| + m <= (D - z) halfW / f
+        var distance = m + 1e-3f
+        for (p in points) {
+            val x = p.dot(r) - mid.x
+            val y = p.dot(u) - mid.y
+            val z = p.dot(b) - mid.z
+            distance = max(distance, max(z + m + (abs(x) + m) * f / halfW, z + m + (abs(y) + m) * f / halfH))
+        }
+        val centre = r * mid.x + u * mid.y + b * mid.z
+        val ox = (insets.left + w / 2) - width / 2
+        val oy = height / 2 - (insets.top + h / 2)
+        return MapPose(centre - (r * ox + u * oy) * (distance / f), distance, yaw, pitch)
+    }
+
+    /** Performance's first view of a ball of [radius] round [centre] (GraphPerfCamera.framing on a ball). */
+    fun framing(centre: Vec3, radius: Float, width: Float, height: Float, insets: MapInsets = MapInsets.NONE,
+                fill: Float = FAST_FILL, yaw: Float = FAST_YAW, pitch: Float = FAST_PITCH,
+                fieldDegrees: Float = FAST_FIELD_DEGREES): MapPose {
+        val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = radians(fieldDegrees))
+        val w = max(width - insets.left - insets.right, 1f)
+        val h = max(height - insets.top - insets.bottom, 1f)
+        val f = lens.focalPixels(height)
+        val half = max(min(w, h) / 2 * fill, 1f)
+        // the ball's silhouette at distance D has half-width R f / sqrt(D^2 - R^2)
+        val ratio = f / half
+        val distance = max(radius, 1e-3f) * sqrt(1 + ratio * ratio)
+        val ox = (insets.left + w / 2) - width / 2
+        val oy = height / 2 - (insets.top + h / 2)
+        return MapPose(centre - (lens.right() * ox + lens.up() * oy) * (distance / f), distance, yaw, pitch)
+    }
+}
 
 /**
  * Fly in to a Universe folder's system (S05h; iOS's fly(to:), Graph3DView.swift:2363-2420, the
@@ -484,6 +644,20 @@ object LabelRoom {
         val side = pixels / 2 + beside + width / 2
         return listOf(LabelBox(x, y + below, width, height), LabelBox(x, y - below, width, height),
             LabelBox(x + side, y, width, height), LabelBox(x - side, y, width, height))
+    }
+
+    /**
+     * [box] kept inside a view [viewWidth] across, [edge] in from either side, as iOS's
+     * GraphPerfLabelRoom.box (GraphPerfLOD.swift:200-204): a name under or above its body ([slides])
+     * slides along its row until it is inside, at the view's middle when it is wider than the room; one
+     * beside its body that would leave the view is null, as sliding it would lay it on its own body.
+     */
+    fun inView(box: LabelBox, viewWidth: Float, edge: Float, slides: Boolean): LabelBox? {
+        val lo = edge + box.width / 2
+        val hi = viewWidth - edge - box.width / 2
+        if (box.x in lo..hi) return box
+        if (!slides) return null
+        return box.copy(x = if (lo > hi) viewWidth / 2 else box.x.coerceIn(lo, hi))
     }
 
     /**

@@ -12,17 +12,28 @@
 # 40718963474 the iPad booted beside the running iPhone, in 6 minutes the
 # first time and in 11 the second.
 #
-#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad [kit|maps|ideas]
+#   UDID=<simulator> bash ../tools/run_ui_tests.sh iphone|ipad [kit|maps|ideas|frames]
 #
 # kit (the default): the launch tests, the look kit's gallery and the maps'
 # renders, by day and by night, and the unit tests. maps: each of the maps'
-# tests (GraphPreviewUITests), one at a time; the maps are always night.
+# tests (GraphPreviewUITests), one at a time; the maps are always night;
+# then the frame tests (FramePerfUITests, the whole class, perf, 15 Nov),
+# whose "SortaFrames" lines show in the log. frames: the frame tests alone.
 # ideas (S05, S05b): on the iPhone, the Ideas screens' behaviour tests
 # (IdeasBehaviourTests and MapModeTests, each whole class in one run), the
 # Sort screen's and Map mode's renders by day and by night (IdeasRenderTests,
 # MapModeRenderTests), Map mode's legends read for the controls they name
 # (S05f), and each one's largest text size; on the iPad, the two sets of
-# renders by day and by night and the legends. A whole class passes only when
+# renders by day and by night and the legends; S06b's renders on the iPhone
+# by day and by night (SkyIdeasRenderTests), and its moons on the iPad
+# (testMoonsKeepTheMapInSight). S06c adds ideas like this,
+# Split, Join and Collide: their behaviour tests on the iPhone
+# (IdeaShapesUITests, the whole class) and their renders on both, by day
+# and by night, the drop target's by night only (the 3D map is always night).
+# On both, the lenses' and the capsule offer's renders by day and by night
+# (LensCapsuleRenderTests, S06d) and Not now once. On the iPad, the map in
+# VoiceOver's reach beside the open editor, and the list behind it not
+# (PanedVoiceOverTests, 5dfed33). A whole class passes only when
 # every test in its file passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
@@ -113,18 +124,46 @@ case "$set_" in
     # the depth tests take a still at each of many poses, so a map test may
     # take longer than a kit test; none was timed in Stethoscore's runs
     allowance=900
-    echo "$kind: ${#runs[@]} map tests" ;;
+    echo "$kind: ${#runs[@]} map tests"
+    # the frames each screen draws, timed (perf, 15 Nov)
+    runs+=(dark:SortaUITests/FramePerfUITests) ;;
+  frames)
+    runs=(dark:SortaUITests/FramePerfUITests)
+    allowance=900 ;;
   ideas)
     runs=(light:SortaUITests/IdeasRenderTests/testScreensRender
           dark:SortaUITests/IdeasRenderTests/testScreensRender
           light:SortaUITests/MapModeRenderTests/testMapRenders
           dark:SortaUITests/MapModeRenderTests/testMapRenders
-          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls)
+          light:SortaUITests/MapModeRenderTests/testLegendsNameSortasControls
+          light:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard
+          dark:SortaUITests/MapModeRenderTests/testWholeTitleOnTheBoard
+          light:SortaUITests/IdeaShapesRenderTests/testShapesRender
+          dark:SortaUITests/IdeaShapesRenderTests/testShapesRender
+          dark:SortaUITests/IdeaShapesRenderTests/testDropTargetRenders
+          light:SortaUITests/LensCapsuleRenderTests/testLensesRender
+          dark:SortaUITests/LensCapsuleRenderTests/testLensesRender
+          light:SortaUITests/LensCapsuleRenderTests/testCapsuleOfferRenders
+          dark:SortaUITests/LensCapsuleRenderTests/testCapsuleOfferRenders
+          light:SortaUITests/LensCapsuleRenderTests/testNotNowPutsTheOfferAway)
     if [ "$kind" = "iphone" ]; then
-      runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests "${runs[@]}"
+      # the largest text size by night too: the look menu's surface (S05m)
+      runs=(light:SortaUITests/IdeasBehaviourTests light:SortaUITests/MapModeTests
+            light:SortaUITests/IdeaShapesUITests "${runs[@]}"
             light:SortaUITests/IdeasRenderTests/testLargestTextSize
-            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap)
+            light:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap
+            dark:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap
+            light:SortaUITests/SkyIdeasRenderTests
+            dark:SortaUITests/SkyIdeasRenderTests)
+    else
+      # the moons and a lit day on the iPad too, the map in sight below them
+      runs+=(light:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
+             dark:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
+             light:SortaUITests/PanedVoiceOverTests/testBesideTheEditorTheMapIsReachedAndTheListIsNot)
     fi
+    # S06a: the deck, the offer, the tide and the frost, last, as it leaves
+    # the map on its 2D look
+    runs+=(light:SortaUITests/DeckRenderTests dark:SortaUITests/DeckRenderTests)
     # one test, or one launch of the whole class's: each test starts the
     # app afresh, and the longest relaunches it once
     allowance=300 ;;
@@ -152,7 +191,7 @@ for run in "${runs[@]}"; do
     -default-test-execution-time-allowance "$allowance" \
     -maximum-test-execution-time-allowance "$allowance" \
     CODE_SIGNING_ALLOWED=NO \
-    test-without-building 2>&1 | tee "$log" | grep --line-buffered -E "error:|Test [Cc]ase|TEST |\*\* " || true
+    test-without-building 2>&1 | tee "$log" | grep --line-buffered -E "error:|Test [Cc]ase|TEST |\*\* |SortaFrames " || true
   if [ "$only" = "$test" ]; then
     # a whole bundle: every case passed, and none failed
     passed_by_name=$(grep -cE "Test [Cc]ase .*passed" "$log" || true)

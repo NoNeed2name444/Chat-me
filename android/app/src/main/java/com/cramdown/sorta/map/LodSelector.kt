@@ -192,13 +192,21 @@ class LodSelector(val tree: Octree, val cache: ChunkCache?) {
      */
     var focus: IntArray? = null
 
+    /**
+     * Under a filter (S05i), the nodes and links it lets through: a summary or bundle holding none is
+     * not drawn, and one holding some is as bright as those alone. Null draws every one whole.
+     */
+    var filter: FilterSlice? = null
+
     private fun emitSummary(cell: Int, pixels: Float, scale: Float, x: Float, y: Float, z: Float) {
         val diameter = (pixels * 1.1f).coerceIn(2.5f, 120f) * scale
         if (diameter < 0.4f) return
+        val held = filter?.cellCount?.get(cell) ?: tree.count[cell]
+        if (held <= 0) return
         val near = focus
         val faded = near != null && !MapFocus.holdsAny(near, tree.start[cell], tree.end[cell])
         if (faded) plan.fadedSummaries++
-        val brightness = (0.35f + 0.65f * ln(1f + tree.count[cell]) / max(logMax, 1e-3f)) * (if (faded) MapMark.FADED else 1f)
+        val brightness = (0.35f + 0.65f * ln(1f + held) / max(logMax, 1e-3f)) * (if (faded) MapMark.FADED else 1f)
         // the mean of many topics drifts to grey, so its hue is pushed back out: the mix still decides the colour
         val r = tree.colorR[cell]; val g = tree.colorG[cell]; val b = tree.colorB[cell]
         val lum = 0.3f * r + 0.59f * g + 0.11f * b
@@ -215,8 +223,9 @@ class LodSelector(val tree: Octree, val cache: ChunkCache?) {
     /** One bundle per pair of drawn chunks, from the leaf-pair link counts. */
     private fun buildBundles() {
         pairs.clear()
-        val a = tree.bundleA; val b = tree.bundleB; val counts = tree.bundleCount
+        val a = tree.bundleA; val b = tree.bundleB; val counts = filter?.bundleCount ?: tree.bundleCount
         for (i in a.indices) {
+            if (counts[i] <= 0) continue
             val la = a[i]; val lb = b[i]
             val ra = rep[la]; val rb = rep[lb]
             if (ra == rb) continue
@@ -237,6 +246,38 @@ class LodSelector(val tree: Octree, val cache: ChunkCache?) {
                 (tree.colorR[ra] + tree.colorR[rb]) * glow, (tree.colorG[ra] + tree.colorG[rb]) * glow, (tree.colorB[ra] + tree.colorB[rb]) * glow,
             )
             plan.bundleCount++
+        }
+    }
+}
+
+/**
+ * What a filter leaves of each octree cell and bundle (S05i): [cellCount] the shown nodes in each cell,
+ * [bundleCount] the links between each bundle's two chunks with both ends shown.
+ */
+class FilterSlice(val cellCount: IntArray, val bundleCount: IntArray) {
+    companion object {
+        /** The slice of [tree] for [shown], by chunk-order node. */
+        fun of(tree: Octree, shown: BooleanArray): FilterSlice {
+            val before = IntArray(tree.nodeCount + 1)
+            for (k in 0 until tree.nodeCount) before[k + 1] = before[k] + if (k < shown.size && shown[k]) 1 else 0
+            val cells = IntArray(tree.cellCount) { c -> before[tree.end[c]] - before[tree.start[c]] }
+            val index = HashMap<Long, Int>(tree.bundleA.size * 2)
+            for (i in tree.bundleA.indices) index[Octree.pairKey(tree.bundleA[i], tree.bundleB[i])] = i
+            val bundles = IntArray(tree.bundleA.size)
+            for (leaf in 0 until tree.leafCount) {
+                var e = tree.leafEdgeStart[leaf]
+                val end = tree.leafEdgeStart[leaf + 1]
+                while (e + 1 < end) {
+                    val u = tree.leafEdges[e]; val v = tree.leafEdges[e + 1]
+                    e += 2
+                    val lu = tree.leafOfNode[u]; val lv = tree.leafOfNode[v]
+                    // a link between two chunks is listed in both: counted once, from its first end's
+                    if (lu == lv || lu != leaf) continue
+                    if (u >= shown.size || v >= shown.size || !shown[u] || !shown[v]) continue
+                    index[Octree.pairKey(min(lu, lv), max(lu, lv))]?.let { bundles[it]++ }
+                }
+            }
+            return FilterSlice(cells, bundles)
         }
     }
 }

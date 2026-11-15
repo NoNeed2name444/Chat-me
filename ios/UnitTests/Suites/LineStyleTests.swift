@@ -309,6 +309,98 @@ check("L6 a tall card at the foot is fitted by its own size, clear of the foot",
       && IdeaBoardFit.camera(centres: spread, card: card, view: phone, hidden: 220, margins: room,
                              sizes: spread.map { _ in card }) == wide, "\(fitTall)")
 
+// S05m item 1: the first view on four windows and the two panes, on the
+// stacked fixture's spread and on four cards apart. The box fills at least
+// 85 % of the room (16 in from each edge, below the strip) along the side
+// that binds, or the zoom is 1; no card is under the tools; every card is in
+// the room and at least a target tall; never zoomed in past 1.
+struct FitWindow {
+    var name: String
+    var view: CGSize
+    var hidden: Double
+    var top: Double
+    var tools: IdeaBoardFit.Tools
+    var target: Double
+}
+let fitWindows: [FitWindow] = [
+    FitWindow(name: "Android phone", view: CGSize(width: 411, height: 914), hidden: 82, top: 56,
+              tools: IdeaBoardFit.Tools(width: 80, height: 208, centred: false), target: 48),
+    FitWindow(name: "Android tablet", view: CGSize(width: 1280, height: 800), hidden: 0, top: 56,
+              tools: IdeaBoardFit.Tools(width: 80, height: 208, centred: true), target: 48),
+    FitWindow(name: "Android tablet's map pane", view: CGSize(width: 768, height: 800), hidden: 0, top: 56,
+              tools: IdeaBoardFit.Tools(width: 80, height: 208, centred: true), target: 48),
+    FitWindow(name: "iPhone", view: CGSize(width: 402, height: 874), hidden: 94, top: 60,
+              tools: IdeaBoardFit.Tools(width: 76, height: 196, centred: false), target: 44),
+    FitWindow(name: "iPad", view: CGSize(width: 1032, height: 1376), hidden: 20, top: 60,
+              tools: IdeaBoardFit.Tools(width: 76, height: 196, centred: false), target: 44),
+    FitWindow(name: "iPad's map pane", view: CGSize(width: 619, height: 1300), hidden: 20, top: 60,
+              tools: IdeaBoardFit.Tools(width: 76, height: 196, centred: false), target: 44),
+]
+func fitCard(_ n: Int, _ x: Double, _ y: Double, w: Double = 150) -> IdeaBoardSpread.Card {
+    IdeaBoardSpread.Card(id: UUID(uuidString: String(format: "00000000-0000-0000-0001-%012d", n))!,
+                         centre: CGPoint(x: x, y: y), size: CGSize(width: w, height: 88))
+}
+// the stacked fixture as both platforms store it (MadeUpExport stacked, IdeasFixture.stacked)
+let fitStacked: [IdeaBoardSpread.Card] = [fitCard(1, 120, -40, w: 180), fitCard(2, 0, 0, w: 180), fitCard(3, -75.5, 210.25, w: 180),
+                                          fitCard(4, 0, 33, w: 180), fitCard(5, 0, 0, w: 180), fitCard(6, 0, 0, w: 180),
+                                          fitCard(7, 0, -230, w: 180)]
+let fitFour: [IdeaBoardSpread.Card] = [fitCard(1, -330, -120), fitCard(2, 360, 40), fitCard(3, 10, 300), fitCard(4, -40, -260)]
+let fitLeastCard = CGSize(width: 150, height: 88)
+for w in fitWindows {
+    for (name, cards) in [("stacked", fitStacked), ("four apart", fitFour)] {
+        let at = IdeaBoardSpread.places(cards)
+        let centres: [CGPoint] = cards.map { at[$0.id]! }
+        let sizes: [CGSize] = cards.map(\.size)
+        let cam = IdeaBoardFit.firstView(centres: centres, sizes: sizes, card: fitLeastCard, view: w.view, hidden: w.hidden,
+                                         top: w.top, tools: w.tools, target: w.target)
+        let seen: Double = Double(w.view.height) - w.hidden
+        let roomW: Double = Double(w.view.width) - 32, roomH: Double = seen - w.top - 32
+        let lefts = cards.indices.map { Double(centres[$0].x) - Double(sizes[$0].width) / 2 }
+        let rights = cards.indices.map { Double(centres[$0].x) + Double(sizes[$0].width) / 2 }
+        let tops = cards.indices.map { Double(centres[$0].y) - Double(sizes[$0].height) / 2 }
+        let bottoms = cards.indices.map { Double(centres[$0].y) + Double(sizes[$0].height) / 2 }
+        let spanW: Double = rights.max()! - lefts.min()!, spanH: Double = bottoms.max()! - tops.min()!
+        let fill: Double = max(spanW * cam.zoom / roomW, spanH * cam.zoom / roomH)
+        let tools = IdeaBoardFit.toolsRect(view: w.view, hidden: w.hidden, tools: w.tools)
+        var under = false, outside = false
+        for k in cards.indices {
+            let x: Double = Double(w.view.width) / 2 + cam.panX + Double(centres[k].x) * cam.zoom
+            let y: Double = seen / 2 + cam.panY + Double(centres[k].y) * cam.zoom
+            let hw: Double = Double(sizes[k].width) * cam.zoom / 2, hh: Double = Double(sizes[k].height) * cam.zoom / 2
+            if x + hw > Double(tools.minX) && x - hw < Double(tools.maxX) && y + hh > Double(tools.minY) && y - hh < Double(tools.maxY) { under = true }
+            if x - hw < 16 - 1e-6 || x + hw > Double(w.view.width) - 16 + 1e-6 || y - hh < 16 + w.top - 1e-6 || y + hh > seen - 16 + 1e-6 { outside = true }
+        }
+        let label = "\(w.name), \(name): zoom \(cam.zoom), fill \(fill)"
+        // a board too wide for the room at the floor opens on its middle, as before (L7)
+        let shortest: Double = sizes.map { Double($0.height) }.min()!
+        let tooWide: Bool = fill > 1 + 1e-9
+            && cam.zoom <= IdeaBoardFit.firstRange(cardHeight: shortest, target: w.target).lowerBound + 1e-9
+        check("L6 the box fills at least 85 % of the room, or the zoom is 1: \(label)", fill >= 0.85 - 1e-9 || cam.zoom >= 1 - 1e-9)
+        check("L6 no card under the tools: \(label)", tooWide || !under)
+        check("L6 every card in the room: \(label)", tooWide || !outside)
+        check("L6 never past 1, every card a target tall: \(label)", cam.zoom <= 1 + 1e-9 && shortest * cam.zoom >= w.target - 1e-6)
+    }
+}
+// the old trailing 76 down the whole height held the phone's box to 84 % across
+let fitPhone = fitWindows[0]
+let fitStackedAt = IdeaBoardSpread.places(fitStacked)
+let fitOld = IdeaBoardFit.camera(centres: fitStacked.map { fitStackedAt[$0.id]! }, card: fitLeastCard, view: fitPhone.view,
+                                 hidden: fitPhone.hidden, margins: IdeaBoardFit.Margins(top: 16 + fitPhone.top, leading: 16, bottom: 16, trailing: 76),
+                                 zoomRange: IdeaBoardFit.firstRange(cardHeight: 88, target: 48), sizes: fitStacked.map(\.size))
+let fitNow = IdeaBoardFit.firstView(centres: fitStacked.map { fitStackedAt[$0.id]! }, sizes: fitStacked.map(\.size), card: fitLeastCard,
+                                    view: fitPhone.view, hidden: fitPhone.hidden, top: fitPhone.top, tools: fitPhone.tools,
+                                    target: fitPhone.target)
+check("L6 the phone opens larger than with the old margins", fitNow.zoom > fitOld.zoom, "\(fitNow.zoom) > \(fitOld.zoom)")
+// a board with a card where the tools are: it is moved or zoomed clear of them
+let fitCorner: [CGPoint] = [CGPoint(x: -150, y: -300), CGPoint(x: 150, y: 300)]
+let fitCornerCam = IdeaBoardFit.firstView(centres: fitCorner, sizes: [fitLeastCard, fitLeastCard], card: fitLeastCard, view: fitPhone.view,
+                                          hidden: fitPhone.hidden, top: fitPhone.top, tools: fitPhone.tools, target: fitPhone.target)
+let fitR = IdeaBoardFit.toolsRect(view: fitPhone.view, hidden: fitPhone.hidden, tools: fitPhone.tools)
+let fitBX: Double = Double(fitPhone.view.width) / 2 + fitCornerCam.panX + 150 * fitCornerCam.zoom
+let fitBY: Double = (Double(fitPhone.view.height) - fitPhone.hidden) / 2 + fitCornerCam.panY + 300 * fitCornerCam.zoom
+check("L6 a card at the bottom-trailing corner is drawn clear of the tools",
+      !(fitBX + 75 * fitCornerCam.zoom > Double(fitR.minX) && fitBY + 44 * fitCornerCam.zoom > Double(fitR.minY)), "\(fitCornerCam)")
+
 // MARK: L7 the first view keeps every card big enough to tap
 
 let tapRange: ClosedRange<Double> = IdeaBoardFit.firstRange(cardHeight: 88, target: 44)
@@ -327,12 +419,13 @@ let clear = CGPoint(x: 400, y: 400)
 check("L8 let go in a clear place, it stays", IdeaBoardDrop.settle(clear, card: card, others: others) == clear)
 let onTop = CGPoint(x: 10, y: 4)
 let settled: CGPoint = IdeaBoardDrop.settle(onTop, card: card, others: others)
+check("L8 the board keeps 12 between cards (S05m)", IdeaBoardDrop.gap == 12)
 func overlaps(_ a: CGPoint, _ b: CGPoint) -> Bool {
-    abs(Double(a.x - b.x)) < 150 + 8 - 1e-6 && abs(Double(a.y - b.y)) < 88 + 8 - 1e-6
+    abs(Double(a.x - b.x)) < 150 + IdeaBoardDrop.gap - 1e-6 && abs(Double(a.y - b.y)) < 88 + IdeaBoardDrop.gap - 1e-6
 }
 let moved: Double = hypot(Double(settled.x - onTop.x), Double(settled.y - onTop.y))
 check("L8 let go on a card, it moves clear of every card, no further than a card's width and a gap",
-      !others.contains { overlaps(settled, $0) } && moved > 0 && moved <= 150 + 8 + 8, "\(settled)")
+      !others.contains { overlaps(settled, $0) } && moved > 0 && moved <= 150 + IdeaBoardDrop.gap + 8, "\(settled)")
 
 // MARK: L9 the board draws no card over another (S05c)
 
@@ -344,7 +437,7 @@ func spNoneCover(_ cards: [IdeaBoardSpread.Card], _ at: [UUID: CGPoint]) -> Bool
     for (i, a) in cards.enumerated() {
         for b in cards[(i + 1)...] {
             guard let p = at[a.id], let q = at[b.id] else { return false }
-            if IdeaBoardDrop.covers(p, a.size, q, b.size, gap: 8 - 1e-6) { return false }
+            if IdeaBoardDrop.covers(p, a.size, q, b.size, gap: 12 - 1e-6) { return false }
         }
     }
     return true
@@ -355,7 +448,17 @@ check("L9 cards that cover none stay where they are stored",
       spApart.allSatisfy { spApartAt[$0.id] == $0.centre }, "\(spApartAt)")
 let spPair: [IdeaBoardSpread.Card] = [spBoardCard(1, 10, 10), spBoardCard(2, 10, 10)]
 let spPairAt = IdeaBoardSpread.places(spPair)
-check("L9 two on one place end apart, the first kept", spPairAt[spPair[0].id] == spPair[0].centre && spNoneCover(spPair, spPairAt), "\(spPairAt)")
+/// The middle of the box round `cards` as drawn at `at`.
+func spMiddle(_ cards: [IdeaBoardSpread.Card], _ at: [UUID: CGPoint]) -> CGPoint {
+    let minX: Double = cards.map { Double(at[$0.id]!.x) - Double($0.size.width) / 2 }.min()!
+    let maxX: Double = cards.map { Double(at[$0.id]!.x) + Double($0.size.width) / 2 }.max()!
+    let minY: Double = cards.map { Double(at[$0.id]!.y) - Double($0.size.height) / 2 }.min()!
+    let maxY: Double = cards.map { Double(at[$0.id]!.y) + Double($0.size.height) / 2 }.max()!
+    return CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+}
+check("L9 two on one place are drawn round it, the first moved with them",
+      spNoneCover(spPair, spPairAt) && spPairAt[spPair[0].id] != spPair[0].centre
+      && gap(spMiddle(spPair, spPairAt), CGPoint(x: 10, y: 10)) <= 1, "\(spPairAt)")
 // the second is drawn away from the first; the third covers the second's
 // stored place but neither drawn card, so it keeps its own
 let spClear: [IdeaBoardSpread.Card] = [spBoardCard(1, 0, 0), spBoardCard(2, 10, 0), spBoardCard(3, 165, -50)]
@@ -365,7 +468,8 @@ check("L9 a card stored clear of every drawn card keeps its place, though it cov
       "\(spClearAt)")
 let spStack: [IdeaBoardSpread.Card] = (1...5).map { spBoardCard($0, 0, 0) }
 let spStackAt = IdeaBoardSpread.places(spStack)
-check("L9 five at (0, 0) end apart, none covering another", spStackAt.count == 5 && spNoneCover(spStack, spStackAt), "\(spStackAt)")
+check("L9 five at (0, 0) end apart round it, none covering another",
+      spStackAt.count == 5 && spNoneCover(spStack, spStackAt) && gap(spMiddle(spStack, spStackAt), CGPoint(x: 0, y: 0)) <= 1, "\(spStackAt)")
 // 96 down clears two 88-point cards, not a 200-point one
 let spTall: [IdeaBoardSpread.Card] = [spBoardCard(1, 0, 0, h: 200), spBoardCard(2, 0, 96)]
 let spTallAt = IdeaBoardSpread.places(spTall)
@@ -373,10 +477,11 @@ check("L9 a tall card and a short one are kept apart by their own sizes",
       spTallAt[spTall[0].id] == spTall[0].centre && spTallAt[spTall[1].id] != spTall[1].centre && spNoneCover(spTall, spTallAt), "\(spTallAt)")
 check("L9 the same cards give the same places", IdeaBoardSpread.places(spStack) == spStackAt)
 let spSwapped: [IdeaBoardSpread.Card] = [spPair[1], spPair[0]]
-check("L9 the store's order decides who stays", IdeaBoardSpread.places(spSwapped)[spPair[1].id] == spPair[1].centre)
+check("L9 the store's order decides who goes where", IdeaBoardSpread.places(spSwapped)[spPair[1].id] == spPairAt[spPair[0].id])
 let spCrowd: [IdeaBoardSpread.Card] = (1...300).map { spBoardCard($0, 0, 0) }
 let spCrowdAt = IdeaBoardSpread.places(spCrowd, rings: 40)
-check("L9 a crowd past the rings still ends with none covering another", spCrowdAt.count == 300 && spNoneCover(spCrowd, spCrowdAt))
+check("L9 a crowd on one point ends round it, none covering another",
+      spCrowdAt.count == 300 && spNoneCover(spCrowd, spCrowdAt) && gap(spMiddle(spCrowd, spCrowdAt), CGPoint(x: 0, y: 0)) <= 1)
 // a card let go of settles clear of the drawn cards, as the board does it
 let spA = spBoardCard(1, 0, 0), spB = spBoardCard(2, 30, 0)
 let spDrawn = IdeaBoardSpread.places([spA, spB])
@@ -387,6 +492,36 @@ let spAfter = IdeaBoardSpread.places([spA, spC, spB])
 check("L9 a card let go of clear of the drawn cards is drawn where it settled, ahead of a moved one in the order",
       spAfter[spC.id] == spDrop && spNoneCover([spA, spC, spB], spAfter), "\(spAfter)")
 check("L9 no cards, no places", IdeaBoardSpread.places([]).isEmpty)
+
+// S05m item 2: cards on one point are drawn round it; a card stored off it on the side it is stored
+let spThree: [IdeaBoardSpread.Card] = (1...3).map { spBoardCard($0, 0, 0) }
+let spBell = spBoardCard(4, 0, 33)
+let spWithBell = spThree + [spBell]
+let spWithBellAt = IdeaBoardSpread.places(spWithBell)
+check("L9 three on one point are drawn round it, the box's middle within 1",
+      gap(spMiddle(spThree, spWithBellAt), CGPoint(x: 0, y: 0)) <= 1, "\(spMiddle(spThree, spWithBellAt))")
+let spThreeBottom: Double = spThree.map { Double(spWithBellAt[$0.id]!.y) + 44 }.max()!
+check("L9 the bell, stored 33 below, is drawn below them, a gap clear",
+      Double(spWithBellAt[spBell.id]!.y) - 44 >= spThreeBottom + 12 - 1e-6 && spNoneCover(spWithBell, spWithBellAt), "\(spWithBellAt)")
+let spAbove = IdeaBoardSpread.places(spThree + [spBoardCard(4, 10, -30)])
+check("L9 a card stored above the point is drawn above the block",
+      Double(spAbove[spBoardCard(4, 0, 0).id]!.y) + 44 <= spThree.map { Double(spAbove[$0.id]!.y) - 44 }.min()! - 12 + 1e-6)
+let spLeft = IdeaBoardSpread.places(spThree + [spBoardCard(4, -120, 5)])
+check("L9 a card stored left of it is drawn left of the block",
+      Double(spLeft[spBoardCard(4, 0, 0).id]!.x) + 75 <= spThree.map { Double(spLeft[$0.id]!.x) - 75 }.min()! - 12 + 1e-6)
+let spRight = IdeaBoardSpread.places(spThree + [spBoardCard(4, 120, -5)])
+check("L9 a card stored right of it is drawn right of the block",
+      Double(spRight[spBoardCard(4, 0, 0).id]!.x) - 75 >= spThree.map { Double(spRight[$0.id]!.x) + 75 }.max()! + 12 - 1e-6)
+let spBellFirst = IdeaBoardSpread.places([spBell] + spThree)
+check("L9 the bell is drawn below the block whatever its place in the order",
+      Double(spBellFirst[spBell.id]!.y) - 44 >= spThree.map { Double(spBellFirst[$0.id]!.y) + 44 }.max()! + 12 - 1e-6)
+let spLone = spBoardCard(5, 600, 0)
+check("L9 a lone card clear of the block keeps its place", IdeaBoardSpread.places(spWithBell + [spLone])[spLone.id] == spLone.centre)
+let spTwoPoints: [IdeaBoardSpread.Card] = (1...4).map { spBoardCard($0, 0, 0) } + (5...8).map { spBoardCard($0, 100, 0) }
+let spTwoAt = IdeaBoardSpread.places(spTwoPoints)
+check("L9 two blocks that would meet are drawn apart",
+      spNoneCover(spTwoPoints, spTwoAt) && gap(spMiddle(Array(spTwoPoints.prefix(4)), spTwoAt), CGPoint(x: 0, y: 0)) <= 1, "\(spTwoAt)")
+check("L9 the same input, the same places", IdeaBoardSpread.places(spWithBell) == spWithBellAt)
 
 print(failures.isEmpty ? "all passed" : "\(failures.count) failed")
 exit(failures.isEmpty ? 0 : 1)

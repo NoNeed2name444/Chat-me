@@ -41,7 +41,10 @@ final class IdeasStoreTests: XCTestCase {
     func testIdeasMadeInARowCoverNoCardOnTheBoard() throws {
         let (store, _) = try freshStore()
         let made = (1...12).map { store.create(title: "Idea \($0)") }
-        let w = Double(IdeaBoardDrop.tallest.width) + 8, h = Double(IdeaBoardDrop.tallest.height) + 8
+        // the board's own gap, 12 (S05m)
+        XCTAssertEqual(IdeaBoardDrop.gap, 12, "the gap new ideas are kept apart by")
+        let w = Double(IdeaBoardDrop.tallest.width) + IdeaBoardDrop.gap
+        let h = Double(IdeaBoardDrop.tallest.height) + IdeaBoardDrop.gap
         for i in made.indices {
             for j in made.indices where j > i {
                 let a = made[i], c = made[j]

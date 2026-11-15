@@ -72,6 +72,11 @@ struct GraphPeekCardView: View {
     /// The body's options (More).
     let more: [String]
     let option: (String) -> Void
+    /// S06b: a loose idea's lean (GraphSkyBodies.lean) and its File there.
+    var lean: GraphSkyLean? = nil
+    var fileThere: () -> Void = {}
+    /// S06b: where a shared idea came from (Note.sharedFrom).
+    var source: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: WardSpace.s) {
@@ -82,6 +87,8 @@ struct GraphPeekCardView: View {
                     .foregroundStyle(Color.wardInkSecondary)
                     .lineLimit(2)
             }
+            if let source { SharedFromMark(mark: source) }
+            if let lean { GraphLeanRow(lean: lean, file: fileThere) }
             if !content.chips.isEmpty { chipRow }
             buttons
         }

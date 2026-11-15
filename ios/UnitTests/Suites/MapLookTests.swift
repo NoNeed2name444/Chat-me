@@ -43,5 +43,16 @@ check("steps: Space's rocky planet is an idea typed in a folder",
       GraphTheme.space.cardSteps.dropFirst().first == "Type an idea in a folder in Sort: a new rocky planet.",
       "\(GraphTheme.space.cardSteps)")
 
+// S05j 7d: each [[ step says what to do and what it makes, with no colon
+// joining two clauses; the same words as Android's (IdeaLooks.kt cardSteps)
+check("steps: Space's link step", GraphTheme.space.cardSteps.last == "Type [[ and another idea\u{2019}s title in an idea to join them with a link.")
+check("steps: Neurons' link step", GraphTheme.neurons.cardSteps.last == "Type [[ and another idea\u{2019}s title in an idea to join them with an axon.")
+check("steps: Performance's link step", GraphTheme.performance.cardSteps.last == "Type [[ and another idea\u{2019}s title in an idea to join them with a line.")
+for theme in GraphTheme.allCases {
+    for step in theme.cardSteps where step.contains("[[") {
+        check("steps: \(theme)'s link step joins no clauses with a colon", !step.contains(":"), step)
+    }
+}
+
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

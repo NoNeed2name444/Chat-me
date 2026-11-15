@@ -45,8 +45,10 @@ class IdeaBookTest {
     @Test fun ideasMadeInARowCoverNoCardOnTheBoard() {
         val b = book()
         val made = (1..12).map { b.create("Idea $it") }
-        val w = IdeaBoardDrop.CARD_WIDTH + 8
-        val h = IdeaBoardDrop.CARD_TALLEST + 8
+        // the board's own gap, 12 (S05m)
+        assertEquals("the gap new ideas are kept apart by", 12.0, IdeaBoardDrop.GAP, 0.0)
+        val w = IdeaBoardDrop.CARD_WIDTH + IdeaBoardDrop.GAP
+        val h = IdeaBoardDrop.CARD_TALLEST + IdeaBoardDrop.GAP
         for (i in made.indices) for (j in i + 1 until made.size) {
             val a = made[i]; val c = made[j]
             assertTrue("${a.title} at (${a.boardX}, ${a.boardY}) and ${c.title} at (${c.boardX}, ${c.boardY}) are apart",

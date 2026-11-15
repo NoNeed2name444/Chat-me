@@ -366,6 +366,30 @@ class MapDragTest {
         assertFalse("a hover is no press", drag.pressTaken)
     }
 
+    @Test fun aPressNotesWhenItReachedTheMapTillTheFingerLifts() {
+        // S05h repair 7: MapDrag.pressArrivedAtMs, which the renderer hands on as MapDrawn.pressArrivedAtMs
+        val drag = run()
+        repeat(10) { drag.step(frame) }
+        assertEquals("no press yet", -1L, drag.pressArrivedAtMs)
+        drag.press(0, 5_000L)
+        assertEquals("noted as it comes, before any step", 5_000L, drag.pressArrivedAtMs)
+        assertEquals(0, drag.pressed)
+        assertFalse("not taken till a step sees it", drag.pressTaken)
+        drag.step(frame)
+        assertTrue(drag.pressTaken)
+        // the same finger handed on again while it stays down: still the one press, its arrival kept
+        drag.press(0, 5_300L)
+        repeat(10) { drag.step(frame) }
+        assertEquals("kept while the finger stays down", 5_000L, drag.pressArrivedAtMs)
+        drag.press(-1, 6_000L)
+        assertEquals("gone with the lift", -1L, drag.pressArrivedAtMs)
+        assertEquals(-1, drag.pressed)
+        drag.step(frame)
+        assertFalse(drag.pressTaken)
+        drag.press(0, 7_000L)
+        assertEquals("a new press its own arrival", 7_000L, drag.pressArrivedAtMs)
+    }
+
     @Test fun aPressIsSlowedFromItsFirstStepUnderTheBarTillItEnds() {
         // S05h repair 6: MapDrag.pressSlowed, which the renderer turns into MapDrawn.pressSlowedAtMs
         val drag = run()

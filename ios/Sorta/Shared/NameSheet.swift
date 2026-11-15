@@ -15,18 +15,30 @@ struct NameSheet: View {
     let initial: String
     let confirm: String
     let onConfirm: (String) -> Void
+    /// A line under the field, from what is typed (S06b's folder words: what
+    /// is kept); nil for none.
+    var footnote: ((String) -> String)? = nil
+    /// Whether a blank field may be confirmed (clearing a folder's words).
+    var allowsBlank: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @FocusState private var focused: Bool
 
     init(title: String, prompt: String, initial: String, confirm: String,
+         footnote: ((String) -> String)? = nil, allowsBlank: Bool = false,
          onConfirm: @escaping (String) -> Void) {
         self.title = title
         self.prompt = prompt
         self.initial = initial
         self.confirm = confirm
+        self.footnote = footnote
+        self.allowsBlank = allowsBlank
         self.onConfirm = onConfirm
     }
+
+    /// Taller with a footnote, so the line shows above the keyboard.
+    private static let plain: Set<PresentationDetent> = [.height(220), .medium]
+    private static let noted: Set<PresentationDetent> = [.height(300), .medium]
 
     private var blank: Bool {
         name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -34,8 +46,15 @@ struct NameSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: WardSpace.s) {
                 field
+                if let footnote {
+                    Text(footnote(name))
+                        .wardFont(.footnote)
+                        .foregroundStyle(Color.wardInkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("nameSheetFootnote")
+                }
                 Spacer(minLength: 0)
             }
             .padding(WardSpace.gutter)
@@ -48,13 +67,13 @@ struct NameSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirm, action: submit)
                     .buttonStyle(.wardCompact)
-                        .disabled(blank)
+                        .disabled(blank && !allowsBlank)
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
             .onAppear { name = initial; focused = true }
         }
-        .presentationDetents([.height(220), .medium])
+        .presentationDetents(footnote == nil ? Self.plain : Self.noted)
     }
 
     private var field: some View {
@@ -72,7 +91,7 @@ struct NameSheet: View {
 
     private func submit() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || allowsBlank else { return }
         onConfirm(trimmed)
         dismiss()
     }

@@ -48,6 +48,13 @@ class SortaRun(private val compose: ComposeTestRule) {
 
     fun close() { scenario?.close(); scenario = null }
 
+    /** Runs [block] on the launched activity, on its thread (S05j: the window's bars). */
+    fun <T> onActivity(block: (MainActivity) -> T): T {
+        var out: Result<T>? = null
+        scenario!!.onActivity { out = runCatching { block(it) } }
+        return out!!.getOrThrow()
+    }
+
     /** A file in the app's cache, for the import. */
     fun file(name: String, text: String): File = File(context.cacheDir, "import-" + UUID.randomUUID() + "-" + name).also { it.writeText(text) }
 

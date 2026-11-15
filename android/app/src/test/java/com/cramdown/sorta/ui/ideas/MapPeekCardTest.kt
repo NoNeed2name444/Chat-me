@@ -1,13 +1,19 @@
 package com.cramdown.sorta.ui.ideas
 
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.onRoot
+import androidx.activity.compose.setContent
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.ideas.rawValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -17,6 +23,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ideas.MapLook
@@ -84,6 +91,21 @@ class MapPeekCardTest {
     }
 
     private val mapNode = SemanticsMatcher.keyIsDefined(MapTapKey)
+
+    /**
+     * A point on empty map, in the map node's own coordinates: halfway between the lower of the top
+     * strip's foot and the card's (when it shows) and the mode switcher's top. In this small window
+     * (Robolectric's 320 by 470 dp) the lenses' row takes a second line (S06d), so the old fixed point,
+     * 0.3 of the height, now falls on a lens chip.
+     */
+    private fun emptyY(): Float {
+        fun bounds(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        val map = compose.onNode(mapNode).fetchSemanticsNode().boundsInRoot
+        val over = listOfNotNull(bounds(MapPanelTags.TOP_STRIP)?.bottom, bounds(MapPanelTags.PEEK)?.bottom).maxOrNull() ?: map.top
+        val under = bounds(SortaMode.SORT.identifier)?.top ?: map.bottom
+        assertTrue("room on the map between $over and $under", under - over >= 24f)
+        return (over + under) / 2 - map.top
+    }
 
     private fun tapper(): MapTap? = compose.onAllNodes(mapNode).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapTapKey)
 
@@ -157,6 +179,57 @@ class MapPeekCardTest {
         cardFor(gate.title)
     }
 
+    // S05j 7c: Show links draws Material's Hub, a node graph as iOS's point.3.connected.trianglepath.dotted,
+    // not Link's chain; the legend's Links row draws the same
+    @Test fun showLinksDrawsTheNodeGraph() {
+        launchOnSpace()
+        tapBody(gate.id)
+        cardFor(gate.title)
+        val hub = androidx.compose.material.icons.Icons.Rounded.Hub
+        assertEquals("Rounded.Hub", hub.name)
+        compose.onNode(hasTestTag(MapPanelTags.glyph(hub)), useUnmergedTree = true).assertExists()
+        assertTrue("no chain", compose.onAllNodes(hasTestTag("glyph:Rounded.Link"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertSame(hub, legendGlyph("point.3.connected.trianglepath.dotted"))
+    }
+
+    // S05j 8b: the link chips' row reaches WardSpace.s into the card's margin each side, its chips padded
+    // back, so the last chip scrolls whole to the row's end, not cut at the card's padding (iOS's
+    // GraphMapPanels.swift:121-147)
+    @Test fun theChipRowReachesIntoTheCardsMargin() {
+        val links = (1..6).map { "id$it" to "A linked idea number $it" }
+        val scenario = androidx.test.core.app.ActivityScenario.launch(androidx.activity.ComponentActivity::class.java)
+        try {
+            scenario.onActivity { activity ->
+                val peekWords = mapPeekWords(activity.resources)
+                activity.setContent {
+                    com.cramdown.sorta.ui.SortaTheme(dark = true) {
+                        MapPeekCard(com.cramdown.sorta.ideas.MapPeek.content(com.cramdown.sorta.ideas.MapPeekInput("space", "gasGiant",
+                            folder = false, title = "Oil the gate", body = "A line.", links = links), peekWords),
+                            folder = false, words = peekWords, open = {}, flyIn = {}, chip = {}, option = {})
+                    }
+                }
+            }
+            compose.waitForIdle()
+            val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+            val s = com.cramdown.sorta.ui.ward.WardSpace.s.toFloat() * density
+            val pad = com.cramdown.sorta.ui.ward.WardFaceMetrics.cardPadding.toFloat() * density
+            val card = compose.onNode(hasTestTag(MapPanelTags.PEEK)).fetchSemanticsNode().boundsInRoot
+            val row = compose.onNode(hasTestTag(MapPanelTags.PEEK_CHIPS), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals("the row's start, s into the margin", card.left + pad - s, row.left, 1.5f)
+            assertEquals("the row's end, s into the margin", card.right - pad + s, row.right, 1.5f)
+            val first = compose.onNode(hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK_CHIPS)) and androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 1")), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertEquals("the first chip padded back to the card's padding", card.left + pad, first.left, 1.5f)
+            compose.onNode(hasTestTag(MapPanelTags.PEEK_CHIPS), useUnmergedTree = true).performScrollToNode(androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 6")))
+            compose.waitForIdle()
+            val last = compose.onNode(hasClickAction() and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK_CHIPS)) and androidx.compose.ui.test.hasAnyDescendant(hasText("A linked idea number 6")), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("the last chip whole: ${last.left}..${last.right} in ${row.left}..${row.right}",
+                last.left >= row.left - 0.5f && last.right <= row.right + 0.5f)
+            assertTrue("and inside the card", last.right <= card.right + 0.5f)
+        } finally {
+            scenario.close()
+        }
+    }
+
     @Test fun itsDeleteDeletesTheIdeaFromTheStore() {
         launchOnSpace()
         tapBody(gate.id)
@@ -183,7 +256,8 @@ class MapPeekCardTest {
         launchOnSpace()
         tapBody(gate.id)
         cardFor(gate.title)
-        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }  // above the card, under the top strip
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }  // empty map, under the strip and the card
         run.until { !shown(MapPanelTags.PEEK) }
         assertTrue("the idea stays", stored().any { it.id == gate.id })
     }
@@ -234,7 +308,8 @@ class MapPeekCardTest {
         assertEquals("the camera stays", pose, drawnPose())
         // a new choice still cues: empty space lets it go, a tap chooses it again
         ShadowSystemClock.advanceBy(Duration.ofMillis(400))
-        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, height * 0.3f)) }
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }
         run.until { !shown(MapPanelTags.PEEK) }
         ShadowSystemClock.advanceBy(Duration.ofMillis(400))
         tapBody(gate.id)
@@ -299,6 +374,33 @@ class MapPeekCardTest {
         assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
+    @Test fun aPerformanceHubsCardIsItsFoldersAndFliesIn() {
+        // S05i2: in Performance each folder has a hub on the map (GraphPerfScene), picked as its folder
+        // (GraphPerfTheme.swift:344-346): its card a folder's, Open folder and Fly in, no Show links; Fly in
+        // keeps the card; an idea's card there has Show links and never Fly in
+        IdeasSettings(run.context).setLook(MapLook.PERFORMANCE)
+        IdeaStore(run.store).replaceIdeas(listOf(gate), listOf(garden))
+        run.launch()
+        compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
+        // laid out off the main thread, then its panels up; Performance has no first-run card
+        run.until { tapper()?.ids?.any { it.equals(garden.id, ignoreCase = true) } == true && shown(MapPanelTags.FILTER_TOOL) }
+        assertFalse("Performance shows no first-run card", shown(MapPanelTags.HINT))
+        val ids = checkNotNull(tapper()).ids
+        assertEquals("the idea, then the folder's hub", listOf(gate.id.uppercase(), garden.id.uppercase()), ids.map { it.uppercase() })
+        tapBody(garden.id)
+        cardFor(garden.name)
+        assertFalse("a hub's card has no Show links", shown(MapPanelTags.PEEK_LINKS))
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_OPEN)).assert(hasText(words.openFolder))
+        val flyIn = hasText(s(R.string.map_peek_fly_in)) and hasAnyAncestor(hasTestTag(MapPanelTags.PEEK))
+        compose.onNode(flyIn).performClick()
+        compose.waitForIdle()
+        cardFor(garden.name)
+        tapBody(gate.id)
+        cardFor(gate.title)
+        compose.onNode(hasTestTag(MapPanelTags.PEEK_LINKS)).assert(hasText(words.showLinks))
+        assertFalse("an idea's card has no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
+    }
+
     @Test fun underOneSingleStyleNoCardFliesIn() {
         // Look › Bodies › one style: today's Space, one body per idea and no folder bodies, so no card has Fly in
         IdeasSettings(run.context).setNodeStyle(SpaceStyle.SUN.rawValue)
@@ -310,6 +412,40 @@ class MapPeekCardTest {
         assertFalse("no Fly in", compose.onAllNodes(flyIn).fetchSemanticsNodes().isNotEmpty())
     }
 
-    private fun drawnPose(): List<Float> =
-        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey)).pose
+    @Test fun recentreAndTwoEmptyTapsEachCountAReturnHomeAndOneTapDoesNot() {
+        // S05i repair 5: the map's record counts each return to the first view (MapDrawn.homes), so a
+        // test reads the pose once the record shows the camera there; Recentre and two taps on empty
+        // space each count one, a single empty tap none, and the pose with each count is the first view.
+        // With no GL here, no frame recomposes the map, so the pose read before any count is the camera's
+        // at the map's last composition, not the first view fitted after it: what the counts are for
+        launchOnSpace()
+        // the first-run card put away by its Got it, as the device's test does, so empty space is free to tap
+        compose.onNode(hasText(s(R.string.map_touch_got_it)) and hasAnyAncestor(hasTestTag(MapPanelTags.HINT))).performClick()
+        run.until { !shown(MapPanelTags.HINT) }
+        assertEquals("no return home yet", 0, drawn().homes)
+        compose.onNode(hasContentDescription("Recentre") and hasClickAction()).performClick()
+        run.until { drawn().homes == 1 }
+        val home = drawn().pose
+        // S05j item 3: Space's first view is iOS's, from yaw 0 looking down at GraphTilt's 45 degrees
+        assertEquals("the first view's turn", listOf(0f, (45.0 * Math.PI / 180.0).toFloat()), home.drop(4))
+        // a turn of the camera on empty space, then one tap there: no return home
+        val y = emptyY()
+        compose.onNode(mapNode).performTouchInput { swipe(Offset(centerX, y), Offset(centerX + width * 0.3f, y)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.onNode(mapNode).performTouchInput { click(Offset(centerX, y)) }
+        compose.waitForIdle()
+        ShadowSystemClock.advanceBy(Duration.ofMillis(1_000))
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        assertEquals("one tap on empty space is no return home", 1, drawn().homes)
+        compose.onNode(mapNode).performTouchInput { doubleClick(Offset(centerX, y)) }
+        run.until { drawn().homes == 2 }
+        assertEquals("two taps' pose is Recentre's first view", home, drawn().pose)
+    }
+
+    private fun drawn() =
+        checkNotNull(compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapDrawnKey)).fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(MapDrawnKey))
+
+    private fun drawnPose(): List<Float> = drawn().pose
 }

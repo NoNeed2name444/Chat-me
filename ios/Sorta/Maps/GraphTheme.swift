@@ -78,7 +78,8 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .space: return "How your universe is built"
         case .neurons: return "How your network is built"
-        case .performance: return "How the Performance map is built"
+        // S05j 8c: shorter, and named as the Look menu names it, so a small phone's bar holds it whole
+        case .performance: return "How Performance is built"
         }
     }
 
@@ -133,20 +134,22 @@ nonisolated enum GraphTheme: String, CaseIterable, Sendable, Identifiable {
     /// (an idea held on the map, Choose folder's New folder, which there
     /// makes a top-level folder; an idea typed in Sort; and [[ ]] in a
     /// note; Map mode has no + menu and no bar, and nothing makes a page).
+    /// The [[ step joins no two clauses with a colon (S05j 7d); a colon
+    /// after a control path stays.
     var cardSteps: [String] {
         switch self {
         case .space:
             return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new galaxy round its black hole.",
                     "Type an idea in a folder in Sort: a new rocky planet.",
-                    "Type [[ and another idea\u{2019}s title in an idea: a link joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea to join them with a link."]
         case .neurons:
             return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new cell.",
                     "Type an idea in Sort: a new granule.",
-                    "Type [[ and another idea\u{2019}s title in an idea: an axon joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea to join them with an axon."]
         case .performance:
             return ["Hold an idea \u{203A} Choose folder \u{203A} New folder: a new cluster round its hub.",
                     "Type an idea in Sort: a new point.",
-                    "Type [[ and another idea\u{2019}s title in an idea: a line joins them."]
+                    "Type [[ and another idea\u{2019}s title in an idea to join them with a line."]
         }
     }
 

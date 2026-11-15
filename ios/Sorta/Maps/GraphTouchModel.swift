@@ -348,13 +348,16 @@ nonisolated enum GraphPeek {
 
     /// VoiceOver's custom actions on a body.
     static func actions(folder: Bool) -> [String] {
-        folder ? ["Open folder", "Fly in", "Delete"] : ["Open", "Show links", "Delete"]
+        folder ? ["Open folder", "Fly in", "Delete"]
+            : ["Open", "Show links", "Split\u{2026}", "Join with\u{2026}", "Collide with\u{2026}", "Delete"]
     }
 
     /// The options held on a body, in order; `canAddNote` for folders.
     static func menu(folder: Bool, home: Bool) -> [String] {
         if home { return ["Open", "Add idea here"] }
         if folder { return ["Open", "Rename", "Add idea here", "Delete"] }
-        return ["Open", "Rename", "Link to\u{2026}", "Choose folder", "Delete"]
+        // S06c: Split…, Join with… and Collide with…, before Delete, as Android's
+        return ["Open", "Rename", "Link to\u{2026}", "Choose folder", "Split\u{2026}", "Join with\u{2026}",
+                "Collide with\u{2026}", "Delete"]
     }
 }

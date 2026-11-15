@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
@@ -112,18 +113,24 @@ const val LINES_PICKER_WIDTH = 200
 
 /** The test tag on the naming sheet's content, as the folder chooser's. */
 const val NAME_SHEET_TAG = "name-sheet"
+/** The test tag on the naming sheet's footnote, when it has one (S06b's words sheet). */
+const val NAME_SHEET_FOOTNOTE_TAG = "name-sheet-footnote"
 
 /** A sheet asking for one name (NameSheet): Cancel, the field, and the confirming word. */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+@Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit,
+                          overMap: Boolean = false, footnote: ((String) -> String)? = null, allowsBlank: Boolean = false,
+                          lines: Int = 1, onConfirm: (String) -> Unit) {
     var name by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
-    val blank = name.isBlank()
+    val blank = name.isBlank() && !allowsBlank
     fun submit() { if (!blank) { onConfirm(name); onDismiss() } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // over a 3D look, night in light mode too, the status icons stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         Column(Modifier.fillMaxWidth().semantics { testTag = NAME_SHEET_TAG }) {
             ReaderNavBar(title,
                 leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) },
@@ -134,15 +141,23 @@ const val NAME_SHEET_TAG = "name-sheet"
                     Modifier.fillMaxWidth().focusRequester(focus).minimumInteractiveComponentSize()
                         .wardFocusRing(RoundedCornerShape(WardRadius.field.wardDp), focused, wardColor(WardControlStates.focusInk))
                         .semantics { contentDescription = prompt },
-                    singleLine = true, interactionSource = source, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
+                    // [lines] over 1 (the words sheet): the text wraps and shows from its start, as iOS's
+                    // field does, not just its end on one scrolled line; Done still saves
+                    singleLine = lines <= 1, maxLines = lines.coerceAtLeast(1),
+                    interactionSource = source, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(wardColor(WardToken.primaryInk)),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { submit() }),
                     decorationBox = { inner ->
-                        Box(Modifier.fillMaxWidth().wardField(), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.fillMaxWidth().wardField(), contentAlignment = if (lines <= 1) Alignment.CenterStart else Alignment.TopStart) {
                             if (name.isEmpty()) Text(prompt, style = WardType.body.textStyle(), color = wardDisabledInk())
                             inner()
                         }
                     })
+            }
+            // S06b: what the field is for and what a save keeps, under it (the words sheet)
+            footnote?.let { words ->
+                Text(words(name), Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).testTag(NAME_SHEET_FOOTNOTE_TAG),
+                    style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary))
             }
             // room under the field so the keyboard doesn't cover it, not a gap between pieces
             Spacer(Modifier.height(120.dp))
@@ -164,10 +179,13 @@ const val FOLDER_CHOOSER_TAG = "folder-chooser"
  * the sheet follows its changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun FolderChooser(book: IdeaBook, current: String?, version: Int = 0, onDismiss: () -> Unit, onChoose: (String?) -> Unit, onNewFolder: () -> Unit) {
+@Composable fun FolderChooser(book: IdeaBook, current: String?, version: Int = 0, onDismiss: () -> Unit, onChoose: (String?) -> Unit,
+                              overMap: Boolean = false, onNewFolder: () -> Unit) {
     // all the way up, so a short window shows every row it can rather than half a sheet
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = wardColor(WardToken.background)) {
+        // over a 3D look, night in light mode too, the status icons stay light (S05j 6a)
+        if (overMap) LightIconsOverTheMap()
         Column(Modifier.fillMaxWidth().semantics { testTag = FOLDER_CHOOSER_TAG }) {
             ReaderNavBar(stringResource(R.string.chooser_title),
                 leading = { WardTextButton(stringResource(R.string.sheet_cancel), onDismiss, kind = WardButtonKind.quiet, fills = false) })

@@ -269,6 +269,22 @@ class MapDrag(
     @Volatile var hovered: Int = -1
 
     /**
+     * The device's uptime when the current press reached the map (S05h repair 7), −1 with no finger on
+     * a body: set by [press], kept while the same finger stays down, so a test can show the press was
+     * taken at the first frame after it arrived (MapDrawn.pressArrivedAtMs).
+     */
+    @Volatile var pressArrivedAtMs: Long = -1; private set
+
+    /**
+     * A finger down on body [index] (−1: lifted, or on no body), reaching the map at uptime [atMs]: the
+     * arrival is noted before the body is, so a frame that sees the press also sees when it came.
+     */
+    fun press(index: Int, atMs: Long) {
+        if (index < 0) pressArrivedAtMs = -1 else if (pressed < 0) pressArrivedAtMs = atMs
+        pressed = index
+    }
+
+    /**
      * The seconds the orbit clock has stepped while a body was pressed, every press together, never
      * capped (MapDrawn.pressedSeconds); and for the latest press, the seconds of it stepped until the
      * rate was under [SLOW] (−1 till then): the map's own time, whenever its record reaches a test.

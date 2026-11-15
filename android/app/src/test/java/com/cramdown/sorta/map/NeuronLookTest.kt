@@ -110,6 +110,68 @@ class NeuronLookTest {
         done()
     }
 
+    // S05i: the cell states chosen. Android's folder ids are lower case (UUID.toString), iOS's upper
+    // (uuidString): Cell by cell keeps them upper case under iOS's key, and still wins in its folder.
+    @Test fun s05iCellByCellWithAndroidIds() {
+        val folderA = fixedID(910).lowercase()
+        val folderB = fixedID(911).lowercase()
+        val notes = (0 until 10).map { k ->
+            UniverseNote(fixedID(k + 1).lowercase(), "Note $k", k % 4 == 0, if (k < 5) folderA else folderB, 60 + k * 30, k.toDouble())
+        }
+        val input = UniverseInput(notes, listOf(UniverseFolder(folderA, "Examples", null), UniverseFolder(folderB, "Cardiology", null)),
+            emptyList(), seedByName = true, open = listOf(folderA, folderB))
+        val plan = GraphNeurons.plan(input)
+        val regionA = plan.bodies.indexOfFirst { it.id == folderA }
+        val ideas = plan.bodies.indices.filter { plan.bodies[it].kind == ThemeBodyKind.NOTE }
+        val inA = ideas.filter { plan.bodies[it].region == regionA }
+        val raw = NeuronStateChoice.encode(mapOf(folderA.uppercase() to NeuronState.ENGULFING))
+        check("S05i stored under iOS's two keys", NeuronStateChoice.KEY == "vignette.neurons.cellState" &&
+            NeuronStateChoice.FOLDERS_KEY == "vignette.neurons.cellStateFolders" && NeuronStateChoice.NATURAL_VALUE == "natural")
+        check("S05i the ids upper case, as iOS's uuidString", raw == folderA.uppercase() + "=engulfing" &&
+            NeuronStateChoice.parse(folderA + "=engulfing") == mapOf(folderA.uppercase() to NeuronState.ENGULFING), raw)
+        val choice = NeuronStateChoice.of("firing", raw)
+        check("S05i Cell by cell wins inside its folder, Cells everywhere else", regionA >= 0 && inA.isNotEmpty() && ideas.size > inA.size &&
+            ideas.all { choice.state(it, plan) == if (it in inA) NeuronState.ENGULFING else NeuronState.FIRING },
+            ideas.map { choice.state(it, plan).rawValue }.toString())
+        check("S05i every idea's state from Cells", NeuronState.entries.all { st ->
+            ideas.all { NeuronStateChoice(main = st.rawValue).state(it, plan) == st } })
+        check("S05i a cell or part rests", plan.bodies.indices.filter { plan.bodies[it].kind != ThemeBodyKind.NOTE }
+            .all { choice.state(it, plan) == NeuronState.RESTING })
+        check("S05i natural, and Resting stored as natural, every idea rests", ideas.all {
+            NeuronStateChoice.NATURAL.state(it, plan) == NeuronState.RESTING &&
+                NeuronStateChoice.of(NeuronStateChoice.NATURAL_VALUE, "").state(it, plan) == NeuronState.RESTING })
+        // the look follows the choice (what NeuronGl draws: NeuronLookPlan.bodies' state)
+        val look = NeuronLookPlan(plan, choice, GraphicsTier.HIGH)
+        check("S05i the look draws each idea in its chosen state", ideas.all { look.bodies[it].state == choice.state(it, plan) })
+        done()
+    }
+
+    // item 1's parity, pinned to iOS's numbers (GraphNeuronStates.swift:81-175, GraphNeuronLook.swift:418-460)
+    @Test fun s05iParityNumbers() {
+        // the space styles' order (GraphNeuronStates.swift:163-165): black hole, sun, rocky, gas giant, pulsar, comet
+        check("S05i the menu: engulfing, firing, resting, releasing, pacemaker, migrating", NeuronState.menuOrder.map { it.rawValue } ==
+            listOf("engulfing", "firing", "resting", "releasing", "pacemaker", "migrating"), NeuronState.menuOrder.toString())
+        check("S05i titles", NeuronState.menuOrder.map { it.title } == listOf("Engulfing", "Firing", "Resting", "Releasing", "Pacemaker", "Migrating"))
+        check("S05i symbols", NeuronState.menuOrder.map { it.symbol } == listOf("circle.circle.fill", "sun.max.fill", "globe.europe.africa.fill",
+            "circle.lefthalf.filled", "dot.radiowaves.left.and.right", "sparkle"))
+        check("S05i shader codes", NeuronState.entries.map { it.rawValue to it.code } ==
+            listOf("resting" to 0, "firing" to 1, "releasing" to 2, "pacemaker" to 3, "migrating" to 4, "engulfing" to 5))
+        val eps = 1e-4f
+        fun near(a: Float, b: Float) = abs(a - b) < eps
+        // firing: three spikes to 1.07 over 0.05 s each
+        check("S05i firing spikes to 1.07 at 0.05 s", near(NeuronMotion.pose(NeuronState.FIRING, false, true, 0f, 0.05f).soma, 1.07f))
+        check("S05i releasing swells to 1.06 over 1.6 s, the arbor 1.03", NeuronMotion.pose(NeuronState.RELEASING, false, true, 0f, 1.6f)
+            .let { near(it.soma, 1.06f) && near(it.arbor, 1.03f) })
+        check("S05i pacemaker kicks to 1.05 at 0.06 s", near(NeuronMotion.pose(NeuronState.PACEMAKER, false, true, 0f, 0.06f).soma, 1.05f))
+        check("S05i migrating crawls 0.35 on in 1.4 s, its arbor 0.175 over 1.8 s", NeuronMotion.pose(NeuronState.MIGRATING, false, true, 0f, 1.4f)
+            .let { near(it.somaMove, 0.35f) } && near(NeuronMotion.pose(NeuronState.MIGRATING, false, true, 0f, 1.8f).arborMove, 0.175f))
+        check("S05i engulfing draws in to 0.86 over 1.8 s with an arbor, 0.9 without",
+            near(NeuronMotion.pose(NeuronState.ENGULFING, false, true, 0f, 1.8f).arbor, 0.86f) &&
+                near(NeuronMotion.pose(NeuronState.ENGULFING, false, false, 0f, 1.8f).soma, 0.9f))
+        check("S05i resting is still", NeuronMotion.pose(NeuronState.RESTING, false, true, 0f, 1.3f) == NeuronMotion.Pose(1f, 1f, 0f, 0f, 0f))
+        done()
+    }
+
     private fun octant(d: Vec3) = (if (d.x > 0) 1 else 0) + (if (d.y > 0) 2 else 0) + (if (d.z > 0) 4 else 0)
 
     @Test fun n4Bokeh() {

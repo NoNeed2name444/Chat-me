@@ -94,6 +94,45 @@ class MapMathTest {
         camera.pan(0.1f, 0f)
         assertTrue((camera.target - before).length() > 0f)
     }
+
+    // S05j item 3: a wide window's first view rolls the camera a quarter about the world's z
+    @Test fun aRolledCameraKeepsItsFrameSquareAndDrawsTheMapsLengthAcross() {
+        val camera = OrbitCamera(target = Vec3(1f, 2f, 0f), distance = 30f, yaw = 0f, pitch = 0.6f,
+            fovY = MapFirstView.radians(55f), roll = (Math.PI / 2).toFloat())
+        val f = camera.forward(); val r = camera.right(); val u = camera.up()
+        assertEquals(0f, r.dot(f), 1e-5f); assertEquals(0f, u.dot(f), 1e-5f); assertEquals(0f, r.dot(u), 1e-5f)
+        assertEquals(1f, r.length(), 1e-5f); assertEquals(1f, u.length(), 1e-5f)
+        assertEquals("the eye stands back along the turned frame", 30f, (camera.eye() - camera.target).length(), 1e-3f)
+        assertEquals(0f, ((camera.target - camera.eye()).normalized() - f).length(), 1e-5f)
+        // the map's length (its y) runs across: a point up the map lands right of the middle, on its row
+        val (x, y) = checkNotNull(camera.project(camera.target + Vec3(0f, 8f, 0f), 2000f, 1000f))
+        assertTrue("right of the middle: $x", x > 1100f)
+        assertEquals(500f, y, 0.5f)
+        // the drawn view (view and projection) puts it where project() says
+        val out = FloatArray(4)
+        val p = camera.target + Vec3(3f, 8f, 1f)
+        Mat4.project(Mat4.multiply(camera.projection(2f), camera.view()), p.x, p.y, p.z, out)
+        val (px, py) = checkNotNull(camera.project(p, 2000f, 1000f))
+        assertEquals(px, (out[0] / out[3] * 0.5f + 0.5f) * 2000f, 0.5f)
+        assertEquals(py, (1f - (out[1] / out[3] * 0.5f + 0.5f)) * 1000f, 0.5f)
+        // no roll is the camera as it was: the screen's right on the ground, the world's up kept in view()
+        val flat = OrbitCamera(target = Vec3.ZERO, distance = 30f, yaw = 0.4f, pitch = 0.6f)
+        assertEquals(0f, flat.right().y, 0f)
+        assertTrue(flat.view().contentEquals(Mat4.lookAt(flat.eye(), flat.target)))
+    }
+
+    @Test fun aRolledCameraSlidesAsTheFingerDoes() {
+        val camera = OrbitCamera(target = Vec3.ZERO, distance = 10f, yaw = 0f, pitch = 0.6f, roll = (Math.PI / 2).toFloat())
+        val right = camera.right()
+        camera.pan(0.1f, 0f)
+        val moved = camera.target
+        assertTrue("a drag to the right slides the map right: the target goes left", moved.dot(right) < 0f)
+        assertEquals("and nowhere else", moved.length(), -moved.dot(right), 1e-4f)
+        val up = camera.up()
+        camera.target = Vec3.ZERO
+        camera.pan(0f, 0.1f)
+        assertEquals(camera.target.length(), camera.target.dot(up), 1e-4f)
+    }
 }
 
 /** The same boxes as iOS's P6 room checks (GraphPerfTests). */
@@ -248,6 +287,100 @@ class MapFitTest {
         val most = lens.fitWindow(centre, radius, 2560f, 1600f, MapInsets(top = 800f, bottom = 1200f))
         assertEquals("never less than a third of the view", third.distance, most.distance, 1e-3f)
         assertEquals("and never nearer than the least", 4f, lens.fitWindow(centre, 0.1f, 1080f, 2400f).distance, 0f)
+    }
+
+    // S05j item 3: Space's and Neurons' first view is GraphTilt.fit's, Performance's GraphPerfCamera.framing's
+
+    /** A map twice as long (y) as it is wide, a little deep, off the origin: the plan's envelope. */
+    private val envelope: List<Vec3> = (0..6).flatMap { i -> (0..12).map { j ->
+        Vec3(5f + (i - 3) * 2f, -3f + (j - 6) * 2f, kotlin.math.sin(i * 1.3f + j * 0.7f) * 1.5f)
+    } }
+
+    /** Each pad's disc on screen (left, top, right, bottom), in pixels. */
+    private fun discs(camera: OrbitCamera, points: List<Vec3>, pad: Float, width: Float, height: Float): FloatArray {
+        val r = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        for (p in points) {
+            val (x, y) = checkNotNull(camera.project(p, width, height))
+            val half = pad / camera.depthOf(p) * camera.focalPixels(height)
+            r[0] = minOf(r[0], x - half); r[1] = minOf(r[1], y - half); r[2] = maxOf(r[2], x + half); r[3] = maxOf(r[3], y + half)
+        }
+        return r
+    }
+
+    /** The discs fill [fill] of the window [insets] leave: inside it, the outermost at its edge, the box in its middle. */
+    private fun assertFills(box: FloatArray, width: Float, height: Float, insets: MapInsets, fill: Float) {
+        val midX = (insets.left + width - insets.right) / 2; val midY = (insets.top + height - insets.bottom) / 2
+        val halfW = (width - insets.left - insets.right) / 2 * fill; val halfH = (height - insets.top - insets.bottom) / 2 * fill
+        val across = maxOf(midX - box[0], box[2] - midX) / halfW
+        val up = maxOf(midY - box[1], box[3] - midY) / halfH
+        assertTrue("inside the fill: ${box.toList()} in $width x $height under $insets", across <= 1.001f && up <= 1.001f)
+        assertTrue("the outermost at the fill's edge: $across, $up", maxOf(across, up) >= 0.99f)
+        assertEquals("the box's middle across", midX, (box[0] + box[2]) / 2, 0.01f * width)
+        assertEquals("the box's middle up", midY, (box[1] + box[3]) / 2, 0.01f * height)
+    }
+
+    @Test fun spacesFirstViewIsGraphTiltsFitOnAPhone() {
+        val pitch = MapFirstView.radians(45f)
+        // GraphTilt.canonical's iPhone window, and a phone with the first-run card up
+        for ((w, h, insets) in listOf(Triple(393f, 852f, MapInsets(top = 118f, bottom = 158f)),
+                Triple(1080f, 2400f, MapInsets(top = 320f, bottom = 410f).coveringFoot(1150f)))) {
+            val pose = MapFirstView.tilted(envelope, 0.3f, 0.88f, 1f, pitch, w, h, insets)
+            val middle = MapFirstView.boxMiddle(envelope)
+            val fit = GraphTilt.fit(envelope.map { it - middle }, List(envelope.size) { 0.3f },
+                GraphTilt.window(w, h, insets.top, insets.left, insets.bottom, insets.right), 0.88f, -pitch, 55f)
+            assertEquals(fit.distance, pose.distance, fit.distance * 1e-3f)
+            assertEquals(0f, pose.yaw, 0f); assertEquals(pitch, pose.pitch, 0f); assertEquals("upright: no turn", 0f, pose.roll, 0f)
+            val camera = OrbitCamera(pose.target, pose.distance, pose.yaw, pose.pitch, MapFirstView.radians(55f), pose.roll)
+            assertFills(discs(camera, envelope, 0.3f, w, h), w, h, insets, 0.88f)
+        }
+    }
+
+    @Test fun aWideWindowTurnsTheMapSoItsLengthRunsAcross() {
+        val pitch = MapFirstView.radians(35f)
+        // GraphTilt.canonical's iPad window and a tablet's; Neurons' fill and depth (GraphFit.of)
+        for ((w, h, insets) in listOf(Triple(1194f, 834f, MapInsets(top = 86f, bottom = 112f)),
+                Triple(2560f, 1600f, MapInsets(top = 250f, bottom = 300f)))) {
+            val pose = MapFirstView.tilted(envelope, 0.3f, 1.0f, 0.35f, pitch, w, h, insets)
+            assertEquals((Math.PI / 2).toFloat(), pose.roll, 1e-6f)
+            val camera = OrbitCamera(pose.target, pose.distance, pose.yaw, pose.pitch, MapFirstView.radians(55f), pose.roll)
+            val box = discs(camera, envelope, 0.3f, w, h)
+            assertTrue("the length across: ${box.toList()}", box[2] - box[0] > 1.5f * (box[3] - box[1]))
+            val middle = MapFirstView.boxMiddle(envelope.map { MapFirstView.rotZ(-pose.roll, it) })
+            val counted = envelope.map { MapFirstView.rotZ(-pose.roll, it) - middle }.map { Vec3(it.x, it.y, it.z * 0.35f) }
+            val fit = GraphTilt.fit(counted, List(counted.size) { 0.3f },
+                GraphTilt.window(w, h, insets.top, insets.left, insets.bottom, insets.right), 1.0f, -pitch, 55f)
+            assertEquals(fit.distance, pose.distance, fit.distance * 1e-3f)
+            // depth counted at 0.35: the discs stay inside the window, not its fill's edge exactly
+            val turnedBack = OrbitCamera(pose.target, pose.distance, pose.yaw, pose.pitch, MapFirstView.radians(55f), pose.roll)
+            val seen = discs(turnedBack, envelope, 0.3f, w, h)
+            assertTrue("below the strip and above the foot: ${seen.toList()}", seen[1] >= insets.top && seen[3] <= h - insets.bottom)
+        }
+    }
+
+    @Test fun performancesFramingIsGraphPerfCamerasWorkedByHand() {
+        // yaw 0 and pitch 0: right x, up y, back z. Points at x -2 and 2 and one up at y 1; a margin of 0.5;
+        // 1000 x 2000 at 60 degrees: f = 1000 / tan 30 = 1732.05; across, halfW = 450, so
+        // D = 0 + 0.5 + (2 + 0.5) f / 450 = 10.12250; under a strip of 200 and a foot of 400 the window's
+        // middle is 100 below the view's, so the target is the box's middle less up x 100 D / f
+        val points = listOf(Vec3(-2f, 0f, 0f), Vec3(2f, 0f, 0f), Vec3(0f, 1f, 0f))
+        val open = checkNotNull(MapFirstView.framing(points, 0.5f, 1000f, 2000f, yaw = 0f, pitch = 0f))
+        assertEquals(10.12250f, open.distance, 10.1225f * 1e-3f)
+        assertEquals(0f, (open.target - Vec3(0f, 0.5f, 0f)).length(), 1e-4f)
+        val barred = checkNotNull(MapFirstView.framing(points, 0.5f, 1000f, 2000f, MapInsets(top = 200f, bottom = 400f), yaw = 0f, pitch = 0f))
+        assertEquals(10.12250f, barred.distance, 10.1225f * 1e-3f)
+        assertEquals(0f, (barred.target - Vec3(0f, -0.084423f, 0f)).length(), 1e-4f)
+        // on the ball: half = min(1000, 1400) / 2 x 0.9 = 450; D = 5 sqrt(1 + (f / 450)^2) = 19.88392
+        val ball = MapFirstView.framing(Vec3.ZERO, 5f, 1000f, 2000f, MapInsets(top = 200f, bottom = 400f), yaw = 0f, pitch = 0f)
+        assertEquals(19.88392f, ball.distance, 19.88392f * 1e-3f)
+        assertEquals(0f, (ball.target - Vec3(0f, -1.147999f, 0f)).length(), 1e-4f)
+        assertNull(MapFirstView.framing(emptyList(), 0.5f, 1000f, 2000f))
+        // at Performance's own yaw, pitch and field, every point and its margin inside 0.9 of the window
+        val insets = MapInsets(top = 320f, bottom = 410f)
+        val pose = checkNotNull(MapFirstView.framing(envelope, 0.6f, 1080f, 2400f, insets))
+        assertEquals(0.55f, pose.yaw, 0f); assertEquals(0.32f, pose.pitch, 0f)
+        val camera = OrbitCamera(pose.target, pose.distance, pose.yaw, pose.pitch, MapFirstView.radians(60f))
+        val box = discs(camera, envelope, 0.6f, 1080f, 2400f)
+        assertTrue("inside the window: ${box.toList()}", box[0] >= 0f && box[2] <= 1080f && box[1] >= insets.top && box[3] <= 2400f - insets.bottom)
     }
 }
 

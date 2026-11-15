@@ -29,6 +29,7 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.ImportCounts
 import com.cramdown.sorta.data.ImportRefusal
+import com.cramdown.sorta.ideas.CapsuleOffer
 import com.cramdown.sorta.data.ImportRefused
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.data.SaveFailed
@@ -47,6 +48,7 @@ import com.cramdown.sorta.ideas.NoteEditing
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.NoteKind
 import com.cramdown.sorta.ideas.NoteTone
+import com.cramdown.sorta.map.NeuronStateChoice
 import com.cramdown.sorta.map.SpaceStyle
 
 /**
@@ -103,10 +105,11 @@ class IdeasModel private constructor(notes: List<Note>, folders: List<NoteFolder
      * S04's import (IdeaStore.importJson) on [text]: the ideas and folders this device doesn't
      * have are added and saved, and the screen shows the store's copy.
      */
-    fun import(text: String): ImportOutcome {
+    fun import(text: String, capsule: Boolean = false): ImportOutcome {
         val s = store ?: return ImportOutcome.NotSaved
         val outcome = try {
-            ImportOutcome.Added(s.importJson(text))
+            // a capsule (S06d A5) goes through the same steps, with its own checks
+            ImportOutcome.Added(if (capsule) s.importCapsule(text) else s.importJson(text))
         } catch (e: ImportRefused) {
             ImportOutcome.Refused(e.refusal)
         } catch (e: SaveFailed) {
@@ -142,11 +145,11 @@ sealed class ImportOutcome {
  * still refused as too big, without reading all of it), then runs the import on it. The
  * system picker's result and the tests' launch extra both come here.
  */
-suspend fun importFrom(model: IdeasModel, open: () -> InputStream?): ImportOutcome {
+suspend fun importFrom(model: IdeasModel, capsule: Boolean = false, open: () -> InputStream?): ImportOutcome {
     val text = withContext(Dispatchers.IO) {
         runCatching { open()?.use { readCapped(it, IdeaStore.MAX_IMPORT_BYTES + 1) } }.getOrNull()
     } ?: return ImportOutcome.Refused(ImportRefusal.UNREADABLE)
-    return model.import(text)
+    return model.import(text, capsule)
 }
 
 /** At most [limit] bytes of [input], as UTF-8. */
@@ -171,6 +174,15 @@ class IdeasSettings(context: Context) {
     private fun str(key: String, fallback: String) = runCatching { prefs?.getString(key, fallback) }.getOrNull() ?: fallback
     private fun bool(key: String) = runCatching { prefs?.getBoolean(key, false) }.getOrNull() ?: false
     private fun put(block: SharedPreferences.Editor.() -> Unit) { runCatching { prefs?.edit()?.apply(block)?.apply() } }
+    private fun time(key: String): Long? = runCatching { prefs?.takeIf { it.contains(key) }?.getLong(key, 0L) }.getOrNull()
+
+    // the capsule's monthly offer (S06d A4, CapsuleOffer): the first launch with ideas, the last offer and the last capsule saved
+    val capsuleFirstSeen: Long? get() = time(CapsuleOffer.FIRST_SEEN_KEY)
+    val capsuleOffered: Long? get() = time(CapsuleOffer.OFFERED_KEY)
+    val capsuleSaved: Long? get() = time(CapsuleOffer.SAVED_KEY)
+    fun setCapsuleFirstSeen(at: Long) = put { putLong(CapsuleOffer.FIRST_SEEN_KEY, at) }
+    fun setCapsuleOffered(at: Long) = put { putLong(CapsuleOffer.OFFERED_KEY, at) }
+    fun setCapsuleSaved(at: Long) = put { putLong(CapsuleOffer.SAVED_KEY, at) }
 
     private var heldMode by mutableStateOf(IdeasMode.of(str(IdeasMode.KEY, IdeasMode.LIST.rawValue)))
     val mode: IdeasMode get() = heldMode
@@ -210,6 +222,25 @@ class IdeasSettings(context: Context) {
     val folderStyles: String get() = heldFolderStyles
     fun setFolderStyles(value: String) { heldFolderStyles = value; put { putString(GraphStyleChoice.FOLDERS_KEY, value) } }
 
+    // the Neurons' cell states (S05i): one for every idea, and one per cell, under iOS's two keys
+    // (GraphNeuronStates.swift:187-188); "natural" is nothing chosen, every idea resting
+    private var heldCellState by mutableStateOf(str(NeuronStateChoice.KEY, NeuronStateChoice.NATURAL_VALUE))
+    val cellState: String get() = heldCellState
+    fun setCellState(value: String) { heldCellState = value; put { putString(NeuronStateChoice.KEY, value) } }
+
+    private var heldCellFolders by mutableStateOf(str(NeuronStateChoice.FOLDERS_KEY, ""))
+    val cellFolders: String get() = heldCellFolders
+    fun setCellFolders(value: String) { heldCellFolders = value; put { putString(NeuronStateChoice.FOLDERS_KEY, value) } }
+    /** The cell states in force, as the Neurons plan reads them. */
+    val cells: NeuronStateChoice get() = NeuronStateChoice.of(heldCellState, heldCellFolders)
+
+    // S06a: To sort shown as cards, and when the last low tide came, under iOS's keys
+    private var heldSortDeck by mutableStateOf(bool(SORT_DECK_KEY))
+    val sortDeck: Boolean get() = heldSortDeck
+    fun setSortDeck(value: Boolean) { heldSortDeck = value; put { putBoolean(SORT_DECK_KEY, value) } }
+    val lastTide: Long? get() = runCatching { prefs?.takeIf { it.contains(LAST_TIDE_KEY) }?.getLong(LAST_TIDE_KEY, 0L) }.getOrNull()
+    fun setLastTide(value: Long) { put { putLong(LAST_TIDE_KEY, value) } }
+
     private var heldPerfDemo by mutableIntStateOf(runCatching { prefs?.getInt(PERF_DEMO_KEY, 0) }.getOrNull() ?: 0)
     val perfDemo: Int get() = heldPerfDemo
     fun setPerfDemo(value: Int) { heldPerfDemo = value; put { putInt(PERF_DEMO_KEY, value) } }
@@ -227,6 +258,8 @@ class IdeasSettings(context: Context) {
         const val READOUT_KEY = "vignette.space.readout"
         const val SWITCHER_KEY = "vignette.ideas.switcherCollapsed"
         const val PERF_DEMO_KEY = "vignette.space.perfDemo"
+        const val SORT_DECK_KEY = "vignette.ideas.sortDeck"
+        const val LAST_TIDE_KEY = "vignette.ideas.lastTide"
         /**
          * The demo maps the readout offers (iOS GraphPerfDemo). Stethoscore's Android offered a
          * million too; Sorta offers it on neither platform until iOS's million map is traced

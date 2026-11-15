@@ -12,6 +12,7 @@ final class IdeasRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
+        Retaps.reset()
     }
 
     func testScreensRender() throws {
@@ -56,8 +57,7 @@ final class IdeasRenderTests: XCTestCase {
         let row = app.ideaRow(long)
         XCTAssertLessThanOrEqual(row.frame.maxY, choose.frame.minY + 1, "the row stacks: Choose folder under the words")
 
-        row.tap()
-        XCTAssertTrue(app.buttons["editor-done"].waitForExistence(timeout: 10), "the editor opened")
+        app.openEditor(from: row)
         sleep(1)
         keepShot("ideas-ax5-3-editor")
         for id in ["editor-done", "editor-more", "editor-folder", "editor-link"] {
