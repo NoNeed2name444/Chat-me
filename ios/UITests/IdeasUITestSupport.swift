@@ -77,7 +77,13 @@ extension XCTestCase {
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
         app.keepTraceOffConsole()
-        app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + more
+        // S06a: a fixed clock, a day after the made-up export's last idea, so
+        // no idea frosts on a still as the real days pass, and To sort as a
+        // list, whatever an earlier test chose; a test may set either
+        var pinned: [String] = []
+        if !more.contains("-SortaNow") { pinned += ["-SortaNow", "2026-09-21T12:00:00Z"] }
+        if !more.contains("-SortaDeck") { pinned += ["-SortaDeck", "off"] }
+        app.launchArguments += ["-SortaStore", store.name, "-SortaNoticesStay"] + pinned + more
         app.launch()
         XCTAssertTrue(app.textFields["idea-capture"].waitForExistence(timeout: 30),
                       "the Sort screen is open, with capture", file: file, line: line)
@@ -544,13 +550,18 @@ enum MadeUpExport {
         let ideas: String = stacked ? notes.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + more + "]}") : notes
         precondition(!stacked || ideas != notes, "the stacked export adds its ideas")
         precondition(stacked || !page, "the page comes with the stacked export")
+        return try base64(notes: ideas, version: version, count: stacked ? (page ? 8 : 7) : 4)
+    }
+
+    /// Any made-up notes.json as a backup, as base64 (S06b's sky export too).
+    static func base64(notes ideas: String, version: Int = 1, count: Int) throws -> String {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("sorta-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let parts: [(String, String)] = [
             ("manifest.json", manifest.replacingOccurrences(of: "VERSION", with: "\(version)")
-                .replacingOccurrences(of: "NOTES", with: stacked ? (page ? "8" : "7") : "4")),
+                .replacingOccurrences(of: "NOTES", with: "\(count)")),
             ("notes.json", ideas),
         ]
         var files: [(name: String, file: URL)] = []

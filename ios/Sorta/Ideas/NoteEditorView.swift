@@ -29,7 +29,14 @@ struct NoteEditorView: View {
     let file: (UUID, UUID?) -> Void
     /// Deletes the idea, from the Sort screen, so it can offer Undo.
     let delete: (UUID) -> Void
+    /// Closes the editor where it is not a sheet (beside the map, on two
+    /// panes, S06c); nil: it is a sheet, and goes as one.
+    let close: (() -> Void)?
     @EnvironmentObject private var notes: NoteStore
+    @Environment(IdeasFiling.self) private var filing
+    /// Ideas like this, Split…, Join with… and Collide with… (S06c); nil
+    /// where the editor is shown without them.
+    @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -41,20 +48,34 @@ struct NoteEditorView: View {
     @State private var text = ""
     @State private var folderId: UUID?
     @State private var loaded = false
+    /// The idea as last read from the store or written to it: a change the
+    /// store has that this is not (a split, a join, their Undo) is read in.
+    @State private var seen: Note?
     /// Read the idea as Markdown instead of editing it; remembered.
     @AppStorage("notesReadAsMarkdown") private var reading = false
     @State private var linking = false
     @State private var choosingFolder = false
     @State private var confirmingDelete = false
+    /// The ideas like this one, as EchoesFinder found them (S06c).
+    @State private var echoes: [UUID] = []
     /// Which field has the caret, if any.
     @FocusState private var editing: EditorField?
+    /// The details' caret (S06a): where the person stopped is kept from it.
+    @State private var selection: TextSelection?
+    /// Opened from "You were saying…": the details take the caret where the
+    /// person stopped, once, for the idea it opened on.
+    private let resume: Bool
+    @State private var resumed = false
 
     enum EditorField: Hashable { case title, body }
 
-    init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void) {
+    init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void,
+         resume: Bool = false, close: (() -> Void)? = nil) {
         _current = State(initialValue: noteID)
         self.file = file
         self.delete = delete
+        self.resume = resume
+        self.close = close
     }
 
     var body: some View {
@@ -66,7 +87,12 @@ struct NoteEditorView: View {
                 // the screen and cover the chip: there it is a row of the
                 // page, under the chip (`form`)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if !typeSize.isAccessibilitySize { actionBar }
+                    VStack(spacing: 0) {
+                        // S06c: a link, split, join or new idea made here is told
+                        // here, with its Undo, since the editor covers the foot
+                        IdeasNoticeHost(notice: shapeNotice, undo: { filing.undo($0, notes: notes) })
+                        if !typeSize.isAccessibilitySize { actionBar }
+                    }
                 }
                 // no words in the bar: the title field under it names the
                 // idea, and the strings list gives the bar none
@@ -88,7 +114,7 @@ struct NoteEditorView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(IdeasWords.done) {
                             commit()
-                            dismiss()
+                            leave()
                         }
                         .buttonStyle(.wardCompact)
                         .accessibilityIdentifier("editor-done")
@@ -96,6 +122,24 @@ struct NoteEditorView: View {
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
+                            // S06c: the plain ways to the map's pinch, push and drop
+                            if let shapes {
+                                Button(IdeasWords.shapeSplit, systemImage: "scissors") {
+                                    commit()
+                                    shapes.askSplit(current, from: .editor, notes: notes, filing: filing)
+                                }
+                                .accessibilityIdentifier("editor-split")
+                                Button(IdeasWords.shapeJoin, systemImage: "arrow.triangle.merge") {
+                                    commit()
+                                    shapes.askJoin(current, from: .editor, notes: notes)
+                                }
+                                .accessibilityIdentifier("editor-join")
+                                Button(IdeasWords.shapeCollide, systemImage: "bolt") {
+                                    commit()
+                                    shapes.askCollide(current, from: .editor, notes: notes)
+                                }
+                                .accessibilityIdentifier("editor-collide")
+                            }
                             Button(IdeasWords.deleteIdea, systemImage: "trash", role: .destructive) {
                                 confirmingDelete = true
                             }
@@ -123,7 +167,7 @@ struct NoteEditorView: View {
                         commit()
                         loaded = false
                         delete(current)
-                        dismiss()
+                        leave()
                     }
                     Button(IdeasWords.cancel, role: .cancel) {}
                 } message: {
@@ -137,13 +181,32 @@ struct NoteEditorView: View {
                         fileHere(in: notes.createFolder(name: name, parentId: nil).id)
                     })
                 }
+                .ideaShapeSheets(.editor)
         }
         .frame(maxWidth: IdeasLayout.column)
         .presentationDetents([.large])
         .onAppear {
             if !loaded { load() }
         }
-        .onDisappear { commit() }
+        .onDisappear {
+            commit()
+            markStop()
+        }
+        // a split, a join or their Undo changed this idea's words from
+        // outside: read them in, so the next save never puts the old back
+        .onChange(of: notes.note(current)) { _, now in
+            guard loaded, let now, now != seen else { return }
+            let words: Bool = now.title != seen?.title || now.body != seen?.body
+            let moved: Bool = now.folderId != seen?.folderId
+            seen = now
+            if words {
+                title = now.title
+                text = now.body
+                // the caret's place was in the old words
+                selection = nil
+            }
+            if moved { folderId = now.folderId }
+        }
         // saved a moment after typing stops, not on every key
         .task(id: draftKey) {
             guard loaded else { return }
@@ -172,6 +235,14 @@ struct NoteEditorView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(PopOutField.rowInsets)
                     .listRowSeparator(.hidden)
+                // S06b: where a shared idea came from, under its folder
+                if let mark = notes.note(current)?.sharedFrom {
+                    SharedFromMark(mark: mark)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(PopOutField.rowInsets)
+                        .listRowSeparator(.hidden)
+                }
                 if typeSize.isAccessibilitySize {
                     actionControls
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -188,7 +259,7 @@ struct NoteEditorView: View {
                 } else {
                     // the details are a reading surface - read, re-read and
                     // edited in place - so they sit flat on their tile
-                    TextEditor(text: $text)
+                    TextEditor(text: $text, selection: $selection)
                         .wardFont(.body)
                         .foregroundStyle(Color.wardInk)
                         .tint(Color.wardPrimaryInk)
@@ -207,6 +278,10 @@ struct NoteEditorView: View {
             }
             .wardRowBackground()
 
+            // S06c: the older ideas that share a rare word with this one, under
+            // the details' hint and over the links it adds to; a tap links one
+            EchoesSection(current: current, echoes: $echoes)
+
             linkedSection
                 .wardRowBackground()
 
@@ -221,6 +296,7 @@ struct NoteEditorView: View {
                 .wardRowBackground()
             }
         }
+        .findsEchoes(current: current, title: title, text: text, into: $echoes)
     }
 
     // MARK: the bottom bar and the chip
@@ -362,7 +438,58 @@ struct NoteEditorView: View {
         title = note.title
         text = note.body
         folderId = note.folderId
+        seen = note
         loaded = true
+        // opened (S06a): its frost goes
+        notes.markOpened(current, at: IdeasClock.now)
+        // from "You were saying…", the caret where the person stopped
+        if resume && !resumed && !reading, let stop = note.stoppedAt {
+            resumed = true
+            selection = TextSelection(insertionPoint: Self.index(in: text, utf16: stop))
+            Task { @MainActor in editing = .body }
+        } else {
+            selection = nil
+        }
+    }
+
+    /// Left mid-sentence, the idea is marked with the caret's place; a
+    /// finished sentence, or no details, clears it (IdeaStops).
+    private func markStop() {
+        guard loaded, notes.note(current) != nil else { return }
+        notes.setStopped(current, at: IdeaStops.stoppedAt(body: text, caret: caret))
+    }
+
+    /// The caret's place in the details, as a UTF-16 offset, when it is known.
+    private var caret: Int? {
+        guard let selection, case .selection(let range) = selection.indices else { return nil }
+        let end = range.upperBound
+        guard end >= text.startIndex, end <= text.endIndex else { return nil }
+        return text.utf16.distance(from: text.utf16.startIndex, to: end)
+    }
+
+    /// The place `utf16` code units into `text`, held to a whole character.
+    static func index(in text: String, utf16 offset: Int) -> String.Index {
+        let utf16 = text.utf16
+        let at = utf16.index(utf16.startIndex, offsetBy: min(max(offset, 0), utf16.count))
+        return at.samePosition(in: text) ?? text.indices.last(where: { $0 < at }) ?? text.startIndex
+    }
+
+    /// Closes the editor: beside the map, by `close`; as a sheet, as one.
+    private func leave() {
+        if let close {
+            close()
+        } else {
+            dismiss()
+        }
+    }
+
+    /// The notice, while it is one of IdeaShapes' (a link, a split, a join,
+    /// a new idea, or why none).
+    private var shapeNotice: Binding<IdeasNotice?> {
+        Binding(get: { filing.notice?.fromShapes == true ? filing.notice : nil },
+                set: { now in
+                    if now == nil, filing.notice?.fromShapes == true { filing.notice = nil }
+                })
     }
 
     /// Files the idea on screen through the Sort screen: what was typed is
@@ -379,6 +506,7 @@ struct NoteEditorView: View {
         note.body = text
         note.folderId = folderId
         notes.update(note)
+        seen = notes.note(current)
     }
 
     // MARK: following links
@@ -386,6 +514,7 @@ struct NoteEditorView: View {
     private func follow(_ id: UUID) {
         guard id != current else { return }
         commit()
+        markStop()
         trail.append(current)
         current = id
         load()
@@ -394,6 +523,7 @@ struct NoteEditorView: View {
     private func goBack() {
         guard let previous = trail.popLast() else { return }
         commit()
+        markStop()
         current = previous
         load()
     }

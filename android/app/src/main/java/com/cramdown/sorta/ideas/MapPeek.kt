@@ -52,7 +52,7 @@ data class MapPeekContent(
 )
 
 /** A body's options (GraphPeek.menu), as far as Android does them. */
-enum class MapMenuItem { OPEN, RENAME, MOVE, DELETE }
+enum class MapMenuItem { OPEN, RENAME, MOVE, SPLIT, JOIN, COLLIDE, DELETE }
 
 /** The card's and the options' words, from strings.xml (MapPanels' mapPeekWords). */
 class MapPeekWords(
@@ -73,6 +73,10 @@ class MapPeekWords(
     val rename: String,
     val moveToFolder: String,
     val delete: String,
+    /** S06c: an idea's Split…, Join with… and Collide with… (GraphPeek.menu). */
+    val split: String,
+    val joinWith: String,
+    val collideWith: String,
     /** Each theme's word for a role, keyed "theme:role" ("space:gasGiant", "neurons:0"). */
     val roles: Map<String, String>,
     val ideas: (Int) -> String,
@@ -87,6 +91,9 @@ class MapPeekWords(
         MapMenuItem.OPEN -> open
         MapMenuItem.RENAME -> rename
         MapMenuItem.MOVE -> moveToFolder
+        MapMenuItem.SPLIT -> split
+        MapMenuItem.JOIN -> joinWith
+        MapMenuItem.COLLIDE -> collideWith
         MapMenuItem.DELETE -> delete
     }
 }
@@ -175,11 +182,11 @@ object MapPeek {
     /**
      * The options held on a body, in order (menu, :355-359), minus what Android has no sheet or
      * action for: Link to… (the editor's link picker is its own) and Add note here (ideas are added
-     * in Sort).
+     * in Sort). An idea's Split…, Join with… and Collide with… (S06c) come before Delete, as iOS's.
      */
     fun menu(folder: Boolean, home: Boolean): List<MapMenuItem> = when {
         home -> listOf(MapMenuItem.OPEN)
         folder -> listOf(MapMenuItem.OPEN, MapMenuItem.RENAME, MapMenuItem.DELETE)
-        else -> listOf(MapMenuItem.OPEN, MapMenuItem.RENAME, MapMenuItem.MOVE, MapMenuItem.DELETE)
+        else -> listOf(MapMenuItem.OPEN, MapMenuItem.RENAME, MapMenuItem.MOVE, MapMenuItem.SPLIT, MapMenuItem.JOIN, MapMenuItem.COLLIDE, MapMenuItem.DELETE)
     }
 }

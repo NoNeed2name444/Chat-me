@@ -10,22 +10,35 @@ struct MapTopStrip: View {
     /// Opens the list of the looks (IdeasMapView draws it, MapLookList).
     let openLooks: () -> Void
     var list: (() -> Void)?
+    /// S06b: the Days chip's toggle (MapDaysChip), on Space and 2D; nil
+    /// on the other looks.
+    var days: (() -> Void)? = nil
+    var daysOn: Bool = false
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: WardSpace.s) {
                 listChip
                 Spacer(minLength: 0)
+                daysChip
                 MapLookChip(look: look, open: openLooks)
             }
             VStack(alignment: .leading, spacing: WardSpace.s) {
                 listChip
+                daysChip
                 MapLookChip(look: look, open: openLooks)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, WardSpace.gutter)
         .padding(.top, WardSpace.s)
+    }
+
+    @ViewBuilder
+    private var daysChip: some View {
+        if let days {
+            MapDaysChip(on: daysOn, toggle: days)
+        }
     }
 
     @ViewBuilder

@@ -1705,10 +1705,13 @@ class MapModeSpaceRenderTest {
         val back = checkNotNull(mapDrawn())
         check(back.flown == -1 && same(home, back.pose)) { "Recentre did not bring back the first view after Fly in for $fly: $home, now ${back.pose}; $back" }
         // the pose comes home at once, the bodies' box only with the next frame drawn (the tablet's came
-        // 800 ms apart): the test thread sleeps, so the map can draw, until the box lies inside the map
+        // 800 ms apart): the test thread sleeps, so the map can draw, until the box is the one measured at
+        // the first view (MapDrawn.boxAtPose) and lies inside the map. The flown-in view's box lies inside
+        // the map too, so that alone let Chat-me run 43607814308's phone tap 4 px from a planet (S06m)
         val homeBy = SystemClock.uptimeMillis() + 10_000
-        while (SystemClock.uptimeMillis() < homeBy && mapDrawn()?.let { boxInside(it) } != true) SystemClock.sleep(250)
-        check(mapDrawn()?.let { boxInside(it) } == true) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
+        fun drawnHome(d: MapDrawn?) = d != null && same(home, d.boxPose) && d.boxAtPose() && boxInside(d)
+        while (SystemClock.uptimeMillis() < homeBy && !drawnHome(mapDrawn())) SystemClock.sleep(250)
+        check(drawnHome(mapDrawn())) { "No frame drawn at the first view within 10 s of Recentre for $drag: ${mapDrawn()}" }
         val empty = emptySpot(drag)
         compose.onNode(map).performTouchInput { click(empty) }
         try { compose.waitUntil(10_000) { !shown(MapPanelTags.PEEK) } } catch (_: ComposeTimeoutException) {}
@@ -1923,11 +1926,18 @@ class MapModeSpaceRenderTest {
      * after Fly in, the Garden drag and Recentre, the tap chose a body and the card stayed. Of the four
      * sides of the bodies the spot is the farthest from them, 24 dp in from the map's edges and off
      * every control: on copy de0fd0f's phone the chosen sun's card, which began above the bodies' foot,
-     * took a tap meant for empty space, and on copy 03eb608's the dragged Garden black hole left the
-     * bodies from y 40 to 1296 of 2400 and from x 17 to 1022 of 1080, with room only below them.
+     * took a tap meant for empty space. On copy 03eb608's phone, and on run 43607814308's (copy 9606194),
+     * the box read after Recentre, y 40 to 1296 of 2400 and x 17 to 1022 of 1080, was the flown-in
+     * view's, not the first view's (y 916 to 1699): the spot below it, at y 1454, lay 4 px from a planet
+     * there. So the box is read only once it was measured at the camera's pose now (S06m).
      */
     private fun emptySpot(name: String): Offset {
+        // the box of a frame drawn at the camera's pose now: after a jump (Recentre) the record's pose
+        // moves at once and its box only with the next frame (S06m, MapDrawn.boxAtPose)
+        val drawnBy = SystemClock.uptimeMillis() + 10_000
+        while (SystemClock.uptimeMillis() < drawnBy && mapDrawn()?.boxAtPose() != true) SystemClock.sleep(100)
         val drawn = checkNotNull(mapDrawn())
+        check(drawn.boxAtPose()) { "The bodies' box was measured at ${drawn.boxPose}, not at the camera's pose ${drawn.pose}, within 10 s for $name: $drawn" }
         check(drawn.box.size == 4) { "No bodies' box to keep clear of for $name: $drawn" }
         val map = checkNotNull(mapNode()).boundsInRoot
         val strip = compose.onNode(hasTestTag(MapPanelTags.TOP_STRIP)).fetchSemanticsNode().boundsInRoot
@@ -1943,8 +1953,13 @@ class MapModeSpaceRenderTest {
                 .flatMap { tag -> compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes() })
             .map { it.boundsInRoot.translate(-map.left, -map.top) }
             .filter { it.width < map.width * 0.95f || it.height < map.height * 0.95f } // not the map itself
-        // below the bodies, the room ends at the highest control that reaches past their foot
-        val floor = controls.filter { it.bottom > foot }.minOfOrNull { maxOf(it.top, foot) } ?: map.height
+        // below the bodies, the room ends at the highest control that reaches past their foot and stands
+        // under the spot's column, the map's middle (S06c: the tools at the map's right edge grew by
+        // Collide, and on Chat-me run 43606446545's phone their top, far from the middle, left less
+        // than the reach below the bodies, though nothing stood under the spot)
+        val column = map.width / 2
+        val floor = controls.filter { it.bottom > foot && it.inflate(8f * density).let { c -> column in c.left..c.right } }
+            .minOfOrNull { maxOf(it.top, foot) } ?: map.height
         val choices = listOf(
             Offset(inset, middle) to (inset..left),
             Offset(map.width - inset, middle) to (right..map.width - inset),

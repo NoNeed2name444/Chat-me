@@ -217,6 +217,114 @@
         }
       }
     },
+    "capsule.notSaved" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.notSaved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save the capsule. Try again, or choose another place."
+          }
+        }
+      }
+    },
+    "capsule.offer" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again."
+          }
+        }
+      }
+    },
+    "capsule.offer.later" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer.later",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
+    "capsule.offer.save" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.offer.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save a capsule"
+          }
+        }
+      }
+    },
+    "capsule.refused.newer" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.newer",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This capsule is from a newer version of Sorta. Check for a Sorta update, then try again."
+          }
+        }
+      }
+    },
+    "capsule.refused.notCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.notCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file isn't a Sorta capsule. Choose another file."
+          }
+        }
+      }
+    },
+    "capsule.refused.tooLarge" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.tooLarge",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file is over 32 MB, too big to import. Choose a smaller file."
+          }
+        }
+      }
+    },
+    "capsule.refused.unreadable" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.refused.unreadable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This file didn't open. It may be damaged, so try another copy."
+          }
+        }
+      }
+    },
+    "capsule.saved" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key capsule.saved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capsule saved."
+          }
+        }
+      }
+    },
     "capture.placeholder" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key capture.placeholder",
       "extractionState" : "manual",
@@ -309,6 +417,210 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "To sort, no folder"
+          }
+        }
+      }
+    },
+    "collide.another" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.another",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try another pair"
+          }
+        }
+      }
+    },
+    "collide.field" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The idea they make"
+          }
+        }
+      }
+    },
+    "collide.none" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.none",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No two ideas are far apart yet. Put ideas in different folders, then try again."
+          }
+        }
+      }
+    },
+    "collide.save" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save idea"
+          }
+        }
+      }
+    },
+    "collide.saved" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.saved",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New idea in To sort."
+          }
+        }
+      }
+    },
+    "collide.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What if both?"
+          }
+        }
+      }
+    },
+    "collide.tool" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key collide.tool",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide two ideas"
+          }
+        }
+      }
+    },
+    "deck.fileIn %@" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.fileIn %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File in %@"
+          }
+        }
+      }
+    },
+    "deck.later" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.later",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
+          }
+        }
+      }
+    },
+    "deck.laterDone" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.laterDone",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moved to the back."
+          }
+        }
+      }
+    },
+    "deck.showCards" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.showCards",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show as cards"
+          }
+        }
+      }
+    },
+    "deck.showList" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.showList",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show as list"
+          }
+        }
+      }
+    },
+    "deck.unfinished" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key deck.unfinished",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfinished"
+          }
+        }
+      }
+    },
+    "echoes.board.link %@" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.board.link",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Links it to “%@”."
+          }
+        }
+      }
+    },
+    "echoes.link.hint" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.link.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Links it to this idea."
+          }
+        }
+      }
+    },
+    "echoes.linked %@" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.linked",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked to “%@”."
+          }
+        }
+      }
+    },
+    "echoes.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key echoes.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas like this"
           }
         }
       }
@@ -613,6 +925,66 @@
         }
       }
     },
+    "folder.words" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder words…"
+          }
+        }
+      }
+    },
+    "folder.words.kept %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.kept %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saves: %@"
+          }
+        }
+      }
+    },
+    "folder.words.note" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.note",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Space, ideas in To sort that use one of these words lean towards this folder."
+          }
+        }
+      }
+    },
+    "folder.words.prompt" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.prompt",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up to 5 words"
+          }
+        }
+      }
+    },
+    "folder.words.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key folder.words.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder words"
+          }
+        }
+      }
+    },
     "folderDelete.body %@" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key folderDelete.body",
       "extractionState" : "manual",
@@ -681,6 +1053,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "frost.spoken" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key frost.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "not opened in a while"
           }
         }
       }
@@ -925,6 +1309,174 @@
         }
       }
     },
+    "join.done" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key join.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas joined."
+          }
+        }
+      }
+    },
+    "lean.file" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File there"
+          }
+        }
+      }
+    },
+    "lean.file.spoken %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.file.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File there, in %@"
+          }
+        }
+      }
+    },
+    "lean.shares %@ %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key lean.shares %@ %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shares ‘%1$@’ with %2$@"
+          }
+        }
+      }
+    },
+    "lens.alone" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.alone",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alone"
+          }
+        }
+      }
+    },
+    "lens.alone.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.alone.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas with no links."
+          }
+        }
+      }
+    },
+    "lens.lateNight" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.lateNight",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Late night"
+          }
+        }
+      }
+    },
+    "lens.lateNight.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.lateNight.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas caught between 11 PM and 4 AM."
+          }
+        }
+      }
+    },
+    "lens.off.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.off.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turns this lens off."
+          }
+        }
+      }
+    },
+    "lens.questions" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.questions",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questions"
+          }
+        }
+      }
+    },
+    "lens.questions.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.questions.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas with a question mark."
+          }
+        }
+      }
+    },
+    "lens.spoken %@ %@" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "lens.unfinished" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.unfinished",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfinished"
+          }
+        }
+      }
+    },
+    "lens.unfinished.hint" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key lens.unfinished.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows only ideas that stop mid-sentence."
+          }
+        }
+      }
+    },
     "look.2d" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key look.2d",
       "extractionState" : "manual",
@@ -1021,6 +1573,30 @@
         }
       }
     },
+    "map.lens.empty" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key map.lens.empty",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No ideas match. Turn a lens off to see more."
+          }
+        }
+      }
+    },
+    "map.lenses" : {
+      "comment" : "Map mode's lenses (S06d), from the ux-writing pass; key map.lenses",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lenses"
+          }
+        }
+      }
+    },
     "map.list.hint" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key map.list.hint",
       "extractionState" : "manual",
@@ -1081,6 +1657,114 @@
         }
       }
     },
+    "moons.chip" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.chip",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Days"
+          }
+        }
+      }
+    },
+    "moons.chip.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.chip.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows recent days as moons."
+          }
+        }
+      }
+    },
+    "moons.clear" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.clear",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
+          }
+        }
+      }
+    },
+    "moons.clear.spoken" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.clear.spoken",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear the chosen day"
+          }
+        }
+      }
+    },
+    "moons.moon.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows that day’s ideas."
+          }
+        }
+      }
+    },
+    "moons.moon.none %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.none %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, no ideas"
+          }
+        }
+      }
+    },
+    "moons.moon.spoken %@ %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.moon.spoken %@ %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "moons.pick" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.pick",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a day to see its ideas."
+          }
+        }
+      }
+    },
+    "moons.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key moons.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent days"
+          }
+        }
+      }
+    },
     "more.import" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key more.import",
       "extractionState" : "manual",
@@ -1101,6 +1785,30 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New folder"
+          }
+        }
+      }
+    },
+    "more.openCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key more.openCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open a capsule…"
+          }
+        }
+      }
+    },
+    "more.saveCapsule" : {
+      "comment" : "The capsule (S06d), from the ux-writing pass; key more.saveCapsule",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save a capsule…"
           }
         }
       }
@@ -1137,6 +1845,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rename"
+          }
+        }
+      }
+    },
+    "offer.carryOn" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.carryOn",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carry on"
+          }
+        }
+      }
+    },
+    "offer.carryOn.spoken %@" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.carryOn.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carry on with %@"
+          }
+        }
+      }
+    },
+    "offer.label" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were saying…"
+          }
+        }
+      }
+    },
+    "offer.notNow" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key offer.notNow",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
           }
         }
       }
@@ -1225,6 +1981,174 @@
         }
       }
     },
+    "shape.collide" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.collide",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide with…"
+          }
+        }
+      }
+    },
+    "shape.collide.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.collide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collide with"
+          }
+        }
+      }
+    },
+    "shape.join" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.join",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Join with…"
+          }
+        }
+      }
+    },
+    "shape.join.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.join.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Join with"
+          }
+        }
+      }
+    },
+    "shape.split" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key shape.split",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split…"
+          }
+        }
+      }
+    },
+    "share.hint" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a word to leave it out. The idea goes in To sort."
+          }
+        }
+      }
+    },
+    "share.keepAll" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.keepAll",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep all"
+          }
+        }
+      }
+    },
+    "share.leaveAll" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.leaveAll",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave all out"
+          }
+        }
+      }
+    },
+    "share.title" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New idea"
+          }
+        }
+      }
+    },
+    "share.word.kept" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.word.kept",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept"
+          }
+        }
+      }
+    },
+    "share.word.out" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key share.word.out",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left out"
+          }
+        }
+      }
+    },
+    "shared.from %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key shared.from %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From %@"
+          }
+        }
+      }
+    },
+    "shared.from.spoken %@" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key shared.from.spoken %@",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared from %@"
+          }
+        }
+      }
+    },
+    "sky.save" : {
+      "comment" : "Space and Map mode (S06b), from the ux-writing pass; key sky.save",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
     "sort.allSorted" : {
       "comment" : "Ideas screens (S05), from the ux-writing pass; key sort.allSorted",
       "extractionState" : "manual",
@@ -1281,6 +2205,102 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "To sort, %@"
+          }
+        }
+      }
+    },
+    "split.confirm" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.confirm",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split idea"
+          }
+        }
+      }
+    },
+    "split.done" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.done",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idea split in two."
+          }
+        }
+      }
+    },
+    "split.ends.here" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.ends.here",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First idea ends here"
+          }
+        }
+      }
+    },
+    "split.first" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.first",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First idea"
+          }
+        }
+      }
+    },
+    "split.hint" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.hint",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap the last sentence of the first idea."
+          }
+        }
+      }
+    },
+    "split.one" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.one",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This idea has one sentence, so it can’t be split."
+          }
+        }
+      }
+    },
+    "split.second" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.second",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Second idea"
+          }
+        }
+      }
+    },
+    "split.title" : {
+      "comment" : "Ideas like this, collide, split and join (S06c), from the ux-writing pass; key split.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Split in two"
           }
         }
       }
@@ -1377,6 +2397,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Show modes. Now showing %@"
+          }
+        }
+      }
+    },
+    "tide.close" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.close",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close low tide"
+          }
+        }
+      }
+    },
+    "tide.keep" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.keep",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep"
+          }
+        }
+      }
+    },
+    "tide.letGo" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.letGo",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let go"
+          }
+        }
+      }
+    },
+    "tide.line" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ideas you haven't opened in a while."
+          }
+        }
+      }
+    },
+    "tide.title" : {
+      "comment" : "Ideas screens (S06a), from the strings pass; key tide.title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low tide"
           }
         }
       }

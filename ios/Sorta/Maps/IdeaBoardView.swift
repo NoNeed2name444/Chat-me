@@ -28,7 +28,20 @@ import SwiftUI
 /// (IdeaBoardFit), clear of the edges and the tool circles.
 struct IdeaBoardView: View {
     @EnvironmentObject private var notes: NoteStore
+    @Environment(IdeasFiling.self) private var filing
+    /// S06c: the ideas like the one open in the editor, edged in the accent;
+    /// absent in the maps' preview, which shows none.
+    @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
     let open: (UUID) -> Void
+    /// S06b: the ideas of the day picked in the moons row; the other cards
+    /// dim while it is lit. Nil: none picked.
+    var lit: Set<UUID>? = nil
+    /// The ideas Map mode's lenses let through (IdeaLens.passing), nil with
+    /// none on (S06d A2). A card left out fades to the filter's ghost
+    /// (IdeaLens.fade), takes no touch and is not read out, and its links
+    /// fade with it; the change is at once, so Reduce Motion has nothing to
+    /// stop. Android's IdeaBoard does the same.
+    var lens: Set<UUID>? = nil
 
     /// How far the board has been moved, and the move in progress.
     @State private var pan: CGSize = .zero
@@ -75,6 +88,8 @@ struct IdeaBoardView: View {
     }
 
     private static let space = "idea-board"
+    /// A card outside the lit day: dimmed, its words still there to read.
+    static let unlit: Double = 0.5
     /// The UI tests' stand-in for a resting finger, which XCUITest can't
     /// hold while it takes a picture: `-SortaBoardPeek <title>` shows that
     /// idea's whole title until the board is moved.
@@ -137,6 +152,13 @@ struct IdeaBoardView: View {
                 connecting.toggle()
                 source = nil
             }
+            // S06c: Collide, two far-apart ideas face to face
+            if let shapes {
+                IdeaToolButton(symbol: "bolt", label: IdeasWords.collideTool) {
+                    shapes.collideAny(from: .map, notes: notes, filing: filing)
+                }
+                .accessibilityIdentifier("collide-tool")
+            }
             IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") {
                 moved = false
                 withAnimation(Motion.gentle(.snappy(duration: 0.25))) { fitAll() }
@@ -186,7 +208,8 @@ struct IdeaBoardView: View {
                     for (k, edge) in edges.enumerated() {
                         guard let p = points[edge.0], let q = points[edge.1] else { continue }
                         let line: Path = Self.line(style, from: p, to: q, lane: lanes[k].lane, lanes: lanes[k].lanes)
-                        context.stroke(line, with: .color(ink), style: stroke)
+                        let faded: Bool = lens.map { !$0.contains(edge.0) || !$0.contains(edge.1) } ?? false
+                        context.stroke(line, with: .color(faded ? ink.opacity(IdeaLens.fade) : ink), style: stroke)
                     }
                 }
                 .allowsHitTesting(false)
@@ -195,9 +218,14 @@ struct IdeaBoardView: View {
                     // a lifted card is drawn over the flat ones it passes
                     let lifted: Bool = dragged == note.id || source == note.id
                     let layer: Double = lifted ? 1 : 0
-                    card(note, oneKind: oneKind)
+                    // a card the lenses leave out (S06d)
+                    let faded: Bool = lens.map { !$0.contains(note.id) } ?? false
+                    card(note, oneKind: oneKind, faded: faded)
                         // its size before the board's zoom, in board points
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { sizes[note.id] = $0 }
+                        .opacity(lit.map { $0.contains(note.id) ? 1 : IdeaBoardView.unlit } ?? 1)
+                        .opacity(faded ? IdeaLens.fade : 1)
+                        .allowsHitTesting(!faded)
                         .scaleEffect(scale)
                         .position(points[note.id] ?? .zero)
                         .zIndex(layer)
@@ -205,6 +233,19 @@ struct IdeaBoardView: View {
 
                 if let id = shownPeek, let note = notes.notes.first(where: { $0.id == id }), let at = points[id] {
                     peekView(note, at: at, in: size, hidden: hidden)
+                }
+
+                // no idea passes the lenses: the map's empty line, as over
+                // Space (S06d)
+                if let lens, !notes.notes.isEmpty, !notes.notes.contains(where: { lens.contains($0.id) }) {
+                    Text(IdeasWords.lensEmpty)
+                        .wardFont(.footnote)
+                        .foregroundStyle(Color.wardInkSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, WardSpace.xl)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("map-lens-empty")
+                        .position(x: size.width / 2, y: midY)
                 }
 
                 if notes.notes.isEmpty {
@@ -265,27 +306,44 @@ struct IdeaBoardView: View {
 
     // MARK: cards
 
-    private func card(_ note: Note, oneKind: Bool) -> some View {
+    private func card(_ note: Note, oneKind: Bool, faded: Bool = false) -> some View {
         let tone = NoteTone.color(for: note.folderId, in: notes)
         let chosen: Bool = source == note.id
+        // S06c: like the idea open in the editor: the accent's edge, still,
+        // so Reduce Motion needs nothing more; a tap links it
+        let glows: Bool = !connecting && (shapes?.glows(note.id) ?? false)
+        let links: Bool = linksOnTap(note.id)
         // a card being dragged or starting a connection rises off the board
         let lifted: Bool = dragged == note.id || chosen
         let grow: CGFloat = lifted && !reduceMotion ? 1.04 : 1
         let wash: Color = tone.opacity(0.14)
+        // the frost on an idea left unopened (S06a A6), deeper by step; opened, it melts, at once with Reduce Motion on
+        let frost: Int = IdeaFrostLook.level(note)
         // a board of one kind (oneKind) drops the kind's word; a folder's name where it has one (S05m item 4)
         let folder: String? = notes.folder(note.folderId)?.name
         let place: String? = folder ?? (oneKind ? nil : note.kind.label)
         let title: String = note.title.isEmpty ? "Untitled" : note.title
         // read as drawn, the whole title first
-        let spoken: String = [title, oneKind ? nil : note.kind.label, folder].compactMap { $0 }.joined(separator: ", ")
+        let spoken: String = [title, oneKind ? nil : note.kind.label, folder, frost > 0 ? IdeasWords.frostSpoken : nil]
+            .compactMap { $0 }.joined(separator: ", ")
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
         return VStack(alignment: .leading, spacing: WardSpace.xs) {
             HStack(spacing: WardSpace.xs) {
                 Image(systemName: note.kind.symbol)
+                if frost > 0 {
+                    Image(systemName: "snowflake")
+                }
                 // a folder's name takes two lines before it ends in "…" (S05m item 8)
                 if let place {
                     Text(place)
                         .lineLimit(2)
+                }
+                // S06c: the echoes strip's link glyph at the card's top end
+                if glows {
+                    Spacer(minLength: 0)
+                    Image(systemName: "link")
+                        .foregroundStyle(Color.wardGlyph)
+                        .accessibilityHidden(true)
                 }
             }
             .wardFont(.caption2)
@@ -308,10 +366,16 @@ struct IdeaBoardView: View {
             ZStack {
                 WardReliefFace(shape: shape, lift: lifted ? .high : .low)
                 shape.fill(wash)
+                shape.fill(IdeaFrostLook.wash(frost))
+                    .animation(reduceMotion ? nil : .easeOut(duration: IdeaFrostLook.melt), value: frost)
             }
         }
         .overlay {
-            if chosen { shape.strokeBorder(Color.wardPrimaryInk, lineWidth: 2).transition(.identity) }
+            if chosen {
+                shape.strokeBorder(Color.wardPrimaryInk, lineWidth: 2).transition(.identity)
+            } else if glows {
+                shape.strokeBorder(Color.wardGlyph, lineWidth: 3).transition(.identity)
+            }
         }
         .scaleEffect(grow)
         .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: lifted)
@@ -334,12 +398,37 @@ struct IdeaBoardView: View {
         .gesture(cardDrag(note))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
+        // S06c: what a tap does when it links: to the open idea, named, since
+        // VoiceOver is on this card and "this idea" would read as itself
+        .accessibilityHint(links ? IdeasWords.echoesBoardLink(openLine) : "")
         .accessibilityAddTraits(.isButton)
         // its symbol and its stored place, which the board may draw it away
         // from (S05c), for the UI tests; VoiceOver doesn't read an identifier
         .accessibilityIdentifier("board-card \(note.kind.symbol) \(note.boardX) \(note.boardY)")
         // as Android's hold names it, and as both hints say it
         .accessibilityAction(named: "Start a connection") { source = note.id }
+        // S06c: when a tap links it, Open stays an action of its own
+        .accessibilityActions {
+            if links {
+                Button("Open") { open(note.id) }
+            }
+        }
+        // a card the lenses leave out is not read (S06d A2): hidden on its own
+        // element, which the card makes here; hidden from outside it, the
+        // faded card was still found (CI, 14 Nov: iPhone and iPad)
+        .accessibilityHidden(faded)
+    }
+
+    /// S06c: a tap on a card like the idea open in the editor links the two.
+    private func linksOnTap(_ id: UUID) -> Bool {
+        guard source == nil, !connecting, let shapes, shapes.editing != nil else { return false }
+        return shapes.glows(id)
+    }
+
+    /// The open idea's first line, which a linking card's hint names.
+    private var openLine: String {
+        guard let id = shapes?.editing, let note = notes.note(id) else { return IdeasWords.untitled }
+        return IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
     }
 
     /// The whole title over its card, at least 240 wide, inside the board's
@@ -370,7 +459,9 @@ struct IdeaBoardView: View {
     /// A tap opens the card - unless a connection is being made, when it is
     /// the first or second end of one.
     private func tapped(_ id: UUID) {
-        if let from = source {
+        if linksOnTap(id), let shapes {
+            shapes.link(id, notes: notes, filing: filing)
+        } else if let from = source {
             if from != id {
                 if notes.isLinked(from, id) { notes.unlink(from, id) } else { notes.link(from, id) }
             }

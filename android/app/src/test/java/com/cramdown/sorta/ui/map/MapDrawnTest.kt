@@ -6,6 +6,8 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.cramdown.sorta.map.NeuronScene
+import com.cramdown.sorta.map.OrbitCamera
+import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.NeuronState
 import com.cramdown.sorta.map.NeuronStateChoice
 import com.cramdown.sorta.map.ThemeBodyKind
@@ -545,5 +547,34 @@ class MapDrawnTest {
         val measure = warm.performing(5, 3, true, "measure")
         assertEquals("measure", measure.tourPhase)
         assertEquals("a filter's fewer hubs and lines", listOf(2, 1), measure.performing(2, 1, true).let { listOf(it.hubs, it.folderLines) })
+    }
+
+    @Test fun theBoxIsAtThePoseOnlyOnceAFrameWasDrawnThere() {
+        // Chat-me run 43607814308's phone (S06m): Recentre put the camera home at once, and the record
+        // still carried the flown-in frame's box, measured at the flown-in pose
+        val home = listOf(-0.06630659f, 0.7421432f, -0.14715767f, 10.481946f, 0f, 0.7853982f)
+        val flown = listOf(0.8f, -2.1f, 0.3f, 3.2f, 0.4f, 0.6f)
+        val stale = MapDrawn(box = listOf(17.054394f, 40.14603f, 1022.1209f, 1296.4523f), pose = home, boxPose = flown)
+        assertFalse("a box from the flown-in frame, the camera home", stale.boxAtPose())
+        val drawn = stale.copy(box = listOf(169.16322f, 916.06116f, 921.1845f, 1699.2186f), boxPose = home)
+        assertTrue("the first view's frame drawn", drawn.boxAtPose())
+        // a thousandth of each value's size (at least 1) is the same pose; more is not
+        assertTrue(drawn.copy(boxPose = home.mapIndexed { i, v -> if (i == 3) v * 1.0005f else v }).boxAtPose())
+        assertFalse(drawn.copy(boxPose = home.mapIndexed { i, v -> if (i == 3) v * 1.01f else v }).boxAtPose())
+        assertFalse("yaw 0 moved by more than 0.001", drawn.copy(boxPose = home.mapIndexed { i, v -> if (i == 4) 0.002f else v }).boxAtPose())
+        // before any frame, or with no pose, there is no box at the pose
+        assertFalse(MapDrawn(pose = home).boxAtPose())
+        assertFalse(MapDrawn(boxPose = home).boxAtPose())
+        assertFalse(MapDrawn().boxAtPose())
+    }
+
+    @Test fun aPoseIsTheCamerasTargetDistanceYawAndPitch() {
+        val camera = OrbitCamera(Vec3(1f, -2f, 3f), distance = 10.5f, yaw = 0.25f, pitch = -0.4f, roll = 1.2f)
+        assertEquals(listOf(1f, -2f, 3f, 10.5f, 0.25f, -0.4f), MapDrawn.poseOf(camera))
+        assertEquals(MapDrawn.POSE, MapDrawn.poseOf(camera).size)
+        val d = MapDrawn(pose = MapDrawn.poseOf(camera), boxPose = MapDrawn.poseOf(camera))
+        assertTrue(d.boxAtPose())
+        camera.orbit(0.3f, 0f)
+        assertFalse("the camera turned after the frame", d.copy(pose = MapDrawn.poseOf(camera)).boxAtPose())
     }
 }

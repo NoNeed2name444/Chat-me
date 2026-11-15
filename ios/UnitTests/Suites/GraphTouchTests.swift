@@ -130,9 +130,13 @@ check("T3 an untitled note", GraphPeek.content(GraphPeekInput(theme: "space", ro
 check("T4 the first-run card's three lines", GraphPeek.coachLines == [
     "Tap to preview", "Tap again or Open to read", "Hold to move or for options"
 ])
-check("T4 VoiceOver's actions", GraphPeek.actions(folder: false) == ["Open", "Show links", "Delete"])
+// S06c: an idea's Split…, Join with… and Collide with…, before Delete
+check("T4 VoiceOver's actions", GraphPeek.actions(folder: false) == [
+    "Open", "Show links", "Split\u{2026}", "Join with\u{2026}", "Collide with\u{2026}", "Delete"
+])
+check("T4 a folder's VoiceOver actions", GraphPeek.actions(folder: true) == ["Open folder", "Fly in", "Delete"])
 check("T4 a note's options", GraphPeek.menu(folder: false, home: false) == [
-    "Open", "Rename", "Link to\u{2026}", "Choose folder", "Delete"
+    "Open", "Rename", "Link to\u{2026}", "Choose folder", "Split\u{2026}", "Join with\u{2026}", "Collide with\u{2026}", "Delete"
 ])
 check("T4 a folder's options add a note there", GraphPeek.menu(folder: true, home: false).contains("Add idea here")
       && !GraphPeek.menu(folder: true, home: false).contains("Link to\u{2026}"))
