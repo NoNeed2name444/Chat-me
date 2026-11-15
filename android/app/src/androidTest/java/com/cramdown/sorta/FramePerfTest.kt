@@ -99,7 +99,9 @@ class FramePerfTest {
         phase("map-drag", 3_000, gl = true) { drag(box.centerX(), box.top + box.height() * 0.3f, box.width() * 0.25f, 3_000) }
         // the biggest body clear of the chrome, else the first
         val body = drawn()?.spot?.takeIf { it.size == 3 }?.get(0)?.toInt() ?: 0
-        val tap = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map takes no tap" }
+        val tap = checkNotNull(onMain { allHere { it.config.getOrNull(MapTapKey) != null }.firstOrNull()?.config?.getOrNull(MapTapKey) }) {
+            "The map takes no tap"
+        }
         phase("map-fly", 2_000, gl = true) { onMain { tap.tap(body) }; SystemClock.sleep(2_000) }
     }
 
@@ -108,11 +110,11 @@ class FramePerfTest {
         IdeasSettings(context).setLook(MapLook.TWO_D)
         open(lively = false)
         reachMap()
-        waitFor(20_000, "the board's cards") { find(BOARD_CARD_TAG) != null }
+        waitFor(20_000, "the board's cards") { find(BOARD_CARD_TAG) }
         SystemClock.sleep(1_000)
         val root = bounds(null)
         // from below the cards, where the board itself takes the finger
-        val lowest = all(BOARD_CARD_TAG).maxOf { it.boundsInWindow.bottom }
+        val lowest = rects(BOARD_CARD_TAG).maxOf { it.bottom }
         val y = minOf(lowest + 40 * px(), root.bottom - root.height() * 0.2f)
         phase("board-pan", 3_000, gl = false) { drag(root.centerX(), y, root.width() * 0.2f, 3_000) }
     }
@@ -122,9 +124,9 @@ class FramePerfTest {
         IdeasSettings(context).apply { setSortDeck(true); setLastTide(System.currentTimeMillis()) }
         IdeasSession.offerDone = true
         open(lively = false)
-        waitFor(20_000, "the deck's card") { find(DeckTags.CARD) != null }
+        waitFor(20_000, "the deck's card") { find(DeckTags.CARD) }
         SystemClock.sleep(1_000)
-        val card = checkNotNull(find(DeckTags.CARD)).boundsInWindow
+        val card = checkNotNull(rects(DeckTags.CARD).firstOrNull()) { "No deck card" }
         val origin = windowOrigin()
         val cx = origin[0] + (card.left + card.right) / 2; val cy = origin[1] + card.top + (card.bottom - card.top) * 0.3f
         phase("deck-drag", 2_000, gl = false) { drag(cx, cy, 60 * px(), 2_000, screen = true) }
@@ -133,12 +135,12 @@ class FramePerfTest {
     /** An idea's editor, typed in at about ten keys a second. */
     @Test fun editor() {
         open(lively = false)
-        waitFor(20_000, "the list") { find(IdeasTags.TITLE) != null }
+        waitFor(20_000, "the list") { find(IdeasTags.TITLE) }
         // the newest idea in To sort, at the list's top
         val idea = notes.first { it.folderId == null }
         val row = checkNotNull(ui.findObject(By.text(idea.title))) { "No row for ${idea.title}" }
         row.click()
-        waitFor(10_000, "the editor") { find(EDITOR_TAG) != null }
+        waitFor(10_000, "the editor") { find(EDITOR_TAG) }
         SystemClock.sleep(1_000)
         val field = ui.findObjects(By.clazz("android.widget.EditText")).maxByOrNull { it.visibleBounds.height() }
         checkNotNull(field) { "The editor has no field" }.click()
@@ -213,7 +215,7 @@ class FramePerfTest {
         IdeaStore(dir).replaceIdeas(notes, folders)
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
         checkNotNull(scenario).onActivity { activity = it }
-        waitFor(20_000, "Sorta") { find(IdeasTags.TITLE) != null }
+        waitFor(20_000, "Sorta") { find(IdeasTags.TITLE) }
         if (lively) {
             ui.executeShellCommand("settings put global animator_duration_scale 1")
             waitFor(5_000, "animations on") { android.animation.ValueAnimator.areAnimatorsEnabled() }
@@ -222,9 +224,8 @@ class FramePerfTest {
 
     /** A phone's map behind its switch; a wider window's beside Sort already. */
     private fun reachMap() {
-        val switch = find(SortaMode.MAP.identifier) ?: return
+        val b = rects(SortaMode.MAP.identifier).firstOrNull() ?: return
         val origin = windowOrigin()
-        val b = switch.boundsInWindow
         check(ui.click((origin[0] + (b.left + b.right) / 2).toInt(), (origin[1] + (b.top + b.bottom) / 2).toInt())) { "Map mode's switch" }
     }
 
@@ -260,10 +261,13 @@ class FramePerfTest {
             if (runCatching(ready).getOrDefault(false)) return
             SystemClock.sleep(100)
         }
-        check(runCatching(ready).getOrDefault(false)) { "Not ready within ${ms / 1000} s: $what" }
+        // a check that threw says why, not only that it never came true
+        val last = runCatching(ready)
+        check(last.getOrDefault(false)) { "Not ready within ${ms / 1000} s: $what" + (last.exceptionOrNull()?.let { " ($it)" } ?: "") }
     }
 
-    // MARK: the activity's semantics, read on the main thread with no wait for idle
+    // MARK: the activity's semantics, read on the main thread with no wait for idle. The ...Here
+    // functions run on it already (inside onMain): runOnMainSync from the main thread throws.
 
     private fun <T> onMain(block: () -> T): T {
         var out: Result<T>? = null
@@ -271,27 +275,29 @@ class FramePerfTest {
         return checkNotNull(out).getOrThrow()
     }
 
-    private fun roots(): List<SemanticsNode> = onMain {
+    private fun rootsHere(): List<SemanticsNode> {
         val found = ArrayList<SemanticsNode>()
         fun views(v: View) {
             if (v is RootForTest) found.add(v.semanticsOwner.unmergedRootSemanticsNode)
             if (v is ViewGroup) for (k in 0 until v.childCount) views(v.getChildAt(k))
         }
         activity?.window?.decorView?.let(::views)
-        found
+        return found
     }
 
-    private fun all(match: (SemanticsNode) -> Boolean): List<SemanticsNode> = onMain {
+    private fun allHere(match: (SemanticsNode) -> Boolean): List<SemanticsNode> {
         val found = ArrayList<SemanticsNode>()
         fun walk(n: SemanticsNode) { if (match(n)) found.add(n); n.children.forEach(::walk) }
-        roots().forEach(::walk)
-        found
+        rootsHere().forEach(::walk)
+        return found
     }
 
-    private fun all(tag: String) = all { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
-    private fun find(tag: String) = all(tag).firstOrNull()
-    private fun mapNode() = all { it.config.getOrNull(MapDrawnKey) != null }.firstOrNull()
-    private fun drawn(): MapDrawn? = mapNode()?.config?.getOrNull(MapDrawnKey)
+    private fun tagged(tag: String): (SemanticsNode) -> Boolean = { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+    private fun rectHere(n: SemanticsNode) = n.boundsInWindow.let { android.graphics.RectF(it.left, it.top, it.right, it.bottom) }
+    /** The bounds, in the window, of each node tagged [tag]. */
+    private fun rects(tag: String): List<android.graphics.RectF> = onMain { allHere(tagged(tag)).map(::rectHere) }
+    private fun find(tag: String): Boolean = onMain { allHere(tagged(tag)).isNotEmpty() }
+    private fun drawn(): MapDrawn? = onMain { allHere { it.config.getOrNull(MapDrawnKey) != null }.firstOrNull()?.config?.getOrNull(MapDrawnKey) }
 
     /** The window's place on the screen. */
     private fun windowOrigin(): FloatArray = onMain {
@@ -301,10 +307,8 @@ class FramePerfTest {
     }
 
     /** The bounds, in the window, of the node carrying [key]; the whole window for null. */
-    private fun bounds(key: androidx.compose.ui.semantics.SemanticsPropertyKey<*>?): android.graphics.RectF {
-        val node = if (key == null) roots().first() else checkNotNull(all { it.config.getOrNull(key) != null }.firstOrNull()) { "No node with $key" }
-        val b = node.boundsInWindow
-        return android.graphics.RectF(b.left, b.top, b.right, b.bottom)
+    private fun bounds(key: androidx.compose.ui.semantics.SemanticsPropertyKey<*>?): android.graphics.RectF = onMain {
+        rectHere(if (key == null) rootsHere().first() else checkNotNull(allHere { it.config.getOrNull(key) != null }.firstOrNull()) { "No node with $key" })
     }
 
     private companion object {
