@@ -342,11 +342,15 @@ data class MapDrawn(
     /** Added by Map3DView (S06c): an idea a test can hold, and the nearest other idea to the held one (else the chosen one), each index, x, y; empty for none. */
     val ideaSpot: List<Float> = emptyList(),
     val near: List<Float> = emptyList(),
-    /** Space's frost (S06a A6): the bodies the latest frame drew a frost halo round. No words. */
-    val frosted: Int = 0,
+    /**
+     * Space's frost (S06a A6): the bodies the latest frame drew a frost halo round, by the level each
+     * wants, 1 to 3 (empty when none is drawn). A body far enough off to be drawn as a point has no
+     * halo. No words.
+     */
+    val frosted: List<Int> = emptyList(),
 ) {
-    /** This record with the latest frame's frost halos; the same record when nothing changed. */
-    fun frosting(frostedNow: Int): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
+    /** This record with the latest frame's frost halos by level; the same record when nothing changed. */
+    fun frosting(frostedNow: List<Int>): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
 
     /**
      * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
@@ -1457,7 +1461,7 @@ class GlMapRenderer(
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
-        record = record.frosting(frostCount)
+        record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList())
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
@@ -2326,6 +2330,8 @@ class GlMapRenderer(
     }
 
     private var frostMelting = false
+    /** The halos [writeFrost] drew last, by the level each wants, 1 to 3, for the record. */
+    private val frostLevels = IntArray(3)
 
     /**
      * The frost halos (S06a A6) for the bodies drawn this frame, into [frostOut] as the sparks' points
@@ -2335,6 +2341,7 @@ class GlMapRenderer(
     private fun writeFrost(bodies: SpaceBodies, dt: Float): Int {
         val levels = frost
         frostMelting = false
+        frostLevels.fill(0)
         if (levels == null && frostShown.none { it > 0f }) return 0
         if (frostOut.size < bodies.count * 7) frostOut = FloatArray(bodies.count * 7)
         var n = 0
@@ -2357,6 +2364,7 @@ class GlMapRenderer(
             frostOut[w] = bodies.data[o]; frostOut[w + 1] = bodies.data[o + 1]; frostOut[w + 2] = bodies.data[o + 2]
             frostOut[w + 3] = bodies.data[o + 3] * 2.8f
             frostOut[w + 4] = FROST_ICE[0] * now; frostOut[w + 5] = FROST_ICE[1] * now; frostOut[w + 6] = FROST_ICE[2] * now
+            if (level > 0) frostLevels[level - 1]++
             n++
         }
         return n

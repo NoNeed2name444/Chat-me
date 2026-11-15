@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -26,9 +27,7 @@ import androidx.compose.ui.test.pinch
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.GraphTheme
@@ -653,33 +652,23 @@ class MapSpaceLivelyTest {
             compose.onNode(item).performClick()
             compose.waitUntil(60_000) { drawn()?.let { it.build != built && framed(it) } == true }
         } else {
-            tapShown(label, "The Look menu's $label")
+            chooseItem(item, "The Look menu's $label")
             compose.waitUntil(30_000) { drawn()?.build?.let { it != built } == true }
         }
     }
 
     /**
-     * A tap through UiAutomation on the clickable [text] as the screen shows it: once its window is
-     * up and its place has held still for 250 ms. Compose's tree has a menu's items before its
-     * window takes touches: on Chat-me copy cfb48d0's phone (run 43694499795, attempt 2) the tap on
-     * Comets came 0.3 s after the Look menu's window was made (0.6 to 1.4 s in the runs that
-     * passed), the menu closed as if tapped outside, no new scene was built, and the wait for
-     * Comets' scene ran out.
+     * The menu item [item] chosen by its own click action, as TalkBack chooses it, on the main thread
+     * and with no wait for Compose to be idle. A tap through the screen raced the menu's window: on
+     * Chat-me copy cfb48d0's phone (run 43694499795, attempt 2) the tap on Comets came 0.3 s after
+     * the Look menu's window was made, and the menu closed as if tapped outside; and on copy
+     * 9e0732f's phone (run 43705809523) UiAutomation found no clickable "Comets" on screen within
+     * 10 s, by day and by night. The menu's own action is what a tap on the item runs.
      */
-    private fun tapShown(text: String, what: String) {
-        val shown = By.text(text).clickable(true)
-        var last = checkNotNull(ui.wait(Until.findObject(shown), 10_000)) { "$what is not on screen" }.visibleBounds
-        val until = SystemClock.uptimeMillis() + 5_000
-        while (SystemClock.uptimeMillis() < until) {
-            SystemClock.sleep(250)
-            val now = checkNotNull(ui.findObject(shown)) { "$what went from the screen" }.visibleBounds
-            if (now == last) {
-                check(ui.click(now.centerX(), now.centerY())) { "$what could not be tapped" }
-                return
-            }
-            last = now
-        }
-        error("$what never held still on screen: last at $last")
+    private fun chooseItem(item: SemanticsMatcher, what: String) {
+        val node = compose.onAllNodes(item).fetchSemanticsNodes().firstOrNull()
+        val click = checkNotNull(node?.config?.getOrNull(SemanticsActions.OnClick)?.action) { "$what has no click action" }
+        check(onMain { click() }) { "$what's click action was refused" }
     }
 
     /** A tap in the middle of [node], through UiAutomation: no wait for Compose to be idle. */

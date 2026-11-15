@@ -42,8 +42,8 @@ import java.util.UUID
  * iOS's DeckRenderTests keeps deck-5-frost-space and deck-6-lens-space: the deck's made-up ideas
  * (as DeckSeed and DeckIdeas), the clock 200 days after they were made, the gate opened 10 days
  * before (no frost), the boiler 40 (one step), the brushes 100 (two), the rest never (three). Kept in
- * /sdcard/Download/sorta-renders as space-frost-<light|dark>-<device>.png, six bodies drawn with
- * their halo, then space-lens-<light|dark>-<device>.png, Alone on: the ideas in no link drawn, the
+ * /sdcard/Download/sorta-renders as space-frost-<light|dark>-<device>.png, a halo of each level
+ * drawn, then space-lens-<light|dark>-<device>.png, Alone on: the ideas in no link drawn, the
  * rest faded. None of the ideas is medical.
  */
 @RunWith(AndroidJUnit4::class)
@@ -74,9 +74,12 @@ class SpaceFrostLensRenderTest {
         val suffix = "${if (dark) "dark" else "light"}-$device"
         open(dark, suffix)
 
-        // the frost: a halo round each of the six ideas not opened in 30 days
-        try { compose.waitUntil(20_000) { drawn()?.frosted == FROSTED } } catch (_: ComposeTimeoutException) {}
-        check(drawn()?.frosted == FROSTED) { "Space drew ${drawn()?.frosted} frost halos, not $FROSTED, for $suffix: ${drawn()}" }
+        // the frost at each step: a halo of each level, round the boiler (one step), the brushes (two)
+        // and the ideas never opened (three); a body far enough off to be a point has none, so of the
+        // six frosted ideas, those drawn as bodies (CI's phone, 15 Nov: one of the four never opened was a point)
+        fun steps(d: MapDrawn?) = d?.frosted?.let { it.size == 3 && it[0] == 1 && it[1] == 1 && it[2] in 1..NEVER_OPENED } == true
+        try { compose.waitUntil(20_000) { steps(drawn()) } } catch (_: ComposeTimeoutException) {}
+        check(steps(drawn())) { "Space drew frost halos by level ${drawn()?.frosted}, not 1, 1 and 1 to $NEVER_OPENED, for $suffix: ${drawn()}" }
         settle(1_000)
         shot("space-frost-$suffix")
 
@@ -181,8 +184,8 @@ class SpaceFrostLensRenderTest {
         /** When the ideas were made (26 Oct 2026), as IdeasFixture's; the clock is 201 days on, as DeckIdeas.LATER. */
         const val T = 1_793_000_000_000L
         const val LATER = T + 201 * DAY
-        /** Not opened in 30 days: the boiler, the brushes and the four never opened. */
-        const val FROSTED = 6
+        /** Never opened, so frosted three steps: the shed, the compost, the tulips and the bread. */
+        const val NEVER_OPENED = 4
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 
         val garden = NoteFolder(id = id(201), name = "Garden", createdAt = T)
