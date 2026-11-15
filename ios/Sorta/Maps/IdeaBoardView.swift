@@ -42,6 +42,10 @@ struct IdeaBoardView: View {
     /// fade with it; the change is at once, so Reduce Motion has nothing to
     /// stop. Android's IdeaBoard does the same.
     var lens: Set<UUID>? = nil
+    /// The capsule's picture (S06d A4): this board drawn once, still, at a
+    /// set zoom and pan (IdeaBoardStill), with none of its tools, hints or
+    /// peeks; nil on screen. As Android's IdeaBoard's still.
+    var still: IdeaBoardStill? = nil
 
     /// How far the board has been moved, and the move in progress.
     @State private var pan: CGSize = .zero
@@ -97,7 +101,7 @@ struct IdeaBoardView: View {
 
     /// Every card's width: 20 letters of its title, never under 150 (S05m
     /// item 5).
-    private var cardWidth: CGFloat { max(IdeaBoardDrop.card.width, titleWidth.rounded(.up) + 2 * WardSpace.m) }
+    private var cardWidth: CGFloat { IdeaBoardStill.card(titleWidth: still?.titleWidth ?? titleWidth).width }
 
     /// The tool cluster's box: three targets and their spacing, in the
     /// gutter (IdeaToolCluster, IdeaToolsPlacement).
@@ -110,17 +114,31 @@ struct IdeaBoardView: View {
     /// The card whose whole title shows: the one a pointer or a finger is
     /// on, or the UI tests' until the board is moved.
     private var shownPeek: UUID? {
+        guard still == nil else { return nil }
         if let peek { return peek }
         guard !moved, let title = Self.peekHook else { return nil }
         return notes.notes.first { $0.title == title }?.id
     }
 
-    private var scale: CGFloat { min(max(zoom * pinching, 0.3), 2.5) }
+    private var scale: CGFloat {
+        if let still { return still.zoom }
+        return min(max(zoom * pinching, 0.3), 2.5)
+    }
     private var offset: CGSize {
-        CGSize(width: pan.width + panning.width, height: pan.height + panning.height)
+        if let still { return still.pan }
+        return CGSize(width: pan.width + panning.width, height: pan.height + panning.height)
     }
 
     var body: some View {
+        if still != nil {
+            // the picture: the cards and links alone, where the still puts them
+            canvas
+        } else {
+            live
+        }
+    }
+
+    private var live: some View {
         // The canvas runs on under the bottom glass (the capture row and the
         // Library's dock); the tools and the hint stay in the safe area.
         ZStack {
@@ -188,7 +206,7 @@ struct IdeaBoardView: View {
             let points = positions(in: size, midY: midY, drawn: drawn)
             let edges = notes.allEdges()
             let lineWidth: CGFloat = max(1, 1.5 * scale)
-            let style: GraphLineStyle = GraphLineStyle.inForce(straightLines)
+            let style: GraphLineStyle = GraphLineStyle.inForce(still?.straight ?? straightLines)
             let lanes: [(lane: Int, lanes: Int)] = Self.lanes(edges)
             // a board of one kind keeps each card's symbol but drops the kind's
             // word (S05m item 4); worked out once a pass, not once a card
@@ -280,6 +298,7 @@ struct IdeaBoardView: View {
     /// Every card in view as the canvas gets (or changes) its size, until
     /// the board has been moved by hand.
     private func fitFirst(size: CGSize, hidden: CGFloat) {
+        guard still == nil else { return }
         frame = size
         underGlass = hidden
         guard !moved, size.width > 0, size.height > 0 else { return }
@@ -519,7 +538,9 @@ struct IdeaBoardView: View {
     private func spreadCards() -> [IdeaBoardSpread.Card] {
         let least = CGSize(width: cardWidth, height: IdeaBoardDrop.card.height)
         return notes.notes.map { note in
-            let seen: CGSize = sizes[note.id] ?? least
+            // held still, every card at the least size the picture's frame
+            // was worked out by (CapsuleSave.fitting)
+            let seen: CGSize = (still == nil ? sizes[note.id] : nil) ?? least
             return IdeaBoardSpread.Card(id: note.id, centre: CGPoint(x: note.boardX, y: note.boardY),
                                         size: CGSize(width: max(seen.width, least.width), height: max(seen.height, least.height)))
         }
@@ -633,6 +654,23 @@ struct IdeaBoardView: View {
                 dragged = nil
                 dragOffset = .zero
             }
+    }
+}
+
+/// The board held still for the capsule's picture (S06d A4): its zoom and
+/// pan, the width of 20 letters of a card's title, which the board measures
+/// unseen on screen and a picture can't wait for, and the lines' style.
+struct IdeaBoardStill {
+    let zoom: CGFloat
+    let pan: CGSize
+    let titleWidth: CGFloat
+    let straight: Bool
+
+    /// The least card the board fits and spreads by: 20 letters of its
+    /// title, never under 150 wide, and a target tall (S05m item 5).
+    static func card(titleWidth: CGFloat) -> CGSize {
+        CGSize(width: max(IdeaBoardDrop.card.width, titleWidth.rounded(.up) + 2 * WardSpace.m),
+               height: IdeaBoardDrop.card.height)
     }
 }
 

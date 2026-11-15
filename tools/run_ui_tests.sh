@@ -29,7 +29,9 @@
 # (IdeaShapesUITests, the whole class) and their renders on both, by day
 # and by night, the drop target's by night only (the 3D map is always night).
 # On both, the lenses' and the capsule offer's renders by day and by night
-# (LensCapsuleRenderTests, S06d) and Not now once. A whole class passes only when
+# (LensCapsuleRenderTests, S06d) and Not now once. On the iPad, the map in
+# VoiceOver's reach beside the open editor, and the list behind it not
+# (PanedVoiceOverTests, 5dfed33). A whole class passes only when
 # every test in its file passed, by name, and none failed or was skipped.
 set -euo pipefail
 kind="$1"
@@ -149,7 +151,8 @@ case "$set_" in
     else
       # the moons and a lit day on the iPad too, the map in sight below them
       runs+=(light:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
-             dark:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight)
+             dark:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
+             light:SortaUITests/PanedVoiceOverTests/testBesideTheEditorTheMapIsReachedAndTheListIsNot)
     fi
     # S06a: the deck, the offer, the tide and the frost, last, as it leaves
     # the map on its 2D look

@@ -98,13 +98,13 @@ const val UNLIT = 0.5f
  * its links fade with it; the change is at once, so Reduce Motion has nothing to stop.
  */
 @Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp, version: Int = 0,
-                         lit: Set<String>? = null, lens: Set<String>? = null) {
+                         lit: Set<String>? = null, lens: Set<String>? = null, still: BoardStill? = null) {
     val density = LocalDensity.current
     val shapes = LocalIdeaShapes.current
     var size by remember { mutableStateOf(IntSize.Zero) }
-    var zoom by remember { mutableDoubleStateOf(1.0) }
-    var panX by remember { mutableDoubleStateOf(0.0) }
-    var panY by remember { mutableDoubleStateOf(0.0) }
+    var zoom by remember { mutableDoubleStateOf(still?.zoom ?: 1.0) }
+    var panX by remember { mutableDoubleStateOf(still?.panX ?: 0.0) }
+    var panY by remember { mutableDoubleStateOf(still?.panY ?: 0.0) }
     var moved by remember { mutableStateOf(false) }
     var connecting by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf<String?>(null) }
@@ -119,29 +119,29 @@ const val UNLIT = 0.5f
     // board by it, and its cards (a folder renamed beside them) with it
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
-    val style = settings.lineStyle
+    val straight = still?.straight ?: settings.lineStyle.isStraight
     val hiddenDp = hidden.value.toDouble()
     // a board of one kind keeps each card's symbol but drops the kind's word (S05m item 4)
     val oneKind = notes.map { it.noteKind }.toSet().size <= 1
     // a title's line is at most 20 letters of its font wide; every card is as wide as that holds,
     // and never under 150 (S05m item 5)
-    val measurer = rememberTextMeasurer()
     val titleStyle = boardTitleStyle()
-    val titleWidth = with(density) { measurer.measure(IdeaBoardDrop.TITLE_SAMPLE, titleStyle, maxLines = 1).size.width.toDp().value.toDouble() }
-    val cardWidth = max(CARD_WIDTH, kotlin.math.ceil(titleWidth) + 2 * WardSpace.m)
+    val cardWidth = boardCardWidth()
     // the tool cluster's box: three targets and their spacing, in the gutter (IdeaToolCluster)
     val tools = IdeaBoardFit.Tools(WardControlSize.target + 2 * WardSpace.gutter,
         3 * WardControlSize.target + 2 * WardSpace.l + 2 * WardSpace.gutter, currentWindowShape().isBroad)
 
-    val widthDp = size.width / density.density.toDouble()
-    val heightDp = size.height / density.density.toDouble()
+    // held still, the picture's size, known before the first layout
+    val widthDp = still?.widthDp ?: (size.width / density.density.toDouble())
+    val heightDp = still?.heightDp ?: (size.height / density.density.toDouble())
     val midY = (heightDp - hiddenDp) / 2
 
     // each card's drawn size as it lays out, in px; the places the cards are drawn at, worked out
     // again only when a stored place, a card or a size changes (S05c)
     val sizes = remember { mutableStateMapOf<String, IntSize>() }
     val cards = notes.map { note ->
-        val seen = sizes[note.id]
+        // held still, every card at the least size the picture's frame was worked out by (capsuleFrame)
+        val seen = if (still == null) sizes[note.id] else null
         val w = if (seen == null) cardWidth else seen.width / density.density.toDouble()
         val h = if (seen == null) CARD_HEIGHT else seen.height / density.density.toDouble()
         IdeaBoardSpread.Card(note.id, BoardPoint(note.boardX, note.boardY), max(w, cardWidth), max(h, CARD_HEIGHT))
@@ -172,7 +172,7 @@ const val UNLIT = 0.5f
     }
     // the first view frames every card, until the board is moved by hand; again as the drawn
     // places change, since sizes arrive after the first layout
-    LaunchedEffect(size, notes.size, hidden, top, drawn) { if (!moved) fitAll() }
+    LaunchedEffect(size, notes.size, hidden, top, drawn) { if (!moved && still == null) fitAll() }
 
     fun tapCard(id: String) {
         val from = source
@@ -226,7 +226,7 @@ const val UNLIT = 0.5f
                 fun px(v: Double) = (v * d).toFloat()
                 // as iOS's IdeaBoardView.line: Straight one segment, Curved one quadratic
                 val path = Path()
-                if (style.isStraight) {
+                if (straight) {
                     val (from, to) = IdeaLinkShape.straightEnds(p, q, lane, count)
                     path.moveTo(px(from.x), px(from.y))
                     path.lineTo(px(to.x), px(to.y))
@@ -381,9 +381,10 @@ const val UNLIT = 0.5f
             }
         }
 
-        // bottom-trailing; on the trailing edge, centred, in a broad window (iOS IdeaToolsPlacement)
+        // bottom-trailing; on the trailing edge, centred, in a broad window (iOS IdeaToolsPlacement);
+        // none in the capsule's picture
         val toolsSpot = if (currentWindowShape().isBroad) Alignment.CenterEnd else Alignment.BottomEnd
-        Box(Modifier.align(toolsSpot).padding(bottom = hidden)) {
+        if (still == null) Box(Modifier.align(toolsSpot).padding(bottom = hidden)) {
             IdeaToolCluster {
                 IdeaBoardLookTool(settings)
                 IdeaToolButton(Icons.Outlined.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
@@ -404,6 +405,20 @@ const val UNLIT = 0.5f
 }
 
 /**
+ * The board held still for the capsule's picture (S06d A4): its zoom and pan, the picture's size in
+ * dp, and the lines' style. As iOS's IdeaBoardStill.
+ */
+data class BoardStill(val zoom: Double, val panX: Double, val panY: Double, val widthDp: Double, val heightDp: Double, val straight: Boolean)
+
+/** Every card's least width: 20 letters of its title's font, never under 150 (S05m item 5). */
+@Composable internal fun boardCardWidth(): Double {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val titleWidth = with(density) { measurer.measure(IdeaBoardDrop.TITLE_SAMPLE, boardTitleStyle(), maxLines = 1).size.width.toDp().value.toDouble() }
+    return max(CARD_WIDTH, kotlin.math.ceil(titleWidth) + 2 * WardSpace.m)
+}
+
+/**
  * One card: its kind and folder in small type, the title, washed in its folder's colour. [version] is
  * the book's, read by no line here: a folder renamed in place reaches the card by it.
  */
@@ -419,7 +434,7 @@ const val UNLIT = 0.5f
     // the frost (S06a A6): deeper with each step since it was last opened; opened, it melts, at once with animations off
     val frost = frostOf(note)
     val reduce = wardReduceMotion()
-    // by night a deep ice, so a forgotten idea never outshines the rest
+    // the page's colour washed over the card, deeper by step (IdeaFrostLook)
     val night = LocalWardDark.current
     val wash by animateFloatAsState(IdeaFrostLook.opacity(night)[frost], wardEaseOut(WardMotion.longest, reduce), label = "frost")
     val frostWords = if (frost > 0) stringResource(R.string.frost_spoken) else null
@@ -432,7 +447,7 @@ const val UNLIT = 0.5f
         .heightIn(min = CARD_HEIGHT.dp)
         .wardRaised(WardRadius.card, if (lifted) WardLift.high else WardLift.low, fill = WardToken.raised)
         .clip(shape).background(tone.copy(alpha = 0.14f))
-        .background(IdeaFrostLook.ice(night).copy(alpha = wash))
+        .background(IdeaFrostLook.wash(night).copy(alpha = wash))
         .then(if (chosen) Modifier.border(2.dp, chosenInk, shape)
             // S06c: like the idea open in the editor: the accent's edge, still, so Reduce Motion needs nothing more
             else if (glows) Modifier.border(3.dp, wardColor(WardToken.accent), shape) else Modifier)

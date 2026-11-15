@@ -50,7 +50,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -72,6 +71,7 @@ import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -299,16 +299,19 @@ internal object IdeasBanner {
     val capsulePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch { imported = importFrom(model, capsule = true) { context.contentResolver.openInputStream(uri) } }
     }
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
+    // the board's picture being drawn for a capsule (CapsuleBoardShot), and who waits for it
+    var shooting by remember { mutableStateOf<Pair<IdeaBook, CompletableDeferred<Capsule.Picture?>>?>(null) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
         if (uri != null) scope.launch {
             val now = System.currentTimeMillis()
             // the book as it is now, taken here on the main thread (its lists, which a change swaps
-            // whole, in a book of their own that nothing changes), then drawn and compressed off it
+            // whole, in a book of their own that nothing changes); the board draws it, then the page
+            // is written off the main thread
             val snapshot = model.book.let { IdeaBook(it.notes, it.folders) }
-            val straight = settings.lineStyle.isStraight
-            val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, straight, measurer, density, now) }
+            val shot = CompletableDeferred<Capsule.Picture?>()
+            shooting = snapshot to shot
+            val picture = try { shot.await() } finally { shooting = null }
+            val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, picture, now) }
             val saved = withContext(Dispatchers.IO) {
                 runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(html.toByteArray(Charsets.UTF_8)) } != null }
                     .getOrDefault(false)
@@ -477,6 +480,8 @@ internal object IdeasBanner {
 
     CompositionLocalProvider(LocalIdeaShapes provides shapes) {
     Box(Modifier.fillMaxSize().background(wardColor(WardToken.background))) {
+        // the capsule's picture, drawn by the board while a capsule is saved; it shows nothing
+        shooting?.let { (snapshot, shot) -> CapsuleBoardShot(snapshot, settings, settings.lineStyle.isStraight) { shot.complete(it) } }
         if (split != null) Row(Modifier.fillMaxSize()) {
             // two panes (S05b checklist 9): the Sort screen leading with the banner at its foot,
             // the band (the page shows through), the map trailing; no switch, no list chip

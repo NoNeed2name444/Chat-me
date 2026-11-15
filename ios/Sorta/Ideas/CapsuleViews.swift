@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 // The capsule on screen (S06d A4), as Android's CapsuleViews: the monthly
 // offer under the capture well, the file the system's save screen writes,
-// and the map's picture the page shows, drawn at save time from the
-// board's own pieces.
+// and the map's picture the page shows, drawn at save time by the board
+// itself (IdeaBoardView, held still).
 
 /// The quiet offer: the kit's banner well (WardBanner's inset, glyph and
 /// words) with its two actions under the words, at the end, each a full
@@ -95,16 +95,47 @@ enum CapsuleSave {
     static let pictureMax: CGFloat = 960
     static let pictureScale: CGFloat = 2
 
-    /// The board as the person last left it, in day's colours: every card
-    /// at its drawn place (IdeaBoardSpread.places, the board's), its
-    /// folder's wash and name or its kind, its title on two lines at most;
-    /// the links as the board draws them (IdeaLinkShape, Straight or
-    /// Curved). Nil with no ideas. As Android's capsulePicture.
+    /// The board as the person last left it, in day's colours, drawn by the
+    /// board itself (IdeaBoardView, held still): every card at its drawn
+    /// place (IdeaBoardSpread, the board's), the links as the board draws
+    /// them, the whole board fitted into the picture (`fitting`). Nil with no
+    /// ideas. As Android's capsule shot.
     @MainActor
     static func picture(_ store: NoteStore, straight: Bool) -> SortaCapsule.Picture? {
+        guard let frame = fitting(store, straight: straight) else { return nil }
+        let board = IdeaBoardView(open: { _ in }, still: frame.still)
+            .frame(width: frame.css.width, height: frame.css.height)
+            .background(Color.wardBackground)
+            .environmentObject(store)
+            .environment(IdeasFiling())
+            .dynamicTypeSize(pictureType)
+            .environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: board)
+        renderer.scale = pictureScale
+        renderer.proposedSize = ProposedViewSize(frame.css)
+        guard let png = renderer.uiImage?.pngData() else { return nil }
+        return SortaCapsule.Picture(png: png, width: Int(frame.css.width), height: Int(frame.css.height))
+    }
+
+    /// The picture's text size: the default, whatever the phone's, so the
+    /// page reads the same from any phone.
+    static let pictureType: DynamicTypeSize = .large
+
+    /// The picture's size in CSS pixels and the board held still to fill
+    /// it: every card at its drawn place, at the least card the board
+    /// spreads by, `WardSpace.xl` in from the edges, zoomed out (never in)
+    /// to fit `pictureMax`. Nil with no ideas.
+    struct Frame {
+        let css: CGSize
+        let still: IdeaBoardStill
+    }
+
+    @MainActor
+    static func fitting(_ store: NoteStore, straight: Bool) -> Frame? {
         let notes: [Note] = store.notes
         guard !notes.isEmpty else { return nil }
-        let card: CGSize = IdeaBoardDrop.card
+        let title: CGFloat = titleWidth()
+        let card: CGSize = IdeaBoardStill.card(titleWidth: title)
         let drawn: [UUID: CGPoint] = IdeaBoardSpread.places(notes.map {
             IdeaBoardSpread.Card(id: $0.id, centre: CGPoint(x: $0.boardX, y: $0.boardY), size: card)
         })
@@ -116,98 +147,24 @@ enum CapsuleSave {
         let maxY: CGFloat = notes.map { at($0).y }.max()! + card.height / 2 + margin
         let fit: CGFloat = min(1, min(pictureMax / (maxX - minX), pictureMax / (maxY - minY)))
         let css = CGSize(width: max(1, ((maxX - minX) * fit).rounded(.down)), height: max(1, ((maxY - minY) * fit).rounded(.down)))
-        var places: [UUID: CGPoint] = [:]
-        for n in notes { places[n.id] = CGPoint(x: at(n).x - minX, y: at(n).y - minY) }
-        let cards: [CapsuleBoardPicture.Card] = notes.map { n in
-            CapsuleBoardPicture.Card(id: n.id, centre: places[n.id]!,
-                                     caption: store.folder(n.folderId)?.name ?? n.kind.label,
-                                     title: n.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? SortaCapsule.Words.untitled : n.title,
-                                     tone: NoteTone.color(for: n.folderId, in: store))
-        }
-        let view = CapsuleBoardPicture(size: CGSize(width: maxX - minX, height: maxY - minY), cards: cards,
-                                       edges: store.allEdges(), straight: straight)
-            .scaleEffect(fit, anchor: .topLeading)
-            .frame(width: css.width, height: css.height, alignment: .topLeading)
-            .environment(\.colorScheme, .light)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = pictureScale
-        renderer.proposedSize = ProposedViewSize(css)
-        guard let png = renderer.uiImage?.pngData() else { return nil }
-        return SortaCapsule.Picture(png: png, width: Int(css.width), height: Int(css.height))
-    }
-}
-
-/// The board drawn for the capsule's picture, at board size, in the day
-/// palette's colours (WardPalette's light values, so the phone's dark mode
-/// never reaches the page's picture).
-struct CapsuleBoardPicture: View {
-    struct Card: Identifiable {
-        let id: UUID
-        let centre: CGPoint
-        let caption: String
-        let title: String
-        let tone: Color
+        // the board's origin is at the picture's middle; the pan brings the
+        // cards' box there
+        let pan = CGSize(width: -(minX + maxX) / 2 * fit, height: -(minY + maxY) / 2 * fit)
+        return Frame(css: css, still: IdeaBoardStill(zoom: fit, pan: pan, titleWidth: title,
+                                                    straight: GraphLineStyle.inForce(straight).isStraight))
     }
 
-    let size: CGSize
-    let cards: [Card]
-    let edges: [(UUID, UUID)]
-    let straight: Bool
-
-    private static func day(_ token: WardToken) -> Color {
-        let hex: UInt32 = WardPalette.hex(token, dark: false)
-        return Color(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
-                     blue: Double(hex & 0xFF) / 255)
-    }
-
-    var body: some View {
-        let card: CGSize = IdeaBoardDrop.card
-        let centres: [UUID: CGPoint] = Dictionary(cards.map { ($0.id, $0.centre) }, uniquingKeysWith: { first, _ in first })
-        let lanes: [(lane: Int, lanes: Int)] = IdeaLinkShape.lanes(for: edges.map { $0.0.uuidString + $0.1.uuidString })
-        let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
-        return ZStack(alignment: .topLeading) {
-            Self.day(.background)
-            Canvas { context, _ in
-                for (k, edge) in edges.enumerated() {
-                    guard let p = centres[edge.0], let q = centres[edge.1] else { continue }
-                    var path = Path()
-                    if straight {
-                        let ends = IdeaLinkShape.straightEnds(from: p, to: q, lane: lanes[k].lane, lanes: lanes[k].lanes)
-                        path.move(to: ends.0)
-                        path.addLine(to: ends.1)
-                    } else {
-                        path.move(to: p)
-                        path.addQuadCurve(to: q, control: IdeaLinkShape.control(from: p, to: q, lane: lanes[k].lane, lanes: lanes[k].lanes))
-                    }
-                    context.stroke(path, with: .color(Self.day(.inkSecondary)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                }
-            }
-            ForEach(cards) { c in
-                VStack(alignment: .leading, spacing: WardSpace.xs) {
-                    HStack(spacing: WardSpace.xs) {
-                        Circle().fill(c.tone).frame(width: 8, height: 8)
-                        Text(c.caption)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Self.day(.inkSecondary))
-                            .lineLimit(1)
-                    }
-                    Text(c.title)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Self.day(.ink))
-                        .lineLimit(2)
-                }
-                .padding(WardSpace.m)
-                .frame(width: card.width, height: card.height, alignment: .topLeading)
-                .background {
-                    ZStack {
-                        shape.fill(Self.day(.raised))
-                        shape.fill(c.tone.opacity(0.14))
-                        shape.strokeBorder(Self.day(.hairline), lineWidth: 1)
-                    }
-                }
-                .position(c.centre)
-            }
-        }
-        .frame(width: size.width, height: size.height, alignment: .topLeading)
+    /// The width of 20 letters of a card's title at the picture's text size,
+    /// as the board measures it (IdeaBoardDrop.titleSample).
+    @MainActor
+    static func titleWidth() -> CGFloat {
+        let sample = Text(IdeaBoardDrop.titleSample)
+            .wardFont(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .fixedSize()
+            .dynamicTypeSize(pictureType)
+        let renderer = ImageRenderer(content: sample)
+        renderer.scale = 1
+        return renderer.uiImage?.size.width ?? 0
     }
 }

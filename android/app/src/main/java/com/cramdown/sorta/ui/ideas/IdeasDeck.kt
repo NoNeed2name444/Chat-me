@@ -121,16 +121,20 @@ object DeckTags {
     const val TIDE = "low-tide"
 }
 
-/** The frost's look (S06a A6): a cool wash over a card, deeper by step. The kit has no cool tone, so it is named here, as iOS's. */
+/**
+ * The frost's look (S06a A6) on the board: the page's own colour (the kit's background token) washed
+ * over a card, deeper by step, so a forgotten idea recedes into the page, its folder's tone fading
+ * with it; the frost glyph and the spoken words say why. The app's screens take no hue the icon
+ * hasn't ("Look" in docs/state.md), so the first pale-blue ice went (v14), as Stethoscore's blue
+ * shade did; washing toward the page keeps every ink's contrast, by day and by night, and never
+ * lifts a card at night. Space draws its own frost, as each map look has its own colours. As iOS's.
+ */
 object IdeaFrostLook {
-    /** The ice by day: pale, over bone. */
-    val dayIce = Color(0xFFD6E8F5)
-    /** The ice by night: a deep blue that cools a card without lifting it, so a forgotten idea never outshines the rest, and every ink on it keeps its contrast. */
-    val nightIce = Color(0xFF1A3048)
     /** The wash at each level, 0 to 3, by day and by night. */
     val dayOpacity = floatArrayOf(0f, 0.20f, 0.40f, 0.60f)
     val nightOpacity = floatArrayOf(0f, 0.30f, 0.50f, 0.70f)
-    fun ice(dark: Boolean): Color = if (dark) nightIce else dayIce
+    /** The wash's colour: the page's. */
+    fun wash(dark: Boolean): Color = Color(0xFF000000 or WardPalette.table.getValue(WardToken.background).of(dark).toLong())
     fun opacity(dark: Boolean): FloatArray = if (dark) nightOpacity else dayOpacity
 }
 

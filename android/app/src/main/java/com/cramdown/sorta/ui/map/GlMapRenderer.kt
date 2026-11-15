@@ -2376,7 +2376,7 @@ class GlMapRenderer(
         const val FROST_MELT = 0.32f
         /** The halo's strength a frost level, 0 to 3. */
         val FROST_WASH = floatArrayOf(0f, 0.22f, 0.38f, 0.55f)
-        /** The ice, as the board's (IdeaFrostLook.ice, #D6E8F5). */
+        /** Space's own ice, #D6E8F5, a pale halo on the night sky (the board washes with the page's colour, IdeaFrostLook). */
         val FROST_ICE = floatArrayOf(0.84f, 0.91f, 0.96f)
         /** The proof tour's logcat tag (S05i2). */
         const val TOUR_TAG = "SortaTour"
