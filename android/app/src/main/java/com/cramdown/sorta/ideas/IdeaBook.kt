@@ -362,9 +362,12 @@ class IdeaBook(
         val time = now()
         val spot = IdeaBoardDrop.settle(BoardPoint(note.boardX + 40, note.boardY + 40), IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST,
             notes.map { BoardPoint(it.boardX, it.boardY) })
-        val first = note.copy(title = halves.firstTitle, body = halves.firstBody, links = firstLinks, updatedAt = time)
+        // where each half stops is its own: the whole idea's mark pointed into text the first half may no longer hold
+        val first = note.copy(title = halves.firstTitle, body = halves.firstBody, links = firstLinks, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.firstBody, null))
         val second = Note(id = secondId, title = halves.secondTitle, body = halves.secondBody, folderId = note.folderId, kind = note.kind,
-            links = secondLinks, tags = note.tags, boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
+            links = secondLinks, tags = note.tags, boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.secondBody, null))
         notes = notes.toMutableList().also { it[index] = first; it.add(index + 1, second) }
         changed()
         return Reshaped(listOf(KeptNote(index, note)), listOf(secondId), id)
@@ -391,8 +394,10 @@ class IdeaBook(
             if (a in n.links || a in wiki) connected.add(n.id)
             if (b in n.links) holders.add(KeptNote(i, n))
         }
+        // the first idea's mark pointed into its own body, not the joined one
         val joined = first.copy(title = title, body = body, updatedAt = now(),
-            links = IdeaReshape.joinLinks(a, b, first.links, second.links, pointedAtSecond, connected))
+            links = IdeaReshape.joinLinks(a, b, first.links, second.links, pointedAtSecond, connected),
+            stoppedAt = IdeaStops.stoppedAt(body, null))
         val held = holders.map { it.note.id }.toHashSet()
         notes = notes.mapNotNull { n ->
             when {

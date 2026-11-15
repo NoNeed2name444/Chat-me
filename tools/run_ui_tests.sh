@@ -23,7 +23,8 @@
 # MapModeRenderTests), Map mode's legends read for the controls they name
 # (S05f), and each one's largest text size; on the iPad, the two sets of
 # renders by day and by night and the legends; S06b's renders on the iPhone
-# by day and by night (SkyIdeasRenderTests). S06c adds ideas like this,
+# by day and by night (SkyIdeasRenderTests), and its moons on the iPad
+# (testMoonsKeepTheMapInSight). S06c adds ideas like this,
 # Split, Join and Collide: their behaviour tests on the iPhone
 # (IdeaShapesUITests, the whole class) and their renders on both, by day
 # and by night, the drop target's by night only (the 3D map is always night).
@@ -145,6 +146,10 @@ case "$set_" in
             dark:SortaUITests/MapModeRenderTests/testLargestTextSizeOnTheMap
             light:SortaUITests/SkyIdeasRenderTests
             dark:SortaUITests/SkyIdeasRenderTests)
+    else
+      # the moons and a lit day on the iPad too, the map in sight below them
+      runs+=(light:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
+             dark:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight)
     fi
     # S06a: the deck, the offer, the tide and the frost, last, as it leaves
     # the map on its 2D look

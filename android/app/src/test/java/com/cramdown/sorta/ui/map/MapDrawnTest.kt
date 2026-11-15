@@ -441,6 +441,18 @@ class MapDrawnTest {
         assertEquals(all, pages.filtering(false, 12, 0, 9, firing))
     }
 
+    // S06a A6: Space's frost halos as drawn, so the frost's still is told by numbers, not only by eye
+    @Test fun theFrostHalosDrawnAreHandedOnWhenTheyChange() {
+        val start = MapDrawn(build = 5)
+        assertEquals(0, start.frosted)
+        assertSame("none drawn, none before: the same record", start, start.frosting(0))
+        val six = start.frosting(6)
+        assertEquals(6, six.frosted)
+        assertEquals("the rest of the record kept", start.copy(frosted = 6), six)
+        assertSame("nothing changed: the same record", six, six.frosting(6))
+        assertEquals("melted away", start, six.frosting(0))
+    }
+
     // S05i repair 6: the cell states as drawn, so a state's still is told from resting's by numbers
     @Test fun theHalosDrawnByStateAreHandedOnWhenTheyChange() {
         val start = MapDrawn(build = 5)

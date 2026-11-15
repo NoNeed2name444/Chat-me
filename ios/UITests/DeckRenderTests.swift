@@ -5,7 +5,8 @@ import XCTest
 /// named screenshots, with each shot's own parts checked: the offer and its
 /// Carry on, the card and its targets (44 points at least), Later with
 /// Undo, a drag onto a folder, the tide's Let go with Undo and Keep,
-/// and a board card at each frost step. CI runs it by day and by night on
+/// a board card at each frost step, the frost in Space, and a lens (Alone)
+/// over Space. CI runs it by day and by night on
 /// the iPhone and the iPad (tools/run_ui_tests.sh, the ideas set). None of
 /// the ideas is medical.
 final class DeckRenderTests: XCTestCase {
@@ -140,6 +141,20 @@ final class DeckRenderTests: XCTestCase {
         }
         sleep(4)
         keepShot("deck-5-frost-space")
+        // a lens over Space (S06d A2), as Android's space-lens still: Alone
+        // on, its chip selected and read with its count, the linked ideas
+        // faded; then off again
+        let alone = app.buttons["map-lens-alone"]
+        XCTAssertTrue(alone.waitForExistence(timeout: 10), "the Alone chip over Space")
+        assertTarget(alone, "Alone over Space")
+        XCTAssertFalse(alone.isSelected, "Alone starts off")
+        alone.tap()
+        XCTAssertTrue(waitFor { alone.isSelected }, "Alone is selected once tapped: \(alone.label)")
+        XCTAssertTrue(alone.label.hasPrefix("Alone, "), "Alone read with its count: \(alone.label)")
+        sleep(2)
+        keepShot("deck-6-lens-space")
+        alone.tap()
+        XCTAssertTrue(waitFor { !alone.isSelected }, "Alone is off again")
         app.chooseLook("look-2d")
         app.terminate()
     }

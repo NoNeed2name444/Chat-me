@@ -1870,6 +1870,8 @@ struct GraphSCNView: UIViewRepresentable {
         } else if coordinator.insets != insets || coordinator.card != card {
             coordinator.inset(to: insets, card: card)
         }
+        // the names keep out from under the glass (GraphNameRoom)
+        coordinator.sim?.setLabelRoom(coordinator.insets)
         coordinator.cover(covered)
     }
 
@@ -2061,6 +2063,7 @@ struct GraphSCNView: UIViewRepresentable {
             view.antialiasingMode = GraphSCNView.antialiasing()
             view.preferredFramesPerSecond = GraphQuality.frameRate
             built.sim.setViewHeight(Float(view.bounds.height), width: Float(view.bounds.width))
+            built.sim.setLabelRoom(insets)
             wireCameraGestures(in: view)
             // still flown in to a folder that is still there: stay on it
             if universe, let id = flownID, let slot = folders[id] {

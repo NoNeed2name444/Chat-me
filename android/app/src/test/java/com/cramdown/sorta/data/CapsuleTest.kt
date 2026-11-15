@@ -132,6 +132,41 @@ class CapsuleTest {
         assertEquals(listOf(listOf("latch")), read.folders.map { it.words })
     }
 
+    /**
+     * iOS's upper-case ids opened into a store that already has ideas: each id an added idea or folder
+     * carries is written as the store spells it, or in lower case, so IdeaBook (which compares ids
+     * exactly) finds the ideas in their folders, the new folder under its parent, and every link.
+     */
+    @Test fun upperCaseIdsJoinTheStoresOwn() {
+        val dir = folder.newFolder()
+        val store = IdeaStore(dir)
+        store.replaceIdeas(listOf(shed), listOf(garden))
+        val page = "<!doctype html><p>Gate</p><script type=\"application/json\" id=\"sorta-capsule\">" +
+            "{\"format\":\"sorta-capsule\",\"version\":1,\"notes\":[" +
+            "{\"id\":\"${id("1").uppercase()}\",\"title\":\"Paint the shed blue\"}," +
+            "{\"id\":\"${id("c7").uppercase()}\",\"title\":\"Oil the gate\",\"folderId\":\"${garden.id.uppercase()}\"," +
+            "\"links\":[\"${shed.id.uppercase()}\",\"${id("C8")}\"]}," +
+            "{\"id\":\"${id("C8")}\",\"title\":\"Buy a latch\",\"folderId\":\"${id("b9").uppercase()}\"}]," +
+            "\"folders\":[{\"id\":\"${garden.id.uppercase()}\",\"name\":\"Garden\"}," +
+            "{\"id\":\"${id("b9").uppercase()}\",\"name\":\"Gate\",\"parentId\":\"${garden.id.uppercase()}\"}]}</script>"
+        assertEquals(ImportCounts(ideas = 2, folders = 1, links = 2, placed = 0), store.importCapsule(page))
+        // the shed already here stays as it was; nothing is added twice
+        assertEquals(listOf(shed.id, id("c7"), id("c8")), store.notes.map { it.id })
+        assertEquals("Paint the shed green", store.notes[0].title)
+        assertEquals(listOf(garden.id, id("b9")), store.folders.map { it.id })
+        val book = IdeaBook(store.notes, store.folders)
+        assertEquals(listOf("Oil the gate"), book.contents(garden.id).filter { it.id != shed.id }.map { it.title })
+        assertEquals(listOf("Buy a latch"), book.contents(id("b9")).map { it.title })
+        assertEquals(listOf("Gate"), book.subfolders(garden.id).map { it.name })
+        assertEquals(listOf(shed.id, id("c8")), book.note(id("c7"))!!.links)
+        assertEquals(setOf(shed.id, id("c8")), book.connections(id("c7")))
+        assertEquals(2, book.allEdges().size)
+        // and as the file has them, after a reload
+        val again = IdeaStore(dir)
+        assertEquals(store.notes.map { listOf(it.id, it.folderId, it.links) }, again.notes.map { listOf(it.id, it.folderId, it.links) })
+        assertEquals(store.folders.map { listOf(it.id, it.parentId) }, again.folders.map { listOf(it.id, it.parentId) })
+    }
+
     @Test fun eachRefusalChangesNothing() {
         val store = IdeaStore(folder.newFolder())
         fun refused(text: String): ImportRefusal? = try { store.importCapsule(text); null } catch (e: ImportRefused) { e.refusal }

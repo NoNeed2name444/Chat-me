@@ -78,6 +78,9 @@ object SkyTags {
 
 /** What the words sheet says under its field as it is typed: what the words do, and what a save keeps. */
 object SkyWords {
+    /** The words field's lines: a folder's words wrap and show from their start, never just their end. */
+    const val FIELD_LINES = 4
+
     /** [note] the words' line, [kept] "Saves: %1$s" as strings.xml has it. */
     fun folderWordsFootnote(text: String, note: String, kept: String): String {
         val words = FolderWords.parse(text)

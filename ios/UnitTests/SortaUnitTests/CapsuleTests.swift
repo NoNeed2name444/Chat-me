@@ -133,6 +133,38 @@ final class CapsuleTests: XCTestCase {
         XCTAssertEqual(fresh.path(to: id("A2")).map(\.id), [id("A1"), id("A2")], "a folder inside a folder")
     }
 
+    /// Android's lower-case ids opened into a store that already has ideas,
+    /// the mirror of Android's upperCaseIdsJoinTheStoresOwn: iOS reads every
+    /// id as a UUID, so case is gone before anything compares them, and the
+    /// new ideas sit in their folders, the new folder under its parent, and
+    /// every link reaches its idea.
+    func testLowerCaseIdsJoinTheStoresOwn() throws {
+        let folder = try MadeUpBackup.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(fileURL: folder.appendingPathComponent("vignette-notes.json"))
+        XCTAssertEqual(store.restore(notes: [shed], folders: [garden]), 1)
+        func low(_ n: String) -> String { id(n).uuidString.lowercased() }
+        // in parts: one long sum of strings is slow for the type checker
+        let page: String = [
+            "<!doctype html><p>Gate</p><script type=\"application/json\" id=\"sorta-capsule\">",
+            "{\"format\":\"sorta-capsule\",\"version\":1,\"notes\":[",
+            "{\"id\":\"\(low("1"))\",\"title\":\"Paint the shed blue\"},",
+            "{\"id\":\"\(low("C7"))\",\"title\":\"Oil the gate\",\"folderId\":\"\(low("A1"))\",",
+            "\"links\":[\"\(low("1"))\",\"\(low("C8"))\"]},",
+            "{\"id\":\"\(low("C8"))\",\"title\":\"Buy a latch\",\"folderId\":\"\(low("B9"))\"}],",
+            "\"folders\":[{\"id\":\"\(low("A1"))\",\"name\":\"Garden\"},",
+            "{\"id\":\"\(low("B9"))\",\"name\":\"Gate\",\"parentId\":\"\(low("A1"))\"}]}</script>",
+        ].joined()
+        XCTAssertEqual(try SortaCapsule.merge(Data(page.utf8), into: store), IdeaImport.Counts(ideas: 2, folders: 1, links: 2, placed: 0))
+        XCTAssertEqual(store.notes.map(\.id), [id("1"), id("C7"), id("C8")])
+        XCTAssertEqual(store.notes.first?.title, "Paint the shed green", "the shed already here stays as it was")
+        XCTAssertEqual(store.folders.map(\.id), [id("A1"), id("B9")])
+        XCTAssertEqual(store.contents(of: id("A1")).map(\.title).sorted(), ["Oil the gate", "Paint the shed green"])
+        XCTAssertEqual(store.contents(of: id("B9")).map(\.title), ["Buy a latch"])
+        XCTAssertEqual(store.subfolders(of: id("A1")).map(\.name), ["Gate"])
+        XCTAssertEqual(store.connections(of: id("C7")), [id("1"), id("C8")])
+    }
+
     /// The fields v14's lanes added to the store (S06a's openedAt and
     /// stoppedAt, S06b's sharedFrom and a folder's words) come back from a
     /// capsule and through Open a capsule; and a block with them in the

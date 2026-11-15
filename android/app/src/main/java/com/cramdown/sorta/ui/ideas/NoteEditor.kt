@@ -94,7 +94,8 @@ const val EDITOR_LINK_TAG = "editor-link"
  * caret where the person stopped.
  */
 @Composable fun NoteEditor(model: IdeasModel, settings: IdeasSettings, noteId: String, bottom: Dp,
-                           choose: (String) -> Unit, delete: (String) -> Unit, resume: Boolean = false, onClose: () -> Unit) {
+                           choose: (String) -> Unit, delete: (String) -> Unit, resume: Boolean = false,
+                           notice: @Composable () -> Unit = {}, onClose: () -> Unit) {
     var trail by rememberSaveable { mutableStateOf(listOf<String>()) }
     var currentId by rememberSaveable { mutableStateOf(noteId) }
     val book = model.book
@@ -102,7 +103,7 @@ const val EDITOR_LINK_TAG = "editor-link"
     if (note == null) { LaunchedEffect(currentId) { if (trail.isEmpty()) onClose() else { currentId = trail.last(); trail = trail.dropLast(1) } }; return }
 
     key(currentId) {
-        NoteEditorPage(model, settings, note, bottom, resume = resume && currentId == noteId, backTitle = trail.lastOrNull()?.let { book.note(it) }?.let { ideaLine(it) },
+        NoteEditorPage(model, settings, note, bottom, notice, resume = resume && currentId == noteId, backTitle = trail.lastOrNull()?.let { book.note(it) }?.let { ideaLine(it) },
             go = { id -> if (id != currentId) { trail = trail + currentId; currentId = id } },
             back = { if (trail.isEmpty()) onClose() else { currentId = trail.last(); trail = trail.dropLast(1) } },
             choose = choose, delete = { delete(it); onClose() }, done = onClose)
@@ -110,7 +111,7 @@ const val EDITOR_LINK_TAG = "editor-link"
 }
 
 @Composable private fun NoteEditorPage(
-    model: IdeasModel, settings: IdeasSettings, note: Note, bottom: Dp, resume: Boolean, backTitle: String?,
+    model: IdeasModel, settings: IdeasSettings, note: Note, bottom: Dp, notice: @Composable () -> Unit, resume: Boolean, backTitle: String?,
     go: (String) -> Unit, back: () -> Unit, choose: (String) -> Unit, delete: (String) -> Unit, done: () -> Unit,
 ) {
     val id = note.id
@@ -258,6 +259,9 @@ const val EDITOR_LINK_TAG = "editor-link"
             WardTextButton(stringResource(R.string.editor_link_to), { save(); picking = true },
                 Modifier.semantics { testTag = EDITOR_LINK_TAG }, kind = WardButtonKind.compact, fills = false)
         }
+        // the app's banner ("Ideas joined.", Undo) over the bar, as the Sort screen has it over the Sort / Map
+        // switch and iOS's editor over its bar (IdeasView's Foot leaves it out while the editor is open)
+        notice()
         if (ax) Column(Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = bottom),
             verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp), horizontalAlignment = Alignment.CenterHorizontally) { bar(Modifier.fillMaxWidth()) }
         else Row(Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = bottom),

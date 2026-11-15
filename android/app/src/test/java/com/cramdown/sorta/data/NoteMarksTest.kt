@@ -41,6 +41,17 @@ class NoteMarksTest {
         assertNull(IdeaJson.note(JSONObject("""{"id":"$id","title":"x","openedAt":"soon"}""")).openedAt)
     }
 
+    /** A stoppedAt that isn't a number reads as none, not as the idea's start (optInt read it as 0). */
+    @Test fun aStoppedAtThatIsntANumberIsNone() {
+        fun stopped(value: String) = IdeaJson.note(JSONObject("""{"id":"$id","title":"Fix the gate","stoppedAt":$value}""")).stoppedAt
+        assertNull(stopped("\"later\""))
+        assertNull(stopped("true"))
+        assertNull(stopped("{}"))
+        assertNull(stopped("null"))
+        assertEquals(7, stopped("7"))
+        assertEquals(0, stopped("0"))
+    }
+
     @Test fun marksLeaveTheTimeAloneAndAnOlderCopyLeavesThem() {
         var clock = 1_000L
         val book = IdeaBook(listOf(Note(id = id, title = "Fix the gate latch", body = "Two coats, then", createdAt = 500L)), emptyList(), now = { clock })

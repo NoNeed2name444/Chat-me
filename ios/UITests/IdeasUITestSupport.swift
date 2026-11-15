@@ -72,11 +72,13 @@ struct IdeasStoreName {
 extension XCTestCase {
     /// Sorta on the Sort screen, on the store `store`. Notices stay until
     /// the next one (`-SortaNoticesStay`), as under VoiceOver, so a slow
-    /// simulator still reaches Undo.
-    func launchIdeas(_ store: IdeasStoreName, _ more: [String] = [],
+    /// simulator still reaches Undo. `zone` runs the app in that time zone
+    /// (`TZ`), for a test whose ideas fall by the hour, as the lenses' do.
+    func launchIdeas(_ store: IdeasStoreName, _ more: [String] = [], zone: String? = nil,
                      file: StaticString = #filePath, line: UInt = #line) -> XCUIApplication {
         let app = XCUIApplication()
         app.keepTraceOffConsole()
+        if let zone { app.launchEnvironment["TZ"] = zone }
         // S06a: a fixed clock, a day after the made-up export's last idea, so
         // no idea frosts on a still as the real days pass, and To sort as a
         // list, whatever an earlier test chose; a test may set either

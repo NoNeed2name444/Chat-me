@@ -1,6 +1,8 @@
 package com.cramdown.sorta.ui.ideas
 
 import android.content.Intent
+import android.content.res.Configuration
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -15,6 +17,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ActivityScenario
 import com.cramdown.sorta.MainActivity
 import com.cramdown.sorta.R
@@ -44,7 +47,8 @@ import java.io.File
 // over Map3DView's no-GL words and a tap on a body is handed in where its hit test hands it, as
 // MapPeekCardTest does): a folder's words sheet from the row's Folder words action, a leaning idea's
 // card with File there, the moons on the 2D board, a share from another app saved with its source,
-// and the editor's source mark. Each is kept as build/outputs/roborazzi/sky_<what>.png. Made-up ideas only.
+// and the editor's source mark. Each is kept as build/outputs/roborazzi/sky_<what>.png, and the words
+// sheet, the share sheet and the source mark by night too, as sky_<what>_dark.png. Made-up ideas only.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -83,23 +87,44 @@ class SkyChromeTest {
         captureScreenRoboImage(File("build/outputs/roborazzi/$name.png").path)
     }
 
+    /** A still by day, or by night with the phone dark (its qualifiers' night), named so. */
+    private fun shot(name: String, dark: Boolean) {
+        val night = run.context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        assertEquals("$name: the phone is ${if (dark) "dark" else "light"}", dark, night)
+        shot(if (dark) "${name}_dark" else name)
+    }
+
     private fun openMap() {
         compose.onNode(hasTestTag(SortaMode.MAP.identifier)).performClick()
         run.until { compose.onAllNodes(SemanticsMatcher.keyIsDefined(MapTapKey)).fetchSemanticsNodes().isNotEmpty() || shown(BOARD_CARD_TAG) }
     }
 
     // A3
-    @Test fun aFoldersWordsAreSetFromItsRowAndTheSheetSaysWhatItKeeps() {
+    @Test fun aFoldersWordsAreSetFromItsRowAndTheSheetSaysWhatItKeeps() = words(dark = false)
+
+    @Config(sdk = [35], qualifiers = "night")
+    @Test fun aFoldersWordsSheetByNight() = words(dark = true)
+
+    private fun words(dark: Boolean) {
         IdeaStore(run.store).replaceIdeas(listOf(leaning), listOf(garden))
         run.launch()
         with(run) { folderRow(run.context.resources.getQuantityString(R.plurals.folder_row_spoken, 0, "Garden", 0)).action(s(R.string.folder_words_title)) }
         run.until { shown(NAME_SHEET_TAG) }
         val field = run.field(s(R.string.folder_words_prompt))
         field.performTextClearance()
-        field.performTextInput("garden, soil garden compost beds paths seeds")
+        // long enough that one line can't hold it: it wraps and shows from its start, not just its end
+        field.performTextInput("garden, soil garden compost beds paths seeds, bulbs and the long raised bed by the shed")
         compose.waitForIdle()
         assertTrue("the footnote says what a save keeps", run.shows(s(R.string.folder_words_kept, "garden, soil, compost, beds, paths")))
-        shot("sky_words_sheet")
+        val layouts = ArrayList<TextLayoutResult>()
+        val shown = field.fetchSemanticsNode()
+        shown.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        val layout = layouts.single()
+        assertTrue("the words wrap: ${layout.lineCount} line(s)", layout.lineCount > 1)
+        assertTrue("the words fit the field's width, none scrolled off: ${layout.size.width} in ${shown.size.width}",
+            layout.size.width <= shown.size.width)
+        assertTrue("every line shows: ${layout.size.height} in ${shown.size.height}", layout.size.height <= shown.size.height)
+        shot("sky_words_sheet", dark)
         compose.onNode(hasText(s(R.string.sky_save))).performClick()
         run.until { !shown(NAME_SHEET_TAG) }
         run.until { IdeaStore(run.store).folders.first().words == listOf("garden", "soil", "compost", "beds", "paths") }
@@ -188,7 +213,12 @@ class SkyChromeTest {
     }
 
     // A7
-    @Test fun aShareFromAnotherAppIsSavedInToSortWithItsSource() {
+    @Test fun aShareFromAnotherAppIsSavedInToSortWithItsSource() = share(dark = false)
+
+    @Config(sdk = [35], qualifiers = "night")
+    @Test fun aShareByNight() = share(dark = true)
+
+    private fun share(dark: Boolean) {
         IdeaStore(run.store).replaceIdeas(emptyList(), emptyList())
         val intent = Intent(run.context, MainActivity::class.java).setAction(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_TEXT, "Bike paths map https://www.example.org/paths please")
@@ -200,7 +230,7 @@ class SkyChromeTest {
         node(SkyTags.shareWord(4)).performClick()
         compose.waitForIdle()
         assertEquals(s(R.string.share_word_out), node(SkyTags.shareWord(4)).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
-        shot("sky_share_sheet")
+        shot("sky_share_sheet", dark)
         node(SkyTags.SHARE_SAVE).performClick()
         run.until { !shown(SkyTags.SHARE_SHEET) }
         run.until { run.ideaCount("Bike paths map https://www.example.org/paths") == 1 }
@@ -233,7 +263,12 @@ class SkyChromeTest {
     }
 
     // A8
-    @Test fun theEditorShowsWhereASharedIdeaCameFrom() {
+    @Test fun theEditorShowsWhereASharedIdeaCameFrom() = mark(dark = false)
+
+    @Config(sdk = [35], qualifiers = "night")
+    @Test fun theSourceMarkByNight() = mark(dark = true)
+
+    private fun mark(dark: Boolean) {
         IdeaStore(run.store).replaceIdeas(listOf(bike, leaning), emptyList())
         run.launch()
         run.idea(leaning.title).performClick()
@@ -243,6 +278,6 @@ class SkyChromeTest {
         run.idea(bike.title).performClick()
         run.until { shown(EDITOR_TAG) }
         assertEquals("Shared from example.org", spoken(SkyTags.SHARED_FROM))
-        shot("sky_editor_mark")
+        shot("sky_editor_mark", dark)
     }
 }

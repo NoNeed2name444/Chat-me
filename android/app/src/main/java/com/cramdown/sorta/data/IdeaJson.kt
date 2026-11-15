@@ -30,7 +30,7 @@ object IdeaJson {
     }
     internal fun note(o: JSONObject): Note { val created = date(o.opt("createdAt")); return Note(o.text("id", newId()), o.text("title"), o.text("body"), o.nullText("folderId"), o.text("kind", "idea"), o.strings("links"), o.strings("tags"), o.optDouble("boardX", 0.0), o.optDouble("boardY", 0.0), created, date(o.opt("updatedAt"), created), o.toString(),
         // S06a
-        openedAt = date(o.opt("openedAt"), Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }, stoppedAt = if (o.has("stoppedAt") && !o.isNull("stoppedAt")) o.optInt("stoppedAt") else null,
+        openedAt = date(o.opt("openedAt"), Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }, stoppedAt = (o.opt("stoppedAt") as? Number)?.toInt(),
         sharedFrom = o.nullText("sharedFrom")) }
     internal fun encodeNote(n: Note): JSONObject = raw(n.rawJson).put("id", n.id).put("title", n.title).put("body", n.body).put("folderId", n.folderId ?: JSONObject.NULL).put("kind", n.kind).put("links", jsonArray(n.links)).put("tags", jsonArray(n.tags)).put("boardX", n.boardX).put("boardY", n.boardY).putDate("createdAt", n.createdAt).putDate("updatedAt", n.updatedAt)
         // S06a: written only when set, and taken out when cleared, so the kept rawJson can't bring one back

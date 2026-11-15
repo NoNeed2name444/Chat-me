@@ -44,8 +44,12 @@ extension NoteStore {
         first.body = halves.firstBody
         first.links = links.first
         first.updatedAt = Date()
+        // where each half stops is its own: the whole idea's mark pointed
+        // into text the first half may no longer hold
+        first.stoppedAt = IdeaStops.stoppedAt(body: halves.firstBody, caret: nil)
         var second = Note(id: secondID, title: halves.secondTitle, body: halves.secondBody,
                           folderId: note.folderId, kind: note.kind, links: links.second, tags: note.tags)
+        second.stoppedAt = IdeaStops.stoppedAt(body: halves.secondBody, caret: nil)
         let spot = IdeaBoardDrop.settle(CGPoint(x: note.boardX + 40, y: note.boardY + 40), card: IdeaBoardDrop.tallest,
                                         others: notes.map { CGPoint(x: $0.boardX, y: $0.boardY) })
         second.boardX = Double(spot.x)
@@ -83,6 +87,8 @@ extension NoteStore {
         joined.links = IdeaReshape.joinLinks(first: a, second: b, firstOwn: first.links, secondOwn: second.links,
                                              pointedAtSecond: pointedAtSecond, connected: connected)
         joined.updatedAt = Date()
+        // the first idea's mark pointed into its own body, not the joined one
+        joined.stoppedAt = IdeaStops.stoppedAt(body: text.body, caret: nil)
         reshapeNotes { list in
             list[ia] = joined
             for held in holders { list[held.index].links.removeAll { $0 == b } }

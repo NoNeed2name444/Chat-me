@@ -422,13 +422,22 @@ internal object IdeasBanner {
         }
     } }
 
+    /** The app's banner, a notice with its Undo: over the foot's switch, or over the open editor's bar. */
+    @Composable fun Banner() {
+        SnackbarHost(banner, Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.s.wardDp)) { data ->
+            WardBanner(data.visuals.message, modifier = Modifier.semantics { testTag = IdeasTags.BANNER },
+                actionTitle = data.visuals.actionLabel, action = { data.performAction() })
+        }
+    }
+
     /** The Sort screen, or the editor open from it, in its column. */
     @Composable fun SortSide() {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Box(Modifier.widthIn(max = IdeasLayout.column.dp).fillMaxSize()) {
                 val bottom = foot + WardSpace.l.wardDp
                 if (open != null) {
-                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }, resume = resuming) {
+                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }, resume = resuming,
+                        notice = { Banner() }) {
                         editing = null
                         resuming = false
                     }
@@ -453,17 +462,14 @@ internal object IdeasBanner {
         }
     }
 
-    /** The foot: the banner, then the Sort / Map switch ([switches]; not on two panes), bottom centre. */
+    /** The foot: the banner (the open editor has it over its own bar), then the Sort / Map switch ([switches]; not on two panes), bottom centre. */
     @Composable fun BoxScope.Foot(switches: Boolean) {
         // Map mode's text stops at AX1 (WardTextCap), its foot's with it; the Sort screen's doesn't
         @Composable fun Capped(content: @Composable () -> Unit) = if (split == null && mapShown) WardTextCap(content) else content()
         Capped { SortaTheme(dark = night || outer.dark, section = outer.section) {
             Column(Modifier.align(Alignment.BottomCenter).widthIn(max = IdeasLayout.column.dp).fillMaxWidth()
                 .onSizeChanged { footHeight = it.height }, horizontalAlignment = Alignment.CenterHorizontally) {
-                if (!sheetUp) SnackbarHost(banner, Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.s.wardDp)) { data ->
-                    WardBanner(data.visuals.message, modifier = Modifier.semantics { testTag = IdeasTags.BANNER },
-                        actionTitle = data.visuals.actionLabel, action = { data.performAction() })
-                }
+                if (!sheetUp && open == null) Banner()
                 if (switches && open == null) ModeSwitch(mode, { mode = it }, settings) { focus.clearFocus() }
             }
         } }
@@ -520,7 +526,7 @@ internal object IdeasBanner {
             val kept = stringResource(R.string.folder_words_kept)
             NameSheet(stringResource(R.string.folder_words_title), stringResource(R.string.folder_words_prompt),
                 prompt.folder.words.joinToString(" "), stringResource(R.string.sky_save), { naming = null }, overMap = night,
-                footnote = { text -> SkyWords.folderWordsFootnote(text, note, kept) }, allowsBlank = true) {
+                footnote = { text -> SkyWords.folderWordsFootnote(text, note, kept) }, allowsBlank = true, lines = SkyWords.FIELD_LINES) {
                 model.book.setWords(prompt.folder.id, FolderWords.parse(it))
             }
         }

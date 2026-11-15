@@ -60,6 +60,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         assertTarget(today.frame, "a moon")
         XCTAssertTrue(today.label.hasSuffix(", \(SkyExport.today.count) ideas"), "today's moon is read with its count: \(today.label)")
         XCTAssertTrue(app.buttons["moon-1"].label.hasSuffix(", no ideas"), "yesterday had none")
+        assertMapInSight(app)
         sleep(1)
         keepShot("sky-4-moons")
 
@@ -68,6 +69,7 @@ final class SkyIdeasRenderTests: XCTestCase {
         XCTAssertTrue(today.isSelected, "today's moon is picked")
         let clear = app.buttons["moons-clear"]
         XCTAssertTrue(clear.waitForExistence(timeout: 5), "Clear, with a day lit")
+        assertMapInSight(app)
         sleep(2)
         keepShot("sky-5-lit-day-space")
         app.chooseLook("look-2d")
@@ -80,6 +82,31 @@ final class SkyIdeasRenderTests: XCTestCase {
         XCTAssertFalse(app.buttons["moon-0"].isSelected, "no moon picked")
         app.buttons["moons-done"].tap()
         XCTAssertTrue(gone(app.buttons["moon-0"]), "Done closes the moons")
+    }
+
+    /// The moons and a lit day on any device, the iPad's stills among them
+    /// (the iPhone's come from testSkyRenders too): the row is its own
+    /// height, so the map and its lit day show below it. On 15 Nov the row
+    /// took all the top inset gave it, and the moons hid the map.
+    func testMoonsKeepTheMapInSight() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try SkyExport.base64(), "-graphFreeze"])
+        importExport(app)
+        openSpace(app)
+        let chip = app.descendants(matching: .any)["map-days-chip"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 10), "the Days chip")
+        chip.tap()
+        let today = app.buttons["moon-0"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10), "today's moon")
+        assertTarget(today.frame, "a moon")
+        assertMapInSight(app)
+        sleep(1)
+        keepShot("sky-moons-in-sight")
+        today.tap()
+        XCTAssertTrue(today.isSelected, "today's moon is picked")
+        XCTAssertTrue(app.buttons["moons-clear"].waitForExistence(timeout: 5), "Clear, with a day lit")
+        assertMapInSight(app)
+        sleep(2)
+        keepShot("sky-lit-day-in-sight")
     }
 
     /// A2: File there, lively, shot as the idea settles into the folder's
@@ -216,6 +243,25 @@ final class SkyIdeasRenderTests: XCTestCase {
         XCTAssertGreaterThan(room, 44, "an empty patch of sky to tap, at \(best)")
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: best.x, dy: best.y)).tap()
         XCTAssertTrue(gone(card), "a tap on the empty sky puts the card away")
+    }
+
+    /// The moons row ends well above the 3D map's centre and the window's,
+    /// and a body below it takes a tap: the row has not taken the screen.
+    private func assertMapInSight(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.descendants(matching: .any)["moons-row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the moons row", file: file, line: line)
+        let map = app.descendants(matching: .any)["graph3D"].firstMatch
+        XCTAssertTrue(map.exists, "the 3D map under the moons", file: file, line: line)
+        let panel: CGRect = row.frame
+        let window: CGRect = app.windows.firstMatch.frame
+        XCTAssertLessThan(panel.maxY, map.frame.midY - 80,
+                          "the moons end well above the map's centre: row \(panel), map \(map.frame)", file: file, line: line)
+        XCTAssertLessThan(panel.maxY, window.midY,
+                          "the moons take less than the top half: row \(panel), window \(window)", file: file, line: line)
+        let below: [XCUIElement] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .filter { $0.frame.minY > panel.maxY + 8 && $0.frame.maxY < map.frame.maxY }
+        XCTAssertTrue(below.contains { $0.isHittable },
+                      "a body below the moons takes a tap (\(below.count) below the row)", file: file, line: line)
     }
 
     private func gone(_ element: XCUIElement) -> Bool {

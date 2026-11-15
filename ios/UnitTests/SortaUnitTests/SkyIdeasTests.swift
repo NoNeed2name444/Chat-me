@@ -210,4 +210,37 @@ final class SkyIdeasTests: XCTestCase {
         let again = try JSONDecoder().decode(NoteFolder.self, from: JSONEncoder().encode(worded))
         XCTAssertEqual(again.words, ["garden"])
     }
+
+    /// v14: a Space name keeps inside the map's free area. On a phone 390
+    /// wide and 844 tall, with 180 points of glass at the top (the strip
+    /// and the lens row) and 90 at the foot, a comet's name by the right
+    /// edge slides in, never past the comet's middle; one that would run
+    /// under the strip goes under its body; one in the open stays put.
+    func testANameKeepsInsideTheMapsFreeArea() {
+        let room = GraphNameRoom.Room(width: 390, height: 844, glass: GraphInsets(top: 180, left: 0, bottom: 90, right: 0),
+                                      edge: GraphNameRoom.edge)
+        XCTAssertEqual(room.maxX, 183)
+        XCTAssertEqual(room.maxY, 230)
+        XCTAssertEqual(room.minY, -320)
+        let half = SIMD2<Float>(60, 14)
+        // in the open: as it was
+        let open = GraphNameRoom.keep(above: SIMD2(0, 40), under: SIMD2(0, -40), half: half, room: room)
+        XCTAssertFalse(open.under)
+        XCTAssertEqual(open.across, 0)
+        // by the right edge: in, until its right side is 12 from the edge
+        let right = GraphNameRoom.keep(above: SIMD2(160, 40), under: SIMD2(160, -40), half: half, room: room)
+        XCTAssertEqual(right.across, -37)
+        XCTAssertEqual(160 + right.across + half.x, room.maxX)
+        // past the edge: no further than its own half width
+        let past = GraphNameRoom.keep(above: SIMD2(260, 40), under: SIMD2(260, -40), half: half, room: room)
+        XCTAssertEqual(past.across, -60)
+        // by the left edge: out
+        XCTAssertEqual(GraphNameRoom.keep(above: SIMD2(-170, 40), under: SIMD2(-170, -40), half: half, room: room).across, 47)
+        // under the strip's glass: under its body instead
+        let top = GraphNameRoom.keep(above: SIMD2(0, 225), under: SIMD2(0, 150), half: half, room: room)
+        XCTAssertTrue(top.under)
+        // with no room under it either, it stays above
+        let tight = GraphNameRoom.Room(minX: -100, maxX: 100, minY: 0, maxY: 50)
+        XCTAssertFalse(GraphNameRoom.keep(above: SIMD2(0, 45), under: SIMD2(0, 5), half: half, room: tight).under)
+    }
 }

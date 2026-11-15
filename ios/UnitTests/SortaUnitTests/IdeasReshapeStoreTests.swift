@@ -104,6 +104,40 @@ final class IdeasReshapeStoreTests: XCTestCase {
         XCTAssertEqual(store.notes, before, "Undo splits them back exactly")
     }
 
+    /// Where an idea stops is worked out again for each half and for the
+    /// joined idea; Undo brings the old mark back.
+    func testEachHalfAndTheJoinedIdeaStopWhereTheirOwnTextDoes() throws {
+        let store = try freshStore()
+        let jobs = store.create(title: "Garden jobs", body: "Dig the bed. Plant the bulbs. Water the")
+        store.setStopped(jobs.id, at: 3)
+        let path = store.create(title: "Path", body: "Weed the path")
+        store.setStopped(path.id, at: 4)
+        let rake = store.create(title: "Rake", body: "Rake the leaves.")
+        let beans = store.create(title: "Beans", body: "By the fence.")
+        let canes = store.create(title: "Canes", body: "Bamboo canes and")
+        let before = store.notes
+
+        let split = try XCTUnwrap(store.split(jobs.id, after: 2))
+        XCTAssertEqual(store.note(jobs.id)?.body, "Dig the bed.")
+        XCTAssertNil(store.note(jobs.id)?.stoppedAt, "the first half ends its sentence, so it stops nowhere")
+        let secondID = try XCTUnwrap(split.added.first)
+        let second = try XCTUnwrap(store.note(secondID))
+        XCTAssertEqual(second.body, "Water the")
+        XCTAssertEqual(second.stoppedAt, "Water the".utf16.count, "the second half stops at its own end")
+        store.undo(split)
+        XCTAssertEqual(store.notes, before, "Undo puts the old mark back")
+
+        let ended = try XCTUnwrap(store.join(path.id, with: rake.id))
+        XCTAssertNil(store.note(path.id)?.stoppedAt, "joined, the text ends a sentence")
+        store.undo(ended)
+        let open = try XCTUnwrap(store.join(beans.id, with: canes.id))
+        let body: String = try XCTUnwrap(store.note(beans.id)?.body)
+        XCTAssertTrue(body.hasSuffix("Bamboo canes and"))
+        XCTAssertEqual(store.note(beans.id)?.stoppedAt, body.utf16.count, "joined, it stops at the joined text's end")
+        store.undo(open)
+        XCTAssertEqual(store.notes, before)
+    }
+
     func testCollideMakesAnIdeaInToSortLinkedToBoth() throws {
         let store = try freshStore()
         let garden = store.createFolder(name: "Garden")

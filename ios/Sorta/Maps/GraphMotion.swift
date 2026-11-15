@@ -387,6 +387,9 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     private var nextOffsets: [SIMD3<Float>] = []
     /// The view's height in points, for names at a constant size.
     private var viewHeight: Float = 800
+    /// The glass over the view's edges, in points (the strip, the foot):
+    /// the Universe's names stay inside the rest (placeLabel).
+    private var labelRoom = GraphInsets()
     /// The theme's lens (GraphLens) and the point the camera orbits: with
     /// depth of field on, each frame focuses there (setLens, setFocus).
     private var lens: GraphLens = .off
@@ -1085,6 +1088,13 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         lock.unlock()
     }
 
+    /// The glass over the view's edges, for the names (placeLabel).
+    func setLabelRoom(_ glass: GraphInsets) {
+        lock.lock()
+        labelRoom = glass
+        lock.unlock()
+    }
+
     /// The lens whose depth of field the frames keep focused.
     func setLens(_ newLens: GraphLens) {
         lock.lock()
@@ -1702,7 +1712,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         }
         // names pop in and go every frame, even when the notes are still
         let labelStep: Float = min(max(rawStep, 0.001), 0.05)
-        updateLabels(labelStep, eye: eye, up: up)
+        updateLabels(labelStep, eye: eye, right: right, up: up)
         if resting && grabbed == nil {
             // v14: a leaning comet the turn put behind its folder on screen
             // moves clear of it, even at rest
@@ -2356,7 +2366,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
     /// full size over about 0.12 s - at once without Reduce Motion's
     /// liveliness - and goes the instant it is not wanted. Called with the
     /// lock held.
-    private func updateLabels(_ dt: Float, eye: SIMD3<Float>, up: SIMD3<Float>) {
+    private func updateLabels(_ dt: Float, eye: SIMD3<Float>, right: SIMD3<Float>, up: SIMD3<Float>) {
         labelsWanted.removeAll(keepingCapacity: true)
         if namesShown, let drop = dropNamed {
             // S06c: the idea a held one would be let go on, alone
@@ -2390,7 +2400,7 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         }
         swap(&labelsUp, &labelsWanted)
         if universe {
-            for i in labelsUp { placeLabel(i, eye: eye, up: up) }
+            for i in labelsUp { placeLabel(i, eye: eye, right: right, up: up) }
         }
         styleLabels(dt, eye: eye, up: up)
     }
@@ -2499,17 +2509,42 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
 
     /// The Universe's names: always `labelPoints` tall, `labelGap` points
     /// above the body's glow, above it on screen whichever way the camera
-    /// is turned (the camera's up), whatever the zoom.
-    private func placeLabel(_ i: Int, eye: SIMD3<Float>, up: SIMD3<Float>) {
+    /// is turned (the camera's up), whatever the zoom. v14: inside the
+    /// map's free area (GraphNameRoom): slid across, never past the body's
+    /// middle, to keep off the sides, and under the body where above it
+    /// would run under the strip's glass (a comet's name ran off the
+    /// iPhone's right edge, under the Look chip).
+    private func placeLabel(_ i: Int, eye: SIMD3<Float>, right: SIMD3<Float>, up: SIMD3<Float>) {
         let d: Float = max(simd_distance(eye, position[i]), 0.05)
         let halfTan: Float = tan(GraphFraming.fieldOfView * Float.pi / 360)
         let perUnit: Float = viewHeight / (2 * d * halfTan)
         let nodeScale: Float = max(popScale[i], 0.05)
-        let size: Float = Self.labelPoints / perUnit / nodeScale * labelGrowth(i)
+        let growth: Float = labelGrowth(i)
+        let size: Float = Self.labelPoints / perUnit / nodeScale * growth
         labels[i].simdScale = SIMD3<Float>(size, size, size)
         let lift: Float = (pickRadius[i] * Self.labelClear + Self.labelGap / perUnit) / nodeScale
-        let upward: SIMD3<Float> = simd_length_squared(up) > 0.000_001 ? simd_normalize(up) : SIMD3<Float>(0, 1, 0)
-        labels[i].simdPosition = upward * lift
+        let upward: SIMD3<Float> = Self.axis(up, or: SIMD3<Float>(0, 1, 0))
+        var at: SIMD3<Float> = upward * lift
+        if let parts = labelParts[i] {
+            let aside: SIMD3<Float> = Self.axis(right, or: SIMD3<Float>(1, 0, 0))
+            // SceneKit's camera looks down its -z: ahead is up x right
+            let ahead: SIMD3<Float> = Self.axis(simd_cross(upward, aside), or: SIMD3<Float>(0, 0, -1))
+            let toBody: SIMD3<Float> = position[i] - eye
+            let depthAhead: Float = simd_dot(toBody, ahead)
+            if depthAhead > 0.001 {
+                let focal: Float = viewHeight * 0.5 / max(tan(fovY * 0.5), 0.0001)
+                let body = SIMD2<Float>(simd_dot(toBody, aside), simd_dot(toBody, upward)) * (focal / depthAhead)
+                let half: SIMD2<Float> = parts.half * (Self.labelPoints * growth)
+                let liftPoints: Float = lift * nodeScale * perUnit
+                let room = GraphNameRoom.Room(width: viewWidth, height: viewHeight, glass: labelRoom, edge: GraphNameRoom.edge)
+                let kept = GraphNameRoom.keep(above: body + SIMD2<Float>(0, liftPoints + half.y),
+                                              under: body - SIMD2<Float>(0, liftPoints + half.y), half: half, room: room)
+                // the pill hangs from its bottom edge's middle
+                if kept.under { at = -upward * (lift + 2 * half.y / perUnit / nodeScale) }
+                at += aside * (kept.across / perUnit / nodeScale)
+            }
+        }
+        labels[i].simdPosition = at
     }
 
     private func wantLabel(_ i: Int?) {
@@ -2533,6 +2568,50 @@ nonisolated final class GraphSim: NSObject, SCNSceneRendererDelegate, @unchecked
         let left: Float = 1 - t
         let eased: Float = 1 - left * left
         return 0.85 + 0.15 * eased
+    }
+}
+
+/// v14: where a Space name goes to stay inside the map's free area: the
+/// view less its glass (the strip at the top, the foot), `edge` in from
+/// each side. Points from the view's middle, y up.
+nonisolated enum GraphNameRoom {
+    /// The room kept between a name and the free area's sides, as
+    /// Performance keeps (GraphPerfLabelRoom).
+    static let edge: Float = 12
+
+    struct Room: Equatable {
+        var minX: Float
+        var maxX: Float
+        var minY: Float
+        var maxY: Float
+
+        init(minX: Float, maxX: Float, minY: Float, maxY: Float) {
+            self.minX = minX
+            self.maxX = maxX
+            self.minY = minY
+            self.maxY = maxY
+        }
+
+        init(width: Float, height: Float, glass: GraphInsets, edge: Float) {
+            self.init(minX: -width / 2 + glass.left + edge, maxX: width / 2 - glass.right - edge,
+                      minY: -height / 2 + glass.bottom + edge, maxY: height / 2 - glass.top - edge)
+        }
+    }
+
+    /// A name whose middle is `above` over its body (or `under` it, below),
+    /// `half` wide and tall: whether it goes under the body (above runs
+    /// past the room's top and under does not), and how far it slides
+    /// across to keep inside the room's sides, never more than its own half
+    /// width, so it still reaches over the body's middle. Wider than the
+    /// room, its start keeps inside.
+    static func keep(above: SIMD2<Float>, under: SIMD2<Float>, half: SIMD2<Float>, room: Room) -> (under: Bool, across: Float) {
+        let goesUnder: Bool = above.y + half.y > room.maxY && under.y - half.y >= room.minY
+        let x: Float = above.x
+        let lo: Float = room.minX + half.x
+        let hi: Float = room.maxX - half.x
+        let wanted: Float = lo > hi ? lo : min(max(x, lo), hi)
+        let across: Float = min(max(wanted - x, -half.x), half.x)
+        return (goesUnder, across)
     }
 }
 

@@ -342,7 +342,12 @@ data class MapDrawn(
     /** Added by Map3DView (S06c): an idea a test can hold, and the nearest other idea to the held one (else the chosen one), each index, x, y; empty for none. */
     val ideaSpot: List<Float> = emptyList(),
     val near: List<Float> = emptyList(),
+    /** Space's frost (S06a A6): the bodies the latest frame drew a frost halo round. No words. */
+    val frosted: Int = 0,
 ) {
+    /** This record with the latest frame's frost halos; the same record when nothing changed. */
+    fun frosting(frostedNow: Int): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
+
     /**
      * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
      * [pose] alike, each value within a thousandth of its size (at least 1). A test reading where the
@@ -1452,6 +1457,7 @@ class GlMapRenderer(
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
+        record = record.frosting(frostCount)
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)

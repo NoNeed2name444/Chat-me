@@ -117,12 +117,12 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           { echo '### Compile errors and warnings'; echo '```'; grep -E "error:|warning:" ../build.log | sed -E 's#^.*/ios/##' | sort -u | head -60 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The app's Info.plist
-        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
+        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app --share
       # each simulator runs once the build has passed, whatever the other did;
       # in run 40718963474 the iPhone's step took 7 to 8 minutes and the iPad's
       # 9, most of it the simulator's first boot, so each may take twice that
@@ -212,7 +212,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
@@ -282,7 +282,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The maps' tests on an iPhone
