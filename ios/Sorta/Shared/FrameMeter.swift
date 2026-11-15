@@ -26,13 +26,14 @@ import os
 /// Debug builds only, launched with `-SortaFrameMeter` (FramePerfUITests;
 /// perf, 15 Nov): Sorta's frames, timed while a UI test's phase runs. The
 /// test posts the Darwin notification `com.cramdown.sorta.frames.begin`,
-/// touches, then posts `….end`; the meter then sums up, per phase:
+/// touches, then posts `….end`; the meter then sums up, per phase, each with
+/// its shares over a 120 Hz refresh and a 60 Hz one (FrameSummary):
 /// - main-interval: the main thread's display-link frames (CADisplayLink), the
-///   time between them, late over 1.5 periods;
+///   time between them;
 /// - main-work: the main thread's run-loop passes (from waking to sleeping
-///   again), late over 8 ms;
+///   again);
 /// - render-interval and render-work: the map's render-thread steps
-///   (RenderFrames), late over 1.5 periods and over 8 ms;
+///   (RenderFrames);
 /// and puts the lines on its mark's accessibility value, for the test to
 /// read, and in the log (subsystem com.cramdown.sorta, category frames),
 /// each phase's work wrapped in a signpost.
@@ -98,15 +99,14 @@ final class FrameMeter {
         interval = nil
         let render = RenderFrames.shared.end()
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let hz: Double = Double(scenes.first?.screen.maximumFramesPerSecond ?? 60)
-        let period: Double = 1000 / max(hz, 1)
+        let hz: Int = scenes.first?.screen.maximumFramesPerSecond ?? 60
         phases += 1
-        var lines: [String] = ["phase=\(phases) hz=\(Int(hz))"]
-        lines.append(FrameSummary.of(intervals, over: 1.5 * period).line("main-interval"))
-        lines.append(FrameSummary.of(busy, over: 8).line("main-work"))
+        var lines: [String] = ["phase=\(phases) hz=\(hz)"]
+        lines.append(FrameSummary.of(intervals).line("main-interval"))
+        lines.append(FrameSummary.of(busy).line("main-work"))
         if !render.work.isEmpty {
-            lines.append(FrameSummary.of(render.intervals, over: 1.5 * period).line("render-interval"))
-            lines.append(FrameSummary.of(render.work, over: 8).line("render-work"))
+            lines.append(FrameSummary.of(render.intervals).line("render-interval"))
+            lines.append(FrameSummary.of(render.work).line("render-work"))
         }
         for line in lines { log.info("\(line, privacy: .public)") }
         report = lines.joined(separator: "\n")

@@ -1,24 +1,32 @@
 import Foundation
 
 /// Frame times summed up (perf, 15 Nov): how many, the 50th, 95th and 99th
-/// percentiles (nearest rank), and the share of frames late (over `over`
-/// milliseconds). For the frame meter (FrameMeter, debug builds) and the
-/// frame tests (FramePerfUITests), as Android's FrameSummary.
+/// percentiles (nearest rank), and the shares over a 120 Hz refresh (`over8`,
+/// over 8.3 ms) and over a 60 Hz one (`over16`, over 16.7 ms): the owner's bar
+/// is 120 frames a second on a 120 Hz screen. For the frame meter
+/// (FrameMeter, debug builds) and the frame tests (FramePerfUITests), as
+/// Android's FrameSummary.
 nonisolated struct FrameSummary: Equatable, Sendable {
     let frames: Int
     let p50: Double
     let p95: Double
     let p99: Double
-    let late: Double
+    let over8: Double
+    let over16: Double
 
-    static let none = FrameSummary(frames: 0, p50: 0, p95: 0, p99: 0, late: 0)
+    /// A 120 Hz refresh, and a 60 Hz one, in milliseconds.
+    static let refresh120: Double = 1000.0 / 120
+    static let refresh60: Double = 1000.0 / 60
+    static let none = FrameSummary(frames: 0, p50: 0, p95: 0, p99: 0, over8: 0, over16: 0)
 
-    static func of(_ ms: [Double], over: Double) -> FrameSummary {
+    static func of(_ ms: [Double]) -> FrameSummary {
         guard !ms.isEmpty else { return .none }
         let sorted: [Double] = ms.sorted()
-        let late: Int = ms.filter { $0 > over }.count
+        let count: Double = Double(ms.count)
+        let over8: Int = ms.filter { $0 > refresh120 }.count
+        let over16: Int = ms.filter { $0 > refresh60 }.count
         return FrameSummary(frames: ms.count, p50: percentile(sorted, 0.50), p95: percentile(sorted, 0.95),
-                            p99: percentile(sorted, 0.99), late: Double(late) / Double(ms.count))
+                            p99: percentile(sorted, 0.99), over8: Double(over8) / count, over16: Double(over16) / count)
     }
 
     /// The nearest-rank `p` percentile of `sorted`: the smallest value at
@@ -29,9 +37,11 @@ nonisolated struct FrameSummary: Equatable, Sendable {
         return sorted[rank - 1]
     }
 
-    /// One line, as Android's: "<name> frames=… p50=… p95=… p99=… late=…%".
+    /// One line, as Android's: "<name> frames=… p50=… p95=… p99=… over8.3=…%
+    /// over16.7=…%".
     func line(_ name: String) -> String {
-        name + String(format: " frames=%d p50=%.1f p95=%.1f p99=%.1f late=%.1f%%", frames, p50, p95, p99, late * 100)
+        name + String(format: " frames=%d p50=%.1f p95=%.1f p99=%.1f over8.3=%.1f%% over16.7=%.1f%%",
+                      frames, p50, p95, p99, over8 * 100, over16 * 100)
     }
 }
 

@@ -1,18 +1,18 @@
 import UIKit
 import XCTest
 
-/// Sorta's frames on the simulator (perf, 15 Nov: the owner's "at least 60
-/// fps"), as Android's FramePerfTest: the map lively, dragged and flown in,
-/// the board dragged and pinched, the deck's card carried and an idea typed
-/// in. Each phase is timed by the app's frame meter (`-SortaFrameMeter`,
-/// FrameMeter, debug builds only): the test posts the Darwin notification
-/// `com.cramdown.sorta.frames.begin`, touches, posts `….end`, then reads the
-/// meter's lines off its mark and prints them as "SortaFrames <device>-<phase>
-/// <measure> frames=… p50=… p95=… p99=… late=…%", and keeps them as an
-/// attachment. The simulator draws on the Mac's GPU at the Mac's pace, so
-/// its numbers are read against each other, before and after a change, and
-/// by the work a frame takes, never as a phone's. Every phase must time
-/// frames, or fails.
+/// Sorta's frames on the simulator (perf, 15 Nov: the owner's 120 frames a
+/// second on a 120 Hz screen), as Android's FramePerfTest: the map lively,
+/// dragged and flown in, the board dragged and pinched, the deck's card
+/// carried and an idea typed in. Each phase is timed by the app's frame meter
+/// (`-SortaFrameMeter`, FrameMeter, debug builds only): the test posts the
+/// Darwin notification `com.cramdown.sorta.frames.begin`, touches, posts
+/// `….end`, then reads the meter's lines off its mark and prints them as
+/// "SortaFrames <device>-<phase> <measure> frames=… p50=… p95=… p99=…
+/// over8.3=…% over16.7=…%", and keeps them as an attachment. The simulator
+/// draws on the Mac's GPU at the Mac's pace, so its numbers are read against
+/// each other, before and after a change, and by the work a frame takes,
+/// never as a phone's. Every phase must time frames, or fails.
 final class FramePerfUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false

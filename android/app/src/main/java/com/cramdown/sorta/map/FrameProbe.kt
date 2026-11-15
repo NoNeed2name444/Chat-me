@@ -5,23 +5,27 @@ import kotlin.math.ceil
 
 /**
  * Frame times summed up (perf, 15 Nov): how many, the 50th, 95th and 99th percentiles (nearest rank),
- * and the share of frames [late] (over 1.5 frame periods for a frame's interval, over one period for
- * its work). For the frame tests (FramePerfTest), and their unit test.
+ * and the shares over a 120 Hz refresh ([over8], over 8.3 ms) and over a 60 Hz one ([over16], over
+ * 16.7 ms): the owner's bar is 120 frames a second on a 120 Hz screen. For the frame tests
+ * (FramePerfTest), and their unit test; iOS's FrameSummary is the same.
  */
-data class FrameSummary(val frames: Int, val p50: Double, val p95: Double, val p99: Double, val late: Double) {
-    /** One line, as the frame tests log it: "<name> frames=… p50=… p95=… p99=… late=…%". */
-    fun line(name: String): String = String.format(Locale.ROOT, "%s frames=%d p50=%.1f p95=%.1f p99=%.1f late=%.1f%%",
-        name, frames, p50, p95, p99, late * 100)
+data class FrameSummary(val frames: Int, val p50: Double, val p95: Double, val p99: Double, val over8: Double, val over16: Double) {
+    /** One line, as the frame tests log it: "<name> frames=… p50=… p95=… p99=… over8.3=…% over16.7=…%". */
+    fun line(name: String): String = String.format(Locale.ROOT, "%s frames=%d p50=%.1f p95=%.1f p99=%.1f over8.3=%.1f%% over16.7=%.1f%%",
+        name, frames, p50, p95, p99, over8 * 100, over16 * 100)
 
     companion object {
-        val NONE = FrameSummary(0, 0.0, 0.0, 0.0, 0.0)
+        /** A 120 Hz refresh, and a 60 Hz one, in milliseconds. */
+        const val REFRESH_120_MS = 1000.0 / 120
+        const val REFRESH_60_MS = 1000.0 / 60
+        val NONE = FrameSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-        /** [ms] summed up; a frame over [over] milliseconds counts as late. */
-        fun of(ms: DoubleArray, over: Double): FrameSummary {
+        /** [ms] summed up. */
+        fun of(ms: DoubleArray): FrameSummary {
             if (ms.isEmpty()) return NONE
             val sorted = ms.copyOf().also { it.sort() }
             return FrameSummary(ms.size, percentile(sorted, 0.50), percentile(sorted, 0.95), percentile(sorted, 0.99),
-                ms.count { it > over }.toDouble() / ms.size)
+                ms.count { it > REFRESH_120_MS }.toDouble() / ms.size, ms.count { it > REFRESH_60_MS }.toDouble() / ms.size)
         }
 
         /** The nearest-rank [p] percentile of [sorted]: the smallest value at least a [p] share of them reach. */

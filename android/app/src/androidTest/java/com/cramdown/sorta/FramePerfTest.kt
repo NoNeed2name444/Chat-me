@@ -48,14 +48,15 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Sorta's frames, timed on the emulator (perf, 15 Nov: the owner's "at least 60 fps"). Each phase
- * logs, under the tag SortaFrames, one line per measure: how many frames, the 50th, 95th and 99th
- * percentile in milliseconds and the share late.
- * - ui-total: each window frame's whole time (FrameMetrics.TOTAL_DURATION), late over one period;
- * - ui-main: its main thread's part (input, animation, layout, draw), late over 8 ms;
- * - ui-render: its render thread's part (sync, commands, swap), late over 8 ms;
- * - gl-interval and gl-work: the GL map's frames (MapFrameProbe): the time between them, late over
- *   1.5 periods, and the renderer thread's work in each, late over 8 ms.
+ * Sorta's frames, timed on the emulator (perf, 15 Nov: the owner's 120 frames a second on a 120 Hz
+ * screen). Each phase logs, under the tag SortaFrames, one line per measure: how many frames, the
+ * 50th, 95th and 99th percentile in milliseconds, and the shares over a 120 Hz refresh (8.3 ms) and
+ * over a 60 Hz one (16.7 ms) (FrameSummary).
+ * - ui-total: each window frame's whole time (FrameMetrics.TOTAL_DURATION);
+ * - ui-main: its main thread's part (input, animation, layout, draw);
+ * - ui-render: its render thread's part (sync, commands, swap);
+ * - gl-interval and gl-work: the GL map's frames (MapFrameProbe): the time between them, and the
+ *   renderer thread's work in each.
  * The emulator draws GL in software (SwiftShader), so its numbers are read against each other, the
  * same phases before and after a change, and by the work a frame takes, never as a phone's.
  *
@@ -158,7 +159,6 @@ class FramePerfTest {
     private fun phase(name: String, ms: Long, gl: Boolean, during: () -> Unit = { SystemClock.sleep(ms) }) {
         val window = checkNotNull(activity).window
         val hz = onMain { checkNotNull(activity).display?.refreshRate } ?: 60f
-        val period = 1000.0 / hz
         val frames = WindowFrames(window)
         frames.start()
         if (gl) MapFrameProbe.start()
@@ -169,12 +169,12 @@ class FramePerfTest {
         val (total, main, render) = frames.stop()
         val out = ArrayList<String>()
         out += String.format(java.util.Locale.ROOT, "%s-%s seconds=%.1f hz=%.0f", device, name, seconds, hz)
-        out += FrameSummary.of(total, period).line("$device-$name ui-total")
-        out += FrameSummary.of(main, 8.0).line("$device-$name ui-main")
-        out += FrameSummary.of(render, 8.0).line("$device-$name ui-render")
+        out += FrameSummary.of(total).line("$device-$name ui-total")
+        out += FrameSummary.of(main).line("$device-$name ui-main")
+        out += FrameSummary.of(render).line("$device-$name ui-render")
         if (gl) {
-            out += FrameSummary.of(interval, 1.5 * period).line("$device-$name gl-interval")
-            out += FrameSummary.of(work, 8.0).line("$device-$name gl-work")
+            out += FrameSummary.of(interval).line("$device-$name gl-interval")
+            out += FrameSummary.of(work).line("$device-$name gl-work")
         }
         for (line in out) Log.i(TAG, line)
         check(total.isNotEmpty() || interval.isNotEmpty()) { "$name drew no frame in ${seconds}s" }
