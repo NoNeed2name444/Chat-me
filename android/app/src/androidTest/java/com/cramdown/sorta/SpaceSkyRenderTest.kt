@@ -169,12 +169,15 @@ class SpaceSkyRenderTest {
         try { compose.waitUntil(30_000) { drawn()?.let { it.build != built && it.bodyFrames >= 2 } == true } } catch (_: ComposeTimeoutException) {}
         check(drawn()?.build != built) { "Filing built no new scene for $suffix: ${drawn()}" }
         check((drawn()?.bodyFrames ?: 0) >= 2) { "The new scene drew no bodies within 30 s of filing for $suffix: ${drawn()}" }
+        // the notice before the stills: it stays up ten seconds, and on a slow emulator the two stills
+        // and the settling between them took it past that (run 44286808376: read 16 s after the tap)
+        fun noticed() = compose.onAllNodes(hasText("Moved to Raised beds.", substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()
+        try { compose.waitUntil(5_000) { noticed() } } catch (_: ComposeTimeoutException) {}
+        check(noticed()) { "No notice of the filing for $suffix" }
         shot("sky-settle-$suffix")
         settle(1_500)
         shot("sky-settled-$suffix")
-        check(compose.onAllNodes(hasText("Moved to Raised beds.", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
-            "No notice of the filing for $suffix"
-        }
     }
 
     /** Sorta on [ideas] with Space's first-run card put away, its map open on the Universe and drawn. */
