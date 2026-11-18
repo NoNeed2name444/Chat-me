@@ -96,6 +96,7 @@ class IdeaShapesMapTest {
 
         // A4: an idea held and moved onto another rings it twice; let go there, the two collide
         val map = SemanticsMatcher.keyIsDefined(MapDrawnKey)
+        atRest("the hold")
         try { compose.waitUntil(10_000) { mapDrawn()?.ideaSpot?.size == 3 } } catch (_: ComposeTimeoutException) {}
         val spot = checkNotNull(mapDrawn()?.ideaSpot?.takeIf { it.size == 3 }) { "No idea to hold on the map: ${mapDrawn()}" }
         val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -126,6 +127,7 @@ class IdeaShapesMapTest {
         compose.waitForIdle()
 
         // A5: the idea chosen with a tap, pinched apart, opens the split chooser
+        atRest("the tap to choose")
         try { compose.waitUntil(10_000) { mapDrawn()?.ideaSpot?.size == 3 } } catch (_: ComposeTimeoutException) {}
         val pick = checkNotNull(mapDrawn()?.ideaSpot?.takeIf { it.size == 3 }) { "No idea to choose: ${mapDrawn()}" }
         val index = pick[0].toInt()
@@ -149,6 +151,7 @@ class IdeaShapesMapTest {
 
         // A6: the chosen idea and the idea nearest it, pushed together with two fingers, join; Undo parts them
         compose.waitUntil(10_000) { mapDrawn()?.chosen == index }
+        atRest("the push together")
         try { compose.waitUntil(10_000) { mapDrawn()?.near?.size == 3 } } catch (_: ComposeTimeoutException) {}
         val before = checkNotNull(mapDrawn())
         val other = checkNotNull(before.near.takeIf { it.size == 3 }) { "No idea near the chosen one $index: $before" }
@@ -184,6 +187,30 @@ class IdeaShapesMapTest {
         compose.onNode(hasText(context.getString(R.string.undo_action))).performClick()
         try { compose.waitUntil(15_000) { mapDrawn()?.bodies == before.bodies } } catch (_: ComposeTimeoutException) {}
         check(mapDrawn()?.bodies == before.bodies) { "Undo did not bring both ideas back: ${mapDrawn()?.bodies} bodies, not ${before.bodies}" }
+    }
+
+    /**
+     * The record once the camera has stopped and the latest frame was drawn where it stands (MapDrawn.boxAtPose,
+     * S06m), as MapSpaceLivelyTest's drawnAtRest: [MapDrawn.ideaSpot], [MapDrawn.near] and the names come from
+     * that frame's bodies on screen, while the record's pose is the camera's now, so after a jump or an ease they
+     * can be the last view's. The same pose on 3 reads in a row, Compose's frames moving on between them.
+     */
+    private fun atRest(what: String): MapDrawn {
+        var pose: List<Float>? = null
+        var still = 0
+        try {
+            compose.waitUntil(10_000) {
+                val d = mapDrawn()
+                still = if (d != null && d.boxAtPose() && d.pose == pose) still + 1 else 0
+                pose = d?.pose
+                still >= 3
+            }
+        } catch (_: ComposeTimeoutException) {}
+        val d = checkNotNull(mapDrawn())
+        check(still >= 3 && d.boxAtPose()) {
+            "The camera did not come to rest with a frame drawn there within 10 s before $what: the bodies measured at ${d.boxPose}, the camera at ${d.pose}; $d"
+        }
+        return d
     }
 
     private fun putCardAway() {

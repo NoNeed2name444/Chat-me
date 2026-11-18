@@ -39,6 +39,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
     private var sparkBuffer: FloatBuffer = floats(256 * 7)
     /** Sparks drawn in the latest frame. */
     var sparksDrawn = 0; private set
+    /** The frost halos drawn last frame (S06a A6). */
+    var frostDrawn = 0; private set
     /** Dying links drawn in the latest frame (S05h2). */
     var dyingLinksDrawn = 0; private set
     private var ringVao = 0
@@ -133,7 +135,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
              fade: FloatArray = FloatArray(4), focalDp: Float = 0f, forward: FloatArray = FloatArray(3),
              straight: Boolean = false, lively: Boolean = true, contrast: Boolean = false,
              ring: FloatArray? = null, ringDepth: Float = 0f, ringGlow: Float = 1f,
-             dyingFade: Float = 1f, sparks: FloatArray? = null, sparkCount: Int = 0, maxPoint: Float = 64f) {
+             dyingFade: Float = 1f, sparks: FloatArray? = null, sparkCount: Int = 0, maxPoint: Float = 64f,
+             frost: FloatArray? = null, frostCount: Int = 0) {
         if (!earthReady) uploadEarth()
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         linksDrawn = 0
@@ -231,25 +234,36 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
         // and its near half, over them
         if (ring != null) drawRing(ring, viewProj, clock, lively, fade, ringDepth, ringGlow, -1f)
         // the sparks, last and additive, as iOS's emitters draw late (renderingOrder 7); the map has no depth to test them by
+        // the frost (S06a A6): a pale halo round each frosted body, by the sparks' program, before them
+        frostDrawn = 0
+        if (frost != null && frostCount > 0 && sparkProgram != 0) {
+            drawPoints(frost, frostCount, viewProj, focal, maxPoint)
+            frostDrawn = frostCount
+        }
         sparksDrawn = 0
         if (sparks != null && sparkCount > 0 && sparkProgram != 0) {
-            GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
-            val used = sparkCount * 7
-            sparkBuffer = ensure(sparkBuffer, used)
-            sparkBuffer.put(sparks, 0, used).flip()
-            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, sparkVbo)
-            GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, used * 4, sparkBuffer, GLES30.GL_STREAM_DRAW)
-            val p = sparkProgram
-            GLES30.glUseProgram(p)
-            GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
-            GLES30.glUniform1f(loc(p, "uFocal"), focal)
-            GLES30.glUniform1f(loc(p, "uMaxPoint"), maxPoint)
-            GLES30.glBindVertexArray(sparkVao)
-            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, sparkCount)
+            drawPoints(sparks, sparkCount, viewProj, focal, maxPoint)
             sparksDrawn = sparkCount
         }
         GLES30.glBindVertexArray(0)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+    }
+
+    /** [count] of the sparks' points (place and size, then colour, 7 floats a point), additive. */
+    private fun drawPoints(points: FloatArray, count: Int, viewProj: FloatArray, focal: Float, maxPoint: Float) {
+        GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE)
+        val used = count * 7
+        sparkBuffer = ensure(sparkBuffer, used)
+        sparkBuffer.put(points, 0, used).flip()
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, sparkVbo)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, used * 4, sparkBuffer, GLES30.GL_STREAM_DRAW)
+        val p = sparkProgram
+        GLES30.glUseProgram(p)
+        GLES30.glUniformMatrix4fv(loc(p, "uVP"), 1, false, viewProj, 0)
+        GLES30.glUniform1f(loc(p, "uFocal"), focal)
+        GLES30.glUniform1f(loc(p, "uMaxPoint"), maxPoint)
+        GLES30.glBindVertexArray(sparkVao)
+        GLES30.glDrawArrays(GLES30.GL_POINTS, 0, count)
     }
 
     /** One half of the orbit ring: [side] 1 the half beyond the body's centre, −1 the near half. Additive (alpha 0). */

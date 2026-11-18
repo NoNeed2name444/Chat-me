@@ -1174,13 +1174,15 @@ void main() {
     if (abs(q.x) <= 1.0 && abs(q.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometComa(q.x, q.y, rpSeen(vLight.xyz, c)), rp_dfF);
     vec3 ion = normalize(vA.xyz);
     vec2 a = rpStrip(rd, c, ion, rpAcross(ion, c));
-    vec2 ti = vec2(a.x / (r * 0.8), a.y / (r * 3.5) - 1.0);
+    // S06b: the tails' length by how long the idea has waited (CometTail, vA.w); 0 is the full tail
+    float rp_tl = vA.w > 0.0 ? vA.w : 1.0;
+    vec2 ti = vec2(a.x / (r * 0.8), a.y / (r * 3.5 * rp_tl) - 1.0);
     if (abs(ti.x) <= 1.0 && abs(ti.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometTail(ti.x, ti.y, 0.0), rp_dfF);
     vec3 dust = normalize(vB.xyz);
     vec3 dx = rpAcross(dust, c);
     if (dot(dx, dust - ion) < 0.0) dx = -dx;
     vec2 d = rpStrip(rd, c, dust, dx);
-    vec2 td = vec2(d.x / (r * 1.5), d.y / (r * 2.975) - 1.0);
+    vec2 td = vec2(d.x / (r * 1.5), d.y / (r * 2.975 * rp_tl) - 1.0);
     if (abs(td.x) <= 1.0 && abs(td.y) <= 1.0) res.rgb = res.rgb + rpFadedGlow(cometDust(td.x, td.y, 0.0), rp_dfF);
     fragColor = res * rpDissolve(rp_dfF);
     // Show links: a body outside the chosen one's neighbourhood at 0.15, premultiplied (S05g)

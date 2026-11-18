@@ -9,6 +9,8 @@ import SwiftUI
 final class IdeasListRoutes {
     /// The idea open in the editor.
     var opening: NoteRef?
+    /// Opened from "You were saying…" (S06a): the editor puts the caret where the person stopped.
+    var resuming: UUID?
     /// The idea whose folder is being chosen.
     var choosing: NoteRef?
     var naming: FolderPrompt?
@@ -18,11 +20,14 @@ final class IdeasListRoutes {
     enum FolderPrompt: Identifiable {
         case new(parent: UUID?)
         case rename(NoteFolder)
+        /// S06b: a folder's own words.
+        case words(NoteFolder)
 
         var id: String {
             switch self {
             case .new(let parent): return "new-\(parent?.uuidString ?? "top")"
             case .rename(let folder): return "rename-\(folder.id.uuidString)"
+            case .words(let folder): return "words-\(folder.id.uuidString)"
             }
         }
     }
@@ -35,7 +40,8 @@ final class IdeasListRoutes {
                          delete: { filing.deleteIdea($0, notes: notes) },
                          renameFolder: { self.naming = .rename($0) },
                          newFolderInside: { self.naming = .new(parent: $0.id) },
-                         deleteFolder: { self.deletingFolder = $0 })
+                         deleteFolder: { self.deletingFolder = $0 },
+                         folderWords: { self.naming = .words($0) })
     }
 }
 
@@ -59,9 +65,12 @@ private struct IdeasListSheets: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: inline ? .constant(nil) : $routes.opening, onDismiss: { filing.offerEditorUndo(notes: notes) }) { ref in
+            .sheet(item: inline ? .constant(nil) : $routes.opening, onDismiss: {
+                routes.resuming = nil
+                filing.offerEditorUndo(notes: notes)
+            }) { ref in
                 NoteEditorView(noteID: ref.id, file: { filing.fileFromEditor($0, in: $1, notes: notes) },
-                               delete: { filing.deleteIdea($0, notes: notes) })
+                               delete: { filing.deleteIdea($0, notes: notes) }, resume: routes.resuming == ref.id)
             }
             .sheet(item: $routes.choosing) { ref in
                 FolderChooser(current: notes.note(ref.id)?.folderId,
@@ -104,6 +113,13 @@ private struct IdeasListSheets: ViewModifier {
             NameSheet(title: IdeasWords.renameFolder, prompt: IdeasWords.folderName, initial: folder.name,
                       confirm: IdeasWords.rename) { name in
                 notes.renameFolder(folder.id, to: name)
+            }
+        case .words(let folder):
+            // blank clears them; the footnote says what a save keeps
+            NameSheet(title: SkyWords.folderWordsTitle, prompt: SkyWords.folderWordsPrompt,
+                      initial: folder.words.joined(separator: " "), confirm: SkyWords.save,
+                      footnote: SkyWords.folderWordsFootnote, allowsBlank: true) { text in
+                notes.setWords(folder.id, to: FolderWords.parse(text))
             }
         }
     }

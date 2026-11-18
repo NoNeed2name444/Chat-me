@@ -1,0 +1,108 @@
+{
+ "about": "Made up from the reference, never recorded with a real key.",
+ "source": "https://platform.openai.com/docs/api-reference/chat/create (read 15 Nov 2026)",
+ "provider": "openai",
+ "credential": "fake-key-for-tests-1",
+ "call": {
+  "model": "gpt-6-luna",
+  "instructions": "Sort the note into ideas.",
+  "input": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}",
+  "schema": "split",
+  "maxOutput": 400
+ },
+ "request": {
+  "method": "POST",
+  "url": "https://api.openai.com/v1/chat/completions",
+  "headers": {
+   "Authorization": "Bearer fake-key-for-tests-1",
+   "Content-Type": "application/json"
+  },
+  "body": {
+   "model": "gpt-6-luna",
+   "max_completion_tokens": 400,
+   "messages": [
+    {
+     "role": "system",
+     "content": "Sort the note into ideas."
+    },
+    {
+     "role": "user",
+     "content": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}"
+    }
+   ],
+   "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+     "name": "split",
+     "strict": true,
+     "schema": {
+      "type": "object",
+      "properties": {
+       "ideas": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "text": {
+           "type": "string"
+          },
+          "title": {
+           "type": "string"
+          },
+          "folder": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "text",
+          "title",
+          "folder"
+         ],
+         "additionalProperties": false
+        }
+       }
+      },
+      "required": [
+       "ideas"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "id": "chatcmpl-fake-1",
+   "object": "chat.completion",
+   "created": 1763200002,
+   "model": "gpt-6-luna",
+   "choices": [
+    {
+     "index": 0,
+     "message": {
+      "role": "assistant",
+      "content": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}",
+      "refusal": null
+     },
+     "finish_reason": "stop"
+    }
+   ],
+   "usage": {
+    "prompt_tokens": 205,
+    "completion_tokens": 47,
+    "total_tokens": 252
+   }
+  }
+ },
+ "expect": {
+  "text": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}",
+  "inputTokens": 205,
+  "outputTokens": 47,
+  "costPico": null
+ }
+}

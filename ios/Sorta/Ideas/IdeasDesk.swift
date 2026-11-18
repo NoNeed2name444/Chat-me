@@ -91,6 +91,15 @@ enum IdeasDesk {
         return Data(base64Encoded: text)
     }
 
+    /// `-SortaSeed <base64>` (S06a): a store file's bytes, written as the
+    /// test's store (`-SortaStore`) when that file is new, so a render can
+    /// start on ideas left mid-sentence or opened long ago. Nil without the
+    /// argument, or when it isn't base64.
+    static func seedFile(arguments: [String]) -> Data? {
+        guard let text = value(after: "-SortaSeed", in: arguments) else { return nil }
+        return Data(base64Encoded: text)
+    }
+
     /// `-SortaNoticesStay`: a notice stays until the next one, as it does
     /// under VoiceOver, so a slow simulator can still reach its Undo.
     static func noticesStay(arguments: [String]) -> Bool {

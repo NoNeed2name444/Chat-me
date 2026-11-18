@@ -32,6 +32,8 @@ data class NoteFolder(
     val parentId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val rawJson: String = "{}",
+    /** The folder's own words (S06b): at most five, each one word; loose ideas sharing one lean towards it in Space. */
+    val words: List<String> = emptyList(),
 )
 
 /** A deleted note, and the notes that held a hand-made link to it (IdeaBook.removal, IdeaBook.restore). */
@@ -105,11 +107,11 @@ class IdeaBook(
      * then to the nearest place where its card covers no other ([IdeaBoardDrop], as a dropped card).
      */
     fun create(title: String, body: String = "", kind: NoteKind = NoteKind.IDEA, folderId: String? = null,
-               at: BoardPoint? = null): Note {
+               at: BoardPoint? = null, sharedFrom: String? = null): Note {
         val spot = at ?: nextBoardSpot()
         val time = now()
         val note = Note(id = makeId(), title = title.trim(), body = body, folderId = folderId, kind = kind.rawValue,
-            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
+            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time, sharedFrom = sharedFrom)
         notes = notes + note
         changed()
         return note
@@ -119,7 +121,8 @@ class IdeaBook(
     fun update(note: Note) {
         val index = notes.indexOfFirst { it.id == note.id }
         if (index < 0) return
-        val kept = note.copy(updatedAt = notes[index].updatedAt)
+        // openedAt and stoppedAt are written by markOpened and setStopped only (S06a), so an editor's older copy leaves them
+        val kept = note.copy(updatedAt = notes[index].updatedAt, openedAt = notes[index].openedAt, stoppedAt = notes[index].stoppedAt)
         if (kept == notes[index]) return
         notes = notes.toMutableList().also { it[index] = kept.copy(updatedAt = now()) }
         changed()
@@ -163,6 +166,22 @@ class IdeaBook(
         val index = notes.indexOfFirst { it.id == id }
         if (index < 0) return
         notes = notes.toMutableList().also { it[index] = it[index].copy(boardX = x, boardY = y) }
+        changed()
+    }
+
+    /** The idea was opened (S06a): its frost goes. Not an edit, so its time is left alone. */
+    fun markOpened(id: String, time: Long = now()) {
+        val index = notes.indexOfFirst { it.id == id }
+        if (index < 0) return
+        notes = notes.toMutableList().also { it[index] = it[index].copy(openedAt = time) }
+        changed()
+    }
+
+    /** Where the caret was when the idea was left mid-sentence, or null (IdeaStops). Not an edit, so its time is left alone. */
+    fun setStopped(id: String, caret: Int?) {
+        val index = notes.indexOfFirst { it.id == id }
+        if (index < 0 || notes[index].stoppedAt == caret) return
+        notes = notes.toMutableList().also { it[index] = it[index].copy(stoppedAt = caret) }
         changed()
     }
 
@@ -246,6 +265,16 @@ class IdeaBook(
         val index = folders.indexOfFirst { it.id == id }
         if (trimmed.isEmpty() || index < 0) return
         folders = folders.toMutableList().also { it[index] = it[index].copy(name = trimmed) }
+        changed()
+    }
+
+    /** Gives a folder its own words (S06b), as FolderWords.parse keeps them from what was typed: at most five; none clears them. */
+    fun setWords(id: String, kept: List<String>) {
+        val index = folders.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val words = kept.take(5)
+        if (words == folders[index].words) return
+        folders = folders.toMutableList().also { it[index] = it[index].copy(words = words) }
         changed()
     }
 
@@ -333,9 +362,12 @@ class IdeaBook(
         val time = now()
         val spot = IdeaBoardDrop.settle(BoardPoint(note.boardX + 40, note.boardY + 40), IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST,
             notes.map { BoardPoint(it.boardX, it.boardY) })
-        val first = note.copy(title = halves.firstTitle, body = halves.firstBody, links = firstLinks, updatedAt = time)
+        // where each half stops is its own: the whole idea's mark pointed into text the first half may no longer hold
+        val first = note.copy(title = halves.firstTitle, body = halves.firstBody, links = firstLinks, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.firstBody, null))
         val second = Note(id = secondId, title = halves.secondTitle, body = halves.secondBody, folderId = note.folderId, kind = note.kind,
-            links = secondLinks, tags = note.tags, boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
+            links = secondLinks, tags = note.tags, boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.secondBody, null))
         notes = notes.toMutableList().also { it[index] = first; it.add(index + 1, second) }
         changed()
         return Reshaped(listOf(KeptNote(index, note)), listOf(secondId), id)
@@ -362,8 +394,10 @@ class IdeaBook(
             if (a in n.links || a in wiki) connected.add(n.id)
             if (b in n.links) holders.add(KeptNote(i, n))
         }
+        // the first idea's mark pointed into its own body, not the joined one
         val joined = first.copy(title = title, body = body, updatedAt = now(),
-            links = IdeaReshape.joinLinks(a, b, first.links, second.links, pointedAtSecond, connected))
+            links = IdeaReshape.joinLinks(a, b, first.links, second.links, pointedAtSecond, connected),
+            stoppedAt = IdeaStops.stoppedAt(body, null))
         val held = holders.map { it.note.id }.toHashSet()
         notes = notes.mapNotNull { n ->
             when {
@@ -386,6 +420,41 @@ class IdeaBook(
         notes = notes.map { if (it.id == made.id) it.copy(links = listOf(a, b).filter { l -> l != made.id }) else it }
         changed()
         return Reshaped(emptyList(), listOf(made.id), made.id)
+    }
+
+    /** One idea a split of a capture proposed (S08, ai.AISplit): its title, its text, its folder (null: To sort). */
+    data class SplitPiece(val title: String, val body: String, val folderId: String?)
+
+    /**
+     * Keeps the ideas a split of a capture proposed, as one change and one Undo (iOS NoteStore.keepSplit): each
+     * piece is a new idea in its folder. With [capture], the idea it came from goes and the pieces take its place in
+     * the list and on the board, with its tags and where it was shared from. Null with no pieces, or a capture that
+     * is not there.
+     */
+    fun keepSplit(pieces: List<SplitPiece>, capture: String? = null): Reshaped? {
+        if (pieces.isEmpty()) return null
+        val index = if (capture == null) notes.size else notes.indexOfFirst { it.id == capture }
+        if (index < 0) return null
+        val from: Note? = if (capture == null) null else notes[index]
+        val others = notes.filter { it.id != capture }.map { BoardPoint(it.boardX, it.boardY) }.toMutableList()
+        val time = now()
+        val made = pieces.mapIndexed { k, piece ->
+            val near = if (from != null) BoardPoint(from.boardX + 40.0 * k, from.boardY + 40.0 * k) else {
+                val n = (notes.size + k).toDouble()
+                BoardPoint(90 * sqrt(n) * cos(n * 2.399963), 90 * sqrt(n) * sin(n * 2.399963))
+            }
+            val spot = IdeaBoardDrop.settle(near, IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST, others)
+            others.add(spot)
+            Note(id = makeId(), title = piece.title.trim(), body = piece.body, folderId = piece.folderId, kind = NoteKind.IDEA.rawValue,
+                tags = from?.tags ?: emptyList(), boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time,
+                sharedFrom = from?.sharedFrom)
+        }
+        notes = notes.toMutableList().also { list ->
+            if (capture != null) list.removeAt(index)
+            list.addAll(minOf(index, list.size), made)
+        }
+        changed()
+        return Reshaped(from?.let { listOf(KeptNote(index, it)) } ?: emptyList(), made.map { it.id }, made[0].id)
     }
 
     /** Undo of a reshape: the ideas it added go (with any hand link to them), and each idea it changed or removed is back as it was, where it stood. */

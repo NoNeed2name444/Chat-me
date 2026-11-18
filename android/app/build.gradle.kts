@@ -57,3 +57,39 @@ dependencies {
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+
+// S08: Android's on-device model, Gemini Nano through ML Kit's Prompt API (owner decision O1). No Gemini API
+// library: AIGuardTest checks this file and the resolved classpath.
+dependencies { implementation("com.google.mlkit:genai-prompt:1.0.0-beta2") }
+
+// S08: the AI prompts, tables and embedding table, the same files the iOS app bundles, as assets under ai/
+val aiAssets = layout.buildDirectory.dir("generated/ai-assets")
+val copyAiAssets = tasks.register<Sync>("copyAiAssets") {
+    from(file("../../ai/prompts")) { into("ai/prompts") }
+    from(file("../../ai/tables")) { into("ai/tables") }
+    from(file("../../ai/embeddings/potion-base-4M")) { into("ai/potion-base-4M") }
+    into(aiAssets)
+}
+android.sourceSets["main"].assets.srcDir(aiAssets.get().asFile)
+tasks.named("preBuild") { dependsOn(copyAiAssets) }
+
+// S08: the resolved debugRuntimeClasspath, one module a line, for AIGuardTest (no Gemini API library)
+afterEvaluate {
+    val root = configurations.getByName("debugRuntimeClasspath").incoming.resolutionResult.rootComponent
+    val listed = layout.buildDirectory.file("ai-guard/debugRuntimeClasspath.txt")
+    val aiClasspath = tasks.register("aiClasspath") {
+        outputs.file(listed)
+        outputs.upToDateWhen { false }
+        doLast {
+            val seen = sortedSetOf<String>()
+            fun walk(c: org.gradle.api.artifacts.result.ResolvedComponentResult) {
+                for (d in c.dependencies) {
+                    if (d is org.gradle.api.artifacts.result.ResolvedDependencyResult && seen.add(d.selected.id.displayName)) walk(d.selected)
+                }
+            }
+            walk(root.get())
+            listed.get().asFile.apply { parentFile.mkdirs(); writeText(seen.joinToString("\n", postfix = "\n")) }
+        }
+    }
+    tasks.named("testDebugUnitTest") { dependsOn(aiClasspath) }
+}

@@ -1,0 +1,53 @@
+{
+ "about": "Stand-in model answers for summing up a folder (S08 A6), one part.",
+ "folder": "Garden",
+ "ideas": [
+  {
+   "id": "i1",
+   "title": "Beans up the fence",
+   "text": "Try growing beans up the fence."
+  },
+  {
+   "id": "i2",
+   "title": "Borrow a ladder",
+   "text": "Ask the neighbours about sharing a ladder."
+  },
+  {
+   "id": "i3",
+   "title": "Paint the fence",
+   "text": "White, before the beans go up."
+  }
+ ],
+ "cases": [
+  {
+   "name": "good",
+   "answer": "{\"summary\": \"Beans go up the fence [1], which gets painted white first [3].\", \"cites\": [1, 3]}",
+   "verdict": "ok",
+   "text": "Beans go up the fence [1], which gets painted white first [3].",
+   "cites": [
+    "i1",
+    "i3"
+   ]
+  },
+  {
+   "name": "JSON that does not parse",
+   "answer": "{\"summary\": ",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "a citation of an idea not sent",
+   "answer": "{\"summary\": \"Beans [1] and a pond [9].\", \"cites\": [1, 9]}",
+   "verdict": "badCitation"
+  },
+  {
+   "name": "an empty answer",
+   "answer": "",
+   "verdict": "empty"
+  },
+  {
+   "name": "an empty summary",
+   "answer": "{\"summary\": \"\", \"cites\": []}",
+   "verdict": "empty"
+  }
+ ]
+}

@@ -97,6 +97,36 @@ class IdeaBookReshapeTest {
         assertEquals("Undo splits them back exactly", before, b.notes)
     }
 
+    /** Where an idea stops is worked out again for each half and for the joined idea; Undo brings the old mark back. */
+    @Test fun eachHalfAndTheJoinedIdeaStopWhereTheirOwnTextDoes() {
+        val b = book(listOf(
+            note("jobs", "Garden jobs", "Dig the bed. Plant the bulbs. Water the", made = 1).copy(stoppedAt = 3),
+            note("path", "Path", "Weed the path", made = 2).copy(stoppedAt = 4),
+            note("rake", "Rake", "Rake the leaves.", made = 3),
+            note("beans", "Beans", "By the fence.", made = 4),
+            note("canes", "Canes", "Bamboo canes and", made = 5),
+        ))
+        val before = b.notes
+        val split = b.split("jobs", 2)!!
+        assertEquals("Dig the bed.", b.note("jobs")!!.body)
+        assertNull("the first half ends its sentence, so it stops nowhere", b.note("jobs")!!.stoppedAt)
+        val second = b.note(split.added.single())!!
+        assertEquals("Water the", second.body)
+        assertEquals("the second half stops at its own end", "Water the".length, second.stoppedAt)
+        b.undo(split)
+        assertEquals("Undo puts the old mark back", before, b.notes)
+
+        val ended = b.join("path", "rake")!!
+        assertNull("joined, the text ends a sentence", b.note("path")!!.stoppedAt)
+        b.undo(ended)
+        val open = b.join("beans", "canes")!!
+        val body = b.note("beans")!!.body
+        assertTrue(body.endsWith("Bamboo canes and"))
+        assertEquals("joined, it stops at the joined text's end", body.length, b.note("beans")!!.stoppedAt)
+        b.undo(open)
+        assertEquals(before, b.notes)
+    }
+
     @Test fun collideMakesAnIdeaInToSortLinkedToBoth() {
         val b = book(listOf(note("kite", "Kite", folder = "garden"), note("bell", "Bike bell", folder = "trips")))
         val before = b.notes

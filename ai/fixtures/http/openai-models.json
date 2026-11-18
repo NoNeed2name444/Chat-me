@@ -1,0 +1,28 @@
+{
+ "about": "The check on connect.",
+ "source": "https://platform.openai.com/docs/api-reference/models/list (read 15 Nov 2026)",
+ "provider": "openai",
+ "credential": "fake-key-for-tests-1",
+ "request": {
+  "method": "GET",
+  "url": "https://api.openai.com/v1/models",
+  "headers": {
+   "Authorization": "Bearer fake-key-for-tests-1"
+  },
+  "body": null
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "object": "list",
+   "data": [
+    {
+     "id": "gpt-6-luna",
+     "object": "model",
+     "created": 1763000000,
+     "owned_by": "fake"
+    }
+   ]
+  }
+ }
+}

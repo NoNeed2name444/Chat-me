@@ -64,9 +64,17 @@ object IdeasFixture {
         Note(id = id(27), title = boiler.title, boardX = 0.0, boardY = -230.0, createdAt = T + 6),
     )
 
-    /** A store in a new directory under [parent], holding [ideas] (the made-up ideas) and their folders, or empty when [filled] is false. */
+    /** The renders' clock (S06a): a day after the ideas were made, so no frost moves a still as the real days pass. */
+    const val NOW = T + 24 * HOUR
+    const val DAY = 24 * HOUR
+
+    /**
+     * A store in a new directory under [parent], holding [ideas] (the made-up ideas) and their folders,
+     * or empty when [filled] is false. It fixes the ideas' clock (IdeaClock) at [NOW].
+     */
     fun store(parent: File, filled: Boolean = true, ideas: List<Note> = notes,
               folderList: List<NoteFolder> = if (ideas === stacked) stackedFolders else folders): IdeaStore {
+        IdeaClock.fixed = NOW
         val dir = File(parent, "fixture-" + UUID.randomUUID()).also { it.mkdirs() }
         val store = IdeaStore(dir)
         if (filled) store.replaceIdeas(ideas, folderList)

@@ -177,3 +177,90 @@ suite notemarkdown NoteMarkdownTests.swift ios/Sorta/Ideas/NoteMarkdown.swift
 # Map mode (S05b).
 # the map's looks: the menu's order, the stored look, the theme each draws
 suite maplook MapLookTests.swift ios/Sorta/Ideas/MapLook.swift $M/GraphTheme.swift
+# The AI core (S08), Foundation only; the Keychain, the listener on both
+# loopback addresses and Apple's model are in the iOS unit tests.
+# providers against ai/fixtures/http, PKCE's RFC vector, sign-in and connect
+suite aiproviders AIProviderTests.swift \
+    ios/Sorta/AI/AICore.swift \
+    ios/Sorta/AI/AIHTTP.swift \
+    ios/Sorta/AI/AIProviders.swift \
+    ios/Sorta/AI/AIOnDevice.swift \
+    ios/Sorta/AI/AISignIn.swift \
+    ios/Sorta/AI/AILoopback.swift \
+    ios/Sorta/AI/AIVault.swift \
+    ios/Sorta/AI/AIMoney.swift \
+    ios/Sorta/AI/AIConsent.swift \
+    ios/Sorta/AI/AIOperations.swift \
+    ios/Sorta/AI/AIEmbeddings.swift \
+    ios/Sorta/AI/AIRunner.swift \
+    ios/Sorta/AI/AIApp.swift \
+    ios/Sorta/Ideas/IdeaEchoes.swift \
+    ios/UnitTests/Suites/AISupport.swift
+# the cap, the worst case on four scripts, the month, the $20 ceiling
+suite aimoney AIMoneyTests.swift \
+    ios/Sorta/AI/AICore.swift \
+    ios/Sorta/AI/AIHTTP.swift \
+    ios/Sorta/AI/AIProviders.swift \
+    ios/Sorta/AI/AIOnDevice.swift \
+    ios/Sorta/AI/AISignIn.swift \
+    ios/Sorta/AI/AILoopback.swift \
+    ios/Sorta/AI/AIVault.swift \
+    ios/Sorta/AI/AIMoney.swift \
+    ios/Sorta/AI/AIConsent.swift \
+    ios/Sorta/AI/AIOperations.swift \
+    ios/Sorta/AI/AIEmbeddings.swift \
+    ios/Sorta/AI/AIRunner.swift \
+    ios/Sorta/AI/AIApp.swift \
+    ios/Sorta/Ideas/IdeaEchoes.swift \
+    ios/UnitTests/Suites/AISupport.swift
+# consent, each payload's least, the ledger, the verdicts, the leak test
+suite aioperations AIOperationTests.swift \
+    ios/Sorta/AI/AICore.swift \
+    ios/Sorta/AI/AIHTTP.swift \
+    ios/Sorta/AI/AIProviders.swift \
+    ios/Sorta/AI/AIOnDevice.swift \
+    ios/Sorta/AI/AISignIn.swift \
+    ios/Sorta/AI/AILoopback.swift \
+    ios/Sorta/AI/AIVault.swift \
+    ios/Sorta/AI/AIMoney.swift \
+    ios/Sorta/AI/AIConsent.swift \
+    ios/Sorta/AI/AIOperations.swift \
+    ios/Sorta/AI/AIEmbeddings.swift \
+    ios/Sorta/AI/AIRunner.swift \
+    ios/Sorta/AI/AIApp.swift \
+    ios/Sorta/Ideas/IdeaEchoes.swift \
+    ios/UnitTests/Suites/AISupport.swift
+# the embedding table against its reference, neighbours, Arabic, the index
+suite aiembeddings AIEmbeddingTests.swift \
+    ios/Sorta/AI/AICore.swift \
+    ios/Sorta/AI/AIHTTP.swift \
+    ios/Sorta/AI/AIProviders.swift \
+    ios/Sorta/AI/AIOnDevice.swift \
+    ios/Sorta/AI/AISignIn.swift \
+    ios/Sorta/AI/AILoopback.swift \
+    ios/Sorta/AI/AIVault.swift \
+    ios/Sorta/AI/AIMoney.swift \
+    ios/Sorta/AI/AIConsent.swift \
+    ios/Sorta/AI/AIOperations.swift \
+    ios/Sorta/AI/AIEmbeddings.swift \
+    ios/Sorta/AI/AIRunner.swift \
+    ios/Sorta/AI/AIApp.swift \
+    ios/Sorta/Ideas/IdeaEchoes.swift \
+    ios/UnitTests/Suites/AISupport.swift
+# no PRO_PAYS, no key-shaped constant, no Gemini API library or model
+suite aiguards AIGuardTests.swift \
+    ios/Sorta/AI/AICore.swift \
+    ios/Sorta/AI/AIHTTP.swift \
+    ios/Sorta/AI/AIProviders.swift \
+    ios/Sorta/AI/AIOnDevice.swift \
+    ios/Sorta/AI/AISignIn.swift \
+    ios/Sorta/AI/AILoopback.swift \
+    ios/Sorta/AI/AIVault.swift \
+    ios/Sorta/AI/AIMoney.swift \
+    ios/Sorta/AI/AIConsent.swift \
+    ios/Sorta/AI/AIOperations.swift \
+    ios/Sorta/AI/AIEmbeddings.swift \
+    ios/Sorta/AI/AIRunner.swift \
+    ios/Sorta/AI/AIApp.swift \
+    ios/Sorta/Ideas/IdeaEchoes.swift \
+    ios/UnitTests/Suites/AISupport.swift

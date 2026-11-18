@@ -196,6 +196,29 @@ enum IdeasWords {
                defaultValue: "This backup didn't open. It may be damaged, so try another copy.")
     }
 
+    // MARK: the sorting deck, "You were saying…" and the low tide (S06a), from the strings pass of 14 Nov
+    static var showAsCards: String { String(localized: "deck.showCards", defaultValue: "Show as cards") }
+    static var showAsList: String { String(localized: "deck.showList", defaultValue: "Show as list") }
+    static var later: String { String(localized: "deck.later", defaultValue: "Later") }
+    static var movedToBack: String { String(localized: "deck.laterDone", defaultValue: "Moved to the back.") }
+    static var unfinished: String { String(localized: "deck.unfinished", defaultValue: "Unfinished") }
+    static var offerLabel: String { String(localized: "offer.label", defaultValue: "You were saying\u{2026}") }
+    static var carryOn: String { String(localized: "offer.carryOn", defaultValue: "Carry on") }
+    static var notNow: String { String(localized: "offer.notNow", defaultValue: "Not now") }
+    static var frostSpoken: String { String(localized: "frost.spoken", defaultValue: "not opened in a while") }
+    static var lowTide: String { String(localized: "tide.title", defaultValue: "Low tide") }
+    static var lowTideLine: String { String(localized: "tide.line", defaultValue: "Ideas you haven't opened in a while.") }
+    static var keep: String { String(localized: "tide.keep", defaultValue: "Keep") }
+    static var letGo: String { String(localized: "tide.letGo", defaultValue: "Let go") }
+    static var closeLowTide: String { String(localized: "tide.close", defaultValue: "Close low tide") }
+    /// A folder target, and the card's action for it: "File in Garden".
+    static func fileIn(_ folder: String) -> String {
+        String(localized: "deck.fileIn %@", defaultValue: "File in \(folder)")
+    }
+    /// "Carry on", read aloud with the idea.
+    static func carryOnWith(_ idea: String) -> String {
+        String(localized: "offer.carryOn.spoken %@", defaultValue: "Carry on with \(idea)")
+    }
     // MARK: ideas like this, collide, split and join (S06c), as Android's strings.xml
     static var echoesTitle: String { String(localized: "echoes.title", defaultValue: "Ideas like this") }
     static var echoesLinkHint: String { String(localized: "echoes.link.hint", defaultValue: "Links it to this idea.") }
@@ -234,4 +257,58 @@ enum IdeasWords {
         String(localized: "split.one", defaultValue: "This idea has one sentence, so it can\u{2019}t be split.")
     }
     static var joinDone: String { String(localized: "join.done", defaultValue: "Ideas joined.") }
+    // MARK: the lenses over the map (S06d, plugins-plan idea 8): the row's
+    // name, each chip, what a tap does, the empty line; Android's the same
+    static var lenses: String { String(localized: "map.lenses", defaultValue: "Lenses") }
+    static var lensQuestions: String { String(localized: "lens.questions", defaultValue: "Questions") }
+    static var lensLateNight: String { String(localized: "lens.lateNight", defaultValue: "Late night") }
+    static var lensUnfinished: String { String(localized: "lens.unfinished", defaultValue: "Unfinished") }
+    static var lensAlone: String { String(localized: "lens.alone", defaultValue: "Alone") }
+    /// A chip, read aloud with its count: "Questions, 3 ideas".
+    static func lensSpoken(_ name: String, _ n: Int) -> String {
+        let count = ideaCount(n)
+        return String(localized: "lens.spoken %@ %@", defaultValue: "\(name), \(count)")
+    }
+    static var lensQuestionsHint: String {
+        String(localized: "lens.questions.hint", defaultValue: "Shows only ideas with a question mark.")
+    }
+    static var lensLateNightHint: String {
+        String(localized: "lens.lateNight.hint", defaultValue: "Shows only ideas caught between 11 PM and 4 AM.")
+    }
+    static var lensUnfinishedHint: String {
+        String(localized: "lens.unfinished.hint", defaultValue: "Shows only ideas that stop mid-sentence.")
+    }
+    static var lensAloneHint: String { String(localized: "lens.alone.hint", defaultValue: "Shows only ideas with no links.") }
+    static var lensOffHint: String { String(localized: "lens.off.hint", defaultValue: "Turns this lens off.") }
+    static var lensEmpty: String {
+        String(localized: "map.lens.empty", defaultValue: "No ideas match. Turn a lens off to see more.")
+    }
+
+    // MARK: the capsule (S06d, plugins-plan idea 11): the More menu, the
+    // monthly offer, the notices, the refusals; Android's the same
+    static var saveCapsule: String { String(localized: "more.saveCapsule", defaultValue: "Save a capsule\u{2026}") }
+    static var openCapsule: String { String(localized: "more.openCapsule", defaultValue: "Open a capsule\u{2026}") }
+    static var capsuleOffer: String {
+        String(localized: "capsule.offer",
+               defaultValue: "Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again.")
+    }
+    static var capsuleOfferSave: String { String(localized: "capsule.offer.save", defaultValue: "Save a capsule") }
+    static var capsuleOfferLater: String { String(localized: "capsule.offer.later", defaultValue: "Not now") }
+    static var capsuleSaved: String { String(localized: "capsule.saved", defaultValue: "Capsule saved.") }
+    static var capsuleNotSaved: String {
+        String(localized: "capsule.notSaved", defaultValue: "Couldn't save the capsule. Try again, or choose another place.")
+    }
+    static var capsuleRefusedNotCapsule: String {
+        String(localized: "capsule.refused.notCapsule", defaultValue: "This file isn't a Sorta capsule. Choose another file.")
+    }
+    static var capsuleRefusedNewer: String {
+        String(localized: "capsule.refused.newer",
+               defaultValue: "This capsule is from a newer version of Sorta. Check for a Sorta update, then try again.")
+    }
+    static var capsuleRefusedUnreadable: String {
+        String(localized: "capsule.refused.unreadable", defaultValue: "This file didn't open. It may be damaged, so try another copy.")
+    }
+    static var capsuleRefusedTooLarge: String {
+        String(localized: "capsule.refused.tooLarge", defaultValue: "This file is over 32 MB, too big to import. Choose a smaller file.")
+    }
 }

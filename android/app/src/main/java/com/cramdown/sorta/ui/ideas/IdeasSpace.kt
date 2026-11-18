@@ -166,6 +166,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     book: IdeaBook, settings: IdeasSettings, covered: Boolean, hidden: Dp,
     open: (String) -> Unit, openFolder: (String?) -> Unit,
     choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
+    lit: Set<String>? = null, file: (String, String) -> Unit = { _, _ -> }, lens: Set<String>? = null,
 ) {
     val theme = GraphTheme.stored(settings.theme)
     // the demo maps are a developer's, as on iOS, where only the readout offers them
@@ -308,7 +309,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 // foot, and above the first-run card while it is not put away (S05d): by the card's own
                 // rules, not the moments it steps aside, so those never move the camera
                 else -> NotesMap(book, settings, theme, recenter + reframe, openPath, panels.linkLength, onRoles = { roles = it },
-                    filter = filter, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
+                    filter = filter, lens = lens, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
                     top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
                     card = if (theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && cardPx > 0)
                         hidden + WardSpace.l.wardDp + with(LocalDensity.current) { cardPx.toDp() } else 0.dp,
@@ -324,10 +325,16 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
                     chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
-                    onHome = { flyTo = null }, peek = peekBounds?.translate(-spaceAt), shown = shown, version = version, shapes = shapes) { shown = it }
+                    onHome = { flyTo = null }, peek = peekBounds?.translate(-spaceAt), shown = shown, version = version,
+                    lit = lit.takeIf { theme == GraphTheme.SPACE }, shapes = shapes) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
-            val peek = chosen?.let { body -> mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) } }
+            // the chosen idea's role as the latest scene has it: a comet filed with File there is a planet now (as iOS's card)
+            val peek = chosen?.let { picked ->
+                val body = roles[picked.id.uppercase()]?.takeIf { picked.kind == ThemeBodyKind.NOTE && it != picked.role }
+                    ?.let { picked.copy(role = it) } ?: picked
+                mapPeekInput(book, body, theme, words)?.let { body to MapPeek.content(it, words) }
+            }
             // a map with no folders yet, under the chrome at the top (GraphEmptyHint's place, Graph3DView.swift:289-294)
             // [top] counts from the window's top, the status bar in it, so the bar is only cleared when there is no strip
             if (panelsShown && book.folders.isEmpty() && book.notes.size < 25) Box(Modifier.align(Alignment.TopCenter)
@@ -354,7 +361,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             }
             // the Link length bar and the peek card, bottom-centred beside the tools (bottomPanels,
             // Graph3DView.swift:349-380); the card steps aside while a body's options are up
+            // S06b: never above [top] (the strip, and the moons when open): a taller card scrolls its middle
             if (panelsShown) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .padding(top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()) + WardSpace.s.wardDp)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                 .padding(start = WardSpace.gutter.wardDp, end = (WardSpace.gutter + WardControlSize.target + WardSpace.m).wardDp,
                     bottom = hidden + WardSpace.l.wardDp),
@@ -362,6 +371,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 if (tuning) MapLinkLengthBar(panels.linkLength, { panels.setLinkLength(it) }, done = { tuning = false })
                 if (held == null && peek != null) {
                     val (body, content) = peek
+                    // S06b: a loose idea's lean, the Universe only, and a shared idea's source
+                    val idea = if (body.kind == ThemeBodyKind.NOTE) book.notes.firstOrNull { it.id.equals(body.id, ignoreCase = true) } else null
+                    val lean = if (idea != null && theme == GraphTheme.SPACE && universeMap) remember(idea, version) { skyLean(book, idea.id) } else null
                     androidx.compose.runtime.key(body.id) {
                         DisposableEffect(Unit) { onDispose { peekBounds = null } }
                         MapPeekCard(content, folder = body.kind != ThemeBodyKind.NOTE, words = words, open = { react(MapSelectionEvent.OpenCard, body) },
@@ -372,7 +384,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                             chip = { id -> react(MapSelectionEvent.Chip(id), MapBody(id, ThemeBodyKind.NOTE, roles[id.uppercase()] ?: "")) },
                             option = { pick(it, body) },
                             linksShown = linksId != null, showLinks = { react(MapSelectionEvent.ShowLinks, body) },
-                            modifier = Modifier.onGloballyPositioned { peekBounds = it.boundsInRoot() })
+                            modifier = Modifier.weight(1f, fill = false).onGloballyPositioned { peekBounds = it.boundsInRoot() },
+                            lean = lean?.first, fileThere = { if (idea != null && lean != null) file(idea.id, lean.second) },
+                            sharedFrom = idea?.sharedFrom)
                     }
                 }
             }
@@ -460,8 +474,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
                                   onHome: () -> Unit, peek: Rect?,
-                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
-                                  onHidden: (String) -> Unit = {}, shapes: IdeaShapes? = null, onShown: (Boolean) -> Unit) {
+                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, lens: Set<String>? = null, onGalaxies: (List<String>?) -> Unit = {},
+                                  onHidden: (String) -> Unit = {}, lit: Set<String>? = null, shapes: IdeaShapes? = null, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
     val main = settings.nodeStyle
@@ -522,7 +536,7 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                 // folders black holes and stars, its notes planets, moons, a pulsar and comets, on orbits
                 val universe = if (spaceStyle(main) == null) UniversePlan.of(universeInput(book, edges, linkLength)) else null
                 if (universe != null && universe.bodies.isNotEmpty()) {
-                    val scene = MapScene.universe(universe, galaxyTones(universe, book))
+                    val scene = MapScene.universe(universe, galaxyTones(universe, book), sky = skySpace(universe, book, edges))
                     val b = universe.bodies
                     // a body's root is its galaxy (Graph3DView.swift:860); a hidden planet with a shown moon stays
                     val bodies = MapFilterBodies(Array(b.size) { i -> when (b[i].role) {
@@ -557,8 +571,19 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val latestGalaxies by rememberUpdatedState(onGalaxies)
     LaunchedEffect(map) { map?.let { latestGalaxies(it.galaxies) } }
     // what the filter shows on this map (S05i): Performance's points and links go at once (GraphPerfRenderer.swift:161-164)
-    val view: MapFilterView? = remember(map, filter) {
-        if (filter == MapFilter.All) null else map?.bodies?.visibility(filter, stored = map.stored)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
+    // and the lenses (S06d), over the filter: a note shows when both let it through
+    val view: MapFilterView? = remember(map, filter, lens) {
+        if (filter == MapFilter.All && lens == null) null
+        else map?.bodies?.visibility(filter, stored = map.stored, lens = lens, ids = map.scene.ids)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
+    }
+    // the frost on ideas left unopened (S06a A6), a level a scene index, in Space only
+    val frost: ByteArray? = remember(map, version) {
+        val m = map
+        if (m == null || theme != GraphTheme.SPACE) null else {
+            val byId = notes.associateBy { it.id.lowercase() }
+            ByteArray(m.scene.ids.size) { i -> (byId[m.scene.ids[i].lowercase()]?.let(::frostOf) ?: 0).toByte() }
+                .takeIf { levels -> levels.any { it > 0 } }
+        }
     }
     // the chosen body filtered away is let go (Graph3DView.swift:2178-2182); Performance keeps it (GraphPerfTheme.swift:313-320)
     val latestHidden by rememberUpdatedState(onHidden)
@@ -622,10 +647,11 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view,
-            glows = shapes?.glowing?.toSet() ?: emptySet(), reshape = touches)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view, frost = frost,
+            lit = lit, glows = shapes?.glowing?.toSet() ?: emptySet(), reshape = touches)
         // no idea passes: say so, over Space and the Neurons only (Graph3DView.swift:308-313); nothing to touch
-        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(R.string.map_filter_empty),
+        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(
+                if (filter == MapFilter.All) R.string.map_lens_empty else R.string.map_filter_empty),
             Modifier.align(Alignment.Center).padding(horizontal = WardSpace.xl.wardDp).testTag(MapPanelTags.FILTER_EMPTY),
             style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)

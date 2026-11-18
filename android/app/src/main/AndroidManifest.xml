@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- S08: a connected AI account answers over HTTPS, straight from the phone; nothing else uses the network -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- The 3D maps draw in OpenGL ES 3.0 (ui/map), and without it the map says so (Map3DView);
          the rest of the app needs no GL. So no glEsVersion here: Google Play filters on it even
          with required="false" (aapt2's badging lists it as uses-gl-es, never as not required),
@@ -13,6 +15,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sorta" />
+            </intent-filter>
+            <!-- S06b: text shared to Sorta from another app (plugins plan idea 10): the share sheet keeps the words chosen as a new idea in To sort -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
     </application>

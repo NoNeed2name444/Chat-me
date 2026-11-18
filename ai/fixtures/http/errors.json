@@ -1,0 +1,314 @@
+{
+ "about": "Each provider's error answers, made up from the references, and the plain kind each maps to.",
+ "sources": {
+  "openrouter": "https://openrouter.ai/docs/api_reference/errors-and-debugging.md (read 15 Nov 2026)",
+  "anthropic": "https://platform.claude.com/docs/en/api/errors (read 15 Nov 2026)",
+  "openai": "https://platform.openai.com/docs/guides/error-codes (read 15 Nov 2026)",
+  "compatible": "https://platform.openai.com/docs/guides/error-codes (read 15 Nov 2026)"
+ },
+ "cases": {
+  "openrouter": [
+   {
+    "status": 400,
+    "body": {
+     "error": {
+      "code": 400,
+      "message": "Bad request"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 401,
+    "body": {
+     "error": {
+      "code": 401,
+      "message": "Invalid credentials"
+     }
+    },
+    "kind": "credentialRefused"
+   },
+   {
+    "status": 402,
+    "body": {
+     "error": {
+      "code": 402,
+      "message": "Insufficient credits"
+     }
+    },
+    "kind": "outOfCredit"
+   },
+   {
+    "status": 403,
+    "body": {
+     "error": {
+      "code": 403,
+      "message": "Key limit exceeded"
+     }
+    },
+    "kind": "outOfCredit"
+   },
+   {
+    "status": 404,
+    "body": {
+     "error": {
+      "code": 404,
+      "message": "No endpoints found for this model"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 408,
+    "body": {
+     "error": {
+      "code": 408,
+      "message": "Request timed out"
+     }
+    },
+    "kind": "tryLater"
+   },
+   {
+    "status": 429,
+    "body": {
+     "error": {
+      "code": 429,
+      "message": "Rate limit exceeded"
+     }
+    },
+    "kind": "rateLimited"
+   },
+   {
+    "status": 502,
+    "body": {
+     "error": {
+      "code": 502,
+      "message": "Provider returned error"
+     }
+    },
+    "kind": "tryLater"
+   },
+   {
+    "status": 503,
+    "body": {
+     "error": {
+      "code": 503,
+      "message": "No available provider"
+     }
+    },
+    "kind": "tryLater"
+   }
+  ],
+  "anthropic": [
+   {
+    "status": 400,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "invalid_request_error",
+      "message": "Your credit balance is too low to access the API."
+     }
+    },
+    "kind": "outOfCredit"
+   },
+   {
+    "status": 400,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "invalid_request_error",
+      "message": "messages: field required"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 401,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "authentication_error",
+      "message": "invalid x-api-key"
+     }
+    },
+    "kind": "credentialRefused"
+   },
+   {
+    "status": 402,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "billing_error",
+      "message": "Billing problem"
+     }
+    },
+    "kind": "outOfCredit"
+   },
+   {
+    "status": 403,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "permission_error",
+      "message": "Not allowed"
+     }
+    },
+    "kind": "credentialRefused"
+   },
+   {
+    "status": 404,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "not_found_error",
+      "message": "model: fake-model-1"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 429,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "rate_limit_error",
+      "message": "Too many requests"
+     }
+    },
+    "kind": "rateLimited"
+   },
+   {
+    "status": 500,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "api_error",
+      "message": "Internal error"
+     }
+    },
+    "kind": "tryLater"
+   },
+   {
+    "status": 529,
+    "body": {
+     "type": "error",
+     "error": {
+      "type": "overloaded_error",
+      "message": "Overloaded"
+     }
+    },
+    "kind": "tryLater"
+   }
+  ],
+  "openai": [
+   {
+    "status": 401,
+    "body": {
+     "error": {
+      "code": "invalid_api_key",
+      "message": "Incorrect API key provided",
+      "type": "invalid_request_error"
+     }
+    },
+    "kind": "credentialRefused"
+   },
+   {
+    "status": 429,
+    "body": {
+     "error": {
+      "code": "insufficient_quota",
+      "message": "You exceeded your current quota",
+      "type": "insufficient_quota"
+     }
+    },
+    "kind": "outOfCredit"
+   },
+   {
+    "status": 429,
+    "body": {
+     "error": {
+      "code": "rate_limit_exceeded",
+      "message": "Rate limit reached",
+      "type": "requests"
+     }
+    },
+    "kind": "rateLimited"
+   },
+   {
+    "status": 404,
+    "body": {
+     "error": {
+      "code": "model_not_found",
+      "message": "The model does not exist",
+      "type": "invalid_request_error"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 500,
+    "body": {
+     "error": {
+      "code": null,
+      "message": "The server had an error",
+      "type": "server_error"
+     }
+    },
+    "kind": "tryLater"
+   },
+   {
+    "status": 503,
+    "body": {
+     "error": {
+      "code": null,
+      "message": "Slow down",
+      "type": "server_error"
+     }
+    },
+    "kind": "tryLater"
+   }
+  ],
+  "compatible": [
+   {
+    "status": 401,
+    "body": {
+     "error": {
+      "code": "invalid_api_key",
+      "message": "Invalid API key"
+     }
+    },
+    "kind": "credentialRefused"
+   },
+   {
+    "status": 429,
+    "body": {
+     "error": {
+      "code": "rate_limit_exceeded",
+      "message": "Rate limit"
+     }
+    },
+    "kind": "rateLimited"
+   },
+   {
+    "status": 404,
+    "body": {
+     "error": {
+      "code": "model_not_found",
+      "message": "Model not found"
+     }
+    },
+    "kind": "modelUnavailable"
+   },
+   {
+    "status": 502,
+    "body": {
+     "error": {
+      "code": null,
+      "message": "Bad gateway"
+     }
+    },
+    "kind": "tryLater"
+   }
+  ]
+ }
+}

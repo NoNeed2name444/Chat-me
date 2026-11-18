@@ -1,0 +1,27 @@
+{
+ "about": "The check on connect.",
+ "source": "https://platform.openai.com/docs/api-reference/models/list (read 15 Nov 2026)",
+ "provider": "compatible",
+ "credential": "fake-key-for-tests-1",
+ "base": "https://compatible.example/v1",
+ "request": {
+  "method": "GET",
+  "url": "https://compatible.example/v1/models",
+  "headers": {
+   "Authorization": "Bearer fake-key-for-tests-1"
+  },
+  "body": null
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "object": "list",
+   "data": [
+    {
+     "id": "fake-model-1",
+     "object": "model"
+    }
+   ]
+  }
+ }
+}

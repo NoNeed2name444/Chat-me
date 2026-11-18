@@ -1,0 +1,1 @@
+{"type":"object","properties":{"answer":{"type":"string"},"cites":{"type":"array","items":{"type":"integer"}},"nothingFits":{"type":"boolean"}},"required":["answer","cites","nothingFits"],"additionalProperties":false}

@@ -60,14 +60,21 @@ struct NoteEditorView: View {
     @State private var echoes: [UUID] = []
     /// Which field has the caret, if any.
     @FocusState private var editing: EditorField?
+    /// The details' caret (S06a): where the person stopped is kept from it.
+    @State private var selection: TextSelection?
+    /// Opened from "You were saying…": the details take the caret where the
+    /// person stopped, once, for the idea it opened on.
+    private let resume: Bool
+    @State private var resumed = false
 
     enum EditorField: Hashable { case title, body }
 
     init(noteID: UUID, file: @escaping (UUID, UUID?) -> Void, delete: @escaping (UUID) -> Void,
-         close: (() -> Void)? = nil) {
+         resume: Bool = false, close: (() -> Void)? = nil) {
         _current = State(initialValue: noteID)
         self.file = file
         self.delete = delete
+        self.resume = resume
         self.close = close
     }
 
@@ -181,7 +188,10 @@ struct NoteEditorView: View {
         .onAppear {
             if !loaded { load() }
         }
-        .onDisappear { commit() }
+        .onDisappear {
+            commit()
+            markStop()
+        }
         // a split, a join or their Undo changed this idea's words from
         // outside: read them in, so the next save never puts the old back
         .onChange(of: notes.note(current)) { _, now in
@@ -192,6 +202,8 @@ struct NoteEditorView: View {
             if words {
                 title = now.title
                 text = now.body
+                // the caret's place was in the old words
+                selection = nil
             }
             if moved { folderId = now.folderId }
         }
@@ -223,6 +235,14 @@ struct NoteEditorView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(PopOutField.rowInsets)
                     .listRowSeparator(.hidden)
+                // S06b: where a shared idea came from, under its folder
+                if let mark = notes.note(current)?.sharedFrom {
+                    SharedFromMark(mark: mark)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(PopOutField.rowInsets)
+                        .listRowSeparator(.hidden)
+                }
                 if typeSize.isAccessibilitySize {
                     actionControls
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -239,7 +259,7 @@ struct NoteEditorView: View {
                 } else {
                     // the details are a reading surface - read, re-read and
                     // edited in place - so they sit flat on their tile
-                    TextEditor(text: $text)
+                    TextEditor(text: $text, selection: $selection)
                         .wardFont(.body)
                         .foregroundStyle(Color.wardInk)
                         .tint(Color.wardPrimaryInk)
@@ -420,6 +440,38 @@ struct NoteEditorView: View {
         folderId = note.folderId
         seen = note
         loaded = true
+        // opened (S06a): its frost goes
+        notes.markOpened(current, at: IdeasClock.now)
+        // from "You were saying…", the caret where the person stopped
+        if resume && !resumed && !reading, let stop = note.stoppedAt {
+            resumed = true
+            selection = TextSelection(insertionPoint: Self.index(in: text, utf16: stop))
+            Task { @MainActor in editing = .body }
+        } else {
+            selection = nil
+        }
+    }
+
+    /// Left mid-sentence, the idea is marked with the caret's place; a
+    /// finished sentence, or no details, clears it (IdeaStops).
+    private func markStop() {
+        guard loaded, notes.note(current) != nil else { return }
+        notes.setStopped(current, at: IdeaStops.stoppedAt(body: text, caret: caret))
+    }
+
+    /// The caret's place in the details, as a UTF-16 offset, when it is known.
+    private var caret: Int? {
+        guard let selection, case .selection(let range) = selection.indices else { return nil }
+        let end = range.upperBound
+        guard end >= text.startIndex, end <= text.endIndex else { return nil }
+        return text.utf16.distance(from: text.utf16.startIndex, to: end)
+    }
+
+    /// The place `utf16` code units into `text`, held to a whole character.
+    static func index(in text: String, utf16 offset: Int) -> String.Index {
+        let utf16 = text.utf16
+        let at = utf16.index(utf16.startIndex, offsetBy: min(max(offset, 0), utf16.count))
+        return at.samePosition(in: text) ?? text.indices.last(where: { $0 < at }) ?? text.startIndex
     }
 
     /// Closes the editor: beside the map, by `close`; as a sheet, as one.
@@ -462,6 +514,7 @@ struct NoteEditorView: View {
     private func follow(_ id: UUID) {
         guard id != current else { return }
         commit()
+        markStop()
         trail.append(current)
         current = id
         load()
@@ -470,6 +523,7 @@ struct NoteEditorView: View {
     private func goBack() {
         guard let previous = trail.popLast() else { return }
         commit()
+        markStop()
         current = previous
         load()
     }

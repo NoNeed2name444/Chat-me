@@ -1,7 +1,7 @@
 """Checks a built Sorta.app against docs/scoping.md: its ids, its name, its
-launch screen and its icon.
+launch screen, its icon and its Share extension.
 
-    python3 tools/check_ios_app.py path/to/Sorta.app [--icon AppIcon] [--alternates A,B]
+    python3 tools/check_ios_app.py path/to/Sorta.app [--icon AppIcon] [--alternates A,B] [--share]
 
 The name must also come from the String Catalog, InfoPlist.xcstrings, which
 the build compiles into the app as InfoPlist.strings in en.lproj or as
@@ -9,7 +9,10 @@ InfoPlist.loctable. The launch screen is the Page colour alone, with no
 storyboard. Without --icon the app must carry no icon (the public builds);
 with it, the named icon set must be the app's icon (the builds the owner
 installs). The alternate icons must be exactly the ones named, none by
-default.
+default. With --share (CI builds with SORTA_SHARE_EXTENSION=YES) the Share
+extension must be in PlugIns, as com.cramdown.sorta.share for the share
+sheet; without it, the app must carry no extension, so a device build spends
+no App ID on one (ios/project.yml).
 """
 import argparse
 import pathlib
@@ -71,6 +74,7 @@ def main() -> int:
     parser.add_argument("app", type=pathlib.Path)
     parser.add_argument("--icon", default="")
     parser.add_argument("--alternates", default="")
+    parser.add_argument("--share", action="store_true")
     args = parser.parse_args()
     info = plistlib.loads((args.app / "Info.plist").read_bytes())
     problems = []
@@ -98,6 +102,22 @@ def main() -> int:
     print(f"alternate icons: {alternates!r}")
     if alternates != wanted:
         problems.append(f"the alternate icons are {alternates!r}, not {wanted!r}")
+    plugins = args.app / "PlugIns"
+    extensions = sorted(p.name for p in plugins.glob("*.appex")) if plugins.is_dir() else []
+    print(f"extensions: {extensions!r}")
+    if not args.share:
+        if extensions:
+            problems.append(f"the app carries {extensions!r}, each one more App ID on a device")
+    elif extensions != ["SortaShare.appex"]:
+        problems.append(f"the extensions are {extensions!r}, not ['SortaShare.appex']")
+    else:
+        share = plistlib.loads((plugins / "SortaShare.appex" / "Info.plist").read_bytes())
+        point = share.get("NSExtension", {}).get("NSExtensionPointIdentifier")
+        print(f"Share extension: {share.get('CFBundleIdentifier')!r}, {point!r}")
+        if share.get("CFBundleIdentifier") != "com.cramdown.sorta.share":
+            problems.append(f"the Share extension's id is {share.get('CFBundleIdentifier')!r}")
+        if point != "com.apple.share-services":
+            problems.append(f"the Share extension's point is {point!r}, not the share sheet's")
     for problem in problems:
         print(f"::error::{problem}")
     print("Sorta.app: as the scoping packet says" if not problems else f"{len(problems)} problem(s)")

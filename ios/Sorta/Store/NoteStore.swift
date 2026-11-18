@@ -41,6 +41,15 @@ struct Note: Identifiable, Codable, Hashable {
     /// The question, card, case, station or lecture the note was saved from
     /// with Save to Ideas (SaveToIdeas.swift); nil for a note written here.
     var source: NoteSource? = nil
+    /// When the idea was last opened (S06a, tides); nil: not since this
+    /// field came. Its frost is counted from it, else from `createdAt`.
+    var openedAt: Date? = nil
+    /// Where the caret was when the idea was left mid-sentence, a UTF-16
+    /// offset into `body` (S06a, "You were saying…"); nil: not marked.
+    var stoppedAt: Int? = nil
+    /// Where an idea shared into Sorta came from (S06b): the link's host or
+    /// the sending app's name only; nil for one written here. Not `source`.
+    var sharedFrom: String? = nil
 }
 
 /// A folder of notes. Folders nest: a folder with a parent sits inside it.
@@ -49,6 +58,9 @@ struct NoteFolder: Identifiable, Codable, Hashable {
     var name: String
     var parentId: UUID? = nil
     var createdAt: Date = Date()
+    /// The folder's own words (S06b): at most five, each one word; loose
+    /// ideas sharing one lean towards it in Space (FolderWords).
+    var words: [String] = []
 }
 
 /// Read tolerantly, like the library: a file written by an older or newer
@@ -57,6 +69,8 @@ struct NoteFolder: Identifiable, Codable, Hashable {
 extension Note {
     private enum Keys: String, CodingKey {
         case id, title, body, folderId, kind, links, tags, boardX, boardY, createdAt, updatedAt, source
+        case openedAt, stoppedAt
+        case sharedFrom
     }
 
     init(from decoder: Decoder) throws {
@@ -77,12 +91,16 @@ extension Note {
         // a source this version cannot read (a kind from a newer one) is
         // dropped, never the note
         source = try? c.decodeIfPresent(NoteSource.self, forKey: .source)
+        openedAt = try? c.decodeIfPresent(Date.self, forKey: .openedAt)
+        stoppedAt = try? c.decodeIfPresent(Int.self, forKey: .stoppedAt)
+        sharedFrom = try? c.decodeIfPresent(String.self, forKey: .sharedFrom)
     }
 }
 
 extension NoteFolder {
     private enum Keys: String, CodingKey {
         case id, name, parentId, createdAt
+        case words
     }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +113,19 @@ extension NoteFolder {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? id
         parentId = try c.decodeIfPresent(UUID.self, forKey: .parentId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? createdAt
+        words = (try? c.decodeIfPresent([String].self, forKey: .words)) ?? []
+    }
+
+    /// Written with `words` only when there are some, as Android's IdeaJson
+    /// writes a folder: one without words stays the file it was, and S06d's
+    /// capsule fixtures (written before the words came) still match.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: Keys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(createdAt, forKey: .createdAt)
+        if !words.isEmpty { try c.encode(words, forKey: .words) }
     }
 }
 
@@ -230,10 +261,11 @@ final class NoteStore: ObservableObject {
     @discardableResult
     func create(title: String, body: String = "", kind: NoteKind = .idea,
                 folderId: UUID? = nil, at point: (x: Double, y: Double)? = nil,
-                source: NoteSource? = nil) -> Note {
+                source: NoteSource? = nil, sharedFrom: String? = nil) -> Note {
         var note = Note(id: makeID(), title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         body: body, folderId: folderId, kind: kind)
         note.source = source
+        note.sharedFrom = sharedFrom
         let spot = point ?? nextBoardSpot()
         note.boardX = spot.x
         note.boardY = spot.y
@@ -249,6 +281,10 @@ final class NoteStore: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
         var changed = note
         changed.updatedAt = notes[index].updatedAt
+        // written by markOpened and setStopped only, so an editor's older
+        // copy of the note leaves them as they are
+        changed.openedAt = notes[index].openedAt
+        changed.stoppedAt = notes[index].stoppedAt
         guard changed != notes[index] else { return }
         changed.updatedAt = Date()
         notes[index] = changed
@@ -329,6 +365,23 @@ final class NoteStore: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         notes[index].boardX = x
         notes[index].boardY = y
+        save()
+    }
+
+    /// The idea was opened (S06a): its frost goes. Not an edit, so its
+    /// time is left alone.
+    func markOpened(_ id: UUID, at time: Date = Date()) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].openedAt = time
+        save()
+    }
+
+    /// Where the caret was when the idea was left mid-sentence, or nil
+    /// (IdeaStops). Not an edit, so its time is left alone.
+    func setStopped(_ id: UUID, at caret: Int?) {
+        guard let index = notes.firstIndex(where: { $0.id == id }),
+              notes[index].stoppedAt != caret else { return }
+        notes[index].stoppedAt = caret
         save()
     }
 
@@ -452,6 +505,16 @@ final class NoteStore: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let index = folders.firstIndex(where: { $0.id == id }) else { return }
         folders[index].name = trimmed
+        save()
+    }
+
+    /// Gives a folder its own words (S06b), as FolderWords.parse keeps them
+    /// from what was typed: at most five; none clears them.
+    func setWords(_ id: UUID, to kept: [String]) {
+        guard let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        let words: [String] = Array(kept.prefix(5))
+        guard words != folders[index].words else { return }
+        folders[index].words = words
         save()
     }
 

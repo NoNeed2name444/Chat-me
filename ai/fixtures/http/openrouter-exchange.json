@@ -1,0 +1,39 @@
+{
+ "about": "The sign-in's code exchange, made up from the reference.",
+ "source": "https://openrouter.ai/docs/api/api-reference/oauth/exchange-authorization-code-for-api-key.md (read 15 Nov 2026)",
+ "provider": "openrouter",
+ "code": "fake-code-for-tests-1",
+ "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+ "request": {
+  "method": "POST",
+  "url": "https://openrouter.ai/api/v1/auth/keys",
+  "headers": {
+   "Content-Type": "application/json"
+  },
+  "body": {
+   "code": "fake-code-for-tests-1",
+   "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+   "code_challenge_method": "S256"
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "key": "fake-key-for-tests-2",
+   "user_id": "fake-user-1"
+  }
+ },
+ "expect": {
+  "key": "fake-key-for-tests-2"
+ },
+ "refused": {
+  "status": 403,
+  "body": {
+   "error": {
+    "code": 403,
+    "message": "Invalid code or code_verifier or already used code"
+   }
+  },
+  "kind": "credentialRefused"
+ }
+}

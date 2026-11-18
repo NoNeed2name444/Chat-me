@@ -111,6 +111,7 @@ import com.cramdown.sorta.map.NeuronLookPlan
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
 import com.cramdown.sorta.map.RefreshRate
+import com.cramdown.sorta.map.SkySpace
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.SpaceStyle
 import com.cramdown.sorta.map.NeuronScene
@@ -129,6 +130,7 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
 import com.cramdown.sorta.ui.ward.WardType
@@ -175,7 +177,9 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 * the GL thread; null for the demo map and the other themes.
                 */
                val perf: PerfMap? = null,
-               val force: PerfForce? = null) {
+               val force: PerfForce? = null,
+               /** S06b, Space's Universe: the leans, the shared circles, the comets' tails and which bodies are comets (SkySpace). */
+               val sky: SkySpace? = null) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -215,7 +219,7 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
          * planet (kind 3) is left out, as iOS never draws it (GraphMotion.swift:1827). [ids] and
          * [titles] by body, its labels the names shown.
          */
-        fun universe(plan: UniversePlan, tones: Map<Int, LabelRgb> = emptyMap(), leafCapacity: Int = 4096): MapScene {
+        fun universe(plan: UniversePlan, tones: Map<Int, LabelRgb> = emptyMap(), leafCapacity: Int = 4096, sky: SkySpace? = null): MapScene {
             val bodies = plan.bodies
             val positions = FloatArray(bodies.size * 3)
             for ((i, body) in bodies.withIndex()) {
@@ -233,7 +237,8 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
             val centre = Vec3(tree.cx[Octree.ROOT], tree.cy[Octree.ROOT], tree.cz[Octree.ROOT])
             val reach = plan.envelope.maxOfOrNull { (it - centre).length() } ?: 0f
             return MapScene(tree, radius, graph.titles, graph.ids, if (reach > 1e-3f) reach else viewRadius(tree), MapTheme.SPACE,
-                links = edges, linkHalf = UniverseBeams.HALF_WIDTH, universe = true, universePlan = plan, galaxyTones = tones)
+                links = edges, linkHalf = UniverseBeams.HALF_WIDTH, universe = true, universePlan = plan, galaxyTones = tones,
+                sky = sky?.takeIf { it.tails.size == bodies.size })
         }
 
         /**
@@ -458,6 +463,10 @@ data class MapFlyTo(val id: String, val serial: Int)
      * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
      */
     filter: MapFilterView? = null,
+    /** The frost on ideas left unopened (S06a A6): a level 0 to 3 by the scene's index, null for none. Space draws it. */
+    frost: ByteArray? = null,
+    /** S06b: a lit day's ideas, by id (any case), their bodies and the folders they sit in drawn whole, the rest faded; null for none. */
+    lit: Set<String>? = null,
     /** The proof tour (S05i2, PerfTour): a Performance scene from the layout flies its path by itself. Never shown to a person. */
     tour: Boolean = false,
     /** S06c: the ideas like the one open in the editor, as [MapScene.ids] ids in any case: each is ringed in [reshape]'s accent. */
@@ -478,6 +487,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
     // per scene, as its renderer: another scene's bodies and counts are not this one's
     var screenNodes by remember(scene) { mutableStateOf<List<ScreenNode>>(emptyList()) }
+    // the camera's pose those were projected at (MapDrawn.boxPose), handed on with them
+    var screenPose by remember(scene) { mutableStateOf<List<Float>>(emptyList()) }
     // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
     val named = remember(scene) { HashMap<Int, Int>() }
     var drawn by remember(scene) { mutableStateOf(MapDrawn()) }
@@ -497,6 +508,12 @@ data class MapFlyTo(val id: String, val serial: Int)
     val home = remember(scene) { HomeView(camera, HomeView.framer(scene)) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
+    // what the first view and a fly-in fit to: half a touch target more under the top glass, so a
+    // body's touch area clears the strip and the lens row too, and half a target more over the
+    // first-run card's cover (fitHome), so the bodies stay centred between them, as iOS's framing
+    // and its card cover keep them (S06d)
+    val half = with(density) { (WardControlSize.target / 2).dp.toPx() }
+    val framed = insets.copy(top = insets.top + half)
     val cover = with(density) { card.toPx() }
     // the card's cover the home was last fitted to
     val framedCover = remember(home) { floatArrayOf(0f) }
@@ -512,11 +529,12 @@ data class MapFlyTo(val id: String, val serial: Int)
         val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
         // only the links new since the scene on screen grow in; every link when there is none (LinkMemory);
         // in Space, the bodies it had and this scene lacks die where they were (S05h2)
-        val recall = if (scene.theme == MapTheme.PLAIN) LinkRecall.EVERYTHING else LinkMemory.recall(scene.ids, scene.links, lively, deathKey(scene))
+        val recall = if (scene.theme == MapTheme.PLAIN) LinkRecall.EVERYTHING
+            else LinkMemory.recall(scene.ids, scene.links, lively, deathKey(scene), scene.sky?.comets)
         GlMapRenderer(
             scene.tree, camera, scene.nodeRadius, displayHz = { hz[0] }, displayMaxHz = maxHz,
             onReadout = { r -> mainHandler.post { readout = r } },
-            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes -> mainHandler.post { screenNodes = nodes } },
+            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes, pose -> mainHandler.post { screenNodes = nodes; screenPose = pose } },
             theme = scene.theme, assets = context.assets,
             density = context.resources.displayMetrics.density, contrast = increaseContrast(context),
             onDrawn = { d -> mainHandler.post { drawn = d } },
@@ -524,7 +542,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             neurons = scene.neurons, lively = lively,
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
             universe = scene.universe, universePlan = scene.universePlan,
-            departures = recall.departures, testHooks = testHooks, totals = totals,
+            departures = recall.departures, testHooks = testHooks, totals = totals, sky = scene.sky, settling = recall.settling,
             perf = scene.perf, force = scene.force, tour = tour,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
@@ -538,7 +556,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     // plain theme draws no growing links, so it leaves nothing to compare with
     DisposableEffect(scene) {
         if (scene.theme == MapTheme.PLAIN) LinkMemory.clear()
-        else LinkMemory.remember(scene.build, scene.ids, scene.links, deathKey(scene), if (deathKey(scene) != null) renderer::departures else null)
+        else LinkMemory.remember(scene.build, scene.ids, scene.links, deathKey(scene), if (deathKey(scene) != null) renderer::departures else null,
+            comets = scene.sky?.comets.orEmpty(), place = if (scene.sky != null) renderer::placeOf else null)
         onDispose {}
     }
     // and once the map leaves the screen, a map opened again grows every link, as iOS's; a turn or
@@ -552,7 +571,11 @@ data class MapFlyTo(val id: String, val serial: Int)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), framed)) loop.touched()
+    }
+    // a lit day reaches the renderer as it changes; the next frame dims the rest (S06b)
+    LaunchedEffect(renderer, lit) {
+        if (renderer.lit != lit) { renderer.lit = lit; loop.moved() }
     }
     // the filter reaches the renderer as it changes; the next frame applies it (S05i)
     // a map built again under a filter starts filtered, with no pop (its first one is set at once)
@@ -561,6 +584,10 @@ data class MapFlyTo(val id: String, val serial: Int)
         val next = if (!filterSet[0]) filter?.at(instantNow = true) else filter
         filterSet[0] = true
         if (renderer.filter !== next) { renderer.filter = next; loop.moved() }
+    }
+    // the frost reaches the renderer as it changes; the next frame melts toward it (S06a A6)
+    LaunchedEffect(renderer, frost) {
+        if (renderer.frost !== frost) { renderer.frost = frost; loop.moved() }
     }
     // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
@@ -611,9 +638,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // the first view fits the shape the map has (on its size, below) and what the chrome and the
     // first-run card leave of it, again when the chrome changes or the card comes or grows
     fun fitHome(size: IntSize, follow: Boolean = true) {
-        if (synchronized(camera) { home.fit(camera, size.width, size.height, insets.coveringFoot(framedCover[0]), follow) }) loop.moved()
+        if (synchronized(camera) { home.fit(camera, size.width, size.height, framed.coveringFoot(if (framedCover[0] > 0f) framedCover[0] + half else 0f), follow) }) loop.moved()
     }
-    LaunchedEffect(home, insets) { fitHome(viewSize) }
+    LaunchedEffect(home, framed) { fitHome(viewSize) }
     LaunchedEffect(home, cover) {
         val follow = MapCardCover.refits(framedCover[0], cover)
         framedCover[0] = cover
@@ -780,9 +807,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     Box(modifier.background(behind, RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
-        mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
-            listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow, cells = cells,
+        mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) { MapDrawn.poseOf(camera) },
+            names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) },
+            spot = spot(), homes = homesNow, cells = cells, boxPose = screenPose,
             glows = screenNodes.filter { it.index in glowNames }.map { it.index }.sorted(), drop = dropName ?: -1,
             ideaSpot = ideaSpot(), near = nearIdea())
         val tapped = onTap

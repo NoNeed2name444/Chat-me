@@ -1,0 +1,100 @@
+{
+ "about": "Made up from the reference, never recorded with a real key.",
+ "source": "https://platform.claude.com/docs/en/api/messages (read 15 Nov 2026)",
+ "provider": "anthropic",
+ "credential": "fake-key-for-tests-1",
+ "call": {
+  "model": "claude-haiku-5-5",
+  "instructions": "Sort the note into ideas.",
+  "input": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}",
+  "schema": "split",
+  "maxOutput": 400
+ },
+ "request": {
+  "method": "POST",
+  "url": "https://api.anthropic.com/v1/messages",
+  "headers": {
+   "x-api-key": "fake-key-for-tests-1",
+   "anthropic-version": "2026-10-21",
+   "Content-Type": "application/json"
+  },
+  "body": {
+   "model": "claude-haiku-5-5",
+   "max_tokens": 400,
+   "system": "Sort the note into ideas.",
+   "messages": [
+    {
+     "role": "user",
+     "content": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}"
+    }
+   ],
+   "output_config": {
+    "format": {
+     "type": "json_schema",
+     "schema": {
+      "type": "object",
+      "properties": {
+       "ideas": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "text": {
+           "type": "string"
+          },
+          "title": {
+           "type": "string"
+          },
+          "folder": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "text",
+          "title",
+          "folder"
+         ],
+         "additionalProperties": false
+        }
+       }
+      },
+      "required": [
+       "ideas"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "id": "msg_fake_1",
+   "type": "message",
+   "role": "assistant",
+   "model": "claude-haiku-5-5",
+   "content": [
+    {
+     "type": "text",
+     "text": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}"
+    }
+   ],
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "usage": {
+    "input_tokens": 312,
+    "output_tokens": 52
+   }
+  }
+ },
+ "expect": {
+  "text": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}",
+  "inputTokens": 312,
+  "outputTokens": 52,
+  "costPico": null
+ }
+}

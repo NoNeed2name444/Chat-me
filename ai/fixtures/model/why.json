@@ -1,0 +1,55 @@
+{
+ "about": "Stand-in model answers for the reasons behind suggested links (S08 A6).",
+ "idea": {
+  "title": "Beans up the fence",
+  "text": "Try growing beans up the fence."
+ },
+ "candidates": [
+  {
+   "id": "c1",
+   "title": "Plant beans by the fence",
+   "text": "Runner beans along the south fence."
+  },
+  {
+   "id": "c2",
+   "title": "Paint the shed blue",
+   "text": "Before spring."
+  },
+  {
+   "id": "c3",
+   "title": "Fix the gate latch",
+   "text": "The latch on the fence gate sticks."
+  }
+ ],
+ "cases": [
+  {
+   "name": "good",
+   "answer": "{\"reasons\": [{\"n\": 1, \"why\": \"Both are about beans on the fence.\"}, {\"n\": 3, \"why\": \"Both are about the fence.\"}]}",
+   "verdict": "ok",
+   "reasons": {
+    "c1": "Both are about beans on the fence.",
+    "c3": "Both are about the fence."
+   }
+  },
+  {
+   "name": "JSON that does not parse",
+   "answer": "{\"reasons\": [{\"n\": 1",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "a reason over 120 characters",
+   "answer": "{\"reasons\": [{\"n\": 1, \"why\": \"wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww\"}]}",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "a reason for a candidate not sent",
+   "answer": "{\"reasons\": [{\"n\": 1, \"why\": \"Beans.\"}, {\"n\": 4, \"why\": \"Something else.\"}]}",
+   "verdict": "badCitation"
+  },
+  {
+   "name": "an empty answer",
+   "answer": "  ",
+   "verdict": "empty"
+  }
+ ]
+}

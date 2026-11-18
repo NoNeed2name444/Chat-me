@@ -1,0 +1,24 @@
+{
+  "about": "The model Sorta suggests for each provider (S08, section 1). The person can pick any model their account offers.",
+  "read": "2026-11-15",
+  "providers": {
+    "apple": {"suggested": "on-device", "window": 4096, "source": "https://developer.apple.com/forums/thread/806542"},
+    "mlkit": {"suggested": "on-device", "window": 4096, "source": "https://developers.google.com/ml-kit/genai"},
+    "openrouter": {
+      "suggested": "inclusionai/ling-3.2-flash:free",
+      "others": ["liquid/lfm-3-1.7b:free", "anthropic/claude-haiku-5.5", "openai/gpt-6-luna", "deepseek/deepseek-v4.1-flash", "mistralai/mistral-small-2603"],
+      "source": "https://openrouter.ai/api/v1/models"
+    },
+    "anthropic": {
+      "suggested": "claude-haiku-5-5",
+      "others": ["claude-sonnet-5-5", "claude-opus-5-5"],
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "openai": {
+      "suggested": "gpt-6-luna",
+      "others": ["gpt-6.1-terra", "gpt-6.1-sol"],
+      "source": "https://developers.openai.com/api/docs/pricing"
+    },
+    "compatible": {"suggested": null, "others": []}
+  }
+}

@@ -1,0 +1,30 @@
+{
+ "about": "The check on connect: one page of the model list.",
+ "source": "https://platform.claude.com/docs/en/api/models-list (read 15 Nov 2026)",
+ "provider": "anthropic",
+ "credential": "fake-key-for-tests-1",
+ "request": {
+  "method": "GET",
+  "url": "https://api.anthropic.com/v1/models?limit=1",
+  "headers": {
+   "x-api-key": "fake-key-for-tests-1",
+   "anthropic-version": "2026-10-21"
+  },
+  "body": null
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "data": [
+    {
+     "type": "model",
+     "id": "claude-haiku-5-5",
+     "display_name": "fake"
+    }
+   ],
+   "has_more": true,
+   "first_id": "claude-haiku-5-5",
+   "last_id": "claude-haiku-5-5"
+  }
+ }
+}

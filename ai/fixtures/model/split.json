@@ -1,0 +1,89 @@
+{
+ "about": "Stand-in model answers for split (S08 A6). Both apps must reach each case's verdict.",
+ "capture": "Paint the shed blue before spring. Ask the neighbours about sharing a ladder.\nTry growing beans up the fence.",
+ "folders": [
+  {
+   "id": "f-garden",
+   "name": "Garden",
+   "words": [
+    "plants",
+    "beans",
+    "fence"
+   ]
+  },
+  {
+   "id": "f-house",
+   "name": "House",
+   "words": [
+    "paint",
+    "repairs"
+   ]
+  }
+ ],
+ "cases": [
+  {
+   "name": "good",
+   "answer": "{\"ideas\": [{\"text\": \"Paint the shed blue before spring.\", \"title\": \"Paint the shed blue\", \"folder\": \"House\"}, {\"text\": \"Ask the neighbours about sharing a ladder.\", \"title\": \"Borrow a ladder\", \"folder\": null}, {\"text\": \"Try growing beans up the fence.\", \"title\": \"Beans up the fence\", \"folder\": \"Garden\"}]}",
+   "verdict": "ok",
+   "pieces": [
+    {
+     "text": "Paint the shed blue before spring.",
+     "title": "Paint the shed blue",
+     "folder": "f-house"
+    },
+    {
+     "text": "Ask the neighbours about sharing a ladder.",
+     "title": "Borrow a ladder",
+     "folder": null
+    },
+    {
+     "text": "Try growing beans up the fence.",
+     "title": "Beans up the fence",
+     "folder": "f-garden"
+    }
+   ]
+  },
+  {
+   "name": "a folder that does not exist goes to To sort",
+   "answer": "{\"ideas\": [{\"text\": \"Paint the shed blue before spring.\", \"title\": \"Shed\", \"folder\": \"Garage\"}]}",
+   "verdict": "ok",
+   "pieces": [
+    {
+     "text": "Paint the shed blue before spring.",
+     "title": "Shed",
+     "folder": null
+    }
+   ]
+  },
+  {
+   "name": "JSON that does not parse",
+   "answer": "{\"ideas\": [{\"text\": \"Paint the shed",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "JSON of the wrong shape",
+   "answer": "{\"items\": []}",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "a title over 60 characters",
+   "answer": "{\"ideas\": [{\"text\": \"Paint the shed blue before spring.\", \"title\": \"TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT\", \"folder\": null}]}",
+   "verdict": "unreadable"
+  },
+  {
+   "name": "an idea that is not a slice of the capture",
+   "answer": "{\"ideas\": [{\"text\": \"Paint the shed blue in spring.\", \"title\": \"Shed\", \"folder\": null}]}",
+   "verdict": "notASlice"
+  },
+  {
+   "name": "an empty answer",
+   "answer": "",
+   "verdict": "empty"
+  },
+  {
+   "name": "no ideas",
+   "answer": "{\"ideas\": []}",
+   "verdict": "empty"
+  }
+ ]
+}

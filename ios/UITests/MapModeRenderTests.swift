@@ -173,6 +173,9 @@ final class MapModeRenderTests: XCTestCase {
         var foot: CGFloat = look.frame.maxY
         let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
         if list.exists { foot = max(foot, list.frame.maxY) }
+        // and the lens row's under them (S06d), which the first view frames below too
+        let lenses = app.descendants(matching: .any)["map-lens-row"].firstMatch
+        if lenses.exists { foot = max(foot, lenses.frame.maxY) }
         let bodies: [CGRect] = bodyFrames(app)
         guard let top = bodies.map(\.midY).min(), let bottom = bodies.map(\.midY).max() else {
             XCTFail("\(name): no bodies to centre", file: file, line: line)
@@ -225,6 +228,9 @@ final class MapModeRenderTests: XCTestCase {
         var foot: CGFloat = look.frame.maxY
         let list = app.descendants(matching: .any)["map-list-chip"].firstMatch
         if list.exists { foot = max(foot, list.frame.maxY) }
+        // and the lens row's under them (S06d), which the first view frames below too
+        let lenses = app.descendants(matching: .any)["map-lens-row"].firstMatch
+        if lenses.exists { foot = max(foot, lenses.frame.maxY) }
         let bodies: [CGRect] = bodyFrames(app)
         XCTAssertFalse(bodies.isEmpty, "\(name): its bodies, on screen", file: file, line: line)
         for body in bodies {

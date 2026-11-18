@@ -1,0 +1,41 @@
+{
+  "about": "What a connected account pays per million tokens, in US dollars (S08, section 2). A model missing here is refused, except the phone's own models and OpenRouter models ending :free. longAbove: above this many input tokens a call pays longInput and longOutput instead.",
+  "unit": "USD per million tokens",
+  "providers": {
+    "anthropic": {
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "read": "2026-11-15",
+      "models": {
+        "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "longAbove": 100000, "longInput": 0.50, "longOutput": 2.50},
+        "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
+        "claude-opus-5-5": {"input": 4.00, "output": 20.00}
+      }
+    },
+    "openai": {
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "read": "2026-11-15",
+      "models": {
+        "gpt-6-luna": {"input": 0.10, "output": 0.50, "longAbove": 272000, "longInput": 0.20, "longOutput": 0.75},
+        "gpt-6.1-terra": {"input": 1.00, "output": 5.00},
+        "gpt-6.1-sol": {"input": 2.00, "output": 10.00}
+      }
+    },
+    "openrouter": {
+      "source": "https://openrouter.ai/api/v1/models",
+      "read": "2026-11-15",
+      "note": "Before a call the cap uses these prices; after it, OpenRouter's reported usage.cost. The long-context prices are the first-party ones (Anthropic's, OpenAI's), so the bound holds if OpenRouter passes them on.",
+      "models": {
+        "anthropic/claude-haiku-5.5": {"input": 0.10, "output": 0.50, "longAbove": 100000, "longInput": 0.50, "longOutput": 2.50},
+        "openai/gpt-6-luna": {"input": 0.10, "output": 0.50, "longAbove": 272000, "longInput": 0.20, "longOutput": 0.75},
+        "deepseek/deepseek-v4.1-flash": {"input": 0.0507, "output": 0.2028},
+        "mistralai/mistral-small-2603": {"input": 0.15, "output": 0.60}
+      }
+    },
+    "compatible": {
+      "source": null,
+      "read": "2026-11-15",
+      "note": "Empty: a compatible service's model is refused until its price is listed here.",
+      "models": {}
+    }
+  }
+}

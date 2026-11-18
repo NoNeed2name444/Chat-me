@@ -1,0 +1,130 @@
+{
+ "about": "Written by ai/embeddings/reference.py from texts.json; do not edit by hand.",
+ "table": "ai/embeddings/potion-base-4M/potion-base-4M-int8.bin",
+ "tolerance": 0.0001,
+ "queries": [
+  {
+   "text": "seedlings for the vegetable patch",
+   "top5": [
+    "L02",
+    "L12",
+    "L01",
+    "L04",
+    "L06"
+   ],
+   "scores": [
+    0.592021,
+    0.59177,
+    0.416001,
+    0.262267,
+    0.249474
+   ],
+   "smallestGap": 0.000251
+  },
+  {
+   "text": "a long bike ride in the hills",
+   "top5": [
+    "L08",
+    "L10",
+    "L06",
+    "L09",
+    "L07"
+   ],
+   "scores": [
+    0.739006,
+    0.524719,
+    0.474578,
+    0.330269,
+    0.293606
+   ],
+   "smallestGap": 0.036663
+  },
+  {
+   "text": "dinner ideas with fresh herbs",
+   "top5": [
+    "L12",
+    "L15",
+    "L02",
+    "L01",
+    "L14"
+   ],
+   "scores": [
+    0.497416,
+    0.476615,
+    0.418184,
+    0.401719,
+    0.351242
+   ],
+   "smallestGap": 0.016466
+  },
+  {
+   "text": "learning a new instrument",
+   "top5": [
+    "L20",
+    "L19",
+    "L17",
+    "L16",
+    "L18"
+   ],
+   "scores": [
+    0.478338,
+    0.277835,
+    0.272796,
+    0.244444,
+    0.237659
+   ],
+   "smallestGap": 0.005039
+  },
+  {
+   "text": "books to read this winter",
+   "top5": [
+    "L21",
+    "L23",
+    "L05",
+    "L25",
+    "L12"
+   ],
+   "scores": [
+    0.547385,
+    0.368933,
+    0.319707,
+    0.301351,
+    0.207504
+   ],
+   "smallestGap": 0.007723
+  },
+  {
+   "text": "small repairs around the house",
+   "top5": [
+    "L23",
+    "L06",
+    "L29",
+    "L27",
+    "L20"
+   ],
+   "scores": [
+    0.319942,
+    0.313955,
+    0.267146,
+    0.266673,
+    0.252132
+   ],
+   "smallestGap": 0.000473
+  }
+ ],
+ "arabic": {
+  "query": "أفكار جديدة عن الحديقة",
+  "covered": false,
+  "ideasCovered": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "echoes": [
+   "A3",
+   "A4",
+   "A1"
+  ]
+ }
+}

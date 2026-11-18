@@ -44,8 +44,12 @@ extension NoteStore {
         first.body = halves.firstBody
         first.links = links.first
         first.updatedAt = Date()
+        // where each half stops is its own: the whole idea's mark pointed
+        // into text the first half may no longer hold
+        first.stoppedAt = IdeaStops.stoppedAt(body: halves.firstBody, caret: nil)
         var second = Note(id: secondID, title: halves.secondTitle, body: halves.secondBody,
                           folderId: note.folderId, kind: note.kind, links: links.second, tags: note.tags)
+        second.stoppedAt = IdeaStops.stoppedAt(body: halves.secondBody, caret: nil)
         let spot = IdeaBoardDrop.settle(CGPoint(x: note.boardX + 40, y: note.boardY + 40), card: IdeaBoardDrop.tallest,
                                         others: notes.map { CGPoint(x: $0.boardX, y: $0.boardY) })
         second.boardX = Double(spot.x)
@@ -83,6 +87,8 @@ extension NoteStore {
         joined.links = IdeaReshape.joinLinks(first: a, second: b, firstOwn: first.links, secondOwn: second.links,
                                              pointedAtSecond: pointedAtSecond, connected: connected)
         joined.updatedAt = Date()
+        // the first idea's mark pointed into its own body, not the joined one
+        joined.stoppedAt = IdeaStops.stoppedAt(body: text.body, caret: nil)
         reshapeNotes { list in
             list[ia] = joined
             for held in holders { list[held.index].links.removeAll { $0 == b } }
@@ -105,6 +111,48 @@ extension NoteStore {
         let links: [UUID] = [a, b].filter { $0 != made.id }
         reshapeNotes { list in list[index].links = links }
         return Reshape(before: [], added: [made.id], result: made.id)
+    }
+
+    /// Keeps the ideas a split of a capture proposed (S08, AISplit), as one
+    /// change and one Undo: each piece is a new idea in its folder (nil: To
+    /// sort). With `capture`, the idea it came from goes and the pieces take
+    /// its place in the list and on the board, with its tags and where it was
+    /// shared from. Nil with no pieces, or a capture that is not there.
+    @discardableResult
+    func keepSplit(_ pieces: [(title: String, body: String, folderId: UUID?)], replacing capture: UUID? = nil) -> Reshape? {
+        guard !pieces.isEmpty else { return nil }
+        var index = notes.count
+        var from: Note?
+        if let capture {
+            guard let i = notes.firstIndex(where: { $0.id == capture }) else { return nil }
+            index = i
+            from = notes[i]
+        }
+        var others: [CGPoint] = notes.filter { $0.id != capture }.map { CGPoint(x: $0.boardX, y: $0.boardY) }
+        var made: [Note] = []
+        for (k, piece) in pieces.enumerated() {
+            var note = Note(id: makeID(), title: piece.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                            body: piece.body, folderId: piece.folderId)
+            let near: CGPoint
+            if let from {
+                near = CGPoint(x: from.boardX + Double(40 * k), y: from.boardY + Double(40 * k))
+                note.tags = from.tags
+                note.sharedFrom = from.sharedFrom
+            } else {
+                let n = Double(notes.count + k)
+                near = CGPoint(x: 90 * n.squareRoot() * cos(n * 2.399963), y: 90 * n.squareRoot() * sin(n * 2.399963))
+            }
+            let spot = IdeaBoardDrop.settle(near, card: IdeaBoardDrop.tallest, others: others)
+            note.boardX = Double(spot.x)
+            note.boardY = Double(spot.y)
+            others.append(spot)
+            made.append(note)
+        }
+        reshapeNotes { list in
+            if capture != nil { list.remove(at: index) }
+            list.insert(contentsOf: made, at: min(index, list.count))
+        }
+        return Reshape(before: from.map { [Kept(index: index, note: $0)] } ?? [], added: made.map(\.id), result: made[0].id)
     }
 
     /// Undo of a reshape: the ideas it added go (with any hand link to

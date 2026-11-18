@@ -1,0 +1,1 @@
+{"type":"object","properties":{"reasons":{"type":"array","items":{"type":"object","properties":{"n":{"type":"integer"},"why":{"type":"string"}},"required":["n","why"],"additionalProperties":false}}},"required":["reasons"],"additionalProperties":false}

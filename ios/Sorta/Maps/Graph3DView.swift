@@ -80,6 +80,12 @@ struct Graph3DView: View {
     /// bar's note or name): the map draws slowly under it (GraphPace), as
     /// under its own sheets.
     var covered: Bool = false
+    /// S06b: the ideas of the day picked in the moons row (IdeasMapView),
+    /// lit where they are while the rest dim; nil, none picked.
+    var lit: Set<UUID>? = nil
+    /// The ideas Map mode's lenses let through (IdeaLens.passing), nil with
+    /// no lens on: the rest fade as the filter fades them (S06d A2).
+    var lens: Set<UUID>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The sky's shared switch (SpaceQuality): at .still - Low Power Mode,
     /// a hot device - the map holds still too.
@@ -161,10 +167,12 @@ struct Graph3DView: View {
     @AccessibilityFocusState private var cardFocused: Bool
 
     init(open: @escaping (UUID) -> Void, openFolder: @escaping (UUID?) -> Void = { _ in },
-         covered: Bool = false) {
+         covered: Bool = false, lit: Set<UUID>? = nil, lens: Set<UUID>? = nil) {
         self.open = open
         self.openFolder = openFolder
         self.covered = covered
+        self.lit = lit
+        self.lens = lens
         _ = GraphFirstRun.reset
     }
 
@@ -299,19 +307,26 @@ struct Graph3DView: View {
         ZStack {
             GeometryReader { geo in
                 let insets: GraphInsets = mapInsets(geo)
-                GraphSCNView(built: built, filter: filter, recenter: recenter,
+                GraphSCNView(built: built, filter: filter, lens: lens, recenter: recenter,
                              insets: insets, card: cardCover(built, viewBottom: geo.frame(in: .global).maxY),
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
                              labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp,
-                             glows: shapes?.glowing ?? [], dropPreview: dropPreview)
+                             frost: frostLevels, melt: !reduceMotion,
+                             lit: lit, glows: shapes?.glowing ?? [], dropPreview: dropPreview)
             }
             .ignoresSafeArea()
         }
         .overlay {
-            if filter != .all && shownCount == 0 {
-                Text("Nothing here for this filter.")
+            if (filter != .all || lens != nil) && shownCount == 0 {
+                Group {
+                    if filter == .all {
+                        Text(IdeasWords.lensEmpty)
+                    } else {
+                        Text("Nothing here for this filter.")
+                    }
+                }
                     .wardFont(.footnote)
                     .foregroundStyle(Color.wardInkSecondary)
                     .allowsHitTesting(false)
@@ -368,7 +383,7 @@ struct Graph3DView: View {
     /// The Performance theme's map (GraphPerfSpace), with the same tools,
     /// peek card and options as every other theme.
     private var perfSpace: some View {
-        GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
+        GraphPerfSpace(source: perfSource, filter: filter, lens: lens, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
                        touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
@@ -403,7 +418,10 @@ struct Graph3DView: View {
                                   flyIn: { command.send(.flyIn(id)) },
                                   chip: { other in handle(.chip(other)) },
                                   more: GraphPeek.menu(folder: folder, home: id == GraphUniverse.homeID),
-                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) })
+                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) },
+                                  lean: folder ? nil : skyLean(id, in: built)?.line,
+                                  fileThere: { fileThere(id, in: built) },
+                                  source: folder ? nil : notes.note(id)?.sharedFrom)
                     .id(id)
                     .accessibilityFocused($cardFocused)
                     .transition(.move(edge: .bottom))
@@ -416,6 +434,20 @@ struct Graph3DView: View {
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: selection.cardShown)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: tuningLinks)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: options == nil)
+    }
+
+    /// S06b: a loose idea's lean in the Universe, for its card: the words
+    /// it shares with a folder, and that folder.
+    private func skyLean(_ id: UUID, in built: GraphScene?) -> (line: GraphSkyLean, folder: UUID)? {
+        guard built?.universe == true, let found = GraphSkyBodies.lean(id, store: notes) else { return nil }
+        return (GraphSkyLean(word: found.lean.word, folder: found.folder.name), found.folder.id)
+    }
+
+    /// File there: the idea goes into the folder it leans to, with the
+    /// filing's notice and Undo; the card stays on it as it settles.
+    private func fileThere(_ id: UUID, in built: GraphScene?) {
+        guard let target = skyLean(id, in: built)?.folder else { return }
+        filing.file(id, in: target, notes: notes)
     }
 
     /// A body's options, held still on it: a glass list beside where it
@@ -888,7 +920,8 @@ struct Graph3DView: View {
         return found.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// How many notes the current filter lets through, to say so when none do.
+    /// How many notes the current filter and lenses let through, to say so
+    /// when none do.
     private var shownCount: Int {
         var degree: [UUID: Int] = [:]
         for edge in notes.allEdges() {
@@ -900,7 +933,7 @@ struct Graph3DView: View {
             var root: UUID? = notes.rootFolder(of: note.folderId)
             if let built, built.universe { root = built.galaxyOf[note.id] }
             let links: Int = degree[note.id] ?? 0
-            if filter.admits(kind: note.kind, root: root, degree: links) { count += 1 }
+            if filter.admits(kind: note.kind, root: root, degree: links) && (lens?.contains(note.id) ?? true) { count += 1 }
         }
         return count
     }
@@ -914,6 +947,18 @@ struct Graph3DView: View {
 
     /// Whether the notes are drawn as the Universe (GraphUniverse): the
     /// Space theme with any main look that is not one single style.
+    /// The frost on ideas left unopened, in Space only (S06a A6): each
+    /// frosted idea's level, 1 to 3.
+    private var frostLevels: [UUID: Int] {
+        guard theme == .space else { return [:] }
+        var levels: [UUID: Int] = [:]
+        for note in notes.notes {
+            let level: Int = IdeaFrostLook.level(note)
+            if level > 0 { levels[note.id] = level }
+        }
+        return levels
+    }
+
     private var isUniverse: Bool {
         theme == .space && GraphNodeStyle(rawValue: mainLook) == nil
     }
@@ -956,8 +1001,28 @@ struct Graph3DView: View {
         // the link length plans the Universe and the themes (not the single
         // looks, which the force layout places)
         if universe { parts.append(GraphLinkLength.tag(linkValue)) }
+        if universe { parts.append(skyTag) }
         parts.append("p\(probeRound)")
         return parts.joined(separator: "\n")
+    }
+
+    /// S06b's part of the signature, in the Universe: the folders' words
+    /// (leaning), the shared ideas' marks (circling) and each loose idea's
+    /// tail step, so a tail grows when its idea crosses a day, a week or a
+    /// month the next time the map is drawn.
+    private var skyTag: String {
+        var hasher = Hasher()
+        let now = Date()
+        for folder in notes.folders where !folder.words.isEmpty {
+            hasher.combine(folder.id)
+            hasher.combine(folder.words)
+        }
+        for note in notes.notes where note.folderId == nil {
+            hasher.combine(note.id)
+            hasher.combine(note.sharedFrom)
+            hasher.combine(CometTail.length(created: note.createdAt, now: now))
+        }
+        return "k\(hasher.finalize())"
     }
 
     /// Whether a shader check this look builds with was not kept: it failed
@@ -1663,6 +1728,8 @@ struct GraphTouchHandlers {
 struct GraphSCNView: UIViewRepresentable {
     let built: GraphScene
     let filter: GraphFilter
+    /// The ideas the lenses let through, nil with none on (S06d A2).
+    var lens: Set<UUID>? = nil
     let recenter: Int
     /// How much of the view is under glass on each side; the graph is
     /// framed to the rest.
@@ -1682,6 +1749,12 @@ struct GraphSCNView: UIViewRepresentable {
     var touch = GraphTouchHandlers()
     /// A sheet is up over the map: it draws slowly under it (GraphPace).
     var covered: Bool = false
+    /// The frost on ideas left unopened (S06a A6), by id, 1 to 3; and
+    /// whether a change melts (not with Reduce Motion).
+    var frost: [UUID: Int] = [:]
+    var melt: Bool = true
+    /// S06b: the lit day's ideas (Graph3DView.lit).
+    var lit: Set<UUID>? = nil
     /// S06c: the ideas like the one open in the editor, rung in the accent;
     /// and, for the drop target's render only, an idea rung as a held one
     /// would be let go on (GraphReshapePreview).
@@ -1757,7 +1830,8 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.commandSerial = command.serial
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
+        coordinator.frost(frost, melt: false)
         coordinator.glow(glows, drop: dropPreview)
         // the design preview's hold is sent once the scene is built, and can
         // be sent before SwiftUI makes this view for it: the line above then
@@ -1780,7 +1854,9 @@ struct GraphSCNView: UIViewRepresentable {
         } else {
             coordinator.syncChoice()
         }
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
+        coordinator.frost(frost, melt: melt)
+        coordinator.lightDay(lit)
         coordinator.glow(glows, drop: dropPreview, rebuilt: rebuilt)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
@@ -1794,6 +1870,8 @@ struct GraphSCNView: UIViewRepresentable {
         } else if coordinator.insets != insets || coordinator.card != card {
             coordinator.inset(to: insets, card: card)
         }
+        // the names keep out from under the glass (GraphNameRoom)
+        coordinator.sim?.setLabelRoom(coordinator.insets)
         coordinator.cover(covered)
     }
 
@@ -1897,6 +1975,8 @@ struct GraphSCNView: UIViewRepresentable {
         /// been turned or zoomed since.
         private var framedPose: simd_float4x4?
         private var shownFilter: GraphFilter?
+        /// The lenses' ideas as last shown (S06d A2).
+        private var shownLens: Set<UUID>?
         /// The note a drag is about to pick up, found when the drag begins.
         private var pending: Int?
         /// How far into the screen the dragged note sits, so it moves across
@@ -1934,9 +2014,16 @@ struct GraphSCNView: UIViewRepresentable {
         }
 
         /// What framing fits the graph to: the glass, and the first-run
-        /// card while it is up (S05d).
+        /// card while it is up (S05d). Half a touch target more under the
+        /// top glass, as the card's cover has (cardCover): the framing keeps
+        /// each body's middle in the window, and its touch frame (voiceFrame,
+        /// 44 pt round its middle) must clear the strip and the lens row too.
+        /// The lens row's second line on a phone (S06d) made the first view
+        /// fill the band's height, and the top body's frame ran 4 pt under it.
         private var framing: GraphInsets {
-            insets.coveringFoot(card)
+            var out: GraphInsets = insets.coveringFoot(card)
+            out.top += Float(WardControlSize.target / 2)
+            return out
         }
 
         /// Shows a newly built scene.
@@ -1959,6 +2046,7 @@ struct GraphSCNView: UIViewRepresentable {
             framedSize = .zero
             framedPose = nil
             shownFilter = nil
+            shownLens = nil
             // the simulation steps on SceneKit's render loop, once per frame
             view.delegate = built.sim
             view.scene = built.scene
@@ -1975,6 +2063,7 @@ struct GraphSCNView: UIViewRepresentable {
             view.antialiasingMode = GraphSCNView.antialiasing()
             view.preferredFramesPerSecond = GraphQuality.frameRate
             built.sim.setViewHeight(Float(view.bounds.height), width: Float(view.bounds.width))
+            built.sim.setLabelRoom(insets)
             wireCameraGestures(in: view)
             // still flown in to a folder that is still there: stay on it
             if universe, let id = flownID, let slot = folders[id] {
@@ -2229,12 +2318,28 @@ struct GraphSCNView: UIViewRepresentable {
             }
         }
 
-        func apply(_ filter: GraphFilter) {
+        /// The frost as last set, and the space it was set on (S06a A6).
+        private var shownFrost: [UUID: Int] = [:]
+        private weak var frostSim: GraphSim?
+
+        /// Sets the frost on the space's bodies; a space new to it takes it at once.
+        func frost(_ levels: [UUID: Int], melt: Bool) {
             guard let sim else { return }
-            if shownFilter == filter { return }
+            let fresh: Bool = frostSim !== sim
+            if !fresh && shownFrost == levels { return }
+            shownFrost = levels
+            frostSim = sim
+            sim.setFrost(levels, melt: melt && !fresh)
+            wake()
+        }
+
+        func apply(_ filter: GraphFilter, lens: Set<UUID>? = nil) {
+            guard let sim else { return }
+            if shownFilter == filter && shownLens == lens { return }
             let before: GraphFilter? = shownFilter
             shownFilter = filter
-            sim.apply(filter)
+            shownLens = lens
+            sim.apply(filter, lens: lens)
             refreshVoice()
             wake()
             // the chosen body filtered away: let it go (after this update)
@@ -2243,8 +2348,8 @@ struct GraphSCNView: UIViewRepresentable {
                 DispatchQueue.main.async { report(nil) }
             }
             // the Universe: a folder filter flies to its galaxy, and
-            // Everything frames the whole map again
-            guard universe, let before else { return }
+            // Everything frames the whole map again; a lens alone never flies
+            guard universe, let before, before != filter else { return }
             if case .folder(let id) = filter, let slot = folders[id] {
                 fly(to: slot, animated: true)
             } else if filter == .all && before != .all {
@@ -2946,6 +3051,20 @@ struct GraphSCNView: UIViewRepresentable {
                 sim.focusLinks(on: slot)
                 wake()
             }
+        }
+
+        /// S06b: the lit day's ideas on this scene, once per change and
+        /// again on a new scene (the sim it was lit on).
+        private var litShown: Set<UUID>?
+        private weak var litSim: GraphSim?
+
+        func lightDay(_ ids: Set<UUID>?) {
+            guard let sim else { return }
+            if litSim === sim && litShown == ids { return }
+            litSim = sim
+            litShown = ids
+            sim.lightDay(ids.map { Set($0.compactMap { sim.index[$0] }) })
+            wake()
         }
 
         /// A request from the card.

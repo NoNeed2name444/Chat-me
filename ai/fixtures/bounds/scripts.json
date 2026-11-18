@@ -1,0 +1,113 @@
+{
+ "about": "The cap's worst case against reported use (S08 A4). Reported counts are made up at the high end of real tokenisers: one per character for Arabic and CJK, three per four bytes for emoji, plus 11 for framing; the worst case counts every UTF-8 byte plus 64.",
+ "model": {
+  "provider": "openrouter",
+  "model": "deepseek/deepseek-v4.1-flash"
+ },
+ "cases": [
+  {
+   "name": "english",
+   "instructions": "Sort.",
+   "input": "Sort these ideas: paint the shed blue, plant beans by the fence, and ask about the ladder.",
+   "inputBytes": 90,
+   "maxOutput": 300,
+   "response": {
+    "provider": "openrouter",
+    "body": {
+     "choices": [
+      {
+       "message": {
+        "role": "assistant",
+        "content": "{\"ideas\":[]}"
+       },
+       "finish_reason": "stop"
+      }
+     ],
+     "usage": {
+      "prompt_tokens": 35,
+      "completion_tokens": 6,
+      "total_tokens": 41
+     }
+    }
+   }
+  },
+  {
+   "name": "arabic",
+   "instructions": "Sort.",
+   "input": "رتب هذه الأفكار: طلاء السقيفة باللون الأزرق، وزراعة الفاصوليا عند السياج، والسؤال عن السلم.",
+   "inputBytes": 167,
+   "maxOutput": 300,
+   "response": {
+    "provider": "openrouter",
+    "body": {
+     "choices": [
+      {
+       "message": {
+        "role": "assistant",
+        "content": "{\"ideas\":[]}"
+       },
+       "finish_reason": "stop"
+      }
+     ],
+     "usage": {
+      "prompt_tokens": 102,
+      "completion_tokens": 6,
+      "total_tokens": 108
+     }
+    }
+   }
+  },
+  {
+   "name": "cjk",
+   "instructions": "Sort.",
+   "input": "整理这些想法：把棚子漆成蓝色，在篱笆边种豆子，再问问梯子的事。物置を青く塗る。",
+   "inputBytes": 117,
+   "maxOutput": 300,
+   "response": {
+    "provider": "openrouter",
+    "body": {
+     "choices": [
+      {
+       "message": {
+        "role": "assistant",
+        "content": "{\"ideas\":[]}"
+       },
+       "finish_reason": "stop"
+      }
+     ],
+     "usage": {
+      "prompt_tokens": 50,
+      "completion_tokens": 6,
+      "total_tokens": 56
+     }
+    }
+   }
+  },
+  {
+   "name": "emoji",
+   "instructions": "Sort.",
+   "input": "🌱🚲🎉 👩‍👩‍👧 ideas 🏳️‍🌈 for the 🌻 garden 🧑🏽‍🌾",
+   "inputBytes": 88,
+   "maxOutput": 300,
+   "response": {
+    "provider": "openrouter",
+    "body": {
+     "choices": [
+      {
+       "message": {
+        "role": "assistant",
+        "content": "{\"ideas\":[]}"
+       },
+       "finish_reason": "stop"
+      }
+     ],
+     "usage": {
+      "prompt_tokens": 77,
+      "completion_tokens": 6,
+      "total_tokens": 83
+     }
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "about": "The check on connect: OpenRouter's model list needs no key, so its current-key read is the cheap read.",
+ "source": "https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key.md (read 15 Nov 2026)",
+ "provider": "openrouter",
+ "credential": "fake-key-for-tests-1",
+ "request": {
+  "method": "GET",
+  "url": "https://openrouter.ai/api/v1/key",
+  "headers": {
+   "Authorization": "Bearer fake-key-for-tests-1"
+  },
+  "body": null
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "data": {
+    "label": "fake-label",
+    "usage": 0,
+    "limit": null,
+    "is_free_tier": true
+   }
+  }
+ }
+}

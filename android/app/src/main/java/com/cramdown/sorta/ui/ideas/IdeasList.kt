@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
@@ -93,6 +94,7 @@ internal fun LazyListScope.ideasList(
         items(level.subfolders, key = { "f-" + it.id }) { folder ->
             FolderRow(folder, book.count(folder.id), open = { setFolder(folder.id) },
                 rename = { name(FolderPrompt.Rename(folder)) }, newInside = { name(FolderPrompt.New(folder.id)) },
+                words = { name(FolderPrompt.Words(folder)) },
                 delete = { deleteFolder(folder) })
         }
     }
@@ -105,7 +107,7 @@ internal fun LazyListScope.ideasList(
 }
 
 /** "To sort 3", or the open folder's name and count, as a header; the More circle at its end. */
-@Composable private fun TitleRow(folder: String?, count: Int, more: @Composable () -> Unit) {
+@Composable internal fun TitleRow(folder: String?, count: Int, more: @Composable () -> Unit) {
     val title = folder ?: stringResource(R.string.sort_title)
     val spoken = if (folder == null) pluralStringResource(R.plurals.sort_title_spoken, count, count)
         else pluralStringResource(R.plurals.folder_title_spoken, count, folder, count)
@@ -154,12 +156,15 @@ internal fun LazyListScope.ideasList(
     val chooseSpoken = stringResource(R.string.row_choose_folder_spoken, line)
     val hint = stringResource(R.string.row_hint)
     val actions = listOf(CustomAccessibilityAction(chooseWords) { choose(); true }, CustomAccessibilityAction(deleteWords) { delete(); true })
+    // left mid-sentence (S06a): a dotted edge, and TalkBack says so after its words
+    val marked = note.stoppedAt != null
+    val unfinished = stringResource(R.string.deck_unfinished)
     SwipeRow(lead = chooseWords to choose, trail = deleteWords to delete) {
         Box {
             @Composable fun Words(modifier: Modifier) {
                 Box(modifier.heightIn(min = WardControlSize.target.wardDp)
                     .combinedClickable(role = Role.Button, onClickLabel = hint, onLongClick = { menu = true }, onClick = open)
-                    .semantics { customActions = actions; testTag = IdeasTags.IDEA_LINE },
+                    .semantics { customActions = actions; testTag = IdeasTags.IDEA_LINE; if (marked) stateDescription = unfinished },
                     contentAlignment = Alignment.CenterStart) {
                     Text(line, style = WardType.body.textStyle(), color = wardColor(WardToken.ink), maxLines = if (ax) 3 else 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -167,10 +172,10 @@ internal fun LazyListScope.ideasList(
             @Composable fun Choose(modifier: Modifier) {
                 WardTextButton(chooseWords, choose, modifier.semantics { contentDescription = chooseSpoken }, kind = WardButtonKind.compact, fills = false)
             }
-            if (ax) Column(Modifier.fillMaxWidth().wardRowTile(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            if (ax) Column(Modifier.fillMaxWidth().unfinishedEdge(marked).wardRowTile(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                 Words(Modifier.fillMaxWidth())
                 Choose(Modifier)
-            } else Row(Modifier.fillMaxWidth().wardRowTile(), verticalAlignment = Alignment.CenterVertically,
+            } else Row(Modifier.fillMaxWidth().unfinishedEdge(marked).wardRowTile(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
                 Words(Modifier.weight(1f))
                 Choose(Modifier)
@@ -188,18 +193,22 @@ internal fun LazyListScope.ideasList(
  * swiped trailing, Delete folder, which asks first (the row springs back), as TalkBack's action does.
  */
 @OptIn(ExperimentalFoundationApi::class)
-@Composable private fun FolderRow(folder: NoteFolder, count: Int, open: () -> Unit, rename: () -> Unit, newInside: () -> Unit, delete: () -> Unit) {
+@Composable private fun FolderRow(folder: NoteFolder, count: Int, open: () -> Unit, rename: () -> Unit, newInside: () -> Unit, delete: () -> Unit,
+                                  words: () -> Unit = {}) {
     var menu by remember { mutableStateOf(false) }
     val spoken = pluralStringResource(R.plurals.folder_row_spoken, count, folder.name, count)
     val renameWords = stringResource(R.string.folder_rename)
     val insideWords = stringResource(R.string.folder_new_inside)
+    val wordsTitle = stringResource(R.string.folder_words_title)
+    val wordsItem = stringResource(R.string.folder_words)
     val deleteWords = stringResource(R.string.folder_delete)
     SwipeRow(lead = null, trail = deleteWords to delete, trailGoes = false) { Box {
         Row(Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onLongClick = { menu = true }, onClick = open).wardRowTile()
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
                 customActions = listOf(CustomAccessibilityAction(renameWords) { rename(); true },
-                    CustomAccessibilityAction(insideWords) { newInside(); true }, CustomAccessibilityAction(deleteWords) { delete(); true })
+                    CustomAccessibilityAction(insideWords) { newInside(); true }, CustomAccessibilityAction(wordsTitle) { words(); true },
+                    CustomAccessibilityAction(deleteWords) { delete(); true })
             },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
             Icon(Icons.Outlined.Folder, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(20.0)))
@@ -210,6 +219,7 @@ internal fun LazyListScope.ideasList(
         DropdownMenu(menu, { menu = false }, containerColor = wardColor(WardToken.background)) {
             MenuItem(renameWords) { menu = false; rename() }
             MenuItem(insideWords) { menu = false; newInside() }
+            MenuItem(wordsItem) { menu = false; words() }
             MenuItem(deleteWords, destructive = true) { menu = false; delete() }
         }
     } }

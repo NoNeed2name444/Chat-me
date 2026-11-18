@@ -1,0 +1,1 @@
+{"type":"object","properties":{"ideas":{"type":"array","items":{"type":"object","properties":{"text":{"type":"string"},"title":{"type":"string"},"folder":{"type":["string","null"]}},"required":["text","title","folder"],"additionalProperties":false}}},"required":["ideas"],"additionalProperties":false}

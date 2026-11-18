@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -230,6 +231,7 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
     count: Int? = null,
     trailingIcon: ImageVector? = null,
     iconTint: Color? = null,
+    struck: Boolean = false,
 ) {
     val source = remember { MutableInteractionSource() }
     val touch = wardTouch(source, enabled)
@@ -253,7 +255,8 @@ enum class WardButtonKind { primary, secondary, destructive, compact, quiet;
             horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp), verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) Icon(icon, null, tint = if (enabled) iconTint ?: ink else ink, modifier = Modifier.size(wardGlyph(18.0)))
-            if (text != null) Text(text, style = WardType.chip.textStyle(), color = ink, maxLines = 1)
+            if (text != null) Text(text, style = WardType.chip.textStyle().let { if (struck) it.copy(textDecoration = TextDecoration.LineThrough) else it },
+                color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (count != null) Text("$count", style = WardType.chip.textStyle(),
                 color = if (enabled) wardColor(WardToken.primaryInk) else ink, maxLines = 1)
             if (trailingIcon != null) Icon(trailingIcon, null, tint = ink, modifier = Modifier.size(wardGlyph(18.0)))

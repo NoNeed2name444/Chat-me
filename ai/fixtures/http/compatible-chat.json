@@ -1,0 +1,66 @@
+{
+ "about": "Any OpenAI-compatible service: a base URL and a key. max_tokens, which these services take, and no response_format: the answer is parsed and checked.",
+ "source": "https://platform.openai.com/docs/api-reference/chat/create (read 15 Nov 2026)",
+ "provider": "compatible",
+ "credential": "fake-key-for-tests-1",
+ "base": "https://compatible.example/v1",
+ "call": {
+  "model": "fake-model-1",
+  "instructions": "Sort the note into ideas.",
+  "input": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}",
+  "schema": "split",
+  "maxOutput": 400
+ },
+ "request": {
+  "method": "POST",
+  "url": "https://compatible.example/v1/chat/completions",
+  "headers": {
+   "Authorization": "Bearer fake-key-for-tests-1",
+   "Content-Type": "application/json"
+  },
+  "body": {
+   "model": "fake-model-1",
+   "max_tokens": 400,
+   "messages": [
+    {
+     "role": "system",
+     "content": "Sort the note into ideas."
+    },
+    {
+     "role": "user",
+     "content": "{\"capture\":\"Paint the shed. Plant beans.\",\"folders\":[]}"
+    }
+   ]
+  }
+ },
+ "response": {
+  "status": 200,
+  "body": {
+   "id": "fake-1",
+   "object": "chat.completion",
+   "created": 1763200003,
+   "model": "fake-model-1",
+   "choices": [
+    {
+     "index": 0,
+     "message": {
+      "role": "assistant",
+      "content": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}"
+     },
+     "finish_reason": "stop"
+    }
+   ],
+   "usage": {
+    "prompt_tokens": 190,
+    "completion_tokens": 50,
+    "total_tokens": 240
+   }
+  }
+ },
+ "expect": {
+  "text": "{\"ideas\":[{\"text\":\"Paint the shed.\",\"title\":\"Paint the shed\",\"folder\":null},{\"text\":\"Plant beans.\",\"title\":\"Plant beans\",\"folder\":null}]}",
+  "inputTokens": 190,
+  "outputTokens": 50,
+  "costPico": null
+ }
+}

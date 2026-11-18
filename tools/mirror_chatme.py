@@ -33,6 +33,7 @@ from pathlib import Path
 
 SORTA = Path(__file__).resolve().parent.parent
 TAKEN = ("ios/", "android/", "tools/")
+TAKEN += ("ai/",)  # S08: prompts, tables, fixtures and the embedding table
 LEFT_OUT = ("tools/private/",)
 WORKFLOWS = "ci/public/"
 ART = ("work/", "design/")
@@ -68,6 +69,8 @@ SESSION_LINK = re.compile(rb"cc:" + rb"//")
 EMAIL = re.compile(rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
 KEY = re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----|\bghp_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}"
                  rb"|\bsk-ant-[A-Za-z0-9_-]{10,}|\bAKIA[0-9A-Z]{16}\b|\bAIza[0-9A-Za-z_-]{30,}")
+# S08: OpenRouter, OpenAI project and Hugging Face key shapes
+KEY = re.compile(KEY.pattern + rb"|\bsk-or-v1-[0-9a-f]{64}|\bsk-proj-[A-Za-z0-9_-]{20,}|\bhf_[A-Za-z0-9]{30,}")
 BIGGEST = 5 * 1024 * 1024
 KEPT_TRAILERS = ("Co-Authored-By", "Claude-Session")
 

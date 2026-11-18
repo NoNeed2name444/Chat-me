@@ -46,13 +46,66 @@ final class IdeasFiling {
         notice = IdeasNotice(text: IdeasWords.ideaDeleted, undo: .deleted(removal))
     }
 
+    // MARK: S06a: the deck, "You were saying…" and the low tide
+
+    /// To sort's order as cards: its top is the card under the thumb.
+    var deck = SortDeck<UUID>()
+    /// Where each folder target stands in the window, for a flick to land on.
+    var targetFrames: [UUID: CGRect] = [:]
+    /// The target a dragged card is over, pressed in.
+    var hoveredTarget: UUID?
+    /// "You were saying…" was taken or put away in this launch.
+    var offerDone = false
+    /// The tide in this launch: its ideas still to see.
+    var tide: [UUID] = []
+    private var tideAsked = false
+
+    /// Keeps the deck's card for later, at the back, with Undo.
+    func later(_ id: UUID) {
+        deck.later(id)
+        notice = IdeasNotice(text: IdeasWords.movedToBack, undo: .later(id))
+    }
+
+    /// The tide's idea leaves it.
+    func leaveTide(_ id: UUID) {
+        tide.removeAll { $0 == id }
+    }
+
+    /// The tide's idea is deleted, with Undo, which brings it back to the
+    /// tide where it stood.
+    func letGo(_ id: UUID, notes: NoteStore) {
+        let at: Int = tide.firstIndex(of: id) ?? 0
+        leaveTide(id)
+        guard let removal = notes.remove(id) else { return }
+        notice = IdeasNotice(text: IdeasWords.ideaDeleted, undo: .letGo(removal, idea: id, at: at))
+    }
+
+    /// Asks once per launch whether the tide is due (the first open 7 days
+    /// or more after the last); it brings the frostiest ideas, and its time
+    /// is kept. With no tide yet, the first open starts the clock.
+    func startTide(notes: NoteStore, defaults: UserDefaults = .standard) {
+        guard !tideAsked else { return }
+        tideAsked = true
+        let now: Date = IdeasClock.now
+        let last: Date? = defaults.object(forKey: DeckKeys.lastTide) == nil
+            ? nil : Date(timeIntervalSince1970: defaults.double(forKey: DeckKeys.lastTide))
+        defer { if last == nil || LowTide.due(last: last, now: now) { defaults.set(now.timeIntervalSince1970, forKey: DeckKeys.lastTide) } }
+        guard LowTide.due(last: last, now: now) else { return }
+        tide = LowTide.pick(notes.notes.map { (id: $0.id, openedAt: $0.openedAt, createdAt: $0.createdAt) }, now: now)
+    }
+
     func undo(_ step: IdeasNotice.Undo, notes: NoteStore) {
         switch step {
+        case let .later(idea):
+            deck.putBack(idea)
         case let .moved(idea, from):
             // the folder it came from may have gone since; then To sort
             notes.move(idea, to: notes.folder(from)?.id)
         case let .deleted(removal):
             notes.undo(removal)
+        case let .letGo(removal, idea, at):
+            notes.undo(removal)
+            if !tide.contains(idea) { tide.insert(idea, at: min(at, tide.count)) }
         case let .linked(a, b):
             notes.unlink(a, b)
         case let .reshaped(reshape):
