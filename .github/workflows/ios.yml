@@ -185,10 +185,11 @@ jobs:
   # import, about 8 minutes. v14 joins them with S06a's deck renders on
   # both (about 6 minutes each) and S06b's sky renders on the iPhone (about
   # 5): the iPhone 70 + 15 + 10 + 6 + 5, so 105; the iPad 35 + 15 (S06a)
-  # + 10 (S06c) + 10 (S06d), so 70; and the job 205.
+  # + 10 (S06c) + 10 (S06d), so 70; and the job 205. S12 adds the Fractal's
+  # renders by day and by night on each, about 3 minutes a run: 111, 76, 217.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 205
+    timeout-minutes: 217
     steps:
       - uses: actions/checkout@v7
         with:
@@ -217,7 +218,7 @@ jobs:
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 105
+        timeout-minutes: 111
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
@@ -227,7 +228,7 @@ jobs:
         # 20 to 35 minutes before the deck renders (runs 43591609208 and the
         # green ones before it), and about 6 for DeckRenderTests by day and by night;
         # S06c's and S06d's renders about 8 more each (see the job's note)
-        timeout-minutes: 70
+        timeout-minutes: 76
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}

@@ -190,3 +190,11 @@ suite treescene TreeSceneTests.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.
 suite treemodel3d TreeModel3DTests.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.swift $M/Nest/NestDraw.swift \
       $M/TreeLayout.swift $M/TreeLayout3D.swift $M/TreeColors.swift $M/TreeModel3D.swift $M/GraphPerfCamera.swift \
       $S/Space/GraphicsQuality.swift
+# S12: the Fractal look: its layout and frames against tools/fractal_fixture.json,
+# its 3D layout against tools/fractal_fixture3d.json (Android reads both), and the
+# 3D frame, camera and names (Android's FractalSightTest and FractalNamesTest)
+suite fractal FractalCoreTests.swift $M/FractalCore.swift
+suite fractallayout3d FractalLayout3DTests.swift $M/FractalCore.swift $M/FractalLayout3D.swift
+suite fractalsight3d FractalSight3DTests.swift $M/FractalCore.swift $M/FractalLayout3D.swift $M/FractalSight.swift \
+      $M/FractalNames3D.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.swift $M/Nest/NestDraw.swift $M/TreeLayout.swift \
+      $M/TreeLayout3D.swift $M/TreeColors.swift $M/TreeModel3D.swift $M/GraphPerfCamera.swift $S/Space/GraphicsQuality.swift

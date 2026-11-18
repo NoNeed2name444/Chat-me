@@ -104,7 +104,8 @@ final class MapModeTests: XCTestCase {
         app.switchMode(to: "mode-map")
         let chip = app.descendants(matching: .any)[MapText.lookChip].firstMatch
         for (look, name) in [("look-neuron", "Neuron"), ("look-2d", "2D"),
-                             ("look-performance", "Performance"), ("look-tree", "Tree"), ("look-space", "Space")] {
+                             ("look-performance", "Performance"), ("look-tree", "Tree"), ("look-fractal", "Fractal"),
+                             ("look-space", "Space")] {
             app.chooseLook(look)
             let named = NSPredicate(format: "label == %@", "Theme, \(name)")
             XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: named, object: chip)], timeout: 10),
@@ -114,6 +115,9 @@ final class MapModeTests: XCTestCase {
             } else if look == "look-tree" {
                 // S11: the Tree, drawn on the page
                 XCTAssertTrue(app.descendants(matching: .any)["tree-map"].firstMatch.waitForExistence(timeout: 10), "Tree: the tree")
+            } else if look == "look-fractal" {
+                // S12: the Fractal, in 3D on its own renderer
+                XCTAssertTrue(app.descendants(matching: .any)["fractal-map"].firstMatch.waitForExistence(timeout: 10), "Fractal: the map")
             } else {
                 XCTAssertTrue(app.descendants(matching: .any)["graph3D"].firstMatch.waitForExistence(timeout: 30),
                               "\(name): the 3D map")
@@ -185,7 +189,7 @@ enum MapText {
     static let emptyTitle = "No ideas yet"
     static let emptyLine = "Add ideas in Sort, and they appear here."
     static let lookChip = "map-look"
-    static let looks = ["look-space", "look-neuron", "look-tree", "look-2d", "look-performance"]
+    static let looks = ["look-space", "look-neuron", "look-tree", "look-2d", "look-performance", "look-fractal"]
     /// The switch's folded disc, as it is at the accessibility text sizes
     /// and while capture holds the caret; the open strip's fold chevron
     /// carries it too (SortaMode.toggleIdentifier).

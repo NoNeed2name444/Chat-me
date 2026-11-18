@@ -327,4 +327,22 @@ enum IdeasWords {
     static func treeBackSpoken(_ part: String) -> String {
         String(format: String(localized: "tree.backSpoken", defaultValue: "Back to %@"), part)
     }
+
+    // S12: the Fractal look
+    static var lookFractal: String { String(localized: "look.fractal", defaultValue: "Fractal") }
+    static var fractalLine: String { String(localized: "fractal.line", defaultValue: "Each folder is a hub, with what it holds around it.") }
+    static var fractalFirstVisit: String {
+        String(localized: "fractal.firstVisit", defaultValue: "Drag to turn the map. Tap a hub to zoom in, or empty space to go back.")
+    }
+    static func fractalMapSpoken(_ part: String) -> String {
+        String(format: String(localized: "fractal.mapSpoken", defaultValue: "Fractal map of ideas, showing %@"), part)
+    }
+    static func fractalFolderSpoken(_ name: String) -> String {
+        String(format: String(localized: "fractal.folderSpoken", defaultValue: "%@, folder"), name)
+    }
+    static var fractalZoomHint: String { String(localized: "fractal.zoomHint", defaultValue: "Zooms in.") }
+    static var fractalIdeaHint: String { String(localized: "fractal.ideaHint", defaultValue: "Previews the idea.") }
+    static func fractalBackSpoken(_ part: String) -> String {
+        String(format: String(localized: "fractal.backSpoken", defaultValue: "Back to %@"), part)
+    }
 }

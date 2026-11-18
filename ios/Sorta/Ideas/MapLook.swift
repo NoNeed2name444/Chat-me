@@ -8,7 +8,8 @@ import Foundation
 /// 2D keeps the theme, so going back to 3D finds the one left. Foundation
 /// only, so it is tested on Linux (tools/swift_suites.txt, suite maplook).
 enum MapLook: String, CaseIterable, Identifiable {
-    case space, neuron, tree, twoD, performance
+    // S12: fractal, clusters in clusters in 3D, beside Performance, kept under flatKey as the Tree is
+    case space, neuron, tree, twoD, performance, fractal
 
     var id: String { rawValue }
 
@@ -42,7 +43,7 @@ enum MapLook: String, CaseIterable, Identifiable {
         case .space: return .space
         case .neuron: return .neurons
         case .performance: return .performance
-        case .twoD, .tree: return nil
+        case .twoD, .tree, .fractal: return nil
         }
     }
 
@@ -54,6 +55,7 @@ enum MapLook: String, CaseIterable, Identifiable {
         case .tree: return "look-tree"
         case .twoD: return "look-2d"
         case .performance: return "look-performance"
+        case .fractal: return "look-fractal"
         }
     }
 

@@ -156,6 +156,8 @@ case "$set_" in
     fi
     # S11: the Tree, whole and one level in, by day and by night
     runs+=(light:SortaUITests/TreeMapRenderTests/testTreeRenders dark:SortaUITests/TreeMapRenderTests/testTreeRenders)
+    # S12: the Fractal in 3D, whole, turned 40 and 120 degrees and flown in, by day and by night
+    runs+=(light:SortaUITests/FractalMapRenderTests/testFractalRenders dark:SortaUITests/FractalMapRenderTests/testFractalRenders)
     # S06a: the deck, the offer, the tide and the frost, last, as it leaves
     # the map on its 2D look
     runs+=(light:SortaUITests/DeckRenderTests dark:SortaUITests/DeckRenderTests)

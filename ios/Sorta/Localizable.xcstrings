@@ -1057,6 +1057,90 @@
         }
       }
     },
+    "fractal.backSpoken" : {
+      "comment" : "VoiceOver: the Fractal's Back, naming where it goes (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to %@"
+          }
+        }
+      }
+    },
+    "fractal.firstVisit" : {
+      "comment" : "The Fractal's first-visit line (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drag to turn the map. Tap a hub to zoom in, or empty space to go back."
+          }
+        }
+      }
+    },
+    "fractal.folderSpoken" : {
+      "comment" : "VoiceOver: a hub's name on the Fractal map (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, folder"
+          }
+        }
+      }
+    },
+    "fractal.ideaHint" : {
+      "comment" : "VoiceOver hint: activating an idea on the Fractal map (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previews the idea."
+          }
+        }
+      }
+    },
+    "fractal.line" : {
+      "comment" : "The Fractal's one line, on its first-visit card (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each folder is a hub, with what it holds around it."
+          }
+        }
+      }
+    },
+    "fractal.mapSpoken" : {
+      "comment" : "VoiceOver: the Fractal map and the part in view (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fractal map of ideas, showing %@"
+          }
+        }
+      }
+    },
+    "fractal.zoomHint" : {
+      "comment" : "VoiceOver hint: activating a hub on the Fractal map (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zooms in."
+          }
+        }
+      }
+    },
     "frost.spoken" : {
       "comment" : "Ideas screens (S06a), from the strings pass; key frost.spoken",
       "extractionState" : "manual",
@@ -1509,6 +1593,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Theme, %@"
+          }
+        }
+      }
+    },
+    "look.fractal" : {
+      "comment" : "The Fractal look's name in the look list (S12); the owner's name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fractal"
           }
         }
       }

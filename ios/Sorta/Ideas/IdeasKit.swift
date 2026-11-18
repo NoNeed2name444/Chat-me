@@ -90,6 +90,7 @@ extension MapLook {
         case .tree: return IdeasWords.lookTree
         case .twoD: return IdeasWords.look2D
         case .performance: return IdeasWords.lookPerformance
+        case .fractal: return IdeasWords.lookFractal
         }
     }
 }

@@ -9,10 +9,10 @@ func check(_ label: String, _ ok: Bool, _ detail: String = "") {
     if !ok { failures.append(label) }
 }
 
-check("order: Space, Neuron, Tree, 2D, Performance",
-      MapLook.allCases == [.space, .neuron, .tree, .twoD, .performance], "\(MapLook.allCases)")
-check("identifiers: look-space, look-neuron, look-tree, look-2d, look-performance",
-      MapLook.allCases.map(\.identifier) == ["look-space", "look-neuron", "look-tree", "look-2d", "look-performance"])
+check("order: Space, Neuron, Tree, 2D, Performance, Fractal",
+      MapLook.allCases == [.space, .neuron, .tree, .twoD, .performance, .fractal], "\(MapLook.allCases)")
+check("identifiers: look-space, look-neuron, look-tree, look-2d, look-performance, look-fractal",
+      MapLook.allCases.map(\.identifier) == ["look-space", "look-neuron", "look-tree", "look-2d", "look-performance", "look-fractal"])
 
 // stored
 check("stored: nothing stored is Space", MapLook.stored(board: false, theme: nil) == .space)
@@ -29,11 +29,17 @@ check("flat: a stored Tree is the Tree, whatever the theme",
 check("flat: the board wins", MapLook.stored(board: true, theme: "space", flat: "tree") == .twoD)
 check("flat: anything else is no look", ["", "twoD", "space", "Tree", "fern"].allSatisfy { MapLook.stored(board: false, theme: nil, flat: $0) == .space })
 check("flat: only the Tree", MapLook.flatLook("tree") == .tree && MapLook.flatLook("twoD") == nil)
+// S12: the Fractal is kept under the same key, by its own name
+check("flat: a stored Fractal is the Fractal, whatever the theme",
+      [nil, "space", "neurons", "performance"].allSatisfy { MapLook.stored(board: false, theme: $0, flat: "fractal") == .fractal })
+check("flat: the board wins over the Fractal", MapLook.stored(board: true, theme: "space", flat: "fractal") == .twoD)
+check("flat: the Fractal by its name only", MapLook.flatLook("fractal") == .fractal && MapLook.stored(board: false, theme: nil, flat: "Fractal") == .space)
 
 // the theme each draws, and back
 check("theme: 2D draws none", MapLook.twoD.theme == nil)
 check("theme: the Tree draws none", MapLook.tree.theme == nil)
-for look in MapLook.allCases where look != .twoD && look != .tree {
+check("theme: the Fractal draws none", MapLook.fractal.theme == nil)
+for look in MapLook.allCases where look != .twoD && look != .tree && look != .fractal {
     check("theme: \(look) round-trips through its theme",
           look.theme.map { MapLook.stored(board: false, theme: $0.rawValue) } == look)
 }

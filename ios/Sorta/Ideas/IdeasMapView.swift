@@ -181,7 +181,7 @@ struct IdeasMapView: View {
         cut.disablesAnimations = true
         withTransaction(cut) {
             board = new == .twoD
-            flat = new == .tree ? new.rawValue : ""
+            flat = new == .tree || new == .fractal ? new.rawValue : ""
             if let theme = new.theme { themeRaw = theme.rawValue }
         }
     }
@@ -201,6 +201,9 @@ struct IdeasMapView: View {
         } else if look == .tree {
             // S11: the Tree, on the page in the phone's own light or dark
             TreeMapView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
+        } else if look == .fractal {
+            // S12: the Fractal, on Performance's night sky by day too
+            FractalMapView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
         } else {
             Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lit: litIdeas, lens: lensPass)
                 .mapSky()
