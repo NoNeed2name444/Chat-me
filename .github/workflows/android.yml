@@ -51,13 +51,15 @@ jobs:
       - name: Build the APK and run the unit tests
         working-directory: android
         run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest
+      - name: The capsule page (S06d A6), kept with the tests as iOS keeps capsule-ios.html
+        run: test -s android/app/build/outputs/capsule/capsule-android.html
       - name: The APK
         run: python3 tools/check_apk.py "$ANDROID_HOME/build-tools/37.0.0/aapt2" android/app/build/outputs/apk/debug/app-debug.apk
       - name: The tests that ran
         if: ${{ always() }}
         run: |
           set -o pipefail
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=12 --expect CapsuleOfferTest=2 --expect CapsuleRenderTest=4 --expect CapsuleTest=7 --expect IdeaLensTest=6 --expect IdeaLensVisibilityTest=6 --expect MapLensRenderTest=6 --expect ChunkCacheTest=5 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=10 --expect IdeaBoardCurveTest=4 --expect IdeaBookTest=20 --expect IdeaImportTest=7 --expect IdeasBannerTest=3 --expect IdeasMapVersionTest=2 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=12 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=8 --expect LinkMemoryTest=8 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDeathTest=16 --expect MapDragTest=22 --expect MapDrawnTest=24 --expect MapFilterTest=18 --expect MapFitTest=7 --expect MapFlightTest=1 --expect MapLegendRenderTest=10 --expect MapLegendTest=9 --expect MapLinkFocusTest=7 --expect MapLookCellsTest=4 --expect MapLookTest=6 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=8 --expect MapModeRenderTest=10 --expect MapModeTest=16 --expect MapNameShowTest=13 --expect MapNamesTest=10 --expect MapPanelsTouchTargetTest=7 --expect MapPeekCardTest=17 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapSpotTest=6 --expect MapTouchCardTest=5 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=19 --expect NeuronMembraneTest=7 --expect PerfFolderLinesTest=10 --expect PerfForceTest=6 --expect PerfLayoutTest=11 --expect PerfSyntheticTest=9 --expect PerfTourTest=10 --expect SortaModeTest=4 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceBodiesKeptTest=5 --expect SpaceBodiesOwnSizeTest=3 --expect SpaceDepthTest=15 --expect SpaceFilterOffTest=2 --expect SpaceStyleTest=23 --expect SpaceTrailsTest=13 --expect UniverseDrawnLinksTest=2 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect BoardSpreadTest=12 --expect CapsuleOfferTest=2 --expect CapsuleRenderTest=5 --expect CapsuleTest=9 --expect ChunkCacheTest=5 --expect DeckRenderTest=6 --expect DeckTouchTest=6 --expect EditorChipGlyphTest=2 --expect FrameBudgetTest=5 --expect GraphAndOctreeTest=7 --expect HomeViewTest=10 --expect IdeaBoardCurveTest=4 --expect IdeaBookReshapeTest=6 --expect IdeaBookTest=20 --expect IdeaEchoesTest=4 --expect IdeaImportTest=7 --expect IdeaLensTest=6 --expect IdeaLensVisibilityTest=6 --expect IdeaReshapeTest=5 --expect IdeasBannerTest=3 --expect IdeaShapesFlowTest=7 --expect IdeaShapesRenderTest=4 --expect IdeasMapVersionTest=2 --expect IdeasReadoutTest=1 --expect IdeasSplitTest=5 --expect IdeaStoreTest=6 --expect LabelContrastTest=7 --expect LabelRoomTest=7 --expect LaunchTest=10 --expect LineStyleTest=12 --expect LinkCurveTest=10 --expect LinkGrowthTest=5 --expect LinkKindTest=8 --expect LinkMemoryTest=8 --expect LinkStripsTest=6 --expect LodSelectorTest=9 --expect MapCameraEaseTest=9 --expect MapCardCoverTest=4 --expect MapDeathTest=16 --expect MapDragTest=22 --expect MapDrawnTest=27 --expect MapFilterTest=18 --expect MapFitTest=7 --expect MapFlightTest=1 --expect MapLegendRenderTest=10 --expect MapLegendTest=9 --expect MapLensRenderTest=6 --expect MapLinkFocusTest=7 --expect MapLookCellsTest=4 --expect MapLookTest=7 --expect MapLookWordsTest=3 --expect MapMarkTest=14 --expect MapMathTest=8 --expect MapModeRenderTest=10 --expect MapModeTest=16 --expect MapNameShowTest=13 --expect MapNamesTest=10 --expect MapPanelsTouchTargetTest=7 --expect MapPeekCardTest=17 --expect MapPeekTest=11 --expect MapRestLengthTest=2 --expect MapSelectionTest=19 --expect MapSpotTest=6 --expect MapTouchCardTest=5 --expect NeuronHierarchyTest=10 --expect NeuronLookTest=19 --expect NeuronMembraneTest=7 --expect NoteMarksTest=4 --expect PerfFolderLinesTest=10 --expect PerfForceTest=6 --expect PerfLayoutTest=11 --expect PerfSyntheticTest=9 --expect PerfTourTest=10 --expect SkyChromeTest=9 --expect SkyFieldsTest=3 --expect SkyIdeasTest=11 --expect SkySpaceTest=6 --expect SortaModeTest=4 --expect SortDeckTest=7 --expect SortRenderTest=9 --expect SortScreenTest=20 --expect SortTouchTargetTest=3 --expect SpaceBodiesKeptTest=5 --expect SpaceBodiesOwnSizeTest=3 --expect SpaceDepthTest=15 --expect SpaceFilterOffTest=2 --expect SpaceStyleTest=23 --expect SpaceTrailsTest=13 --expect TreeLayout3DTest=4 --expect TreeLayoutTest=5 --expect TreeMapTest=3 --expect TreeModelTest=4 --expect TreeNamesTest=5 --expect TreeSceneTest=11 --expect UniverseDrawnLinksTest=2 --expect UniversePlanTest=18 --expect WardDarkFacesTest=2 --expect WardDockTest=5 --expect WardFontsTest=4 --expect WardFrameClearTest=5 --expect WardGalleryRenderTest=8 --expect WardGroundTest=4 --expect WardIslandTest=5 --expect WardKitPortTest=7 --expect WardLightSliceTest=5 --expect WardLookTest=11 --expect WardMotionTest=1 --expect WardPaletteTest=10 --expect WardPressIndicationTest=1 --expect WardReduceMotionTest=1 --expect WardReliefTest=6 --expect WardStatesTest=4 --expect WardTokensTest=6 --expect WardTouchTargetTest=1 --expect WindowShapeTest=8 | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: sorta-android-apks
@@ -71,6 +73,7 @@ jobs:
             android/app/build/reports/tests/
             android/app/build/test-results/
             android/app/build/outputs/roborazzi/
+            android/app/build/outputs/capsule/
           if-no-files-found: ignore
           retention-days: 7
   # The maps' renders on an emulator (MapRenderTest), a phone and a tablet:
@@ -96,10 +99,14 @@ jobs:
   # 13 Nov: the combined version (v13) runs every task's sets in one job. On
   # their own, S05h2's tablet renders took about 23 min and S05i's about 21,
   # so the old 35/30 left no room for both; 50/45 is about twice that.
+  # 15 Nov: v14 joins four lanes' emulator sets. On copy b4bfd31 the renders
+  # took 26 min (tablet) and 24 (phone); each lane's green run added 9, 3, 6
+  # and 4 on the tablet and 4, 2, 3 and 1 on the phone, so about 48 and 34
+  # together, which 50/45 would cut short: 75/55.
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.device == 'tablet' && 50 || 45 }}
+    timeout-minutes: ${{ matrix.device == 'tablet' && 75 || 55 }}
     strategy:
       fail-fast: false
       matrix:
@@ -214,6 +221,18 @@ jobs:
           echo "The lively Universe took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
           # whatever happened, animations are off again for what follows
           adb shell settings put global animator_duration_scale 0
+          # S06b A9: Space's Universe on ideas dated back from now, by day and by night: tails of
+          # four ages, a leaning idea's card, a shared idea's card, the moons, a lit day in Space
+          # and on the board, and File there with animations on, its settle and after
+          sky_source=app/src/androidTest/java/com/cramdown/sorta/SpaceSkyRenderTest.kt
+          sky_tests=$(grep -c '@Test' "$sky_source")
+          echo "expecting OK ($sky_tests tests) and $sky_tests renders each of the sky's eight stills" | tee -a test-results/expected.txt
+          [ "$sky_tests" -eq 2 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SpaceSkyRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sky.txt
+          echo "The sky's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          adb shell settings put global animator_duration_scale 0
           # S05m item 7: the look chip's menu over the 2D board at font scale 2, by day and by night;
           # the test sets the scale and puts 1.0 back
           board_source=app/src/androidTest/java/com/cramdown/sorta/MapModeBoardRenderTest.kt
@@ -225,6 +244,39 @@ jobs:
             com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode-board.txt
           echo "The board's look menu took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
           adb shell settings put system font_scale 1.0
+          # S06c: on Space, an idea held onto another rings it twice and collides them, and the chosen idea
+          # pinched apart opens the split chooser, and pushed together with its nearest idea joins them;
+          # on the tablet the ideas like the open one are ringed
+          shapes_source=app/src/androidTest/java/com/cramdown/sorta/IdeaShapesMapTest.kt
+          shapes_tests=$(grep -c '@Test' "$shapes_source")
+          [ "$shapes_tests" -eq 1 ]
+          echo "expecting OK (1 test), a drop, a pinch and a push still, and on the tablet a still of the rings" | tee -a test-results/expected.txt
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.IdeaShapesMapTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-shapes.txt
+          echo "The reshaping touches took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # S06a A8 and S06d A2: Space's frost, six bodies with their halo, then the Alone lens over
+          # Space, by day and by night
+          frost_source=app/src/androidTest/java/com/cramdown/sorta/SpaceFrostLensRenderTest.kt
+          frost_tests=$(grep -c '@Test' "$frost_source")
+          [ "$frost_tests" -eq 2 ]
+          echo "expecting OK ($frost_tests tests) and $frost_tests renders each of Space's frost and a lens over Space" | tee -a test-results/expected.txt
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SpaceFrostLensRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-frost.txt
+          echo "Space's frost and lens took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # S11: the 3D Tree, whole (the first visit's card up), turned about 40 degrees and flown in to
+          # Cardiology, by day and by night; on the tablet the day's three again at an open foldable's
+          # inner screen (wm size 2208x1840, 420 dpi), reset after
+          tree_source=app/src/androidTest/java/com/cramdown/sorta/TreeMapRenderTest.kt
+          tree_tests=$(grep -c '@Test' "$tree_source")
+          [ "$tree_tests" -eq 2 ]
+          if [ "$device" = tablet ]; then tree_folds=1; else tree_folds=0; fi
+          echo "expecting OK ($tree_tests tests), $tree_tests renders each of the Tree whole, turned and in Cardiology, and $tree_folds each at a foldable's size" | tee -a test-results/expected.txt
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.TreeMapRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-tree.txt
+          echo "The Tree's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
           # the phone also renders To sort with Android's three-button
           # navigation bar, by day and by night (S05, A6); the test checks
           # the bar is the tappable three-button one
@@ -332,6 +384,23 @@ jobs:
           test "$(find renders -name 'mapmode-lively-death-*.png' | wc -l)" -eq "$spark_tests"
           test "$(find renders -name 'mapmode-lively-plasma-*.png' | wc -l)" -eq "$spark_tests"
           test "$(find renders -name 'mapmode-lively-dust-*.png' | wc -l)" -eq "$spark_tests"
+          grep -qF "OK ($sky_tests tests)" test-results/instrumentation-sky.txt
+          for still in tails lean-card shared-card moons lit-day-space lit-day-board settle settled; do
+            test "$(find renders -name "sky-$still-[dl]*.png" | wc -l)" -eq "$sky_tests"
+          done
+          grep -qF "OK (1 test)" test-results/instrumentation-shapes.txt
+          test "$(find renders -name 'shapes-drop-space-*.png' | wc -l)" -eq 1
+          test "$(find renders -name 'shapes-pinch-split-space-*.png' | wc -l)" -eq 1
+          test "$(find renders -name 'shapes-push-join-space-*.png' | wc -l)" -eq 1
+          if [ "$device" = tablet ]; then test "$(find renders -name 'shapes-glow-space-*.png' | wc -l)" -eq 1; fi
+          grep -qF "OK ($frost_tests tests)" test-results/instrumentation-frost.txt
+          test "$(find renders -name 'space-frost-*.png' | wc -l)" -eq "$frost_tests"
+          test "$(find renders -name 'space-lens-*.png' | wc -l)" -eq "$frost_tests"
+          grep -qF "OK ($tree_tests tests)" test-results/instrumentation-tree.txt
+          for still in whole orbit cardiology; do
+            test "$(find renders -name "tree-$still-*-$device.png" | wc -l)" -eq "$tree_tests"
+            test "$(find renders -name "tree-$still-light-foldable.png" | wc -l)" -eq "$tree_folds"
+          done
           if [ "$device" = phone ]; then
             # 0 is the three-button bar
             [ "$(cat test-results/navigation-mode.txt)" = 0 ]

@@ -41,4 +41,59 @@ final class CapsulePageTests: XCTestCase {
         XCTAssertEqual(fresh.notes.map(\.id), store.notes.map(\.id))
         XCTAssertEqual(fresh.notes.map(\.source), store.notes.map(\.source), "each source, as written")
     }
+
+    /// The picture is the board's own drawing (IdeaBoardView, held still),
+    /// not a redraw: at the board's size (every card's drawn place inside
+    /// it, at twice the CSS pixels), on the day page, and not blank.
+    func testThePictureIsTheBoardAtItsSize() throws {
+        let folder = try MadeUpBackup.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(fileURL: folder.appendingPathComponent("vignette-notes.json"))
+        store.restore(notes: MadeUpBackup.notes, folders: MadeUpBackup.folders)
+
+        let frame = try XCTUnwrap(CapsuleSave.fitting(store, straight: false), "the board's frame")
+        let picture = try XCTUnwrap(CapsuleSave.picture(store, straight: false), "a picture of the board")
+        XCTAssertEqual(picture.width, Int(frame.css.width), "as wide as the board's frame")
+        XCTAssertEqual(picture.height, Int(frame.css.height), "as tall as the board's frame")
+        // every card the board draws, wholly inside the picture
+        let card = IdeaBoardStill.card(titleWidth: frame.still.titleWidth)
+        XCTAssertGreaterThan(frame.still.titleWidth, 0, "the title's 20 letters measured")
+        let drawn = IdeaBoardSpread.places(store.notes.map {
+            IdeaBoardSpread.Card(id: $0.id, centre: CGPoint(x: $0.boardX, y: $0.boardY), size: card)
+        })
+        for note in store.notes {
+            let at = try XCTUnwrap(drawn[note.id])
+            let x = frame.css.width / 2 + frame.still.pan.width + at.x * frame.still.zoom
+            let y = frame.css.height / 2 + frame.still.pan.height + at.y * frame.still.zoom
+            let halfW = card.width / 2 * frame.still.zoom, halfH = card.height / 2 * frame.still.zoom
+            XCTAssertTrue(x - halfW >= -0.5 && x + halfW <= frame.css.width + 0.5 && y - halfH >= -0.5 && y + halfH <= frame.css.height + 0.5,
+                          "\(note.title) at \(x), \(y) in \(frame.css)")
+        }
+
+        let image = try XCTUnwrap(UIImage(data: picture.png)?.cgImage, "the PNG reads back")
+        XCTAssertEqual(image.width, picture.width * Int(CapsuleSave.pictureScale), "drawn at twice its CSS width")
+        XCTAssertEqual(image.height, picture.height * Int(CapsuleSave.pictureScale), "drawn at twice its CSS height")
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drew: Bool = pixels.withUnsafeMutableBytes { bytes in
+            guard let context = CGContext(data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        XCTAssertTrue(drew, "the pixels read")
+        // the corner is the day page
+        let page: UInt32 = WardPalette.hex(.background, dark: false)
+        let ground = [Int((page >> 16) & 0xFF), Int((page >> 8) & 0xFF), Int(page & 0xFF)]
+        let corner = [Int(pixels[0]), Int(pixels[1]), Int(pixels[2])]
+        XCTAssertTrue(zip(corner, ground).allSatisfy { abs($0 - $1) <= 2 }, "the ground is the day page: \(corner) vs \(ground)")
+        // and the cards and links are on it: not a blank picture
+        var marked = 0
+        for k in stride(from: 0, to: pixels.count, by: 4) {
+            let off = abs(Int(pixels[k]) - ground[0]) + abs(Int(pixels[k + 1]) - ground[1]) + abs(Int(pixels[k + 2]) - ground[2])
+            if off > 24 { marked += 1 }
+        }
+        XCTAssertGreaterThan(marked, width * height / 100, "\(marked) of \(width * height) pixels drawn on the page")
+    }
 }

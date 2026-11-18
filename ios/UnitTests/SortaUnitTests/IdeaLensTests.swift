@@ -26,6 +26,9 @@ final class IdeaLensTests: XCTestCase {
             ("", false), ("   ", false), ("Buy milk", true), ("Buy milk.", false), ("Really?", false), ("Wow!", false),
             ("And then\u{2026}", false), ("And then...", false), ("Buy milk  \n", true), ("Ends with a comma,", true),
             ("(see the list)", true), ("Tea? Later", true), ("Two lines.\nAnd a third", true),
+            // S06a's "You were saying…" cases, the same rule (IdeaStops.stoppedAt)
+            ("He said \u{201C}go.\u{201D}", false), ("(see the shed.)", false), ("Done!  \n", false), ("Done!\r\n", false),
+            ("パンを焼く。", false), ("متى؟", false), ("Plant tulips 🌷", true), ("Bread rises,", true),
         ]
         for (text, mid) in cases { XCTAssertEqual(IdeaSentence.endsMidSentence(text), mid, "\"\(text)\"") }
     }

@@ -4,7 +4,7 @@ import XCTest
 /// each kept as a named screenshot, as Android's MapLensRenderTest and
 /// CapsuleRenderTest keep theirs. CI runs both by day and by night on the
 /// iPhone and the iPad (tools/run_ui_tests.sh, the ideas set). The ideas
-/// are the made-up export's and one typed; none is medical.
+/// are the made-up export's; none is medical.
 final class LensCapsuleRenderTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -12,8 +12,25 @@ final class LensCapsuleRenderTests: XCTestCase {
         Retaps.reset()
     }
 
-    /// The typed idea: a question that stops mid-sentence.
+    /// The lenses' extra idea: a question that stops mid-sentence.
     private let baker = "Ask the baker about rye? Maybe"
+
+    /// The made-up export with the baker's question added, and two ideas
+    /// caught late at fixed times, as Android's MapLensRenderTest has its
+    /// compost at 2:10 AM and its bread at 11:30 PM: the bell at 2:10 AM and
+    /// the baker's question at 11:30 PM, UTC. The app runs in UTC (`TZ`), so
+    /// Late night counts 2 on both, wherever and whenever the test runs.
+    private func lensExport() throws -> String {
+        let bell = "\"createdAt\":\"2026-09-05T10:00:00Z\""
+        let last = "\"updatedAt\":\"2026-09-05T10:00:00Z\"}]}"
+        let question = "{\"boardX\":-150,\"boardY\":-40,\"body\":\"\",\"createdAt\":\"2026-09-05T23:30:00Z\","
+            + "\"id\":\"\(MadeUpExport.id(9))\",\"kind\":\"idea\",\"links\":[],\"tags\":[],\"title\":\"\(baker)\","
+            + "\"updatedAt\":\"2026-09-05T23:30:00Z\"}"
+        let late: String = MadeUpExport.notes.replacingOccurrences(of: bell, with: "\"createdAt\":\"2026-09-05T02:10:00Z\"")
+        let notes: String = late.replacingOccurrences(of: last, with: String(last.dropLast(2)) + "," + question + "]}")
+        precondition(late != MadeUpExport.notes && notes != late, "the bell is late and the baker's question is added")
+        return try MadeUpExport.base64(notes: notes, count: MadeUpExport.titles.count + 1)
+    }
 
     /// Map mode's lens row on the 2D board: Unfinished on (the bell, which
     /// has no words, and the baker's question), then Questions too (the
@@ -22,9 +39,8 @@ final class LensCapsuleRenderTests: XCTestCase {
     /// left out are faded and not read, so VoiceOver finds only those that
     /// pass. The 3D looks' fade is the filter's own path (IdeaLensTests).
     func testLensesRender() throws {
-        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try MadeUpExport.base64()])
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try lensExport()], zone: "UTC")
         importExport(app)
-        app.captureIdea(baker)
         XCTAssertTrue(app.ideaRow(baker).waitForExistence(timeout: 10))
         app.keyboards.buttons["Done"].firstMatch.tapIfThere()
         let window = app.windows.firstMatch.frame
@@ -40,8 +56,7 @@ final class LensCapsuleRenderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(row.frame.minY, look.frame.maxY - 0.5, "the row is under the strip's chips")
         chip(app, "questions", "Questions", 1, on: false, window)
         chip(app, "unfinished", "Unfinished", 2, on: false, window)
-        let late = app.buttons["map-lens-late-night"]
-        XCTAssertTrue(late.label.hasPrefix("Late night, "), "Late night read with its count: \(late.label)")
+        chip(app, "late-night", "Late night", 2, on: false, window)
         let alone = app.buttons["map-lens-alone"]
         XCTAssertTrue(alone.label.hasPrefix("Alone, "), "Alone read with its count: \(alone.label)")
 
@@ -52,6 +67,7 @@ final class LensCapsuleRenderTests: XCTestCase {
         for title in ["Seed swap list", "Try a rye starter"] { XCTAssertFalse(card(app, title).exists, "\(title) is left out") }
         chip(app, "unfinished", "Unfinished", 2, on: true, window)
         chip(app, "questions", "Questions", 1, on: false, window)
+        chip(app, "late-night", "Late night", 2, on: false, window)
         sleep(1)
         keepShot("lens-one")
 
@@ -61,6 +77,7 @@ final class LensCapsuleRenderTests: XCTestCase {
         XCTAssertTrue(card(app, baker).exists, "the baker's question passes both")
         chip(app, "questions", "Questions", 1, on: true, window)
         chip(app, "unfinished", "Unfinished", 1, on: true, window)
+        chip(app, "late-night", "Late night", 1, on: false, window)
         XCTAssertFalse(app.descendants(matching: .any)["map-lens-empty"].exists, "no empty line while one passes")
         sleep(1)
         keepShot("lens-two")
@@ -105,7 +122,10 @@ final class LensCapsuleRenderTests: XCTestCase {
         XCTAssertFalse(offer.exists, "the offer went with Save a capsule")
         XCTAssertFalse(app.staticTexts["Capsule saved."].exists, "nothing saved, so no notice")
 
-        // the More menu offers both
+        // the More menu offers both. The list's scroll bar shows for a moment
+        // as the offer's row goes, and its element lies over More's middle,
+        // so More has no hit point until it fades (CI, 15 Nov: iPhone, dark)
+        assertHittable(app, app.more, "More takes a tap once the list's scroll bar has faded")
         app.more.tap()
         XCTAssertTrue(app.buttons[CapsuleText.saveMore].firstMatch.waitForExistence(timeout: 10), "More has Save a capsule…")
         XCTAssertTrue(app.buttons[CapsuleText.openMore].firstMatch.exists, "More has Open a capsule…")
@@ -149,6 +169,20 @@ final class LensCapsuleRenderTests: XCTestCase {
     private func assertGone(_ app: XCUIApplication, _ element: XCUIElement, _ message: String,
                             file: StaticString = #filePath, line: UInt = #line) {
         if waitGone(element) { return }
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "tree when \(message)"
+        tree.lifetime = .keepAlways
+        add(tree)
+        XCTFail(message, file: file, line: line)
+    }
+
+    /// `element` takes a tap within ten seconds; if not, the failure keeps
+    /// the app's tree, to show what covers it.
+    private func assertHittable(_ app: XCUIApplication, _ element: XCUIElement, _ message: String,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        let start = Date()
+        while !(element.exists && element.isHittable) && Date().timeIntervalSince(start) < 10 { usleep(200_000) }
+        if element.exists && element.isHittable { return }
         let tree = XCTAttachment(string: app.debugDescription)
         tree.name = "tree when \(message)"
         tree.lifetime = .keepAlways

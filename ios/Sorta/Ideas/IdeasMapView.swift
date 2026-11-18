@@ -22,6 +22,8 @@ struct IdeasMapView: View {
     var paned = false
     @AppStorage(MapLook.boardKey) private var board = false
     @AppStorage(GraphTheme.key) private var themeRaw = GraphTheme.standard.rawValue
+    /// S11: a flat nested map chosen (Tree), empty for the board or a theme.
+    @AppStorage(MapLook.flatKey) private var flat = ""
     @Environment(\.colorScheme) private var scheme
     /// The idea open in the editor, from the board.
     @State private var opening: NoteRef?
@@ -31,15 +33,21 @@ struct IdeasMapView: View {
     @State private var choosingLook = false
     /// The top strip's height, so the list of the looks opens under it.
     @State private var stripHeight: CGFloat = 0
+    /// S06b: the moons row is open, and the day picked in it (its start),
+    /// whose ideas are lit on the map.
+    @State private var showingDays = false
+    @State private var litDay: Date?
+    /// How many moons the row holds, the most it scrolls back.
+    private static let moonCount = MoonDays.most
     /// The lenses on (S06d): held while Map mode is, never stored, as the
     /// map's filter.
     @State private var lenses: Set<IdeaLens> = []
 
-    private var look: MapLook { MapLook.stored(board: board, theme: themeRaw) }
+    private var look: MapLook { MapLook.stored(board: board, theme: themeRaw, flat: flat) }
 
     private var empty: Bool { notes.notes.isEmpty }
 
-    private var night: Bool { !empty && look != .twoD }
+    private var night: Bool { !empty && look != .twoD && look != .tree }
 
     /// The ideas the lenses on let through, nil with none on (S06d A2).
     private var lensPass: Set<UUID>? {
@@ -54,16 +62,25 @@ struct IdeasMapView: View {
             // strip and the foot, so every sheet still follows the phone
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !empty {
-                    // the lenses' row under the strip (S06d), in the strip's
-                    // height, which the map's first view keeps under
+                    // S06b: the moons row sits in the inset under the strip, so
+                    // the map and the board lay out below it, not under it; the
+                    // lenses' row under the strip (S06d), in the strip's height,
+                    // which the map's first view keeps under
                     VStack(spacing: 0) {
-                        MapTopStrip(look: look, openLooks: { choosingLook = true },
-                                    list: paned ? nil : { listing = true })
-                        MapLensRow(on: $lenses)
+                        VStack(spacing: 0) {
+                            MapTopStrip(look: look, openLooks: { choosingLook = true },
+                                        list: paned ? nil : { listing = true },
+                                        days: daysShown ? { toggleDays() } : nil, daysOn: showingDays)
+                            MapLensRow(on: $lenses)
+                        }
+                            .environment(\.colorScheme, night ? .dark : scheme)
+                            .mapTextCap()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
+                        if showingDays && daysShown && !choosingLook {
+                            moonRow
+                                .mapTextCap()
+                        }
                     }
-                        .environment(\.colorScheme, night ? .dark : scheme)
-                        .mapTextCap()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stripHeight = $0 }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -82,7 +99,14 @@ struct IdeasMapView: View {
             // on two panes the last idea can go from the Sort screen while
             // the list is open: it must not come back with the next one
             .onChange(of: empty) { _, now in
-                if now { choosingLook = false }
+                if now {
+                    choosingLook = false
+                    closeDays()
+                }
+            }
+            // the moons are Space's and 2D's: another look puts them away
+            .onChange(of: look) { _, _ in
+                if !daysShown { closeDays() }
             }
             // the map frames itself in one side of a fold's hinge, never on it
             .clearOfBand()
@@ -96,6 +120,9 @@ struct IdeasMapView: View {
             .sheet(isPresented: $listing) {
                 MapListSheet()
             }
+            // S06c: the collide card, the split chooser and the picker, from
+            // the map's options, its gestures and the Collide tool
+            .ideaShapeSheets(.map)
     }
 
     /// The list of the looks under the strip, at its trailing end; a tap
@@ -118,6 +145,35 @@ struct IdeasMapView: View {
         .environment(\.colorScheme, night ? .dark : scheme)
     }
 
+    /// S06b: the Days chip shows on Space and 2D, over ideas.
+    private var daysShown: Bool { !empty && (look == .space || look == .twoD) }
+
+    private func toggleDays() {
+        if showingDays { closeDays() } else { showingDays = true }
+    }
+
+    /// Closing the row ends the lit day too.
+    private func closeDays() {
+        showingDays = false
+        litDay = nil
+    }
+
+    /// The lit day's ideas, nil when none is picked.
+    private var litIdeas: Set<UUID>? {
+        guard let litDay else { return nil }
+        return MoonDays.lit(notes.notes.map { (id: $0.id, created: $0.createdAt) }, day: litDay, calendar: .current)
+    }
+
+    /// The moons row under the strip, a gutter in from each side.
+    private var moonRow: some View {
+        let days: [MoonDays.Day] = MoonDays.days(created: notes.notes.map(\.createdAt), now: Date(),
+                                                 count: Self.moonCount, calendar: .current)
+        return MoonRow(days: days, lit: litDay, pick: { litDay = $0 }, close: { closeDays() })
+            .padding(.bottom, WardSpace.s)
+            .padding(.horizontal, WardSpace.gutter)
+            .environment(\.colorScheme, night ? .dark : scheme)
+    }
+
     /// A new look, as a cut: no morph and no cross-fade between looks
     /// (T0135-review, item 6). 2D keeps the theme, for going back to 3D.
     private func choose(_ new: MapLook) {
@@ -125,6 +181,7 @@ struct IdeasMapView: View {
         cut.disablesAnimations = true
         withTransaction(cut) {
             board = new == .twoD
+            flat = new == .tree ? new.rawValue : ""
             if let theme = new.theme { themeRaw = theme.rawValue }
         }
     }
@@ -139,10 +196,13 @@ struct IdeasMapView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("map-empty")
         } else if look == .twoD {
-            IdeaBoardView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
+            IdeaBoardView(open: { opening = NoteRef(id: $0) }, lit: litIdeas, lens: lensPass)
                 .wardUnlit()
+        } else if look == .tree {
+            // S11: the Tree, on the page in the phone's own light or dark
+            TreeMapView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
         } else {
-            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lens: lensPass)
+            Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lit: litIdeas, lens: lensPass)
                 .mapSky()
         }
     }

@@ -24,7 +24,7 @@ class MapLookWordsTest {
     }
 
     @Test fun theLooksAreNamed() {
-        assertEquals(listOf("Space", "Neuron", "2D", "Performance"), MapLook.entries.map { context.getString(it.title) })
+        assertEquals(listOf("Space", "Neuron", "Tree", "2D", "Performance"), MapLook.entries.map { context.getString(it.title) })
     }
 
     @Test fun theChipIsSpokenAsTheTheme() {
@@ -41,5 +41,13 @@ class MapLookWordsTest {
         assertEquals(GraphTheme.NEURONS.rawValue, IdeasSettings(context).theme)
         settings.setLook(MapLook.PERFORMANCE)
         assertEquals(MapLook.PERFORMANCE, IdeasSettings(context).look)
+        // S11: the Tree is kept, keeps the theme under it, and any other look puts it away
+        settings.setLook(MapLook.TREE)
+        assertEquals(MapLook.TREE, IdeasSettings(context).look)
+        assertEquals(GraphTheme.PERFORMANCE.rawValue, IdeasSettings(context).theme)
+        settings.setLook(MapLook.TWO_D)
+        assertEquals(MapLook.TWO_D, IdeasSettings(context).look)
+        settings.setLook(MapLook.SPACE)
+        assertEquals(MapLook.SPACE, IdeasSettings(context).look)
     }
 }

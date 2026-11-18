@@ -45,6 +45,10 @@ import com.cramdown.sorta.map.NeuronScene
 import com.cramdown.sorta.map.Mat4
 import com.cramdown.sorta.map.Octree
 import com.cramdown.sorta.map.OrbitCamera
+import com.cramdown.sorta.map.CometSettle
+import com.cramdown.sorta.map.Leaning
+import com.cramdown.sorta.map.SharedCircle
+import com.cramdown.sorta.map.SkySpace
 import com.cramdown.sorta.map.SpaceBodies
 import com.cramdown.sorta.map.SpaceDepth
 import com.cramdown.sorta.map.SpaceDepthBand
@@ -53,6 +57,7 @@ import com.cramdown.sorta.map.SpaceLod
 import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.map.TreeModel
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.MapPose
 import com.cramdown.sorta.map.PerfForce
@@ -322,7 +327,41 @@ data class MapDrawn(
     val folderLines: Int = 0,
     val settled: Boolean = true,
     val tourPhase: String = "",
+    /**
+     * Added by Map3DView (S06m): the camera's pose ([pose]'s order) the frame that measured [box],
+     * [names], [spot] and [cells] was drawn at. [pose] is the camera's now, read when the record is
+     * composed, and a jump home (Recentre) moves it at once, while those come only with the GL's next
+     * frame, so until then they are the last view's ([boxAtPose]). Empty before any frame. No words.
+     */
+    val boxPose: List<Float> = emptyList(),
+    /**
+     * Added by Map3DView (S06c): the ideas on screen ringed as like the one open in the editor, by index, and
+     * the idea a held body would be let go on ([drop], ringed twice; −1 for none). No words.
+     */
+    val glows: List<Int> = emptyList(),
+    val drop: Int = -1,
+    /** Added by Map3DView (S06c): an idea a test can hold, and the nearest other idea to the held one (else the chosen one), each index, x, y; empty for none. */
+    val ideaSpot: List<Float> = emptyList(),
+    val near: List<Float> = emptyList(),
+    /**
+     * Space's frost (S06a A6): the bodies the latest frame drew a frost halo round, by the level each
+     * wants, 1 to 3 (empty when none is drawn). A body far enough off to be drawn as a point has no
+     * halo. No words.
+     */
+    val frosted: List<Int> = emptyList(),
 ) {
+    /** This record with the latest frame's frost halos by level; the same record when nothing changed. */
+    fun frosting(frostedNow: List<Int>): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
+
+    /**
+     * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
+     * [pose] alike, each value within a thousandth of its size (at least 1). A test reading where the
+     * bodies are waits for this; on Chat-me run 43607814308's phone, after Fly in and Recentre, the box
+     * was still the flown-in view's, so a spot clear of it lay 4 px from a planet of the first view.
+     */
+    fun boxAtPose(): Boolean = pose.size == POSE && boxPose.size == POSE &&
+        pose.indices.all { abs(pose[it] - boxPose[it]) <= 1e-3f * max(1f, abs(pose[it])) }
+
     /** This record with Performance's hubs, folder lines, force and tour as the latest frame had them; the same record when nothing changed. */
     fun performing(hubsNow: Int, folderLinesNow: Int, settledNow: Boolean, tourPhaseNow: String = tourPhase): MapDrawn =
         if (hubs == hubsNow && folderLines == folderLinesNow && settled == settledNow && tourPhase == tourPhaseNow) this
@@ -443,6 +482,12 @@ data class MapDrawn(
     companion object {
         /** Finished frames worth counting: by the last of them, the ones before it were handed to the screen. */
         const val ENOUGH = 3
+        /** A pose's values: target x, y, z, distance, yaw, pitch ([pose], [boxPose]). */
+        const val POSE = 6
+
+        /** [camera]'s pose as [pose] and [boxPose] carry it; the caller holds the camera's lock. */
+        fun poseOf(camera: OrbitCamera): List<Float> =
+            listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
         /** How far the deaths' clock moves before that alone makes a new record (S05h2 repair 8), seconds. */
         const val DYING_CLOCK_STEP = 0.1
     }
@@ -501,8 +546,8 @@ object FrameQuiet {
         stillNanos >= QUIET_NANOS && (finishedSince >= MapDrawn.ENOUGH || stillNanos >= GIVE_UP_NANOS)
 }
 
-/** How the map draws its notes: plain coloured points, the Space theme's bodies, or the Neurons theme's cells (NeuronGl). */
-enum class MapTheme { PLAIN, SPACE, NEURONS }
+/** How the map draws its notes: plain coloured points, the Space theme's bodies, the Neurons theme's cells (NeuronGl), or the Tree's branches and leaves (TreeGl, S11). */
+enum class MapTheme { PLAIN, SPACE, NEURONS, TREE }
 
 /**
  * A node's place on screen, for labels and taps (real notes only). [crisp] is false where the
@@ -550,7 +595,8 @@ class GlMapRenderer(
     private val displayHz: () -> Float,
     private val displayMaxHz: Float,
     private val onReadout: (MapReadout) -> Unit,
-    private val onScreenNodes: ((List<ScreenNode>) -> Unit)? = null,
+    /** Each frame's bodies on screen, with the camera's pose they were projected at (MapDrawn.boxPose). */
+    private val onScreenNodes: ((List<ScreenNode>, List<Float>) -> Unit)? = null,
     private val theme: MapTheme = MapTheme.PLAIN,
     /** Where the Space theme's Earth maps are read from; null draws the rocky planet from noise. */
     assets: AssetManager? = null,
@@ -599,6 +645,13 @@ class GlMapRenderer(
      * die where they were while their links draw back into them (MapDeathStage).
      */
     departures: List<MapDeparture> = emptyList(),
+    /**
+     * S06b, Space's Universe (MapScene.sky): the loose ideas that lean towards a folder, the shared ones
+     * circling the first of their group, and each comet's tail; and the comets just filed, each with
+     * where it was drawn (LinkRecall.settling), which ease from there into their place (CometSettle).
+     */
+    sky: SkySpace? = null,
+    settling: Map<String, Vec3> = emptyMap(),
     /** A debuggable app (S05h2): only then are the test clocks (MapDeath.testHold, SpaceTrails.testFrozen) read. */
     private val testHooks: Boolean = false,
     /** What the map counts over its life (S05h2), kept by Map3DView across its scenes. */
@@ -615,12 +668,19 @@ class GlMapRenderer(
      * each phase's line goes to logcat and the phase to the record. Never shown to a person.
      */
     tour: Boolean = false,
+    /** S11: the Tree's branches and leaves ([MapTheme.TREE]); its bodies are drawn by TreeGl, not as points. */
+    private val treeModel: TreeModel? = null,
 ) : GLSurfaceView.Renderer {
     private val linkGrowth = LinkGrowth.of(ids, links, recall, lively)
     private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null)
         NeuronGl(neurons, lively, linkGrowth.takeIf { it.links == neurons.plan.links.size }
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
+    /** S11: the Tree's draw, its own frame as the Neurons' is ([drawTree]). */
+    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast) else null
+    /** The camera's pose the Tree's bodies were last handed on at, and whether its filter changed since. */
+    private val treePose = FloatArray(6) { Float.NaN }
+    private var treeFilterSent: MapFilterView? = null
     private val lively = lively
     /** The scene's links (pairs of its body indices), for Show links' neighbourhood. */
     private val sceneLinks = links
@@ -643,6 +703,28 @@ class GlMapRenderer(
     private val live: FloatArray? = uplan?.let { tree.positions.copyOf() }
     /** The orbit clock [live] was last written at; NaN before the first. */
     private var liveTime = Double.NaN
+    /** S06b: the Universe's leans, circles and tails ([sky]), by the plan's body index; null elsewhere. */
+    private val skyPlan: SkySpace? = sky?.takeIf { uplan != null && it.tails.size == tree.nodeCount }
+    /** v14: whether a loose idea here leans to a folder, so its comet is kept clear of the folder on screen. */
+    private val leaning: Boolean = skyPlan?.leanTo?.any { it >= 0 } == true
+    /**
+     * v14: the camera this frame keeps the leaning comets clear of their folders for (Leaning.clearOnScreen), and
+     * the one [live] was last written for; null before the first frame, and where nothing leans.
+     */
+    @Volatile private var leanView: Leaning.View? = null
+    private var liveView: Leaning.View? = null
+    /** How far a circling idea sits from the one it circles, by body index: three of the larger one's radii. */
+    private val circleRadius: FloatArray = skyPlan?.let { s ->
+        val b = uplan!!.bodies
+        FloatArray(b.size) { i -> s.circles[i]?.let { p -> max(UniverseBeams.radius(b[p.leader]), UniverseBeams.radius(b[i])) * SkySpace.CIRCLE_RADII } ?: 0f }
+    } ?: FloatArray(0)
+    /** The comets being filed, by chunk-order node, each from where it was drawn; empty when none (or still). */
+    private val settleFrom: Map<Int, Vec3> = if (!lively || uplan == null) emptyMap() else HashMap<Int, Vec3>().also { out ->
+        for ((i, id) in ids.withIndex()) settling[id]?.let { from -> chunkOf.getOrElse(i) { -1 }.takeIf { it >= 0 }?.let { out[it] = from } }
+    }
+    /** When the settle began (System.nanoTime, 0 before its first frame), and whether it is over. */
+    private var settleStart = 0L
+    private var settleDone = false
     private val bodies: SpaceBodies? = if (space) SpaceBodies(tree, nodeRadius).also {
         if (lively && linkGrowth.links == tree.edgeCount) it.growth = SpaceLinkGrowth(tree, links, linkGrowth)
         val plan = uplan ?: return@also
@@ -651,6 +733,7 @@ class GlMapRenderer(
         it.reaches = FloatArray(tree.nodeCount) { k -> UniverseBeams.reach(plan.bodies[tree.order[k]]) }
         it.looks = FloatArray(tree.nodeCount) { k -> UniverseLooks.of(plan.bodies[tree.order[k]]) }
         it.linkKinds = UniverseBeams.kinds(plan, chunkOf)
+        skyPlan?.let { s -> it.tails = FloatArray(tree.nodeCount) { k -> s.tails.getOrElse(tree.order[k]) { 0f } } }
     } else null
     /**
      * The deaths playing (S05h2): the departures' plans, their links found in this scene by id (chunk
@@ -668,6 +751,15 @@ class GlMapRenderer(
     private val sparkOut = FloatArray(if (trails != null) SpaceTrails.CAPACITY * SpaceTrails.OUT_STRIDE else 0)
     private var sparkCount = 0
     private var sparksCounted = 0L
+    /**
+     * The frost on ideas left unopened (S06a A6), set from the page: a level 0 to 3 a scene index, or
+     * null for none. Space draws each frosted body drawn with a pale halo, by the sparks' program.
+     */
+    @Volatile var frost: ByteArray? = null
+    /** The halo shown now, a chunk-order node: it melts toward [frost]'s over [FROST_MELT] seconds while lively. */
+    private val frostShown = FloatArray(if (space) tree.nodeCount else 0) { -1f }
+    private var frostOut = FloatArray(0)
+    private var frostCount = 0
     /** The scene's ids (MapScene.ids), for the departures this renderer hands the next scene. */
     private val sceneIds = ids
 
@@ -684,7 +776,7 @@ class GlMapRenderer(
         space && uplan != null -> {
             // parents first by the plan's order: rank[k] is node k's plan index, every body after its parent
             val chunkParents = IntArray(tree.nodeCount) { k -> uplan.bodies[tree.order[k]].parent.let { p -> if (p >= 0) chunkOf.getOrElse(p) { -1 } else -1 } }
-            MapDrag(tree.nodeCount, MapDragPath.ORBITS, nodeRadius, { k, t -> uplan.position(tree.order[k], t) },
+            MapDrag(tree.nodeCount, MapDragPath.ORBITS, nodeRadius, { k, t -> skyHome(tree.order[k], t) },
                 parents = chunkParents, lively = lively, rank = tree.order.copyOf(tree.nodeCount))
         }
         space -> {
@@ -877,7 +969,7 @@ class GlMapRenderer(
         return MapDeath.departures(sceneIds, keeping, sceneLinks, seed = { a, b -> bodies?.linkSeed(a, b) ?: 0f }) { i ->
             val k = chunkOf.getOrElse(i) { -1 }
             if (k < 0) null else {
-                val home = plan?.position(i, t) ?: Vec3(tree.positions[3 * k], tree.positions[3 * k + 1], tree.positions[3 * k + 2])
+                val home = if (plan != null) skyHome(i, t) else Vec3(tree.positions[3 * k], tree.positions[3 * k + 1], tree.positions[3 * k + 2])
                 val place = if (d != null) home + d.offsetOf(k) else home
                 val code = tree.groups[k].toInt()
                 val body = plan?.bodies?.getOrNull(i)
@@ -903,15 +995,90 @@ class GlMapRenderer(
      * one place. Whether they moved since the last frame.
      */
     private fun refreshLive(): Boolean {
-        val plan = uplan ?: return false
+        if (uplan == null) return false
         val l = live ?: return false
         val t = drag?.orbitTime ?: 0.0
-        if (t == liveTime) return false
+        val settling = settleFrom.isNotEmpty() && !settleDone
+        // v14: a leaning comet's place follows the camera too (skyHome)
+        val view = leanView
+        if (t == liveTime && !settling && view == liveView) return false
         liveTime = t
+        liveView = view
         for (k in 0 until tree.nodeCount) {
-            val p = plan.position(tree.order[k], t)
+            val p = skyHome(tree.order[k], t)
             l[3 * k] = p.x; l[3 * k + 1] = p.y; l[3 * k + 2] = p.z
         }
+        // S06b: a comet just filed eases from where it was into its place, fast then slow (CometSettle)
+        if (settling) {
+            val now = System.nanoTime()
+            if (settleStart == 0L) settleStart = now
+            val elapsed = (now - settleStart) / 1e9
+            for ((k, from) in settleFrom) {
+                val p = CometSettle.place(from, Vec3(l[3 * k], l[3 * k + 1], l[3 * k + 2]), elapsed)
+                l[3 * k] = p.x; l[3 * k + 1] = p.y; l[3 * k + 2] = p.z
+            }
+            if (elapsed >= CometSettle.DURATION) settleDone = true
+        }
+        return true
+    }
+
+    /**
+     * S06b: where Universe body [i] (the plan's index) is drawn at orbit clock [t]: on its own orbit, or a
+     * shared idea circling the first of its group, or a loose one pulled part of the way to the folder
+     * it leans towards, never into it (iOS GraphSim.skyPlace).
+     */
+    private fun skyHome(i: Int, t: Double): Vec3 {
+        val plan = uplan!!
+        val own = plan.position(i, t)
+        val s = skyPlan ?: return own
+        s.circles[i]?.let { place ->
+            if (place.leader in 0 until i) return skyHome(place.leader, t) + SharedCircle.offset(place, circleRadius[i], t)
+        }
+        val j = s.leanTo.getOrElse(i) { -1 }
+        if (j >= 0 && j != i && j < plan.bodies.size) {
+            val folder = plan.position(j, t)
+            val size = UniverseBeams.radius(plan.bodies[j])
+            val at = Leaning.place(own, folder, size)
+            // v14: and clear of the folder's disc on screen, where the camera has them one behind the other
+            val view = leanView ?: return at
+            return Leaning.clearOnScreen(at, UniverseBeams.radius(plan.bodies[i]), folder, size, view)
+        }
+        return own
+    }
+
+    /** S06b: where the body of id [id] is drawn now, for the next scene's settle (LinkMemory); null for none. Main thread. */
+    fun placeOf(id: String): Vec3? {
+        val i = sceneIds.indexOf(id)
+        return if (i < 0) null else bodyAt(i)
+    }
+
+    /**
+     * S06b: a lit day's ideas, by id (any case): they and the bodies they sit in are drawn whole and the
+     * rest faded, as Show links fades; null for none. Read once a frame.
+     */
+    @Volatile var lit: Set<String>? = null
+    private var litShown: Set<String>? = null
+
+    /** Applies [lit] when it changed; whether it did. */
+    private fun applyLit(): Boolean {
+        val want = lit
+        if (want === litShown) return false
+        litShown = want
+        val b = bodies ?: return true
+        if (want == null) { b.lit = null; return true }
+        val wanted = want.mapTo(HashSet()) { it.uppercase() }
+        val keep = BooleanArray(tree.nodeCount)
+        for ((i, id) in sceneIds.withIndex()) {
+            if (id.uppercase() !in wanted) continue
+            var at = i
+            var steps = 0
+            while (at >= 0 && steps <= tree.nodeCount) {
+                chunkOf.getOrElse(at) { -1 }.takeIf { it >= 0 }?.let { keep[it] = true }
+                at = parents?.getOrNull(at) ?: -1
+                steps++
+            }
+        }
+        b.lit = keep
         return true
     }
 
@@ -940,6 +1107,7 @@ class GlMapRenderer(
 
     /** Whether body [index] can be flown in to: a Universe folder or the home, with a system to frame; a Performance hub (S05i2). */
     fun canFlyTo(index: Int): Boolean {
+        treeModel?.let { m -> return index == 0 || (index in 1 until m.nodes.size && m.nodes.childCount[index] > 0) }
         perf?.let { p -> return index >= p.graph.noteCount && index < p.graph.nodeCount }
         val plan = uplan ?: return false
         val body = plan.bodies.getOrNull(index) ?: return false
@@ -953,6 +1121,7 @@ class GlMapRenderer(
      */
     fun flyTo(index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         neuronGl?.let { gl -> return flyToCell(gl, index, viewWidth, viewHeight, insets) }
+        treeModel?.let { m -> return flyToBranch(m, index, viewWidth, viewHeight, insets) }
         perf?.let { p -> return flyToFolder(p, index, viewWidth, viewHeight, insets) }
         val plan = uplan ?: return false
         if (!canFlyTo(index)) return false
@@ -993,6 +1162,22 @@ class GlMapRenderer(
         }
         flown = index
         return fit.distance > 0f
+    }
+
+    /**
+     * The Tree's fly-in (S11): branch [index]'s subtree ball framed in what the [insets] leave, from the
+     * camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames the whole tree.
+     */
+    private fun flyToBranch(m: TreeModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
+        if (!canFlyTo(index)) return false
+        val l = m.layout
+        val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
+        synchronized(camera) {
+            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
+            flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
+        }
+        flown = index
+        return true
     }
 
     /**
@@ -1120,6 +1305,8 @@ class GlMapRenderer(
         lod = LodSelector(tree, cache)
         if (bodies != null) spaceGl?.create(bodies, budget.detail)
         neuronGl?.create()
+        treeGl?.create()
+        treePose.fill(Float.NaN)
         // a new context: its frames are counted afresh
         record = MapDrawn(renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "", maxPointSize = maxPointSize,
             bodyStyles = bodies?.enabled?.count { it } ?: 0, build = build)
@@ -1153,10 +1340,13 @@ class GlMapRenderer(
             eye = camera.eye(); target = camera.target
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
+            if (leaning) leanView = Leaning.View(eye, forward, camera.right(), focal, Leaning.SCREEN_GAP_DP * max(density, 0.1f))
+            if (onScreenNodes != null) framePose = MapDrawn.poseOf(camera)
             frustum = if (perf != null) camera.frustum(width.toFloat(), height.toFloat()) else null
         }
         drag?.step(dt)
         val orbiting = refreshLive()
+        applyLit()
         // the deaths' clock (S05h2): it begins on the first frame after one of this scene was handed to the
         // screen (one that drew its bodies, or ENOUGH frames: an empty scene draws none), and is counted
         // then (repair 2); the first step at most 1/30 s; the test clock holds it in a debuggable app
@@ -1173,6 +1363,10 @@ class GlMapRenderer(
         val focusDepth = SpaceDepth.depth(target, eye, forward)
         if (neuronGl != null) {
             drawNeurons(neuronGl, start, vsync, intervalMs, eye, view, proj, focal, focusDepth)
+            return
+        }
+        if (treeGl != null && treeModel != null) {
+            drawTree(treeGl, treeModel, start, vsync, intervalMs, eye, target, view, proj, focal, aspect)
             return
         }
         band = if (space) SpaceDepth.band(focusDepth, SpaceDepth.reach(focusDepth, viewRadius), tier, contrast) else SpaceDepthBand.OFF
@@ -1208,6 +1402,7 @@ class GlMapRenderer(
             totals.sparks += tr.thrownTotal - sparksCounted
             sparksCounted = tr.thrownTotal
         }
+        frostCount = if (bodies != null && space) writeFrost(bodies, dt) else 0
         // the marked body's orbit ring (the held body, else the chosen one), where its node is placed this frame (Space)
         var ring: FloatArray? = null
         var ringDepth = 0f
@@ -1230,7 +1425,7 @@ class GlMapRenderer(
             // the Universe's orbits turn whenever animations run (the packet's question 1: as iOS)
             || orbiting || (uplan != null && lively) || flight != null || filterMoving
             // a death playing, and sparks alive (S05h2)
-            || death?.finished == false || sparkCount > 0
+            || death?.finished == false || sparkCount > 0 || frostMelting
             // Performance's force settling, and the tour under way (S05i2)
             || settling || (touring && !tourDone)
 
@@ -1258,7 +1453,7 @@ class GlMapRenderer(
                 floatArrayOf(view[1], view[5], view[9]), focal, clock, SpaceLod.shaderDetail(budget.detail),
                 bandUniform, focal / max(density, 0.1f), floatArrayOf(forward.x, forward.y, forward.z),
                 straightNow, lively, contrast, ring, ringDepth, pop.glow,
-                death?.setOpacity ?: 1f, sparkOut, sparkCount, maxPointSize)
+                death?.setOpacity ?: 1f, sparkOut, sparkCount, maxPointSize, frostOut, frostCount)
             linksNow = spaceGl.linksDrawn
             ringNow = spaceGl.ringDrawn
             dyingLinksNow = spaceGl.dyingLinksDrawn
@@ -1293,10 +1488,12 @@ class GlMapRenderer(
         // the chosen body's marks, and Show links' counts (S05g)
         val ownChunkLinks = if (focusOn) ownLinksDrawn(plan) else 0
         val marked = if (space) ringNow else chosenChunk >= 0 && chosenDrawn(plan)
-        val faded = if (space && focusOn) fadedPoints(plan) + plan.fadedSummaries else 0
+        // S06b: under a lit day, the bodies drawn faded outside it
+        val faded = if (space && focusOn) fadedPoints(plan) + plan.fadedSummaries else if (space && bodies?.lit != null) bodies.fadedCount else 0
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
+        record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList())
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
@@ -1424,6 +1621,7 @@ class GlMapRenderer(
         focusedChosen = wanted; focusedShown = show
         val near = if (show && wanted >= 0) MapFocus.neighbourhood(wanted, sceneCount, sceneLinks, parents, notes) else null
         neuronGl?.let { it.chosen = wanted; it.focus = near }
+        treeGl?.let { it.chosen = wanted; it.near = near }
         chosenChunk = if (neuronGl != null) -1 else chunkOf.getOrElse(wanted) { -1 }
         val chunks = if (neuronGl != null || near == null) null
             else near.map { chunkOf.getOrElse(it) { -1 } }.filter { it >= 0 }.sorted().toIntArray()
@@ -1519,7 +1717,7 @@ class GlMapRenderer(
                 val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
                 out.add(ScreenNode(i, sx, sy, gl.size(i) * focal / clip[3] * 2f, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
             }
-            callback(out)
+            callback(out, framePose)
         }
         val workMs = (System.nanoTime() - start) / 1e6
         budget.onFrame(intervalMs, workMs)
@@ -1537,6 +1735,51 @@ class GlMapRenderer(
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
         record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn, gl.halosDrawn)
         record = dragRecord(if (grabbedScene >= 0) gl.position(grabbedScene, time) else null, grabbedScene, record.chosen)
+        if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+        finished++
+    }
+
+    /**
+     * The Tree's frame (S11): no octree points, links or summaries, only TreeGl's branches and leaves
+     * on the page's colour. Its bodies (each node's [TreeLayout3D.anchor], in the octree) are handed on
+     * for names and taps only when the camera or the filter moved, so a still tree makes nothing.
+     */
+    private fun drawTree(gl: TreeGl, m: TreeModel, start: Long, vsync: Long, intervalMs: Double, eye: Vec3, target: Vec3,
+                         view: FloatArray, proj: FloatArray, focal: Float, aspect: Float) {
+        val l = m.layout
+        val dx = eye.x - l.centre[0].toFloat(); val dy = eye.y - l.centre[1].toFloat(); val dz = eye.z - l.centre[2].toFloat()
+        val toCentre = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        val distance = (eye - target).length()
+        val focusReach = (if (flown in 0 until m.nodes.size) l.reach[flown] else l.reach[0]).toFloat()
+        val fovY = synchronized(camera) { camera.fovY }
+        gl.draw(view, fovY, aspect, distance, toCentre, l.reach[0].toFloat(), focusReach, focal)
+        val moved = treePose[0] != eye.x || treePose[1] != eye.y || treePose[2] != eye.z ||
+            treePose[3] != target.x || treePose[4] != target.y || treePose[5] != target.z
+        animating = moved || flight != null
+        val f = appliedFilter
+        val count = m.nodes.size
+        val send = moved || f !== treeFilterSent || record.frames < MapDrawn.ENOUGH
+        treePose[0] = eye.x; treePose[1] = eye.y; treePose[2] = eye.z; treePose[3] = target.x; treePose[4] = target.y; treePose[5] = target.z
+        treeFilterSent = f
+        if (send) onScreenNodes?.let { callback ->
+            viewProj = Mat4.multiply(proj, view)
+            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip)
+            callback(out, framePose)
+        }
+        val workMs = (System.nanoTime() - start) / 1e6
+        budget.onFrame(intervalMs, workMs)
+        stats.add(vsync, intervalMs, workMs)
+        val drawnBodies = m.branchCount + m.leafCount
+        if (vsync - lastReadout > 250_000_000L) {
+            lastReadout = vsync
+            onReadout(MapReadout(fps = stats.fps(vsync), displayMaxHz = displayMaxHz, displayHz = displayHz(),
+                frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = 0,
+                drawnNodes = drawnBodies, detail = budget.detail, bodies = count))
+        }
+        record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, 0, 0, false)
+        record = record.detailing(budget.detail, 0, 0, 0)
+        record = record.marking(focusedChosen, focusedChosen >= 0, 0, false, 0, 0)
+        record = record.filtering(f != null, count - gl.hidden, gl.hidden, 0, emptyList(), emptyList())
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -1756,6 +1999,7 @@ class GlMapRenderer(
             filterLinksNow = f?.links?.count { it } ?: gl.linkCount
         }
         if (neuronGl != null) return
+        treeGl?.let { gl -> gl.filter = f; shownNow = 0; hiddenNow = 0; filterLinksNow = 0; return }
         // far points and chunk links, every theme: hidden, a ghost (its links hidden), or shown
         filterOn = f != null
         val wanted = BooleanArray(if (f == null) 0 else n)
@@ -2102,6 +2346,8 @@ class GlMapRenderer(
     }
 
     private val clip = FloatArray(4)
+    /** The camera's pose this frame's view was built from, read with it (MapDrawn.boxPose). */
+    private var framePose: List<Float> = emptyList()
 
     /** Real notes only: where each node is on screen and how big, for labels and taps. */
     private fun publishScreenNodes(plan: FramePlan) {
@@ -2135,7 +2381,7 @@ class GlMapRenderer(
             }
             out.add(ScreenNode(tree.order[k], sx, sy, pixels, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
         }
-        callback(out)
+        callback(out, framePose)
     }
 
     // ---- helpers ----
@@ -2162,8 +2408,55 @@ class GlMapRenderer(
         return p
     }
 
+    private var frostMelting = false
+    /** The halos [writeFrost] drew last, by the level each wants, 1 to 3, for the record. */
+    private val frostLevels = IntArray(3)
+
+    /**
+     * The frost halos (S06a A6) for the bodies drawn this frame, into [frostOut] as the sparks' points
+     * (place and size, then colour): a pale ice, brighter a level deeper, round each body at 2.8 its
+     * radius. A level that changes melts over [FROST_MELT] seconds while lively, and snaps otherwise.
+     */
+    private fun writeFrost(bodies: SpaceBodies, dt: Float): Int {
+        val levels = frost
+        frostMelting = false
+        frostLevels.fill(0)
+        if (levels == null && frostShown.none { it > 0f }) return 0
+        if (frostOut.size < bodies.count * 7) frostOut = FloatArray(bodies.count * 7)
+        var n = 0
+        for (j in 0 until bodies.count) {
+            val k = bodies.nodes[j]
+            if (k !in frostShown.indices) continue
+            val scene = tree.order[k]
+            val level = levels?.getOrNull(scene)?.toInt()?.coerceIn(0, 3) ?: 0
+            val want = FROST_WASH[level]
+            val shown = frostShown[k]
+            val now = if (shown < 0f || !lively) want else {
+                val step = dt / FROST_MELT * FROST_WASH[3]
+                if (shown < want) min(want, shown + step) else max(want, shown - step)
+            }
+            frostShown[k] = now
+            if (now != want) frostMelting = true
+            if (now <= 0f) continue
+            val o = j * SpaceBodies.STRIDE
+            val w = n * 7
+            frostOut[w] = bodies.data[o]; frostOut[w + 1] = bodies.data[o + 1]; frostOut[w + 2] = bodies.data[o + 2]
+            frostOut[w + 3] = bodies.data[o + 3] * 2.8f
+            frostOut[w + 4] = FROST_ICE[0] * now; frostOut[w + 5] = FROST_ICE[1] * now; frostOut[w + 6] = FROST_ICE[2] * now
+            if (level > 0) frostLevels[level - 1]++
+            n++
+        }
+        return n
+    }
+
     companion object {
         const val NODE_STRIDE = 12
+        /** The frost's melt, in seconds, as the board's (WardMotion.longest). */
+        const val FROST_MELT = 0.32f
+        /** The halo's strength a frost level, 0 to 3. */
+        val FROST_WASH = floatArrayOf(0f, 0.22f, 0.38f, 0.55f)
+        /** Space's own ice, #D6E8F5, a pale halo on the night sky (the board washes with the page's colour, IdeaFrostLook). */
+        val FROST_ICE = floatArrayOf(0.84f, 0.91f, 0.96f)
         /** The proof tour's logcat tag (S05i2). */
         const val TOUR_TAG = "SortaTour"
 

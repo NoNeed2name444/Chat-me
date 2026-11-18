@@ -196,6 +196,67 @@ enum IdeasWords {
                defaultValue: "This backup didn't open. It may be damaged, so try another copy.")
     }
 
+    // MARK: the sorting deck, "You were saying…" and the low tide (S06a), from the strings pass of 14 Nov
+    static var showAsCards: String { String(localized: "deck.showCards", defaultValue: "Show as cards") }
+    static var showAsList: String { String(localized: "deck.showList", defaultValue: "Show as list") }
+    static var later: String { String(localized: "deck.later", defaultValue: "Later") }
+    static var movedToBack: String { String(localized: "deck.laterDone", defaultValue: "Moved to the back.") }
+    static var unfinished: String { String(localized: "deck.unfinished", defaultValue: "Unfinished") }
+    static var offerLabel: String { String(localized: "offer.label", defaultValue: "You were saying\u{2026}") }
+    static var carryOn: String { String(localized: "offer.carryOn", defaultValue: "Carry on") }
+    static var notNow: String { String(localized: "offer.notNow", defaultValue: "Not now") }
+    static var frostSpoken: String { String(localized: "frost.spoken", defaultValue: "not opened in a while") }
+    static var lowTide: String { String(localized: "tide.title", defaultValue: "Low tide") }
+    static var lowTideLine: String { String(localized: "tide.line", defaultValue: "Ideas you haven't opened in a while.") }
+    static var keep: String { String(localized: "tide.keep", defaultValue: "Keep") }
+    static var letGo: String { String(localized: "tide.letGo", defaultValue: "Let go") }
+    static var closeLowTide: String { String(localized: "tide.close", defaultValue: "Close low tide") }
+    /// A folder target, and the card's action for it: "File in Garden".
+    static func fileIn(_ folder: String) -> String {
+        String(localized: "deck.fileIn %@", defaultValue: "File in \(folder)")
+    }
+    /// "Carry on", read aloud with the idea.
+    static func carryOnWith(_ idea: String) -> String {
+        String(localized: "offer.carryOn.spoken %@", defaultValue: "Carry on with \(idea)")
+    }
+    // MARK: ideas like this, collide, split and join (S06c), as Android's strings.xml
+    static var echoesTitle: String { String(localized: "echoes.title", defaultValue: "Ideas like this") }
+    static var echoesLinkHint: String { String(localized: "echoes.link.hint", defaultValue: "Links it to this idea.") }
+    static func echoesLinked(_ title: String) -> String {
+        String(localized: "echoes.linked %@", defaultValue: "Linked to \u{201C}\(title)\u{201D}.")
+    }
+    /// VoiceOver, on a board card like the open idea: whom a tap links it to.
+    static func echoesBoardLink(_ title: String) -> String {
+        String(localized: "echoes.board.link %@", defaultValue: "Links it to \u{201C}\(title)\u{201D}.")
+    }
+    static var collideTool: String { String(localized: "collide.tool", defaultValue: "Collide two ideas") }
+    static var collideTitle: String { String(localized: "collide.title", defaultValue: "What if both?") }
+    static var collideField: String { String(localized: "collide.field", defaultValue: "The idea they make") }
+    static var collideSave: String { String(localized: "collide.save", defaultValue: "Save idea") }
+    static var collideAnother: String { String(localized: "collide.another", defaultValue: "Try another pair") }
+    static var collideSaved: String { String(localized: "collide.saved", defaultValue: "New idea in To sort.") }
+    static var collideNone: String {
+        String(localized: "collide.none",
+               defaultValue: "No two ideas are far apart yet. Put ideas in different folders, then try again.")
+    }
+    static var shapeSplit: String { String(localized: "shape.split", defaultValue: "Split\u{2026}") }
+    static var shapeJoin: String { String(localized: "shape.join", defaultValue: "Join with\u{2026}") }
+    static var shapeCollide: String { String(localized: "shape.collide", defaultValue: "Collide with\u{2026}") }
+    static var shapeJoinTitle: String { String(localized: "shape.join.title", defaultValue: "Join with") }
+    static var shapeCollideTitle: String { String(localized: "shape.collide.title", defaultValue: "Collide with") }
+    static var splitTitle: String { String(localized: "split.title", defaultValue: "Split in two") }
+    static var splitHint: String {
+        String(localized: "split.hint", defaultValue: "Tap the last sentence of the first idea.")
+    }
+    static var splitFirst: String { String(localized: "split.first", defaultValue: "First idea") }
+    static var splitEndsHere: String { String(localized: "split.ends.here", defaultValue: "First idea ends here") }
+    static var splitSecond: String { String(localized: "split.second", defaultValue: "Second idea") }
+    static var splitConfirm: String { String(localized: "split.confirm", defaultValue: "Split idea") }
+    static var splitDone: String { String(localized: "split.done", defaultValue: "Idea split in two.") }
+    static var splitOne: String {
+        String(localized: "split.one", defaultValue: "This idea has one sentence, so it can\u{2019}t be split.")
+    }
+    static var joinDone: String { String(localized: "join.done", defaultValue: "Ideas joined.") }
     // MARK: the lenses over the map (S06d, plugins-plan idea 8): the row's
     // name, each chip, what a tap does, the empty line; Android's the same
     static var lenses: String { String(localized: "map.lenses", defaultValue: "Lenses") }
@@ -249,5 +310,21 @@ enum IdeasWords {
     }
     static var capsuleRefusedTooLarge: String {
         String(localized: "capsule.refused.tooLarge", defaultValue: "This file is over 32 MB, too big to import. Choose a smaller file.")
+    }
+
+    // S11: the Tree look
+    static var lookTree: String { String(localized: "look.tree", defaultValue: "Tree") }
+    static var treeLine: String { String(localized: "tree.line", defaultValue: "Each folder grows as a branch, and each idea as a leaf.") }
+    static var treeFirstVisit: String { String(localized: "tree.firstVisit", defaultValue: "Tap a branch to zoom in. Tap empty space to go back.") }
+    static func treeMapSpoken(_ part: String) -> String {
+        String(format: String(localized: "tree.mapSpoken", defaultValue: "Tree map of ideas, showing %@"), part)
+    }
+    static func treeFolderSpoken(_ name: String) -> String {
+        String(format: String(localized: "tree.folderSpoken", defaultValue: "%@, folder"), name)
+    }
+    static var treeZoomHint: String { String(localized: "tree.zoomHint", defaultValue: "Zooms in.") }
+    static var treeIdeaHint: String { String(localized: "tree.ideaHint", defaultValue: "Previews the idea.") }
+    static func treeBackSpoken(_ part: String) -> String {
+        String(format: String(localized: "tree.backSpoken", defaultValue: "Back to %@"), part)
     }
 }

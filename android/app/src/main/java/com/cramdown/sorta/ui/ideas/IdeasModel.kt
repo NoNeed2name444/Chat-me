@@ -206,11 +206,19 @@ class IdeasSettings(context: Context) {
     fun setTheme(value: String) { heldTheme = value; put { putString(GraphTheme.KEY, value) } }
 
     private var heldBoard by mutableStateOf(bool(MapLook.BOARD_KEY))
+    private var heldFlat by mutableStateOf(str(MapLook.FLAT_KEY, ""))
+    /** S11: whether the Tree's first-visit card has been put away. */
+    private var heldTreeSeen by mutableStateOf(bool(TREE_SEEN_KEY))
+    val treeSeen: Boolean get() = heldTreeSeen
+    fun setTreeSeen() { heldTreeSeen = true; put { putBoolean(TREE_SEEN_KEY, true) } }
     /** Map mode's look (MapLook): the board's choice and the theme, each under its own key. */
-    val look: MapLook get() = MapLook.stored(heldBoard, heldTheme)
+    val look: MapLook get() = MapLook.stored(heldBoard, heldTheme, heldFlat)
     fun setLook(value: MapLook) {
         heldBoard = value == MapLook.TWO_D
         put { putBoolean(MapLook.BOARD_KEY, heldBoard) }
+        // S11: a flat nested map (Tree) is kept under its own key, cleared by any other look
+        heldFlat = if (MapLook.flatOf(value.rawValue) == value) value.rawValue else ""
+        put { putString(MapLook.FLAT_KEY, heldFlat) }
         value.theme?.let { setTheme(it.rawValue) }
     }
 
@@ -234,6 +242,13 @@ class IdeasSettings(context: Context) {
     /** The cell states in force, as the Neurons plan reads them. */
     val cells: NeuronStateChoice get() = NeuronStateChoice.of(heldCellState, heldCellFolders)
 
+    // S06a: To sort shown as cards, and when the last low tide came, under iOS's keys
+    private var heldSortDeck by mutableStateOf(bool(SORT_DECK_KEY))
+    val sortDeck: Boolean get() = heldSortDeck
+    fun setSortDeck(value: Boolean) { heldSortDeck = value; put { putBoolean(SORT_DECK_KEY, value) } }
+    val lastTide: Long? get() = runCatching { prefs?.takeIf { it.contains(LAST_TIDE_KEY) }?.getLong(LAST_TIDE_KEY, 0L) }.getOrNull()
+    fun setLastTide(value: Long) { put { putLong(LAST_TIDE_KEY, value) } }
+
     private var heldPerfDemo by mutableIntStateOf(runCatching { prefs?.getInt(PERF_DEMO_KEY, 0) }.getOrNull() ?: 0)
     val perfDemo: Int get() = heldPerfDemo
     fun setPerfDemo(value: Int) { heldPerfDemo = value; put { putInt(PERF_DEMO_KEY, value) } }
@@ -246,11 +261,15 @@ class IdeasSettings(context: Context) {
 
     companion object {
         const val FILE = "ideas"
+        /** S11: the Tree's first-visit card was put away. */
+        const val TREE_SEEN_KEY = "vignette.ideas.treeSeen"
         /** Whether this is a developer's build: never, in Sorta. */
         const val DEVELOPER = false
         const val READOUT_KEY = "vignette.space.readout"
         const val SWITCHER_KEY = "vignette.ideas.switcherCollapsed"
         const val PERF_DEMO_KEY = "vignette.space.perfDemo"
+        const val SORT_DECK_KEY = "vignette.ideas.sortDeck"
+        const val LAST_TIDE_KEY = "vignette.ideas.lastTide"
         /**
          * The demo maps the readout offers (iOS GraphPerfDemo). Stethoscore's Android offered a
          * million too; Sorta offers it on neither platform until iOS's million map is traced
@@ -289,6 +308,7 @@ enum class SortaMode(val rawValue: String, val identifier: String, @StringRes va
 val MapLook.title: Int @StringRes get() = when (this) {
     MapLook.SPACE -> R.string.look_space
     MapLook.NEURON -> R.string.look_neuron
+    MapLook.TREE -> R.string.look_tree
     MapLook.TWO_D -> R.string.look_2d
     MapLook.PERFORMANCE -> R.string.look_performance
 }

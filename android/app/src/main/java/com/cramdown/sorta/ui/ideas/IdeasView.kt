@@ -28,11 +28,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -48,7 +50,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -61,15 +62,19 @@ import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.NoteFolder
 import com.cramdown.sorta.ideas.MapLook
+import com.cramdown.sorta.map.FolderWords
+import com.cramdown.sorta.map.MoonDays
+import java.time.LocalDate
+import java.time.ZoneId
 import com.cramdown.sorta.ui.LocalWardLook
 import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.LocalSortaBars
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.ZoneId
 import java.io.File
 import java.io.FileInputStream
 import kotlin.math.max
@@ -157,6 +162,8 @@ data class IdeasStart(val folderId: String? = null, val editing: String? = null,
 internal sealed class FolderPrompt {
     data class New(val parent: String?, val filing: String? = null) : FolderPrompt()
     data class Rename(val folder: NoteFolder) : FolderPrompt()
+    /** S06b: a folder's own words (FolderWords), which loose ideas sharing one lean towards in Space. */
+    data class Words(val folder: NoteFolder) : FolderPrompt()
 }
 
 /**
@@ -198,11 +205,16 @@ internal object IdeasBanner {
     /** The foot's height: the banner and the switch, which the list and the map keep above. */
     var footHeight by remember { mutableIntStateOf(0) }
     var stripHeight by remember { mutableIntStateOf(0) }
+    // S06b: the moons row's height while it is open, which the map keeps under too
+    var moonsHeight by remember { mutableIntStateOf(0) }
     /** The lenses on (S06d): held while the screen is, never stored, as the map's filter. */
     var lenses by remember { mutableStateOf(emptySet<IdeaLens>()) }
     /** Map mode's list sheet is up, and the folder it is browsing (nil: the top level). */
     var listing by rememberSaveable { mutableStateOf(false) }
     var listFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    /** S06b: the moons row is open, and the day picked in it, whose ideas are lit on the map. */
+    var showingDays by rememberSaveable { mutableStateOf(false) }
+    var litDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val capture = remember { FocusRequester() }
     val focus = LocalFocusManager.current
 
@@ -216,6 +228,9 @@ internal object IdeasBanner {
         }
     }
 
+    // S06c: ideas like the open one, Collide, Split and Join, shared by the editor, the map and the board
+    val shapes = remember(book) { IdeaShapes(book, res, say = { message, undo -> say(message, undo) }) }
+
     fun folderName(id: String?): String = model.book.folder(id)?.name ?: res.getString(R.string.sort_title)
 
     /** Files an idea where the person chose, with Undo back to where it was. */
@@ -228,11 +243,44 @@ internal object IdeasBanner {
         say(message, undo = { model.book.move(id, before) })
     }
 
-    fun deleteIdea(id: String) {
+    fun deleteIdea(id: String, undone: () -> Unit = {}) {
         val removed = model.book.removal(id) ?: return
         model.book.delete(id)
-        say(res.getString(R.string.undo_deleted), undo = { model.book.restore(removed) })
+        say(res.getString(R.string.undo_deleted), undo = { model.book.restore(removed); undone() })
     }
+
+    // S06a: the deck's order, "You were saying…", and the low tide, asked once per launch
+    val deck = remember { DeckState() }
+    val frames = remember { mutableStateMapOf<String, Rect>() }
+    // the folder a dragged card is over, pressed in, round the card or in the pane beside it
+    var hovered by remember { mutableStateOf<String?>(null) }
+    remember(model) { IdeasSession.startTide(settings, model.book); 0 }
+    var resuming by rememberSaveable { mutableStateOf(false) }
+    var linking by remember { mutableStateOf<String?>(null) }
+    val toSortIds = remember(book, model.version) { book.contents(null).map { it.id } }
+    val order = remember(toSortIds, deck.bump) { deck.deck.sync(toSortIds); deck.deck.order }
+    val offer = if (IdeasSession.offerDone) null else remember(book, model.version) { offerOf(book) }
+    val tide = IdeasSession.tide.filter { book.note(it) != null }
+
+    /** Later: to the deck's back, with Undo putting it on top again. */
+    fun later(id: String) {
+        deck.later(id)
+        say(res.getString(R.string.deck_later_done), undo = { deck.putBack(id) })
+    }
+    fun leaveTide(id: String) { IdeasSession.tide = IdeasSession.tide - id }
+    val sortActions = DeckActions.Sort(file = { id, to -> file(id, to) }, later = ::later, choose = { choosing = it })
+    val tideActions = DeckActions.Tide(
+        keep = { id -> model.book.markOpened(id, IdeaClock.now()); leaveTide(id) },
+        link = { id -> linking = id },
+        // Undo brings the idea back onto the tide, where it was
+        letGo = { id ->
+            val at = IdeasSession.tide.indexOf(id)
+            leaveTide(id)
+            deleteIdea(id) {
+                val now = IdeasSession.tide.toMutableList()
+                if (id !in now) { now.add(at.coerceIn(0, now.size), id); IdeasSession.tide = now }
+            }
+        })
 
     /** captureIdea: the words trimmed, nothing for an empty field, into the open folder; the field stays ready. */
     fun captureIdea(): Note? {
@@ -251,16 +299,19 @@ internal object IdeasBanner {
     val capsulePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch { imported = importFrom(model, capsule = true) { context.contentResolver.openInputStream(uri) } }
     }
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
+    // the board's picture being drawn for a capsule (CapsuleBoardShot), and who waits for it
+    var shooting by remember { mutableStateOf<Pair<IdeaBook, CompletableDeferred<Capsule.Picture?>>?>(null) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/html")) { uri ->
         if (uri != null) scope.launch {
             val now = System.currentTimeMillis()
             // the book as it is now, taken here on the main thread (its lists, which a change swaps
-            // whole, in a book of their own that nothing changes), then drawn and compressed off it
+            // whole, in a book of their own that nothing changes); the board draws it, then the page
+            // is written off the main thread
             val snapshot = model.book.let { IdeaBook(it.notes, it.folders) }
-            val straight = settings.lineStyle.isStraight
-            val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, straight, measurer, density, now) }
+            val shot = CompletableDeferred<Capsule.Picture?>()
+            shooting = snapshot to shot
+            val picture = try { shot.await() } finally { shooting = null }
+            val html = withContext(Dispatchers.Default) { capsuleHtml(snapshot, picture, now) }
             val saved = withContext(Dispatchers.IO) {
                 runCatching { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(html.toByteArray(Charsets.UTF_8)) } != null }
                     .getOrDefault(false)
@@ -307,6 +358,8 @@ internal object IdeasBanner {
 
     val open = editing?.takeIf { book.note(it) != null }
     val shape = currentWindowShape()
+    // the deck on To sort's top level (S06a): the tide's while it is up, else To sort's when chosen
+    val deckShown = folderId == null && open == null && (tide.isNotEmpty() || (settings.sortDeck && order.isNotEmpty()))
     BackHandler(enabled = (mode == SortaMode.SORT || IdeasSplit.of(shape) != null) && open == null && folderId != null) {
         folderId = book.folder(folderId)?.parentId
     }
@@ -314,8 +367,12 @@ internal object IdeasBanner {
     // the map is on screen: Map mode, with no idea open over it, or beside the Sort screen on two
     // panes; its 3D looks are night, and the chrome over them is too (iOS's IdeasMapView)
     val split = IdeasSplit.of(shape)
+    // two panes with To sort's deck: the folders pane takes the map's place (S06a A2)
+    val paneTargets = if (split != null && deckShown && tide.isEmpty())
+        remember(book, model.version, shape, split) { deckTargets(book, paneSlots(shape.width - split.sort - split.gap - 2 * WardSpace.gutter, shape.height)) }
+        else null
     val mapShown = mode == SortaMode.MAP && open == null
-    val mapNight = book.notes.isNotEmpty() && settings.look != MapLook.TWO_D
+    val mapNight = book.notes.isNotEmpty() && settings.look != MapLook.TWO_D && settings.look != MapLook.TREE
     val night = split == null && mapShown && mapNight
     // the list sheet covers the map's foot, so the banner shows in it meanwhile
     val sheetUp = split == null && listing && mapShown && book.notes.isNotEmpty()
@@ -324,23 +381,57 @@ internal object IdeasBanner {
     val stripTop = with(LocalDensity.current) { (if (book.notes.isNotEmpty()) stripHeight else 0).toDp() }
     val outer = LocalWardLook.current
 
+    // S06b: the Days chip and the moons are Space's and 2D's, over ideas; another look or no ideas puts them away
+    val daysShown = book.notes.isNotEmpty() && (settings.look == MapLook.SPACE || settings.look == MapLook.TWO_D)
+    LaunchedEffect(daysShown) { if (!daysShown) { showingDays = false; litDay = null } }
+    // Back puts the moons away and ends the lit day, as it closes the look list
+    BackHandler(enabled = daysShown && showingDays) { showingDays = false; litDay = null }
+    val moonsTop = with(LocalDensity.current) { (if (daysShown && showingDays) moonsHeight else 0).toDp() }
+    val mapTop = if (moonsTop > 0.dp) stripTop + WardSpace.s.wardDp + moonsTop else stripTop
+    val litIdeas: Set<String>? = litDay?.let { day ->
+        remember(book.notes, model.version, day) {
+            MoonDays.lit(book.notes.map { it.id to it.createdAt }, LocalDate.ofEpochDay(day), ZoneId.systemDefault())
+        }
+    }
+
     /** The map, edge to edge: the tools and the empty page keep above the foot ([hidden]) and the navigation bar. */
     @Composable fun MapPane(paned: Boolean) = WardTextCap { CompositionLocalProvider(LocalSortaBars provides !paned) {
         val hidden = (if (paned) 0.dp else foot) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         IdeasMap(book, settings, hidden = hidden, open = { editing = it },
             openFolder = { folderId = it; if (!paned) mode = SortaMode.SORT },
-            choose = { choosing = it }, delete = ::deleteIdea, top = stripTop, version = model.version,
-            lens = rememberLensPass(book, model.version, lenses))
-        // the top strip: the To sort chip (not on two panes) and the look chip, night over the 3D looks;
+            choose = { choosing = it }, delete = ::deleteIdea, top = mapTop, version = model.version,
+            lit = litIdeas, file = { id, to -> file(id, to) }, lens = rememberLensPass(book, model.version, lenses))
+        // the top strip: the To sort chip (not on two panes), the Days chip and the look chip, night over the 3D looks;
         // the lenses' row under it (S06d), in the strip's height, which the map's first view keeps under
         if (book.notes.isNotEmpty()) SortaTheme(dark = mapNight || outer.dark, section = outer.section) {
             Column(Modifier.onSizeChanged { stripHeight = it.height }.testTag(MapPanelTags.TOP_STRIP)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
-                MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }))
+                MapTopStrip(book, model.version, settings.look, choose = { settings.setLook(it) }, list = if (paned) null else ({ listing = true }),
+                    days = if (daysShown) ({ showingDays = !showingDays; if (!showingDays) litDay = null }) else null, daysOn = showingDays)
                 MapLensRow(book, model.version, lenses, toggle = { lens -> lenses = if (lens in lenses) lenses - lens else lenses + lens })
+            }
+            // the moons, under the strip and the lenses; closing them ends the lit day
+            if (daysShown && showingDays) {
+                val moons = remember(book.notes, model.version) {
+                    MoonDays.days(book.notes.map { it.createdAt }, System.currentTimeMillis(), MoonDays.MOST, ZoneId.systemDefault())
+                }
+                Box(Modifier.fillMaxWidth().padding(top = stripTop + WardSpace.s.wardDp)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(horizontal = WardSpace.gutter.wardDp), contentAlignment = Alignment.TopCenter) {
+                    MoonRow(moons, litDay?.let { LocalDate.ofEpochDay(it) }, pick = { litDay = it?.toEpochDay() },
+                        close = { showingDays = false; litDay = null }, modifier = Modifier.onSizeChanged { moonsHeight = it.height })
+                }
             }
         }
     } }
+
+    /** The app's banner, a notice with its Undo: over the foot's switch, or over the open editor's bar. */
+    @Composable fun Banner() {
+        SnackbarHost(banner, Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.s.wardDp)) { data ->
+            WardBanner(data.visuals.message, modifier = Modifier.semantics { testTag = IdeasTags.BANNER },
+                actionTitle = data.visuals.actionLabel, action = { data.performAction() })
+        }
+    }
 
     /** The Sort screen, or the editor open from it, in its column. */
     @Composable fun SortSide() {
@@ -348,8 +439,10 @@ internal object IdeasBanner {
             Box(Modifier.widthIn(max = IdeasLayout.column.dp).fillMaxSize()) {
                 val bottom = foot + WardSpace.l.wardDp
                 if (open != null) {
-                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }) {
+                    NoteEditor(model, settings, open, bottom = bottom, choose = { choosing = it }, delete = { id -> deleteIdea(id) }, resume = resuming,
+                        notice = { Banner() }) {
                         editing = null
+                        resuming = false
                     }
                 } else SortPage(
                     book = book, version = model.version, folderId = folderId, draft = draft, onDraft = { draft = it }, capture = capture, bottom = bottom,
@@ -358,30 +451,37 @@ internal object IdeasBanner {
                     setFolder = { folderId = it }, open = { editing = it }, choose = { choosing = it }, delete = ::deleteIdea,
                     name = { naming = it }, deleteFolder = { deletingFolder = it },
                     onImport = { picker.launch(arrayOf("application/json")) },
-                    offer = offering && hasIdeas, onSaveCapsule = ::saveCapsule, onLater = { offering = false },
+                    extras = SortExtras(
+                        offer = offer, openOffer = { id -> IdeasSession.offerDone = true; resuming = true; editing = id },
+                        dismissOffer = { IdeasSession.offerDone = true },
+                        deckOn = settings.sortDeck, setDeck = { settings.setSortDeck(it) }, deckShown = deckShown,
+                        order = order, tide = tide, closeTide = { IdeasSession.tide = emptyList() },
+                        sortActions = sortActions, tideActions = tideActions, paneTargets = paneTargets, frames = frames,
+                        hovered = hovered, hover = { hovered = it }, paned = split != null),
+                    capsuleOffer = offering && hasIdeas, onSaveCapsule = ::saveCapsule, onLater = { offering = false },
                     onOpenCapsule = { capsulePicker.launch(arrayOf("text/html", "application/octet-stream")) },
                 )
             }
         }
     }
 
-    /** The foot: the banner, then the Sort / Map switch ([switches]; not on two panes), bottom centre. */
+    /** The foot: the banner (the open editor has it over its own bar), then the Sort / Map switch ([switches]; not on two panes), bottom centre. */
     @Composable fun BoxScope.Foot(switches: Boolean) {
         // Map mode's text stops at AX1 (WardTextCap), its foot's with it; the Sort screen's doesn't
         @Composable fun Capped(content: @Composable () -> Unit) = if (split == null && mapShown) WardTextCap(content) else content()
         Capped { SortaTheme(dark = night || outer.dark, section = outer.section) {
             Column(Modifier.align(Alignment.BottomCenter).widthIn(max = IdeasLayout.column.dp).fillMaxWidth()
                 .onSizeChanged { footHeight = it.height }, horizontalAlignment = Alignment.CenterHorizontally) {
-                if (!sheetUp) SnackbarHost(banner, Modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp, vertical = WardSpace.s.wardDp)) { data ->
-                    WardBanner(data.visuals.message, modifier = Modifier.semantics { testTag = IdeasTags.BANNER },
-                        actionTitle = data.visuals.actionLabel, action = { data.performAction() })
-                }
+                if (!sheetUp && open == null) Banner()
                 if (switches && open == null) ModeSwitch(mode, { mode = it }, settings) { focus.clearFocus() }
             }
         } }
     }
 
+    CompositionLocalProvider(LocalIdeaShapes provides shapes) {
     Box(Modifier.fillMaxSize().background(wardColor(WardToken.background))) {
+        // the capsule's picture, drawn by the board while a capsule is saved; it shows nothing
+        shooting?.let { (snapshot, shot) -> CapsuleBoardShot(snapshot, settings, settings.lineStyle.isStraight) { shot.complete(it) } }
         if (split != null) Row(Modifier.fillMaxSize()) {
             // two panes (S05b checklist 9): the Sort screen leading with the banner at its foot,
             // the band (the page shows through), the map trailing; no switch, no list chip
@@ -392,7 +492,9 @@ internal object IdeasBanner {
             if (split.gap > 0) Spacer(Modifier.width(split.gap.dp).fillMaxHeight())
             // the map pane starts below the status bar, whose row shows the page across the window, and
             // the bar's icons follow the page (S05j item 1, question 1's default; LocalSortaBars)
-            Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
+            if (paneTargets != null) Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().navigationBarsPadding()) {
+                DeckFolderPane(paneTargets, frames, hovered, file = { to -> order.firstOrNull()?.let { file(it, to) } })
+            } else Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding().testTag(IdeasTags.MAP_PANE)) { MapPane(paned = true) }
         } else {
             if (mapShown) WardHingePane(shape, Modifier.fillMaxSize()) { MapPane(paned = false) }
             else WardHingePane(shape, Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) { SortSide() }
@@ -400,6 +502,7 @@ internal object IdeasBanner {
             // WardSpace.s above the navigation bar and the keyboard, in the page's side of a hinge
             WardHingePane(shape, Modifier.fillMaxSize().navigationBarsPadding().imePadding()) { Foot(switches = true) }
         }
+    }
     }
 
     // first, so the chooser, the naming sheet and the dialog it opens come over it
@@ -422,6 +525,16 @@ internal object IdeasBanner {
         }
         is FolderPrompt.Rename -> NameSheet(stringResource(R.string.name_rename_title), stringResource(R.string.name_field), prompt.folder.name,
             stringResource(R.string.name_rename), { naming = null }, overMap = night) { model.book.renameFolder(prompt.folder.id, it) }
+        // blank clears them; the footnote says what a save keeps
+        is FolderPrompt.Words -> {
+            val note = stringResource(R.string.folder_words_note)
+            val kept = stringResource(R.string.folder_words_kept)
+            NameSheet(stringResource(R.string.folder_words_title), stringResource(R.string.folder_words_prompt),
+                prompt.folder.words.joinToString(" "), stringResource(R.string.sky_save), { naming = null }, overMap = night,
+                footnote = { text -> SkyWords.folderWordsFootnote(text, note, kept) }, allowsBlank = true, lines = SkyWords.FIELD_LINES) {
+                model.book.setWords(prompt.folder.id, FolderWords.parse(it))
+            }
+        }
         null -> {}
     }
     deletingFolder?.let { folder ->
@@ -437,7 +550,25 @@ internal object IdeasBanner {
             dismissButton = { TextButton({ deletingFolder = null }) { Text(stringResource(R.string.sheet_cancel), color = wardColor(WardToken.primaryInk)) } })
     }
     imported?.let { outcome -> ImportAlert(outcome, model.unreadable) { imported = null } }
+    // the tide's Link to…: the editor's chooser; done, the idea counts as kept
+    linking?.let { id ->
+        if (book.note(id) == null) linking = null
+        else LinkPicker(book, model.version, id) { linking = null; model.book.markOpened(id, IdeaClock.now()); leaveTide(id) }
+    }
+    IdeaShapeSheets(shapes, book, model.version, overMap = night)
 }
+
+/** What S06a adds to the Sort page: the offer, the list or deck toggle, the deck and the tide. */
+internal class SortExtras(
+    val offer: Note?, val openOffer: (String) -> Unit, val dismissOffer: () -> Unit,
+    val deckOn: Boolean, val setDeck: (Boolean) -> Unit, val deckShown: Boolean,
+    val order: List<String>, val tide: List<String>, val closeTide: () -> Unit,
+    val sortActions: DeckActions.Sort, val tideActions: DeckActions.Tide,
+    val paneTargets: List<NoteFolder>?, val frames: SnapshotStateMap<String, Rect>,
+    val hovered: String?, val hover: (String?) -> Unit,
+    /** Two panes: the deck stands in the middle of its own, the tide's too. */
+    val paned: Boolean,
+)
 
 /**
  * The Sort / Map switch (S05b checklist 2): the kit's FloatingSwitcher with iOS's items and
@@ -492,7 +623,8 @@ internal object IdeasBanner {
     book: IdeaBook, version: Int, folderId: String?, draft: String, onDraft: (String) -> Unit, capture: FocusRequester, bottom: Dp,
     onCapture: () -> Unit, onSortIt: () -> Unit, setFolder: (String?) -> Unit, open: (String) -> Unit, choose: (String) -> Unit,
     delete: (String) -> Unit, name: (FolderPrompt) -> Unit, deleteFolder: (NoteFolder) -> Unit, onImport: () -> Unit,
-    offer: Boolean = false, onSaveCapsule: () -> Unit = {}, onLater: () -> Unit = {}, onOpenCapsule: () -> Unit = {},
+    extras: SortExtras,
+    capsuleOffer: Boolean = false, onSaveCapsule: () -> Unit = {}, onLater: () -> Unit = {}, onOpenCapsule: () -> Unit = {},
 ) {
     val list = rememberLazyListState()
     val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
@@ -501,8 +633,16 @@ internal object IdeasBanner {
     val level = rememberIdeasListLevel(book, version, folderId)
     val fresh = remember(book, version) { book.notes.isEmpty() && book.folders.isEmpty() }
     val inset = WardSpace.s.wardDp
-    val more: @Composable () -> Unit = { MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) },
-        onSaveCapsule = onSaveCapsule, onOpenCapsule = onOpenCapsule, canSave = !fresh) }
+    val top = folderId == null
+    // at the top level with ideas to sort, list or cards beside More (S06a A3)
+    val more: @Composable () -> Unit = {
+        if (top && extras.order.isNotEmpty()) DeckToggle(extras.deckOn, extras.setDeck)
+        MoreButton(onImport, onNewFolder = { name(FolderPrompt.New(folderId)) },
+            onSaveCapsule = onSaveCapsule, onOpenCapsule = onOpenCapsule, canSave = !fresh)
+    }
+    val offer: (@Composable () -> Unit)? = extras.offer?.takeIf { top }?.let { note ->
+        { ResumeOffer(note, open = { extras.openOffer(note.id) }, dismiss = extras.dismissOffer) }
+    }
     Column(Modifier.fillMaxSize().semantics { testTag = IdeasTags.SCREEN }) {
         // the pinned strip: the list scrolls under it and is cut at its edge, with a hairline while it is scrolled
         Box(Modifier.fillMaxWidth().background(wardColor(WardToken.background)).drawBehind {
@@ -510,6 +650,21 @@ internal object IdeasBanner {
             if (scrolled) drawLine(hairline, Offset(0f, size.height - edge / 2), Offset(size.width, size.height - edge / 2), edge)
         }.padding(horizontal = WardSpace.gutter.wardDp).padding(top = WardSpace.s.wardDp, bottom = WardSpace.s.wardDp)) {
             CaptureWell(draft, onDraft, capture, onCapture, onSortIt)
+        }
+        if (extras.deckShown) {
+            // the deck in the list's place: the offer and the title row, then the cards (S06a)
+            Column(Modifier.fillMaxWidth().padding(horizontal = inset).padding(top = WardSpace.xs.wardDp),
+                verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+                offer?.invoke()
+                // the capsule's quiet offer over the deck as over the list (S06d A4): it is marked offered as it shows
+                if (capsuleOffer && top) CapsuleOfferCard(onSaveCapsule, onLater)
+                if (extras.tide.isNotEmpty()) TideTitle(extras.closeTide) else TitleRow(null, level.count, more)
+            }
+            val tideUp = extras.tide.isNotEmpty()
+            DeckArea(book, version, if (tideUp) extras.tide else extras.order, if (tideUp) extras.tideActions else extras.sortActions,
+                paneTargets = if (tideUp) (if (extras.paned) emptyList() else null) else extras.paneTargets, frames = extras.frames, hovered = extras.hovered, hover = extras.hover, bottom = bottom,
+                modifier = Modifier.weight(1f).padding(top = WardSpace.m.wardDp))
+            return@Column
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list,
             contentPadding = PaddingValues(start = inset, end = inset, top = WardSpace.xs.wardDp, bottom = bottom)) {
@@ -528,8 +683,9 @@ internal object IdeasBanner {
                 }
                 return@LazyColumn
             }
+            if (offer != null) item(key = "offer") { offer() }
             // the capsule's quiet offer, at the top level only, under the well (S06d A4)
-            if (offer && folderId == null) item(key = "capsule-offer") {
+            if (capsuleOffer && folderId == null) item(key = "capsule-offer") {
                 CapsuleOfferCard(onSaveCapsule, onLater, Modifier.padding(horizontal = inset).padding(top = WardSpace.xs.wardDp, bottom = WardSpace.s.wardDp))
             }
             ideasList(book, level, inset, more, setFolder = setFolder, open = open, choose = choose, delete = delete,

@@ -23,6 +23,9 @@ class IdeaLensTest {
             "" to false, "   " to false, "Buy milk" to true, "Buy milk." to false, "Really?" to false, "Wow!" to false,
             "And then…" to false, "And then..." to false, "Buy milk  \n" to true, "Ends with a comma," to true,
             "(see the list)" to true, "Tea? Later" to true, "Two lines.\nAnd a third" to true,
+            // S06a's "You were saying…" cases, the same rule (IdeaStops.stoppedAt)
+            "He said “go.”" to false, "(see the shed.)" to false, "Done!  \n" to false, "Done!\r\n" to false,
+            "パンを焼く。" to false, "متى؟" to false, "Plant tulips 🌷" to true, "Bread rises," to true,
         )
         for ((text, mid) in cases) assertEquals("\"$text\"", mid, IdeaSentence.endsMidSentence(text))
     }

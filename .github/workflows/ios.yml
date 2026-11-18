@@ -117,12 +117,12 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           { echo '### Compile errors and warnings'; echo '```'; grep -E "error:|warning:" ../build.log | sed -E 's#^.*/ios/##' | sort -u | head -60 || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The app's Info.plist
-        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app
+        run: python3 tools/check_ios_app.py ios/build/Build/Products/Debug-iphonesimulator/Sorta.app --share
       # each simulator runs once the build has passed, whatever the other did;
       # in run 40718963474 the iPhone's step took 7 to 8 minutes and the iPad's
       # 9, most of it the simulator's first boot, so each may take twice that
@@ -177,12 +177,18 @@ jobs:
   # the last test, every test before it passed: so 60, and the job 125.
   # S05m adds the largest text size by night and the whole-title test by
   # day and by night on the iPhone, about 8 minutes more: so 70, and the
-  # job 135. S06d adds five runs on each (the lenses and the capsule offer
-  # by day and by night, Not now once), each one launch and an import, about
-  # 8 minutes: so 80 and 45, and the job 155.
+  # job 135. On copy 34089de the iPhone's step took 42 minutes and the
+  # iPad's 21; S06c adds 5 behaviour tests and 3 render runs on the iPhone
+  # and 3 render runs on the iPad, about 17 and 8 minutes more: so 85 and
+  # 45, and the job 160. S06d adds five runs on each (the lenses and the
+  # capsule offer by day and by night, Not now once), each one launch and an
+  # import, about 8 minutes. v14 joins them with S06a's deck renders on
+  # both (about 6 minutes each) and S06b's sky renders on the iPhone (about
+  # 5): the iPhone 70 + 15 + 10 + 6 + 5, so 105; the iPad 35 + 15 (S06a)
+  # + 10 (S06c) + 10 (S06d), so 70; and the job 205.
   ideas:
     runs-on: macos-latest
-    timeout-minutes: 155
+    timeout-minutes: 205
     steps:
       - uses: actions/checkout@v7
         with:
@@ -206,19 +212,22 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The Ideas tests on an iPhone
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 80
+        timeout-minutes: 105
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.iphone_udid }}
         run: bash ../tools/run_ui_tests.sh iphone ideas
       - name: The Ideas renders on an iPad
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 45
+        # 20 to 35 minutes before the deck renders (runs 43591609208 and the
+        # green ones before it), and about 6 for DeckRenderTests by day and by night;
+        # S06c's and S06d's renders about 8 more each (see the job's note)
+        timeout-minutes: 70
         working-directory: ios
         env:
           UDID: ${{ steps.sim.outputs.ipad_udid }}
@@ -273,7 +282,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
             -skipMacroValidation -skipPackagePluginValidation \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO SORTA_SHARE_EXTENSION=YES \
             build-for-testing 2>&1 | tee ../build.log | grep -E "error:|warning:|\*\* " || true
           grep -q "TEST BUILD SUCCEEDED" ../build.log
       - name: The maps' tests on an iPhone

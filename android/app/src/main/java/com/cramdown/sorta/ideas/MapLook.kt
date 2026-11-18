@@ -11,6 +11,8 @@ package com.cramdown.sorta.ideas
 enum class MapLook(val rawValue: String, val identifier: String, val theme: GraphTheme?) {
     SPACE("space", "look-space", GraphTheme.SPACE),
     NEURON("neuron", "look-neuron", GraphTheme.NEURONS),
+    // S11: a flat nested map, drawn on the page, kept under [FLAT_KEY]
+    TREE("tree", "look-tree", null),
     TWO_D("twoD", "look-2d", null),
     PERFORMANCE("performance", "look-performance", GraphTheme.PERFORMANCE);
 
@@ -21,8 +23,13 @@ enum class MapLook(val rawValue: String, val identifier: String, val theme: Grap
         const val CHIP = "map-look"
 
         /** The look the two stored values make; an unknown theme is the standard one ([GraphTheme.stored]). */
-        fun stored(board: Boolean, theme: String?): MapLook =
-            if (board) TWO_D else of(GraphTheme.stored(theme))
+        fun stored(board: Boolean, theme: String?, flat: String? = null): MapLook =
+            if (board) TWO_D else flatOf(flat) ?: of(GraphTheme.stored(theme))
+
+        /** S11: where a flat nested map (Tree) is kept; empty when the look is the board or a theme. */
+        const val FLAT_KEY = "vignette.ideas.mapFlat"
+        /** S11: the flat nested map [flat] names, or null for the board, a theme or nothing. */
+        fun flatOf(flat: String?): MapLook? = entries.firstOrNull { it.theme == null && it != TWO_D && it.rawValue == flat }
 
         fun of(theme: GraphTheme): MapLook = entries.first { it.theme == theme }
     }

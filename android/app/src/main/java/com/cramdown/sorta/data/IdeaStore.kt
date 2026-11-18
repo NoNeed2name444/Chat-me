@@ -164,16 +164,24 @@ class IdeaStore(private val directory: File) {
      * A capsule opened (S06d A5), with the import's rules: over 32 MB is refused, then the capsule's
      * own checks (Capsule.read); the ideas and folders this device has no id for are added and saved
      * once, and one already here stays as it is. Ids are compared ignoring case, since iOS writes its
-     * UUIDs in upper case. Throws [ImportRefused] with nothing changed, or [SaveFailed] (memory put
-     * back) when the save doesn't land.
+     * UUIDs in upper case, and each id an added idea or folder carries (its own, its folderId and links,
+     * a folder's parentId) is written as this store spells it, or in lower case when the store has none:
+     * IdeaBook compares ids exactly, so an upper-case folderId put an idea in no folder and its links
+     * went nowhere. Throws [ImportRefused] with nothing changed, or [SaveFailed] (memory put back) when
+     * the save doesn't land.
      */
     @Synchronized fun importCapsule(text: String): ImportCounts {
         if (text.toByteArray(Charsets.UTF_8).size > MAX_IMPORT_BYTES) throw ImportRefused(ImportRefusal.TOO_LARGE)
         val incoming = Capsule.read(text)
+        val spelled = HashMap<String, String>()
+        (notes.map { it.id } + folders.map { it.id }).forEach { spelled.putIfAbsent(it.uppercase(), it) }
+        fun mine(id: String): String = spelled.getOrPut(id.uppercase()) { id.lowercase() }
         val noteIds = notes.map { it.id.uppercase() }.toHashSet()
         val added = incoming.notes.filter { noteIds.add(it.id.uppercase()) }
+            .map { n -> n.copy(id = mine(n.id), folderId = n.folderId?.let(::mine), links = n.links.map(::mine).distinct()) }
         val folderIds = folders.map { it.id.uppercase() }.toHashSet()
         val addedFolders = incoming.folders.filter { folderIds.add(it.id.uppercase()) }
+            .map { f -> f.copy(id = mine(f.id), parentId = f.parentId?.let(::mine)) }
         if (added.isEmpty() && addedFolders.isEmpty()) return ImportCounts()
         notes = notes + added
         folders = folders + addedFolders

@@ -53,6 +53,9 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapMenuItem
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.automirrored.outlined.CallMerge
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.MapPeekContent
 import com.cramdown.sorta.ideas.MapPeekInput
@@ -156,6 +159,9 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     rename = res.getString(R.string.map_menu_rename),
     moveToFolder = res.getString(R.string.map_menu_move),
     delete = res.getString(R.string.map_menu_delete),
+    split = res.getString(R.string.shape_split),
+    joinWith = res.getString(R.string.shape_join),
+    collideWith = res.getString(R.string.shape_collide),
     // GraphPeek.roleWord (GraphTouchModel.swift:267-281): Space's bodies, and Neurons' roles by number
     roles = mapOf(
         "space:galaxy" to res.getString(R.string.map_role_black_hole),
@@ -331,13 +337,16 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
  * lines and its links (an idea), or its counts and latest ideas (a folder). Tapping it, swiping it
  * up or Open reads it; a chip selects that idea; Show links, for an idea, keeps its own links on the
  * map ([linksShown]: All links brings the rest back, S05g); More opens the same options a hold does.
- * Fly in, for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]).
+ * Fly in, for a folder, shows only where the map can fly in ([MapPeekInput.flyIn]). S06b: [lean], a
+ * loose idea's lean in the Universe, with [fileThere]; [sharedFrom], a shared idea's sharedFrom.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable fun MapPeekCard(
     content: MapPeekContent, folder: Boolean, words: MapPeekWords,
     open: () -> Unit, flyIn: () -> Unit, chip: (String) -> Unit, option: (MapMenuItem) -> Unit,
     modifier: Modifier = Modifier, linksShown: Boolean = false, showLinks: () -> Unit = {},
+    lean: SkyLean? = null, fileThere: () -> Unit = {}, sharedFrom: String? = null,
+    more: List<MapMenuItem>? = null,
 ) {
     val source = remember { MutableInteractionSource() }
     var swiped by remember { mutableFloatStateOf(0f) }
@@ -362,20 +371,32 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
             Spacer(Modifier.width(WardSpace.s.wardDp))
             Icon(Icons.Outlined.KeyboardArrowUp, null, tint = wardColor(WardToken.inkSecondary), modifier = Modifier.size(wardGlyph(17.0)))
         }
-        content.lines.forEach { line ->
-            Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        if (content.chips.isNotEmpty()) {
-            // the row reaches WardSpace.s into the card's margin each side, its chips padded back, so a chip's
-            // edge scrolls out under the margin, not cut at the padding (S05j 8b; GraphMapPanels.swift:121-147)
-            Row(Modifier.intoMargin(WardSpace.s.wardDp).testTag(MapPanelTags.PEEK_CHIPS).horizontalScroll(rememberScrollState())
-                .padding(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
-                verticalAlignment = Alignment.CenterVertically) {
-                content.chips.forEach { item ->
-                    WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
-                }
-                if (content.moreLinks > 0) {
-                    Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+        // S06b: where the card meets the chrome above it (IdeasSpace keeps it under the strip), its middle
+        // scrolls, only then, so a swipe up anywhere still opens it. The scroll's clip reaches s into the
+        // card's margin, its words padded back, so the chip row still reaches there (S05j 8b), and 2 more
+        // above and below, so File there's 48 dp touch area is whole
+        val middle = rememberScrollState()
+        Column(Modifier.weight(1f, fill = false).intoMargin(WardSpace.s.wardDp).verticalScroll(middle, enabled = middle.maxValue > 0)
+            .padding(horizontal = WardSpace.s.wardDp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            content.lines.forEach { line ->
+                Text(line, style = WardTextStyle.subheadline.textStyle(), color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            // S06b: the folder a loose idea leans towards, with File there; where a shared one came from
+            lean?.let { LeanRow(it, fileThere) }
+            sharedFrom?.let { SharedFromMark(it) }
+            if (content.chips.isNotEmpty()) {
+                // the row reaches WardSpace.s into the card's margin each side, its chips padded back, so a chip's
+                // edge scrolls out under the margin, not cut at the padding (S05j 8b; GraphMapPanels.swift:121-147)
+                Row(Modifier.intoMargin(WardSpace.s.wardDp).testTag(MapPanelTags.PEEK_CHIPS).horizontalScroll(rememberScrollState())
+                    .padding(horizontal = WardSpace.s.wardDp), horizontalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    content.chips.forEach { item ->
+                        WardChipButton(item.title, { chip(item.id) }, role = Role.Button)
+                    }
+                    if (content.moreLinks > 0) {
+                        Text(words.moreLinks(content.moreLinks), style = WardType.caption.textStyle(), color = wardColor(WardToken.inkSecondary))
+                    }
                 }
             }
         }
@@ -404,7 +425,7 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
                 var showing by remember { mutableStateOf(false) }
                 Box {
                     WardCircleButton(Icons.Rounded.MoreHoriz, words.more, { showing = true })
-                    MapOptionsMenu(showing, { showing = false }, content.title, MapPeek.menu(folder = false, home = false).filter { it != MapMenuItem.OPEN }, words) {
+                    MapOptionsMenu(showing, { showing = false }, content.title, (more ?: MapPeek.menu(folder = false, home = false)).filter { it != MapMenuItem.OPEN }, words) {
                         showing = false
                         option(it)
                     }
@@ -441,6 +462,9 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
     MapMenuItem.OPEN -> Icons.Outlined.Description
     MapMenuItem.RENAME -> Icons.Outlined.Edit
     MapMenuItem.MOVE -> Icons.Outlined.Folder
+    MapMenuItem.SPLIT -> Icons.AutoMirrored.Outlined.CallSplit
+    MapMenuItem.JOIN -> Icons.AutoMirrored.Outlined.CallMerge
+    MapMenuItem.COLLIDE -> Icons.Outlined.Bolt
     MapMenuItem.DELETE -> Icons.Outlined.Delete
 }
 

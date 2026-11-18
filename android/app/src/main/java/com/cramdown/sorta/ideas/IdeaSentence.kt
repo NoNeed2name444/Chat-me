@@ -1,17 +1,21 @@
 package com.cramdown.sorta.ideas
 
 /**
- * Where a piece of writing stops (S06d A1, the rule S06a's A4 states): text that, trimmed of white
- * space, is not empty and does not end in a closing mark (. ! ? …) ends mid-sentence. iOS's
- * IdeaSentence is the same function.
+ * Where a piece of writing stops: the one rule behind S06a's "You were saying…" ([IdeaStops.stoppedAt])
+ * and S06d's Unfinished lens ([IdeaLens]). Text ends mid-sentence when its last character, past white
+ * space and closing quotes and brackets, is not a mark that closes a sentence: . ! ? … or their
+ * full-width and Arabic forms. Empty text, or white space alone, does not. iOS's IdeaSentence is the
+ * same function, case for case.
  */
 object IdeaSentence {
     /** The marks that close a sentence. */
-    val CLOSERS = charArrayOf('.', '!', '?', '…')
+    val closers: Set<Int> = ".!?\u2026\u3002\uFF01\uFF1F\u061F".codePoints().toArray().toSet()
+    /** What may follow a sentence's close and still leave it closed, besides white space: closing quotes and brackets. */
+    val trailing: Set<Int> = "\"'\u201D\u2019\u00BB)]}\u300D\u300F\u00A0".codePoints().toArray().toSet()
 
-    /** [text] stops mid-sentence: not empty once trimmed, and its last character closes nothing. */
+    /** [text] stops mid-sentence: something is written, and the last of it closes nothing. */
     fun endsMidSentence(text: String): Boolean {
-        val trimmed = text.trim()
-        return trimmed.isNotEmpty() && trimmed.last() !in CLOSERS
+        val last = text.codePoints().toArray().lastOrNull { !Character.isWhitespace(it) && it !in trailing } ?: return false
+        return last !in closers
     }
 }
