@@ -60,6 +60,14 @@ import kotlin.math.sin
  * The emulator draws GL in software (SwiftShader), so its numbers are read against each other, the
  * same phases before and after a change, and by the work a frame takes, never as a phone's.
  *
+ * The guard: each phase's median ui-main frame under [BUDGET_MS] (about 4 ms, the share of an 8.3 ms
+ * refresh the app keeps for itself) times [EMULATOR_SCALE]. CI's emulator runs a phone's main-thread
+ * work 10 to 25 times slower (a carried deck card's median frame took 8.3 to 12.2 ms there, a panned
+ * board's 36.6 to 80.7 ms, runs 43727841564 and 43728974570) and swings about twice over between runs,
+ * so 50 times, 200 ms, fails only on a real regression, never on the runner's pace. The GL map's work
+ * is SwiftShader's rasterizing, 85 to 566 ms a frame there, so it is logged, never held to a bound
+ * here: its budget is FrameBudget's, held by FrameBudgetTest.
+ *
  * No Compose test rule: its test clock would pace the page's frames. The screens are found through
  * the activity's own semantics, touched through UiAutomation, and timed on the real clock. Animations
  * are on for the map (lively, as a person's phone has them) and off elsewhere, as CI has them. The map
@@ -181,6 +189,10 @@ class FramePerfTest {
         for (line in out) Log.i(TAG, line)
         check(total.isNotEmpty() || interval.isNotEmpty()) { "$name drew no frame in ${seconds}s" }
         if (gl) check(interval.isNotEmpty()) { "$name: the map drew no frame in ${seconds}s" }
+        if (main.isNotEmpty()) {
+            val p50 = FrameSummary.of(main).p50
+            check(p50 <= BUDGET_MS * EMULATOR_SCALE) { "$name: the main thread's median frame took $p50 ms" }
+        }
     }
 
     /** A window's frames, as FrameMetrics hands them over on a thread of their own. */
@@ -313,6 +325,8 @@ class FramePerfTest {
 
     private companion object {
         const val TAG = "SortaFrames"
+        const val BUDGET_MS = 4.0
+        const val EMULATOR_SCALE = 50.0
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 

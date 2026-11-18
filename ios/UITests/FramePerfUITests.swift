@@ -16,12 +16,20 @@ import XCTest
 ///
 /// The guards hold each phase to about 4 ms of work a frame, the share of an
 /// 8.3 ms refresh the app keeps for itself: the main thread's median pass
-/// under `budget`, and its 95th percentile pass, and with the map the median
-/// render-thread step, under `budget` times `ciScale`. CI's simulator runs a
-/// phone's work four times slower or more (its render thread drives the
-/// Mac's GPU through a virtual machine: a render step's median was 6.6 to
-/// 9.2 ms there before these fixes, run 43726420703), so a guard fails only
-/// on a real regression, never on the runner's pace.
+/// under `budget`, and with the map the median render-thread step under
+/// `budget` times `ciScale`. CI's simulator runs a phone's work four times
+/// slower or more (its render thread drives the Mac's GPU through a virtual
+/// machine: a render step's median was 6.6 to 9.2 ms there before these
+/// fixes, run 43726420703), so a guard fails only on a real regression, never
+/// on the runner's pace. Where the app moves on its own (`alone`: the test
+/// only waits), the main thread's 95th percentile pass is held under
+/// `budget` times `ciScale` too. Where the test drives the app (a drag, a
+/// pinch, typing), XCUITest resolves its elements on the app's main thread
+/// mid-phase, in passes of 15 to 250 ms that are XCUITest's, not the app's:
+/// a few per phase, whose share of the passes swings with the runner's pace
+/// (the same editor took 0.3 ms at the 95th percentile in run 43726420703
+/// and 55.9 ms in run 43728974615), so there the 95th percentile is logged,
+/// never held to a bound.
 final class FramePerfUITests: XCTestCase {
     static let budget: Double = 4
     static let ciScale: Double = 4
@@ -36,7 +44,7 @@ final class FramePerfUITests: XCTestCase {
         let space = app.otherElements["graph3D"]
         XCTAssertTrue(space.waitForExistence(timeout: 30), "the 3D map didn't open")
         sleep(3)
-        phase(app, "map-lively", render: true) { sleep(3) }
+        phase(app, "map-lively", render: true, alone: true) { sleep(3) }
         phase(app, "map-drag", render: true) {
             let from = space.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.35))
             let to = space.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.45))
@@ -51,7 +59,7 @@ final class FramePerfUITests: XCTestCase {
     func testFlyInFrames() {
         let app = launchPreview(["-graphPreviewFly", "Inguinal"])
         XCTAssertTrue(app.otherElements["graph3D"].waitForExistence(timeout: 30), "the 3D map didn't open")
-        phase(app, "map-fly", render: true) { sleep(4) }
+        phase(app, "map-fly", render: true, alone: true) { sleep(4) }
         app.terminate()
     }
 
@@ -123,7 +131,8 @@ final class FramePerfUITests: XCTestCase {
     /// Times `during` with the app's frame meter, then reads its lines; with
     /// `render`, the map's render thread must have timed frames too. `close`
     /// puts away what covers the meter's mark (a sheet) before it is read.
-    private func phase(_ app: XCUIApplication, _ name: String, render: Bool, close: (() -> Void)? = nil,
+    /// `alone`: the test only waits while the app moves on its own.
+    private func phase(_ app: XCUIApplication, _ name: String, render: Bool, alone: Bool = false, close: (() -> Void)? = nil,
                        file: StaticString = #filePath, line: UInt = #line, during: () -> Void) {
         phases += 1
         post("com.cramdown.sorta.frames.begin")
@@ -156,7 +165,7 @@ final class FramePerfUITests: XCTestCase {
         if let p50 = Self.percentile("p50", of: "main-work", in: lines) {
             XCTAssertLessThanOrEqual(p50, Self.budget, "\(name): the main thread's median pass took \(p50) ms", file: file, line: line)
         }
-        if let p95 = Self.percentile("p95", of: "main-work", in: lines) {
+        if alone, let p95 = Self.percentile("p95", of: "main-work", in: lines) {
             XCTAssertLessThanOrEqual(p95, scaled, "\(name): the main thread's 95th percentile pass took \(p95) ms", file: file, line: line)
         }
         if render, let p50 = Self.percentile("p50", of: "render-work", in: lines) {

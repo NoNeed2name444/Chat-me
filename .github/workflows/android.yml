@@ -1,6 +1,3 @@
-# perf, 15 Nov: a measurement copy only, never landed: Sorta at 9398dd4
-# with the frame instrumentation alone, so the frames are timed before the
-# fixes; the renders job runs only the frame tests (FramePerfTest).
 # Sorta's Android app, on every copy pushed to Chat-me's sorta branch
 # (tools/mirror_chatme.py): the debug APK built and checked, and the unit
 # tests run. The SDK steps are Stethoscore's
@@ -58,6 +55,13 @@ jobs:
         run: test -s android/app/build/outputs/capsule/capsule-android.html
       - name: The APK
         run: python3 tools/check_apk.py "$ANDROID_HOME/build-tools/37.0.0/aapt2" android/app/build/outputs/apk/debug/app-debug.apk
+      - name: The 120 Hz opt-ins on both platforms
+        # perf, 15 Nov: the Info.plist key, every display link's and view's
+        # rate, the GL surface's and the window's votes, the frame budgets;
+        # the self-test breaks each in memory and must catch it
+        run: |
+          python3 tools/check_high_refresh.py --self-test
+          python3 tools/check_high_refresh.py
       - name: The tests that ran
         if: ${{ always() }}
         run: |
@@ -109,7 +113,7 @@ jobs:
   renders:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: ${{ matrix.device == 'tablet' && 75 || 55 }}
     strategy:
       fail-fast: false
       matrix:
@@ -188,6 +192,42 @@ jobs:
           adb shell settings put system font_scale 1.0
           adb install -r -t built-apks/debug/app-debug.apk
           adb install -r -t built-apks/androidTest/debug/app-debug-androidTest.apk
+          source=app/src/androidTest/java/com/cramdown/sorta/MapRenderTest.kt
+          tests=$(grep -c '@Test' "$source")
+          echo "expecting OK ($tests tests) and $tests renders" | tee test-results/expected.txt
+          [ "$tests" -gt 0 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation.txt
+          echo "the renders took $((SECONDS - started)) seconds" | tee test-results/time.txt
+          # Map mode's Space, Sorta itself on made-up ideas, by day and by night (S05b, A6)
+          mode_source=app/src/androidTest/java/com/cramdown/sorta/MapModeSpaceRenderTest.kt
+          mode_tests=$(grep -c '@Test' "$mode_source")
+          # each a Space still and, after its first-run card's Got it, a Neurons one (S05d, A6),
+          # and Space's links drawn Straight between them (S05e, A6), and each look with a chosen
+          # body's name on show (S05f, A3)
+          echo "expecting OK ($mode_tests tests) and $mode_tests renders each of Map mode's Space, Space with Straight lines, Neurons and each with a body named" | tee -a test-results/expected.txt
+          [ "$mode_tests" -gt 0 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeSpaceRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode.txt
+          echo "Map mode's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # S05h A3: Space's Universe with animations on, the test turning them on for itself;
+          # S05h2 A3: its deaths and sparks, by day and by night, a still each of a death, plasma and dust
+          lively_source=app/src/androidTest/java/com/cramdown/sorta/MapSpaceLivelyTest.kt
+          lively_tests=$(grep -c '@Test' "$lively_source")
+          orbit_tests=$(grep -c '@Test fun orbiting' "$lively_source")
+          spark_tests=$(grep -c '@Test fun deathsAndSparks' "$lively_source")
+          echo "expecting OK ($lively_tests tests), $orbit_tests renders of the Universe orbiting and $spark_tests each of a death, plasma and dust" | tee -a test-results/expected.txt
+          [ "$orbit_tests" -eq 2 ]
+          [ "$spark_tests" -eq 2 ]
+          [ "$lively_tests" -eq 4 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapSpaceLivelyTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-lively.txt
+          echo "The lively Universe took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # whatever happened, animations are off again for what follows
+          adb shell settings put global animator_duration_scale 0
           # perf, 15 Nov: Sorta's frames timed: the map lively, dragged and flying to a body, the
           # board panned, the deck's card carried and an idea typed in (SortaFrames in the log)
           frames_source=app/src/androidTest/java/com/cramdown/sorta/FramePerfTest.kt
@@ -200,8 +240,181 @@ jobs:
           echo "The frames took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
           adb logcat -d -s SortaFrames:I | tee "test-results/frames-$device.txt" || true
           adb shell settings put global animator_duration_scale 0
+          # S06b A9: Space's Universe on ideas dated back from now, by day and by night: tails of
+          # four ages, a leaning idea's card, a shared idea's card, the moons, a lit day in Space
+          # and on the board, and File there with animations on, its settle and after
+          sky_source=app/src/androidTest/java/com/cramdown/sorta/SpaceSkyRenderTest.kt
+          sky_tests=$(grep -c '@Test' "$sky_source")
+          echo "expecting OK ($sky_tests tests) and $sky_tests renders each of the sky's eight stills" | tee -a test-results/expected.txt
+          [ "$sky_tests" -eq 2 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SpaceSkyRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sky.txt
+          echo "The sky's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          adb shell settings put global animator_duration_scale 0
+          # S05m item 7: the look chip's menu over the 2D board at font scale 2, by day and by night;
+          # the test sets the scale and puts 1.0 back
+          board_source=app/src/androidTest/java/com/cramdown/sorta/MapModeBoardRenderTest.kt
+          board_tests=$(grep -c '@Test' "$board_source")
+          echo "expecting OK ($board_tests tests) and $board_tests renders of the look menu over the board at font scale 2" | tee -a test-results/expected.txt
+          [ "$board_tests" -eq 2 ]
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeBoardRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode-board.txt
+          echo "The board's look menu took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          adb shell settings put system font_scale 1.0
+          # S06c: on Space, an idea held onto another rings it twice and collides them, and the chosen idea
+          # pinched apart opens the split chooser, and pushed together with its nearest idea joins them;
+          # on the tablet the ideas like the open one are ringed
+          shapes_source=app/src/androidTest/java/com/cramdown/sorta/IdeaShapesMapTest.kt
+          shapes_tests=$(grep -c '@Test' "$shapes_source")
+          [ "$shapes_tests" -eq 1 ]
+          echo "expecting OK (1 test), a drop, a pinch and a push still, and on the tablet a still of the rings" | tee -a test-results/expected.txt
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.IdeaShapesMapTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-shapes.txt
+          echo "The reshaping touches took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # S06a A8 and S06d A2: Space's frost, six bodies with their halo, then the Alone lens over
+          # Space, by day and by night
+          frost_source=app/src/androidTest/java/com/cramdown/sorta/SpaceFrostLensRenderTest.kt
+          frost_tests=$(grep -c '@Test' "$frost_source")
+          [ "$frost_tests" -eq 2 ]
+          echo "expecting OK ($frost_tests tests) and $frost_tests renders each of Space's frost and a lens over Space" | tee -a test-results/expected.txt
+          started=$SECONDS
+          adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SpaceFrostLensRenderTest \
+            com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-frost.txt
+          echo "Space's frost and lens took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          # the phone also renders To sort with Android's three-button
+          # navigation bar, by day and by night (S05, A6); the test checks
+          # the bar is the tappable three-button one
+          sort_tests=0
+          if [ "$device" = phone ]; then
+            adb shell cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton
+            for attempt in $(seq 1 15); do
+              if [ "$(adb shell settings get secure navigation_mode | tr -d '\r')" = 0 ]; then break; fi
+              sleep 2
+            done
+            adb shell settings get secure navigation_mode | tr -d '\r' | tee test-results/navigation-mode.txt
+            sort_source=app/src/androidTest/java/com/cramdown/sorta/SortNavBarRenderTest.kt
+            sort_tests=$(grep -c '@Test' "$sort_source")
+            echo "expecting OK ($sort_tests tests) and $sort_tests renders of To sort" | tee -a test-results/expected.txt
+            started=$SECONDS
+            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.SortNavBarRenderTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-sort.txt
+            echo "To sort's renders took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+            # Map mode with the same bar, by day and by night (S05b, A6)
+            map_bar_source=app/src/androidTest/java/com/cramdown/sorta/MapModeNavBarRenderTest.kt
+            map_bar_tests=$(grep -c '@Test' "$map_bar_source")
+            echo "expecting OK ($map_bar_tests tests) and $map_bar_tests renders of Map mode with the bar" | tee -a test-results/expected.txt
+            started=$SECONDS
+            adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.MapModeNavBarRenderTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-mapmode-navbar.txt
+            echo "Map mode's renders with the bar took $((SECONDS - started)) seconds" | tee -a test-results/time.txt
+          fi
+          # pulled first, so a failed run still uploads what it took
+          adb pull /sdcard/Download/sorta-renders/. renders/ || true
+          grep -qF "OK ($tests tests)" test-results/instrumentation.txt
+          test "$(find renders -name 'map-*.png' | wc -l)" -eq "$tests"
+          grep -qF "OK ($mode_tests tests)" test-results/instrumentation-mapmode.txt
           grep -qF "OK ($frames_tests tests)" test-results/instrumentation-frames.txt
           test "$(grep -c 'gl-work' "test-results/frames-$device.txt")" -ge 3
+          test "$(find renders -name 'mapmode-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-straight-[dl]*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-named-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-named-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A3: the first run's steps, a chosen body and Show links in Space, Neurons and Performance
+          test "$(find renders -name 'mapmode-card-steps-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-performance-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A6, repair 3: a chosen sun in Space, and a cell's bridges chosen and shown in Neurons
+          test "$(find renders -name 'mapmode-chosen-sun-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chosen-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-links-bridges-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g2 A3: a body held, then moved, in Space and Neurons; a sun pulling its neighbours; an open cell carrying its idea
+          test "$(find renders -name 'mapmode-drag-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-sun-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-cell-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05g A2: each legend scrolled to its end, its last line above the sheet's foot and the bar
+          test "$(find renders -name 'mapmode-legend-foot-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-foot-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-foot-performance-*.png' | wc -l)" -eq "$mode_tests"
+          # S05h A3: the Universe at rest, Fly in, a moved black hole, the legend's top; and orbiting
+          test "$(find renders -name 'mapmode-universe-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-fly-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-drag-star-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-top-space-*.png' | wc -l)" -eq "$mode_tests"
+          # S05j A3: the legend sheet, the folder chooser over Space, the first view, Neurons and the Look menu's
+          # Lines row with Straight on; the list sheet on the phone only (two panes have none), the two panes'
+          # status bar on the tablet only
+          test "$(find renders -name 'mapmode-legend-sheet-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-chooser-sheet-*.png' | wc -l)" -eq "$mode_tests"
+          if [ "$device" = phone ]; then sheets=$mode_tests; else sheets=0; fi
+          test "$(find renders -name 'mapmode-list-sheet-*.png' | wc -l)" -eq "$sheets"
+          test "$(find renders -name 'mapmode-first-view-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-straight-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-look-lines-*.png' | wc -l)" -eq "$mode_tests"
+          if [ "$device" = tablet ]; then panes=$mode_tests; else panes=0; fi
+          test "$(find renders -name 'mapmode-panes-bar-*.png' | wc -l)" -eq "$panes"
+          # S05i A3: the filter's menu in each theme, the Neurons' cell states and the legend's Cell states row
+          test "$(find renders -name 'mapmode-filter-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filter-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filter-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-cells-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05i repair 4, A6: the map under a filter in each theme, the Look menu's Cells group, the Cell by cell
+          # sheet and each cell state close up
+          test "$(find renders -name 'mapmode-filtered-pages-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filtered-garden-space-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filtered-pages-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filtered-garden-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filtered-pages-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-filtered-garden-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-menu-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-sheet-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-firing-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-engulfing-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-resting-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-releasing-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-pacemaker-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-cells-migrating-neurons-*.png' | wc -l)" -eq "$mode_tests"
+          # S05i2 A3: Performance's hubs and folder lines on the sample, and its legend's ladder
+          test "$(find renders -name 'mapmode-hubs-performance-*.png' | wc -l)" -eq "$mode_tests"
+          test "$(find renders -name 'mapmode-legend-ladder-performance-*.png' | wc -l)" -eq "$mode_tests"
+          grep -qF "OK ($board_tests tests)" test-results/instrumentation-mapmode-board.txt
+          test "$(find renders -name 'mapmode-board-looks-scale2-*.png' | wc -l)" -eq "$board_tests"
+          grep -qF "OK ($lively_tests tests)" test-results/instrumentation-lively.txt
+          test "$(find renders -name 'mapmode-lively-universe-*.png' | wc -l)" -eq "$orbit_tests"
+          test "$(find renders -name 'mapmode-lively-death-*.png' | wc -l)" -eq "$spark_tests"
+          test "$(find renders -name 'mapmode-lively-plasma-*.png' | wc -l)" -eq "$spark_tests"
+          test "$(find renders -name 'mapmode-lively-dust-*.png' | wc -l)" -eq "$spark_tests"
+          grep -qF "OK ($sky_tests tests)" test-results/instrumentation-sky.txt
+          for still in tails lean-card shared-card moons lit-day-space lit-day-board settle settled; do
+            test "$(find renders -name "sky-$still-[dl]*.png" | wc -l)" -eq "$sky_tests"
+          done
+          grep -qF "OK (1 test)" test-results/instrumentation-shapes.txt
+          test "$(find renders -name 'shapes-drop-space-*.png' | wc -l)" -eq 1
+          test "$(find renders -name 'shapes-pinch-split-space-*.png' | wc -l)" -eq 1
+          test "$(find renders -name 'shapes-push-join-space-*.png' | wc -l)" -eq 1
+          if [ "$device" = tablet ]; then test "$(find renders -name 'shapes-glow-space-*.png' | wc -l)" -eq 1; fi
+          grep -qF "OK ($frost_tests tests)" test-results/instrumentation-frost.txt
+          test "$(find renders -name 'space-frost-*.png' | wc -l)" -eq "$frost_tests"
+          test "$(find renders -name 'space-lens-*.png' | wc -l)" -eq "$frost_tests"
+          if [ "$device" = phone ]; then
+            # 0 is the three-button bar
+            [ "$(cat test-results/navigation-mode.txt)" = 0 ]
+            [ "$sort_tests" -gt 0 ]
+            grep -qF "OK ($sort_tests tests)" test-results/instrumentation-sort.txt
+            test "$(find renders -name 'sort-navbar-*.png' | wc -l)" -eq "$sort_tests"
+            [ "$map_bar_tests" -gt 0 ]
+            grep -qF "OK ($map_bar_tests tests)" test-results/instrumentation-mapmode-navbar.txt
+            test "$(find renders -name 'navbar-map-*.png' | wc -l)" -eq "$map_bar_tests"
+          fi
           SCRIPT
       - name: The renders
         uses: reactivecircus/android-emulator-runner@v2
