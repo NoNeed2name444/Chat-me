@@ -7,7 +7,8 @@ import com.cramdown.sorta.map.nest.NestNodes
 /**
  * The 3D Tree's names (S11), from where its bodies are on screen. Branch names first (the trunk and
  * every part that holds others), then by the leaves under each, then the nearer; each takes the first
- * of its spots (on its branch for a branch, then under, above, after and before its body) that is clear
+ * of its spots (on its branch for a branch, then under, above, after and before its body, and for a
+ * branch a row further under and above) that is clear
  * of every name placed, halo and gap included, inside the view and off the chrome; a name with no clear
  * spot is not drawn. So no two names ever overlap, at any angle or zoom. Names may cross branches and
  * leaves: the halo, the page's colour, keeps them readable there.
@@ -26,6 +27,15 @@ object TreeNames {
         /** A leaf drawn smaller than this across is too far to name. */
         val leastLeaf: Float,
     )
+
+    /**
+     * How far up from the view's foot the names keep: the chrome's foot ([insets]), raised to the
+     * first-run card's [cover] while it is up. The cover is measured from the view's foot and already
+     * holds the chrome under the card, so the two are not added (that left the first view's big
+     * branches no room above the card on the emulators); the first view is framed half a target
+     * higher still (Map3DView's framed cover), so the bodies it fits are always above this.
+     */
+    fun floor(insets: com.cramdown.sorta.map.MapInsets, cover: Float): Float = insets.coveringFoot(cover).bottom
 
     fun bough(nodes: NestNodes, i: Int): Boolean = i == 0 || nodes.childCount[i] > 0 || nodes.folder[i]
 
@@ -60,10 +70,13 @@ object TreeNames {
             val w = metrics.width(label, size) + 2 * style.halo
             val h = metrics.descent(size) - metrics.ascent(size) + 2 * style.halo
             val below = node.pixels / 2 + h / 2 + style.gapY
-            val around = LabelRoom.spots(node.x, node.y, node.pixels, w, h, below, style.gapX)
-            val all = if (isBough) listOf(LabelBox(node.x, node.y, w, h)) + around else around
-            val spots: List<LabelBox?> = all.mapIndexed { k, b ->
-                LabelRoom.inView(b, width, style.edge, slides = k < all.size - 2)?.takeIf { it.y - it.height / 2 >= top && it.y + it.height / 2 <= height - bottom }
+            // under, above, after, before: the first two slide along their row to stay in, the others don't
+            val around = LabelRoom.spots(node.x, node.y, node.pixels, w, h, below, style.gapX).mapIndexed { k, b -> b to (k < 2) }
+            // a branch also tries its own body first and, in a crowd, a row further under and above
+            val all = if (!isBough) around else listOf(LabelBox(node.x, node.y, w, h) to true) + around +
+                listOf(LabelBox(node.x, node.y + below + h + style.gapY, w, h) to true, LabelBox(node.x, node.y - below - h - style.gapY, w, h) to true)
+            val spots: List<LabelBox?> = all.map { (b, slides) ->
+                LabelRoom.inView(b, width, style.edge, slides)?.takeIf { it.y - it.height / 2 >= top && it.y + it.height / 2 <= height - bottom }
             }
             val last = held[i]
             val tried = (if (last != null && last in spots.indices) listOf(spots[last]) + spots.filterIndexed { k, _ -> k != last } else spots).filterNotNull()

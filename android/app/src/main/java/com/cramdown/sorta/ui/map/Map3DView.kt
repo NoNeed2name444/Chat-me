@@ -798,6 +798,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         }
     }
     // S11, the Tree's names: branches first, then by weight, each clear of every other, its halo the page;
+    // their foot is the chrome's or the card's cover, whichever is higher (TreeNames.floor)
     // worked out here, not in the drawing, so TalkBack has one element a name
     val treeModel = scene.treeModel
     val treeType = remember(context, density) { if (treeModel == null) null else TreeType(context, density.density) }
@@ -805,7 +806,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
         remember(screenNodes, viewSize, insets, cover) {
             TreeNames.layout(screenNodes, treeModel.nodes, treeType.boughs, treeType.leaves, treeType.style, w, h,
-                top = insets.top, bottom = insets.bottom + cover, held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
                 named.clear(); for (p in placed) named[p.index] = p.spot
             }
         }

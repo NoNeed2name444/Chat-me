@@ -89,13 +89,14 @@ class TreeMapRenderTest {
         open(dark, suffix)
         waitFor(TreeTags.FIRST_VISIT, "the first visit's card, $suffix")
         settle(1_500)
+        // each still is kept before its checks, so a failed check still leaves the picture
+        shot("tree-whole-$suffix", dark)
         names("whole", suffix, listOf("All ideas", "Examples", "Cardiology"))
         // the first view keeps above the card: the trunk's foot, its body's place, is drawn above the card's top
         val card = node(TreeTags.FIRST_VISIT).boundsInRoot
         val top = checkNotNull(mapNode()).boundsInRoot.top
         val trunk = checkNotNull(drawn()?.names?.firstOrNull { it.index == 0 }) { "The trunk is not named for $suffix" }
         check(top + trunk.box[3] < card.top) { "The trunk's name ${trunk.box} (map top $top) runs under the card $card for $suffix" }
-        shot("tree-whole-$suffix", dark)
 
         // a drag of about 40 degrees round the trunk (Map3DView's drag turns 3.2 radians a view's width)
         val before = checkNotNull(drawn()).pose
@@ -104,10 +105,10 @@ class TreeMapRenderTest {
         val from = (map.left + map.width * 0.70f).toInt(); val to = (map.left + map.width * 0.482f).toInt()
         check(ui.swipe(from, y, to, y, 40)) { "The drag could not be made for $suffix" }
         settle(1_500)
+        shot("tree-orbit-$suffix", dark)
         val turned = checkNotNull(drawn()).pose[4] - before[4]
         check(turned in 0.45f..1.0f) { "The drag turned the tree $turned radians, not about 40 degrees, for $suffix" }
         names("orbit", suffix, listOf("All ideas", "Cardiology"))
-        shot("tree-orbit-$suffix", dark)
 
         // a tap on Cardiology flies in to it
         val cardiology = TITLE.indexOf("Cardiology")
@@ -117,13 +118,13 @@ class TreeMapRenderTest {
         onMain { tap.tap(index) }
         waitFor(TreeTags.BACK, "Back after flying in, $suffix")
         settle(2_500)
+        shot("tree-cardiology-$suffix", dark)
         val inside = names("cardiology", suffix, listOf("Cardiology", "Heart failure"))
         check(inside.count { under(cardiology, it) } >= 6) { "Few of Cardiology's parts are named for $suffix: $inside" }
         // each name is a TalkBack element at least 48 dp each way
         val least = 48 * instrumentation.targetContext.resources.displayMetrics.density - 0.5f
         val part = node(TreeTags.part(id(TITLE.indexOf("Heart failure")))).touchBoundsInRoot
         check(part.width >= least && part.height >= least) { "Heart failure's element is ${part.width} x ${part.height} for $suffix" }
-        shot("tree-cardiology-$suffix", dark)
     }
 
     /** The names drawn now: none overlapping, [want] among them; their nodes. */
@@ -131,7 +132,12 @@ class TreeMapRenderTest {
         try { compose.waitUntil(10_000) { drawn()?.names?.map { TITLE.getOrNull(it.index) }?.containsAll(want) == true } } catch (_: ComposeTimeoutException) {}
         val names = checkNotNull(drawn()).names
         val words = names.map { TITLE.getOrNull(it.index) }
-        check(words.containsAll(want)) { "$what, $suffix: $want not all named: $words" }
+        check(words.containsAll(want)) {
+            val d = checkNotNull(drawn())
+            val card = if (shown(TreeTags.FIRST_VISIT)) node(TreeTags.FIRST_VISIT).boundsInRoot.toString() else "none"
+            "$what, $suffix: $want not all named in a ${d.width} x ${d.height} map (its top ${mapNode()?.boundsInRoot?.top}, the card $card): " +
+                names.joinToString { n -> "${TITLE.getOrNull(n.index)} ${n.box.map { it.toInt() }}" }
+        }
         for (a in names.indices) for (b in a + 1 until names.size) {
             val p = names[a].box; val q = names[b].box
             val apart = p[2] <= q[0] || q[2] <= p[0] || p[3] <= q[1] || q[3] <= p[1]
