@@ -68,6 +68,10 @@ struct Graph3DView: View {
     /// Map mode's filings, deletes and Undo, the Sort screen's (S05b
     /// checklist 7).
     @Environment(IdeasFiling.self) private var filing
+    /// S06c: the ideas like the one open in the editor, rung; Collide,
+    /// Split and Join. Absent where the map is shown without the Ideas
+    /// screens, which offer none of them.
+    @Environment(IdeaShapes.self) private var shapes: IdeaShapes?
     let open: (UUID) -> Void
     /// Opens a folder in the List (nil: its top level) - two double taps on
     /// a star or black hole in the Universe.
@@ -76,6 +80,12 @@ struct Graph3DView: View {
     /// bar's note or name): the map draws slowly under it (GraphPace), as
     /// under its own sheets.
     var covered: Bool = false
+    /// S06b: the ideas of the day picked in the moons row (IdeasMapView),
+    /// lit where they are while the rest dim; nil, none picked.
+    var lit: Set<UUID>? = nil
+    /// The ideas Map mode's lenses let through (IdeaLens.passing), nil with
+    /// no lens on: the rest fade as the filter fades them (S06d A2).
+    var lens: Set<UUID>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The sky's shared switch (SpaceQuality): at .still - Low Power Mode,
     /// a hot device - the map holds still too.
@@ -157,10 +167,12 @@ struct Graph3DView: View {
     @AccessibilityFocusState private var cardFocused: Bool
 
     init(open: @escaping (UUID) -> Void, openFolder: @escaping (UUID?) -> Void = { _ in },
-         covered: Bool = false) {
+         covered: Bool = false, lit: Set<UUID>? = nil, lens: Set<UUID>? = nil) {
         self.open = open
         self.openFolder = openFolder
         self.covered = covered
+        self.lit = lit
+        self.lens = lens
         _ = GraphFirstRun.reset
     }
 
@@ -295,19 +307,26 @@ struct Graph3DView: View {
         ZStack {
             GeometryReader { geo in
                 let insets: GraphInsets = mapInsets(geo)
-                GraphSCNView(built: built, filter: filter, recenter: recenter,
+                GraphSCNView(built: built, filter: filter, lens: lens, recenter: recenter,
                              insets: insets, card: cardCover(built, viewBottom: geo.frame(in: .global).maxY),
                              onTap: open, openFolder: openFolder,
                              command: command, chosen: selection.selected,
                              linksFor: selection.linksShown ? selection.selected : nil,
                              labels: labelSettings, touch: touchHandlers, covered: covered || sheetUp,
-                             frost: frostLevels, melt: !reduceMotion)
+                             frost: frostLevels, melt: !reduceMotion,
+                             lit: lit, glows: shapes?.glowing ?? [], dropPreview: dropPreview)
             }
             .ignoresSafeArea()
         }
         .overlay {
-            if filter != .all && shownCount == 0 {
-                Text("Nothing here for this filter.")
+            if (filter != .all || lens != nil) && shownCount == 0 {
+                Group {
+                    if filter == .all {
+                        Text(IdeasWords.lensEmpty)
+                    } else {
+                        Text("Nothing here for this filter.")
+                    }
+                }
                     .wardFont(.footnote)
                     .foregroundStyle(Color.wardInkSecondary)
                     .allowsHitTesting(false)
@@ -364,7 +383,7 @@ struct Graph3DView: View {
     /// The Performance theme's map (GraphPerfSpace), with the same tools,
     /// peek card and options as every other theme.
     private var perfSpace: some View {
-        GraphPerfSpace(source: perfSource, filter: filter, recenter: recenter, command: command,
+        GraphPerfSpace(source: perfSource, filter: filter, lens: lens, recenter: recenter, command: command,
                        chosen: selection.selected, linksFor: selection.linksShown ? selection.selected : nil,
                        touch: touchHandlers, bold: bold, mapInsets: { mapInsets($0) })
             .overlay(alignment: .bottom) {
@@ -399,7 +418,10 @@ struct Graph3DView: View {
                                   flyIn: { command.send(.flyIn(id)) },
                                   chip: { other in handle(.chip(other)) },
                                   more: GraphPeek.menu(folder: folder, home: id == GraphUniverse.homeID),
-                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) })
+                                  option: { item in choose(item, for: optionsTarget(id, in: built, at: nil)) },
+                                  lean: folder ? nil : skyLean(id, in: built)?.line,
+                                  fileThere: { fileThere(id, in: built) },
+                                  source: folder ? nil : notes.note(id)?.sharedFrom)
                     .id(id)
                     .accessibilityFocused($cardFocused)
                     .transition(.move(edge: .bottom))
@@ -412,6 +434,20 @@ struct Graph3DView: View {
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: selection.cardShown)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: tuningLinks)
         .animation(reduceMotion ? nil : .spring(duration: 0.3), value: options == nil)
+    }
+
+    /// S06b: a loose idea's lean in the Universe, for its card: the words
+    /// it shares with a folder, and that folder.
+    private func skyLean(_ id: UUID, in built: GraphScene?) -> (line: GraphSkyLean, folder: UUID)? {
+        guard built?.universe == true, let found = GraphSkyBodies.lean(id, store: notes) else { return nil }
+        return (GraphSkyLean(word: found.lean.word, folder: found.folder.name), found.folder.id)
+    }
+
+    /// File there: the idea goes into the folder it leans to, with the
+    /// filing's notice and Undo; the card stays on it as it settles.
+    private func fileThere(_ id: UUID, in built: GraphScene?) {
+        guard let target = skyLean(id, in: built)?.folder else { return }
+        filing.file(id, in: target, notes: notes)
     }
 
     /// A body's options, held still on it: a glass list beside where it
@@ -508,12 +544,28 @@ struct Graph3DView: View {
         out.hold = { id, point in held(id, at: point) }
         out.voice = { id, action in voiceAction(id, action) }
         out.flown = { id in flownRegion = id }
+        if let shapes {
+            out.collide = { a, b in shapes.collide(a, b, from: .map, notes: notes) }
+            out.split = { id in shapes.askSplit(id, from: .map, notes: notes, filing: filing) }
+            out.join = { a, b in shapes.joinOlderFirst(a, b, notes: notes, filing: filing) }
+        }
         return out
+    }
+
+    /// UI tests only: the idea rung as a held one's drop target
+    /// (GraphReshapePreview).
+    private var dropPreview: UUID? {
+        guard let name = GraphReshapePreview.drop else { return nil }
+        return notes.notes.first(where: { $0.title == name })?.id
     }
 
     /// A tap on the map: on a body (its id) or on empty space (nil).
     private func touched(_ id: UUID?) {
-        if let id {
+        // S06c: a tap on an idea rung as like the one open in the editor
+        // links the two, with Undo (Performance draws no rings, so not there)
+        if let id, let shapes, shapes.editing != nil, shapes.glows(id), theme.bodies != .points {
+            shapes.link(id, notes: notes, filing: filing)
+        } else if let id {
             handle(.tapBody(id))
         } else {
             handle(.tapEmpty)
@@ -584,6 +636,12 @@ struct Graph3DView: View {
             command.send(.flyIn(id))
         case "Delete":
             askToDelete(optionsTarget(id, in: built, at: nil))
+        case "Split\u{2026}":
+            shapes?.askSplit(id, from: .map, notes: notes, filing: filing)
+        case "Join with\u{2026}":
+            shapes?.askJoin(id, from: .map, notes: notes)
+        case "Collide with\u{2026}":
+            shapes?.askCollide(id, from: .map, notes: notes)
         default:
             if selection.selected != id { handle(.tapBody(id)) }
         }
@@ -598,6 +656,9 @@ struct Graph3DView: View {
         case "Link to\u{2026}": linkingFrom = GraphReading(id: target.id)
         case "Choose folder": movingNote = GraphReading(id: target.id)
         case "Add idea here": addingInto = target
+        case "Split\u{2026}": shapes?.askSplit(target.id, from: .map, notes: notes, filing: filing)
+        case "Join with\u{2026}": shapes?.askJoin(target.id, from: .map, notes: notes)
+        case "Collide with\u{2026}": shapes?.askCollide(target.id, from: .map, notes: notes)
         case "Delete": askToDelete(target)
         default: break
         }
@@ -779,6 +840,14 @@ struct Graph3DView: View {
         .ideaToolRelief(active: filtering)
         .accessibilityLabel("Filter")
 
+        // S06c: Collide, two far-apart ideas face to face, above Recentre
+        if let shapes, !GraphPreview.isOn {
+            IdeaToolButton(symbol: "bolt", label: IdeasWords.collideTool) {
+                shapes.collideAny(from: .map, notes: notes, filing: filing)
+            }
+            .accessibilityIdentifier("collide-tool")
+        }
+
         IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") {
             recenter += 1
         }
@@ -851,7 +920,8 @@ struct Graph3DView: View {
         return found.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// How many notes the current filter lets through, to say so when none do.
+    /// How many notes the current filter and lenses let through, to say so
+    /// when none do.
     private var shownCount: Int {
         var degree: [UUID: Int] = [:]
         for edge in notes.allEdges() {
@@ -863,7 +933,7 @@ struct Graph3DView: View {
             var root: UUID? = notes.rootFolder(of: note.folderId)
             if let built, built.universe { root = built.galaxyOf[note.id] }
             let links: Int = degree[note.id] ?? 0
-            if filter.admits(kind: note.kind, root: root, degree: links) { count += 1 }
+            if filter.admits(kind: note.kind, root: root, degree: links) && (lens?.contains(note.id) ?? true) { count += 1 }
         }
         return count
     }
@@ -931,8 +1001,28 @@ struct Graph3DView: View {
         // the link length plans the Universe and the themes (not the single
         // looks, which the force layout places)
         if universe { parts.append(GraphLinkLength.tag(linkValue)) }
+        if universe { parts.append(skyTag) }
         parts.append("p\(probeRound)")
         return parts.joined(separator: "\n")
+    }
+
+    /// S06b's part of the signature, in the Universe: the folders' words
+    /// (leaning), the shared ideas' marks (circling) and each loose idea's
+    /// tail step, so a tail grows when its idea crosses a day, a week or a
+    /// month the next time the map is drawn.
+    private var skyTag: String {
+        var hasher = Hasher()
+        let now = Date()
+        for folder in notes.folders where !folder.words.isEmpty {
+            hasher.combine(folder.id)
+            hasher.combine(folder.words)
+        }
+        for note in notes.notes where note.folderId == nil {
+            hasher.combine(note.id)
+            hasher.combine(note.sharedFrom)
+            hasher.combine(CometTail.length(created: note.createdAt, now: now))
+        }
+        return "k\(hasher.finalize())"
     }
 
     /// Whether a shader check this look builds with was not kept: it failed
@@ -961,7 +1051,7 @@ struct Graph3DView: View {
     /// and takes its touches): it draws slowly under them (GraphPace).
     private var sheetUp: Bool {
         reading != nil || renaming != nil || linkingFrom != nil || movingNote != nil || addingInto != nil
-            || addingFolder || showingLegend
+            || addingFolder || showingLegend || shapes?.sheet != nil
     }
 
     /// Reduce Transparency or Increase Contrast: brighter, solid links.
@@ -1627,11 +1717,19 @@ struct GraphTouchHandlers {
     var voice: (UUID, String) -> Void = { _, _ in }
     /// The camera flew in to a region (its id) or back out to the whole map.
     var flown: (UUID?) -> Void = { _ in }
+    /// S06c, on ideas only: a held idea let go on another (`collide`); two
+    /// fingers spread on the chosen idea (`split`), or on it and another
+    /// pushed together (`join`). Nil: the map offers none of them.
+    var collide: ((UUID, UUID) -> Void)?
+    var split: ((UUID) -> Void)?
+    var join: ((UUID, UUID) -> Void)?
 }
 
 struct GraphSCNView: UIViewRepresentable {
     let built: GraphScene
     let filter: GraphFilter
+    /// The ideas the lenses let through, nil with none on (S06d A2).
+    var lens: Set<UUID>? = nil
     let recenter: Int
     /// How much of the view is under glass on each side; the graph is
     /// framed to the rest.
@@ -1655,6 +1753,13 @@ struct GraphSCNView: UIViewRepresentable {
     /// whether a change melts (not with Reduce Motion).
     var frost: [UUID: Int] = [:]
     var melt: Bool = true
+    /// S06b: the lit day's ideas (Graph3DView.lit).
+    var lit: Set<UUID>? = nil
+    /// S06c: the ideas like the one open in the editor, rung in the accent;
+    /// and, for the drop target's render only, an idea rung as a held one
+    /// would be let go on (GraphReshapePreview).
+    var glows: [UUID] = []
+    var dropPreview: UUID? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onTap: onTap, openFolder: openFolder, recenter: recenter, insets: insets, card: card)
@@ -1706,6 +1811,17 @@ struct GraphSCNView: UIViewRepresentable {
         // a tap waits only for the hold to fail - at once when the finger
         // lifts before a quarter second - so a long hold never also taps
         tap.require(toFail: hold)
+        // S06c: two fingers on the chosen idea split it or join it to
+        // another; the camera's pinches wait for this to fail
+        let reshape = GraphReshapeRecognizer(target: coordinator, action: #selector(Coordinator.reshaped(_:)))
+        reshape.delegate = coordinator
+        reshape.cancelsTouchesInView = false
+        reshape.delaysTouchesEnded = false
+        reshape.starts = { [weak coordinator] a, b in
+            coordinator?.reshapeStart(a, b) ?? GraphReshapeTouch.Start.none
+        }
+        view.addGestureRecognizer(reshape)
+        coordinator.reshaper = reshape
 
         coordinator.touch = touch
         coordinator.chosenID = chosen
@@ -1714,8 +1830,9 @@ struct GraphSCNView: UIViewRepresentable {
         coordinator.commandSerial = command.serial
         coordinator.cover(covered)
         coordinator.attach(built, to: view)
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
         coordinator.frost(frost, melt: false)
+        coordinator.glow(glows, drop: dropPreview)
         // the design preview's hold is sent once the scene is built, and can
         // be sent before SwiftUI makes this view for it: the line above then
         // counts it as seen, and it is lost (Chat-me copy daa2707, maps re-run)
@@ -1737,8 +1854,10 @@ struct GraphSCNView: UIViewRepresentable {
         } else {
             coordinator.syncChoice()
         }
-        coordinator.apply(filter)
+        coordinator.apply(filter, lens: lens)
         coordinator.frost(frost, melt: melt)
+        coordinator.lightDay(lit)
+        coordinator.glow(glows, drop: dropPreview, rebuilt: rebuilt)
         if coordinator.commandSerial != command.serial {
             coordinator.commandSerial = command.serial
             coordinator.run(command.kind)
@@ -1751,6 +1870,8 @@ struct GraphSCNView: UIViewRepresentable {
         } else if coordinator.insets != insets || coordinator.card != card {
             coordinator.inset(to: insets, card: card)
         }
+        // the names keep out from under the glass (GraphNameRoom)
+        coordinator.sim?.setLabelRoom(coordinator.insets)
         coordinator.cover(covered)
     }
 
@@ -1854,6 +1975,8 @@ struct GraphSCNView: UIViewRepresentable {
         /// been turned or zoomed since.
         private var framedPose: simd_float4x4?
         private var shownFilter: GraphFilter?
+        /// The lenses' ideas as last shown (S06d A2).
+        private var shownLens: Set<UUID>?
         /// The note a drag is about to pick up, found when the drag begins.
         private var pending: Int?
         /// How far into the screen the dragged note sits, so it moves across
@@ -1891,9 +2014,16 @@ struct GraphSCNView: UIViewRepresentable {
         }
 
         /// What framing fits the graph to: the glass, and the first-run
-        /// card while it is up (S05d).
+        /// card while it is up (S05d). Half a touch target more under the
+        /// top glass, as the card's cover has (cardCover): the framing keeps
+        /// each body's middle in the window, and its touch frame (voiceFrame,
+        /// 44 pt round its middle) must clear the strip and the lens row too.
+        /// The lens row's second line on a phone (S06d) made the first view
+        /// fill the band's height, and the top body's frame ran 4 pt under it.
         private var framing: GraphInsets {
-            insets.coveringFoot(card)
+            var out: GraphInsets = insets.coveringFoot(card)
+            out.top += Float(WardControlSize.target / 2)
+            return out
         }
 
         /// Shows a newly built scene.
@@ -1916,6 +2046,7 @@ struct GraphSCNView: UIViewRepresentable {
             framedSize = .zero
             framedPose = nil
             shownFilter = nil
+            shownLens = nil
             // the simulation steps on SceneKit's render loop, once per frame
             view.delegate = built.sim
             view.scene = built.scene
@@ -1932,6 +2063,7 @@ struct GraphSCNView: UIViewRepresentable {
             view.antialiasingMode = GraphSCNView.antialiasing()
             view.preferredFramesPerSecond = GraphQuality.frameRate
             built.sim.setViewHeight(Float(view.bounds.height), width: Float(view.bounds.width))
+            built.sim.setLabelRoom(insets)
             wireCameraGestures(in: view)
             // still flown in to a folder that is still there: stay on it
             if universe, let id = flownID, let slot = folders[id] {
@@ -2201,12 +2333,13 @@ struct GraphSCNView: UIViewRepresentable {
             wake()
         }
 
-        func apply(_ filter: GraphFilter) {
+        func apply(_ filter: GraphFilter, lens: Set<UUID>? = nil) {
             guard let sim else { return }
-            if shownFilter == filter { return }
+            if shownFilter == filter && shownLens == lens { return }
             let before: GraphFilter? = shownFilter
             shownFilter = filter
-            sim.apply(filter)
+            shownLens = lens
+            sim.apply(filter, lens: lens)
             refreshVoice()
             wake()
             // the chosen body filtered away: let it go (after this update)
@@ -2215,8 +2348,8 @@ struct GraphSCNView: UIViewRepresentable {
                 DispatchQueue.main.async { report(nil) }
             }
             // the Universe: a folder filter flies to its galaxy, and
-            // Everything frames the whole map again
-            guard universe, let before else { return }
+            // Everything frames the whole map again; a lens alone never flies
+            guard universe, let before, before != filter else { return }
             if case .folder(let id) = filter, let slot = folders[id] {
                 fly(to: slot, animated: true)
             } else if filter == .all && before != .all {
@@ -2461,6 +2594,8 @@ struct GraphSCNView: UIViewRepresentable {
         func stop() {
             view?.isPlaying = false
             view?.delegate = nil
+            ringLink?.invalidate()
+            ringLink = nil
         }
 
         // MARK: the frame rate
@@ -2574,9 +2709,23 @@ struct GraphSCNView: UIViewRepresentable {
         /// and is never held up by one: choosing a note is instant.
         func gestureRecognizer(_ gesture: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            // S06c: two fingers are watched alongside everything; once they
+            // split or join, `reshaped` lets the camera's own gestures go
+            if gesture === reshaper || other === reshaper { return true }
             let involvesTap: Bool = gesture === tapper || other === tapper
             guard involvesTap else { return false }
             return gesture is UITapGestureRecognizer && other is UITapGestureRecognizer
+        }
+
+        /// S06c: the camera's pinch, twist and two-finger drags wait for the
+        /// reshaping fingers to fail - at once, unless both are on the
+        /// chosen idea, or on it and another.
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            guard gesture === reshaper else { return false }
+            if other is UIPinchGestureRecognizer || other is UIRotationGestureRecognizer { return true }
+            if let pan = other as? UIPanGestureRecognizer { return pan.minimumNumberOfTouches >= 2 }
+            return false
         }
 
         /// A hold on a body (GraphTouchRules): at a quarter second it is
@@ -2625,10 +2774,15 @@ struct GraphSCNView: UIViewRepresentable {
                 guard holdMoving else { return }
                 let finger: SIMD3<Float> = fingerPoint(point, in: view, sim: sim)
                 sim.drag(to: finger + dragOffset)
+                // S06c: the idea under the finger, rung, is where the held
+                // one would be let go
+                if touch.collide != nil, let i = pending { setDrop(dropTarget(for: i, at: point, in: view)) }
             default:
                 holdGeneration += 1
                 let picked: Int? = pending
                 let wasStill: Bool = !holdMoving && !holdMenu
+                let dropped: Int? = dropIndex
+                setDrop(nil)
                 if dragging { sim.release() }
                 dragging = false
                 pending = nil
@@ -2641,7 +2795,188 @@ struct GraphSCNView: UIViewRepresentable {
                     if chosenSlot != i {
                         if let chosenSlot { sim.select(chosenSlot) } else { sim.clearSelection() }
                     }
+                    // S06c: let go on another idea, the held one springs
+                    // home as before and the two collide
+                    if gesture.state == .ended, let d = dropped, i < sim.ids.count, d < sim.ids.count,
+                       let collide = touch.collide {
+                        collide(sim.ids[i], sim.ids[d])
+                    }
                 }
+            }
+        }
+
+        // MARK: ideas like the open one, and reshaping (S06c)
+
+        /// The ideas like the one open in the editor, and the idea a held
+        /// one would be let go on: still rings in the accent over the
+        /// scene, on a layer that takes no touch. They never move or pulse,
+        /// so Reduce Motion needs nothing more. Android's Map3DView draws
+        /// the same rings.
+        private var glowIDs: [UUID] = []
+        private var dropIndex: Int?
+        private var shownDropPreview: UUID?
+        private var ringView: UIView?
+        private let glowRings = CAShapeLayer()
+        private let dropRings = CAShapeLayer()
+        private let dropFill = CAShapeLayer()
+        /// Moves the rings with the bodies, each frame, while there are any.
+        private var ringLink: CADisplayLink?
+        weak var reshaper: GraphReshapeRecognizer?
+
+        func glow(_ ids: [UUID], drop preview: UUID?, rebuilt: Bool = true) {
+            var changed: Bool = rebuilt || ids != glowIDs
+            glowIDs = ids
+            // the preview's ring is found again in a scene built anew
+            if let sim, preview != shownDropPreview || (rebuilt && preview != nil) {
+                shownDropPreview = preview
+                dropIndex = preview.flatMap { sim.index[$0] }
+                sim.nameDrop(dropIndex)
+                changed = true
+            }
+            if changed { drawRings() }
+        }
+
+        private func setDrop(_ i: Int?) {
+            guard i != dropIndex else { return }
+            dropIndex = i
+            // its name shows in place of the held idea's (GraphSim.nameDrop)
+            sim?.nameDrop(i)
+            if i != nil { light.impactOccurred() }
+            drawRings()
+        }
+
+        /// The idea under the finger while body `held` is moved: within its
+        /// drawn radius, or GraphReshapeTouch.drop points of a small one's
+        /// centre; never the held one, a folder or the home.
+        private func dropTarget(for held: Int, at point: CGPoint, in view: SCNView) -> Int? {
+            let seen: [Seen] = project(at: point, in: view)
+            guard seen.contains(where: { $0.index == held && !$0.folder }) else { return nil }
+            var best: Seen?
+            for body in seen where body.index != held && !body.folder {
+                guard body.distance <= max(body.size, CGFloat(GraphReshapeTouch.drop)) else { continue }
+                if best == nil || body.distance < best!.distance { best = body }
+            }
+            return best?.index
+        }
+
+        /// Draws the rings where the bodies are drawn now.
+        func drawRings() {
+            guard let view, let sim else { return }
+            let glowing: Set<Int> = Set(glowIDs.compactMap { sim.index[$0] })
+            guard !glowing.isEmpty || dropIndex != nil else {
+                ringLink?.invalidate()
+                ringLink = nil
+                ringView?.isHidden = true
+                return
+            }
+            let host: UIView = ringHost(in: view)
+            host.isHidden = false
+            if ringLink == nil {
+                let link = CADisplayLink(target: GraphRingTicker(self), selector: #selector(GraphRingTicker.tick))
+                link.add(to: .main, forMode: .common)
+                ringLink = link
+            }
+            let glow = UIBezierPath()
+            let drop = UIBezierPath()
+            let fill = UIBezierPath()
+            for body in project(at: .zero, in: view) where !body.folder {
+                let isDrop: Bool = body.index == dropIndex
+                guard isDrop || glowing.contains(body.index) else { continue }
+                let r: CGFloat = max(body.size, 10) + 6
+                glow.append(Self.circle(body.centre, r))
+                if isDrop {
+                    drop.append(Self.circle(body.centre, r + 7))
+                    fill.append(Self.circle(body.centre, r))
+                }
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            glowRings.path = glow.cgPath
+            dropRings.path = drop.cgPath
+            dropFill.path = fill.cgPath
+            CATransaction.commit()
+        }
+
+        private static func circle(_ centre: CGPoint, _ r: CGFloat) -> UIBezierPath {
+            UIBezierPath(ovalIn: CGRect(x: centre.x - r, y: centre.y - r, width: 2 * r, height: 2 * r))
+        }
+
+        /// The rings' layer over the scene: no touch, nothing VoiceOver
+        /// reads; the map is always night, so the accent is night's.
+        private func ringHost(in view: SCNView) -> UIView {
+            if let ringView, ringView.superview === view { return ringView }
+            let host = UIView(frame: view.bounds)
+            host.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            host.isUserInteractionEnabled = false
+            host.backgroundColor = .clear
+            host.isAccessibilityElement = false
+            host.accessibilityElementsHidden = true
+            let accent: UIColor = Color.uiColor(WardPalette.hex(.accent, dark: true))
+            for layer in [glowRings, dropRings] {
+                layer.fillColor = nil
+                layer.strokeColor = accent.cgColor
+                layer.lineWidth = 2.5
+            }
+            dropFill.fillColor = accent.withAlphaComponent(0.25).cgColor
+            dropFill.strokeColor = nil
+            for layer in [dropFill, glowRings, dropRings] {
+                layer.removeFromSuperlayer()
+                host.layer.addSublayer(layer)
+            }
+            view.addSubview(host)
+            ringView = host
+            return host
+        }
+
+        /// Two fingers coming down at `a` and `b`: a split of the chosen
+        /// idea, a join of it and another, or nothing (GraphReshapeTouch).
+        /// Never while a body is held, and only on ideas.
+        func reshapeStart(_ a: CGPoint, _ b: CGPoint) -> GraphReshapeTouch.Start {
+            guard touch.split != nil, !dragging, let view, let sim,
+                  let chosen = chosenID, let c = sim.index[chosen] else { return .none }
+            let ideas: [Seen] = project(at: .zero, in: view).filter { !$0.folder }
+            func under(_ p: CGPoint) -> Int? {
+                var best: (index: Int, distance: CGFloat)?
+                for body in ideas {
+                    let dx: CGFloat = body.centre.x - p.x
+                    let dy: CGFloat = body.centre.y - p.y
+                    let distance: CGFloat = (dx * dx + dy * dy).squareRoot()
+                    guard distance <= max(body.size, CGFloat(GraphReshapeTouch.reach)) else { continue }
+                    if best == nil || distance < best!.distance { best = (body.index, distance) }
+                }
+                return best?.index
+            }
+            let middle = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            let dx: Double = Double(a.x - b.x)
+            let dy: Double = Double(a.y - b.y)
+            let start = GraphReshapeTouch.start(first: under(a), second: under(b), middle: under(middle),
+                                                apart: (dx * dx + dy * dy).squareRoot())
+            switch start {
+            case .split(let i) where i == c: return start
+            case .join(let x, let y) where x == c || y == c: return start
+            default: return .none
+            }
+        }
+
+        /// Two fingers split or joined: the camera lets go of them, a tick,
+        /// and SwiftUI is told.
+        @objc func reshaped(_ gesture: GraphReshapeRecognizer) {
+            guard gesture.state == .recognized, let sim else { return }
+            for other in view?.gestureRecognizers ?? [] where other !== gesture {
+                guard other is UIPanGestureRecognizer || other is UIPinchGestureRecognizer
+                        || other is UIRotationGestureRecognizer else { continue }
+                other.isEnabled = false
+                other.isEnabled = true
+            }
+            wake()
+            pickup.impactOccurred()
+            switch gesture.start {
+            case .split(let i):
+                if i < sim.ids.count { touch.split?(sim.ids[i]) }
+            case .join(let a, let b):
+                if a < sim.ids.count, b < sim.ids.count { touch.join?(sim.ids[a], sim.ids[b]) }
+            case .none:
+                break
             }
         }
 
@@ -2716,6 +3051,20 @@ struct GraphSCNView: UIViewRepresentable {
                 sim.focusLinks(on: slot)
                 wake()
             }
+        }
+
+        /// S06b: the lit day's ideas on this scene, once per change and
+        /// again on a new scene (the sim it was lit on).
+        private var litShown: Set<UUID>?
+        private weak var litSim: GraphSim?
+
+        func lightDay(_ ids: Set<UUID>?) {
+            guard let sim else { return }
+            if litSim === sim && litShown == ids { return }
+            litSim = sim
+            litShown = ids
+            sim.lightDay(ids.map { Set($0.compactMap { sim.index[$0] }) })
+            wake()
         }
 
         /// A request from the card.
@@ -3192,5 +3541,19 @@ final class GraphWholeElement: UIAccessibilityElement {
     override var accessibilityFrameInContainerSpace: CGRect {
         get { container?.bounds ?? .zero }
         set { _ = newValue }
+    }
+}
+
+/// Calls the map's rings each frame without the display link keeping the
+/// coordinator alive.
+final class GraphRingTicker: NSObject {
+    private weak var owner: GraphSCNView.Coordinator?
+
+    init(_ owner: GraphSCNView.Coordinator) {
+        self.owner = owner
+    }
+
+    @MainActor @objc func tick() {
+        owner?.drawRings()
     }
 }

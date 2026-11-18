@@ -1,0 +1,8 @@
+{
+  "about": "An archive of about 600 KB; the limit is 512 KB.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "big.json", "repeat": {"text": "[\"seed\", \"soil\", \"sun\", \"rain\"],\n", "times": 18000}}
+  ],
+  "expect": {"verdict": "refused", "reason": "zip.size"}
+}

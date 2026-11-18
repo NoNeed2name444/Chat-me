@@ -1,0 +1,21 @@
+{
+  "day": {
+    "page": "#56636B",
+    "card": "#FFFFFF",
+    "cardText": "#1E1D1A",
+    "link": "#F2D3A0",
+    "folders": [
+      "#B5543A",
+      "#3F6E5A"
+    ]
+  },
+  "night": {
+    "page": "#0E0D12",
+    "card": "#6E6880",
+    "cardText": "#9A93A8",
+    "link": "#B9B0D0",
+    "folders": [
+      "#E08A6E"
+    ]
+  }
+}

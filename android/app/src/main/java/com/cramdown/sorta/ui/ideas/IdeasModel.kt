@@ -29,6 +29,7 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.data.ImportCounts
 import com.cramdown.sorta.data.ImportRefusal
+import com.cramdown.sorta.ideas.CapsuleOffer
 import com.cramdown.sorta.data.ImportRefused
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.data.SaveFailed
@@ -104,10 +105,11 @@ class IdeasModel private constructor(notes: List<Note>, folders: List<NoteFolder
      * S04's import (IdeaStore.importJson) on [text]: the ideas and folders this device doesn't
      * have are added and saved, and the screen shows the store's copy.
      */
-    fun import(text: String): ImportOutcome {
+    fun import(text: String, capsule: Boolean = false): ImportOutcome {
         val s = store ?: return ImportOutcome.NotSaved
         val outcome = try {
-            ImportOutcome.Added(s.importJson(text))
+            // a capsule (S06d A5) goes through the same steps, with its own checks
+            ImportOutcome.Added(if (capsule) s.importCapsule(text) else s.importJson(text))
         } catch (e: ImportRefused) {
             ImportOutcome.Refused(e.refusal)
         } catch (e: SaveFailed) {
@@ -143,11 +145,11 @@ sealed class ImportOutcome {
  * still refused as too big, without reading all of it), then runs the import on it. The
  * system picker's result and the tests' launch extra both come here.
  */
-suspend fun importFrom(model: IdeasModel, open: () -> InputStream?): ImportOutcome {
+suspend fun importFrom(model: IdeasModel, capsule: Boolean = false, open: () -> InputStream?): ImportOutcome {
     val text = withContext(Dispatchers.IO) {
         runCatching { open()?.use { readCapped(it, IdeaStore.MAX_IMPORT_BYTES + 1) } }.getOrNull()
     } ?: return ImportOutcome.Refused(ImportRefusal.UNREADABLE)
-    return model.import(text)
+    return model.import(text, capsule)
 }
 
 /** At most [limit] bytes of [input], as UTF-8. */
@@ -172,6 +174,15 @@ class IdeasSettings(context: Context) {
     private fun str(key: String, fallback: String) = runCatching { prefs?.getString(key, fallback) }.getOrNull() ?: fallback
     private fun bool(key: String) = runCatching { prefs?.getBoolean(key, false) }.getOrNull() ?: false
     private fun put(block: SharedPreferences.Editor.() -> Unit) { runCatching { prefs?.edit()?.apply(block)?.apply() } }
+    private fun time(key: String): Long? = runCatching { prefs?.takeIf { it.contains(key) }?.getLong(key, 0L) }.getOrNull()
+
+    // the capsule's monthly offer (S06d A4, CapsuleOffer): the first launch with ideas, the last offer and the last capsule saved
+    val capsuleFirstSeen: Long? get() = time(CapsuleOffer.FIRST_SEEN_KEY)
+    val capsuleOffered: Long? get() = time(CapsuleOffer.OFFERED_KEY)
+    val capsuleSaved: Long? get() = time(CapsuleOffer.SAVED_KEY)
+    fun setCapsuleFirstSeen(at: Long) = put { putLong(CapsuleOffer.FIRST_SEEN_KEY, at) }
+    fun setCapsuleOffered(at: Long) = put { putLong(CapsuleOffer.OFFERED_KEY, at) }
+    fun setCapsuleSaved(at: Long) = put { putLong(CapsuleOffer.SAVED_KEY, at) }
 
     private var heldMode by mutableStateOf(IdeasMode.of(str(IdeasMode.KEY, IdeasMode.LIST.rawValue)))
     val mode: IdeasMode get() = heldMode

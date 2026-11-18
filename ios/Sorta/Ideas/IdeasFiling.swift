@@ -106,6 +106,10 @@ final class IdeasFiling {
         case let .letGo(removal, idea, at):
             notes.undo(removal)
             if !tide.contains(idea) { tide.insert(idea, at: min(at, tide.count)) }
+        case let .linked(a, b):
+            notes.unlink(a, b)
+        case let .reshaped(reshape):
+            notes.undo(reshape)
         }
     }
 }

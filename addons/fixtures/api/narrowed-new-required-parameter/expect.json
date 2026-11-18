@@ -1,0 +1,7 @@
+{
+  "about": "sorta.ideas.tag gains a required third parameter.",
+  "verdict": "fail",
+  "reasons": [
+    "narrowed"
+  ]
+}

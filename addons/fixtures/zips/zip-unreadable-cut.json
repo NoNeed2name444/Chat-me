@@ -1,0 +1,7 @@
+{
+  "about": "An archive with its last 10 bytes cut off, so its end record is gone.",
+  "from": "ok-minimal",
+  "entries": [],
+  "cut_end": 10,
+  "expect": {"verdict": "refused", "reason": "zip.unreadable"}
+}

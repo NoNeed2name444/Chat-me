@@ -26,6 +26,12 @@ final class SortDeckTests: XCTestCase {
             ("متى؟", nil, nil),
             ("Plant tulips 🌷", nil, 15),
             ("Bread rises,", 5, 5),
+            // S06d's Unfinished lens cases, the same rule (IdeaSentence)
+            ("(see the list)", nil, 14),
+            ("Tea? Later", nil, 10),
+            ("Two lines.\nAnd a third", nil, 22),
+            ("And then...", nil, nil),
+            ("Done!\r\n", nil, nil),
         ]
         for (body, caret, want) in cases {
             XCTAssertEqual(IdeaStops.stoppedAt(body: body, caret: caret), want, "\(body.debugDescription) caret \(String(describing: caret))")

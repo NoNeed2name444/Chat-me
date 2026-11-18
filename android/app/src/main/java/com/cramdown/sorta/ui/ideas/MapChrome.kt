@@ -49,13 +49,19 @@ object MapTags {
 /**
  * The top strip: leading, the "To sort n" chip, which opens the list sheet ([list]; null on two
  * panes, where the Sort screen is beside the map); trailing, the look chip. A gutter in from the
- * edges and WardSpace.s under the status bar; when one row can't hold both, they stack.
+ * edges and WardSpace.s under the status bar; when one row can't hold both, they stack. S06b: [days],
+ * Space's and 2D's Days chip (MapDaysChip) before the look chip, pressed in while the moons are open
+ * ([daysOn]); null on the other looks.
  */
-@Composable fun MapTopStrip(book: IdeaBook, version: Int, look: MapLook, choose: (MapLook) -> Unit, list: (() -> Unit)?, modifier: Modifier = Modifier) {
+@Composable fun MapTopStrip(book: IdeaBook, version: Int, look: MapLook, choose: (MapLook) -> Unit, list: (() -> Unit)?, modifier: Modifier = Modifier,
+                            days: (() -> Unit)? = null, daysOn: Boolean = false) {
     val gap = WardSpace.s.wardDp
     Layout({
         if (list != null) MapListChip(book, version, list)
-        MapLookChip(look, choose)
+        Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+            if (days != null) MapDaysChip(daysOn, days)
+            MapLookChip(look, choose)
+        }
     }, modifier.fillMaxWidth().padding(horizontal = WardSpace.gutter.wardDp).padding(top = gap)) { measurables, constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val placeables = measurables.map { it.measure(loose) }

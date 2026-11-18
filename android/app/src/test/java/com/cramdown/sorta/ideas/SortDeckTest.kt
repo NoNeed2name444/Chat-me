@@ -30,6 +30,12 @@ class SortDeckTest {
             Triple("متى؟", null, null),
             Triple("Plant tulips 🌷", null, 15),
             Triple("Bread rises,", 5, 5),
+            // S06d's Unfinished lens cases, the same rule (IdeaSentence)
+            Triple("(see the list)", null, 14),
+            Triple("Tea? Later", null, 10),
+            Triple("Two lines.\nAnd a third", null, 22),
+            Triple("And then...", null, null),
+            Triple("Done!\r\n", null, null),
         )
         for ((body, caret, want) in cases) assertEquals("\"$body\" caret $caret", want, IdeaStops.stoppedAt(body, caret))
     }

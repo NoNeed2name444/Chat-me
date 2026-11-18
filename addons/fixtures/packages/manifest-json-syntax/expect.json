@@ -1,0 +1,5 @@
+{
+  "about": "manifest.json with a trailing comma.",
+  "verdict": "refused",
+  "reason": "manifest.json"
+}

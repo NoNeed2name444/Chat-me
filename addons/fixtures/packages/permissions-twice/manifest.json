@@ -1,0 +1,29 @@
+{
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "id": "io.github.example.fixture",
+  "name": "Fixture",
+  "version": "1.0.0",
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "license": "MIT",
+  "minSorta": "1.0.0",
+  "api": 1,
+  "main": "main.js",
+  "permissions": [
+    "ideas.read",
+    "commands",
+    "commands"
+  ],
+  "hosts": [],
+  "contributes": {
+    "commands": [
+      {
+        "id": "count",
+        "title": "Count words"
+      }
+    ]
+  }
+}

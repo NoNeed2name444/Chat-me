@@ -219,4 +219,96 @@ enum IdeasWords {
     static func carryOnWith(_ idea: String) -> String {
         String(localized: "offer.carryOn.spoken %@", defaultValue: "Carry on with \(idea)")
     }
+    // MARK: ideas like this, collide, split and join (S06c), as Android's strings.xml
+    static var echoesTitle: String { String(localized: "echoes.title", defaultValue: "Ideas like this") }
+    static var echoesLinkHint: String { String(localized: "echoes.link.hint", defaultValue: "Links it to this idea.") }
+    static func echoesLinked(_ title: String) -> String {
+        String(localized: "echoes.linked %@", defaultValue: "Linked to \u{201C}\(title)\u{201D}.")
+    }
+    /// VoiceOver, on a board card like the open idea: whom a tap links it to.
+    static func echoesBoardLink(_ title: String) -> String {
+        String(localized: "echoes.board.link %@", defaultValue: "Links it to \u{201C}\(title)\u{201D}.")
+    }
+    static var collideTool: String { String(localized: "collide.tool", defaultValue: "Collide two ideas") }
+    static var collideTitle: String { String(localized: "collide.title", defaultValue: "What if both?") }
+    static var collideField: String { String(localized: "collide.field", defaultValue: "The idea they make") }
+    static var collideSave: String { String(localized: "collide.save", defaultValue: "Save idea") }
+    static var collideAnother: String { String(localized: "collide.another", defaultValue: "Try another pair") }
+    static var collideSaved: String { String(localized: "collide.saved", defaultValue: "New idea in To sort.") }
+    static var collideNone: String {
+        String(localized: "collide.none",
+               defaultValue: "No two ideas are far apart yet. Put ideas in different folders, then try again.")
+    }
+    static var shapeSplit: String { String(localized: "shape.split", defaultValue: "Split\u{2026}") }
+    static var shapeJoin: String { String(localized: "shape.join", defaultValue: "Join with\u{2026}") }
+    static var shapeCollide: String { String(localized: "shape.collide", defaultValue: "Collide with\u{2026}") }
+    static var shapeJoinTitle: String { String(localized: "shape.join.title", defaultValue: "Join with") }
+    static var shapeCollideTitle: String { String(localized: "shape.collide.title", defaultValue: "Collide with") }
+    static var splitTitle: String { String(localized: "split.title", defaultValue: "Split in two") }
+    static var splitHint: String {
+        String(localized: "split.hint", defaultValue: "Tap the last sentence of the first idea.")
+    }
+    static var splitFirst: String { String(localized: "split.first", defaultValue: "First idea") }
+    static var splitEndsHere: String { String(localized: "split.ends.here", defaultValue: "First idea ends here") }
+    static var splitSecond: String { String(localized: "split.second", defaultValue: "Second idea") }
+    static var splitConfirm: String { String(localized: "split.confirm", defaultValue: "Split idea") }
+    static var splitDone: String { String(localized: "split.done", defaultValue: "Idea split in two.") }
+    static var splitOne: String {
+        String(localized: "split.one", defaultValue: "This idea has one sentence, so it can\u{2019}t be split.")
+    }
+    static var joinDone: String { String(localized: "join.done", defaultValue: "Ideas joined.") }
+    // MARK: the lenses over the map (S06d, plugins-plan idea 8): the row's
+    // name, each chip, what a tap does, the empty line; Android's the same
+    static var lenses: String { String(localized: "map.lenses", defaultValue: "Lenses") }
+    static var lensQuestions: String { String(localized: "lens.questions", defaultValue: "Questions") }
+    static var lensLateNight: String { String(localized: "lens.lateNight", defaultValue: "Late night") }
+    static var lensUnfinished: String { String(localized: "lens.unfinished", defaultValue: "Unfinished") }
+    static var lensAlone: String { String(localized: "lens.alone", defaultValue: "Alone") }
+    /// A chip, read aloud with its count: "Questions, 3 ideas".
+    static func lensSpoken(_ name: String, _ n: Int) -> String {
+        let count = ideaCount(n)
+        return String(localized: "lens.spoken %@ %@", defaultValue: "\(name), \(count)")
+    }
+    static var lensQuestionsHint: String {
+        String(localized: "lens.questions.hint", defaultValue: "Shows only ideas with a question mark.")
+    }
+    static var lensLateNightHint: String {
+        String(localized: "lens.lateNight.hint", defaultValue: "Shows only ideas caught between 11 PM and 4 AM.")
+    }
+    static var lensUnfinishedHint: String {
+        String(localized: "lens.unfinished.hint", defaultValue: "Shows only ideas that stop mid-sentence.")
+    }
+    static var lensAloneHint: String { String(localized: "lens.alone.hint", defaultValue: "Shows only ideas with no links.") }
+    static var lensOffHint: String { String(localized: "lens.off.hint", defaultValue: "Turns this lens off.") }
+    static var lensEmpty: String {
+        String(localized: "map.lens.empty", defaultValue: "No ideas match. Turn a lens off to see more.")
+    }
+
+    // MARK: the capsule (S06d, plugins-plan idea 11): the More menu, the
+    // monthly offer, the notices, the refusals; Android's the same
+    static var saveCapsule: String { String(localized: "more.saveCapsule", defaultValue: "Save a capsule\u{2026}") }
+    static var openCapsule: String { String(localized: "more.openCapsule", defaultValue: "Open a capsule\u{2026}") }
+    static var capsuleOffer: String {
+        String(localized: "capsule.offer",
+               defaultValue: "Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again.")
+    }
+    static var capsuleOfferSave: String { String(localized: "capsule.offer.save", defaultValue: "Save a capsule") }
+    static var capsuleOfferLater: String { String(localized: "capsule.offer.later", defaultValue: "Not now") }
+    static var capsuleSaved: String { String(localized: "capsule.saved", defaultValue: "Capsule saved.") }
+    static var capsuleNotSaved: String {
+        String(localized: "capsule.notSaved", defaultValue: "Couldn't save the capsule. Try again, or choose another place.")
+    }
+    static var capsuleRefusedNotCapsule: String {
+        String(localized: "capsule.refused.notCapsule", defaultValue: "This file isn't a Sorta capsule. Choose another file.")
+    }
+    static var capsuleRefusedNewer: String {
+        String(localized: "capsule.refused.newer",
+               defaultValue: "This capsule is from a newer version of Sorta. Check for a Sorta update, then try again.")
+    }
+    static var capsuleRefusedUnreadable: String {
+        String(localized: "capsule.refused.unreadable", defaultValue: "This file didn't open. It may be damaged, so try another copy.")
+    }
+    static var capsuleRefusedTooLarge: String {
+        String(localized: "capsule.refused.tooLarge", defaultValue: "This file is over 32 MB, too big to import. Choose a smaller file.")
+    }
 }

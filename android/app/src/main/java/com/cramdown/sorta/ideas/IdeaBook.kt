@@ -32,6 +32,8 @@ data class NoteFolder(
     val parentId: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val rawJson: String = "{}",
+    /** The folder's own words (S06b): at most five, each one word; loose ideas sharing one lean towards it in Space. */
+    val words: List<String> = emptyList(),
 )
 
 /** A deleted note, and the notes that held a hand-made link to it (IdeaBook.removal, IdeaBook.restore). */
@@ -105,11 +107,11 @@ class IdeaBook(
      * then to the nearest place where its card covers no other ([IdeaBoardDrop], as a dropped card).
      */
     fun create(title: String, body: String = "", kind: NoteKind = NoteKind.IDEA, folderId: String? = null,
-               at: BoardPoint? = null): Note {
+               at: BoardPoint? = null, sharedFrom: String? = null): Note {
         val spot = at ?: nextBoardSpot()
         val time = now()
         val note = Note(id = makeId(), title = title.trim(), body = body, folderId = folderId, kind = kind.rawValue,
-            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time)
+            boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time, sharedFrom = sharedFrom)
         notes = notes + note
         changed()
         return note
@@ -266,6 +268,16 @@ class IdeaBook(
         changed()
     }
 
+    /** Gives a folder its own words (S06b), as FolderWords.parse keeps them from what was typed: at most five; none clears them. */
+    fun setWords(id: String, kept: List<String>) {
+        val index = folders.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val words = kept.take(5)
+        if (words == folders[index].words) return
+        folders = folders.toMutableList().also { it[index] = it[index].copy(words = words) }
+        changed()
+    }
+
     /** Deletes a folder but nothing in it: its notes and folders move up into its parent. */
     fun deleteFolder(id: String) {
         val folder = folders.firstOrNull { it.id == id } ?: return
@@ -327,6 +339,100 @@ class IdeaBook(
         val radius = 90 * sqrt(n)
         return IdeaBoardDrop.settle(BoardPoint(radius * cos(angle), radius * sin(angle)),
             IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST, notes.map { BoardPoint(it.boardX, it.boardY) })
+    }
+
+    // ---- reshaping (S06c): split, join and collide, and their Undo (iOS NoteStore's Reshaping) ----
+
+    /**
+     * Splits an idea after its sentence [after] (IdeaReshape.cut): the first half keeps its id, place and links;
+     * the second is new, beside it, in the same folder, with the hand links too and the `[[Title]]`s its words
+     * hold (IdeaReshape.splitLinks). Null when there is no such cut.
+     */
+    fun split(id: String, after: Int): Reshaped? {
+        val index = notes.indexOfFirst { it.id == id }
+        if (index < 0) return null
+        val note = notes[index]
+        val halves = IdeaReshape.cut(note.title, note.body, after) ?: return null
+        val titles = titleIndex()
+        val heldBy = notes.filter { it.id != id && id in it.links }.map { it.id }
+        val namedBy = if (halves.titleChanged) notes.filter { it.id != id && id in resolve(it.body, titles) }.map { it.id } else emptyList()
+        val named = if (halves.titleFromBody) resolve(halves.secondTitle, titles) else emptyList()
+        val secondId = makeId()
+        val (firstLinks, secondLinks) = IdeaReshape.splitLinks(note.links, heldBy, namedBy, halves.titleChanged, named, id, secondId)
+        val time = now()
+        val spot = IdeaBoardDrop.settle(BoardPoint(note.boardX + 40, note.boardY + 40), IdeaBoardDrop.CARD_WIDTH, IdeaBoardDrop.CARD_TALLEST,
+            notes.map { BoardPoint(it.boardX, it.boardY) })
+        // where each half stops is its own: the whole idea's mark pointed into text the first half may no longer hold
+        val first = note.copy(title = halves.firstTitle, body = halves.firstBody, links = firstLinks, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.firstBody, null))
+        val second = Note(id = secondId, title = halves.secondTitle, body = halves.secondBody, folderId = note.folderId, kind = note.kind,
+            links = secondLinks, tags = note.tags, boardX = spot.x, boardY = spot.y, createdAt = time, updatedAt = time,
+            stoppedAt = IdeaStops.stoppedAt(halves.secondBody, null))
+        notes = notes.toMutableList().also { it[index] = first; it.add(index + 1, second) }
+        changed()
+        return Reshaped(listOf(KeptNote(index, note)), listOf(secondId), id)
+    }
+
+    /**
+     * Joins [b] into [a]: its title, its body after [a]'s, its links and the ideas that pointed at it go to [a]
+     * (IdeaReshape.joined, joinLinks), and [b] goes, with every hand link to it. Null for one idea or a missing one.
+     */
+    fun join(a: String, b: String): Reshaped? {
+        val ia = notes.indexOfFirst { it.id == a }
+        val ib = notes.indexOfFirst { it.id == b }
+        if (a == b || ia < 0 || ib < 0) return null
+        val first = notes[ia]; val second = notes[ib]
+        val titles = titleIndex()
+        val (title, body) = IdeaReshape.joined(first.title, first.body, second.title, second.body)
+        val pointedAtSecond = ArrayList<String>()
+        val connected = resolve(body, titles).toHashSet()
+        val holders = ArrayList<KeptNote>()
+        notes.forEachIndexed { i, n ->
+            if (n.id == a || n.id == b) return@forEachIndexed
+            val wiki = resolve(n.body, titles)
+            if (b in n.links || b in wiki) pointedAtSecond.add(n.id)
+            if (a in n.links || a in wiki) connected.add(n.id)
+            if (b in n.links) holders.add(KeptNote(i, n))
+        }
+        // the first idea's mark pointed into its own body, not the joined one
+        val joined = first.copy(title = title, body = body, updatedAt = now(),
+            links = IdeaReshape.joinLinks(a, b, first.links, second.links, pointedAtSecond, connected),
+            stoppedAt = IdeaStops.stoppedAt(body, null))
+        val held = holders.map { it.note.id }.toHashSet()
+        notes = notes.mapNotNull { n ->
+            when {
+                n.id == a -> joined
+                n.id == b -> null
+                n.id in held -> n.copy(links = n.links.filterNot { it == b })
+                else -> n
+            }
+        }
+        changed()
+        return Reshaped(listOf(KeptNote(ia, first), KeptNote(ib, second)) + holders, emptyList(), a)
+    }
+
+    /** The idea written between two collided ones: in To sort, linked to both; its first line is its title, the rest its body. Null when nothing was written. */
+    fun collide(a: String, b: String, text: String): Reshaped? {
+        val words = text.trim()
+        if (words.isEmpty() || note(a) == null || note(b) == null) return null
+        val lines = words.split("\n", limit = 2)
+        val made = create(lines[0], if (lines.size > 1) lines[1].trim() else "")
+        notes = notes.map { if (it.id == made.id) it.copy(links = listOf(a, b).filter { l -> l != made.id }) else it }
+        changed()
+        return Reshaped(emptyList(), listOf(made.id), made.id)
+    }
+
+    /** Undo of a reshape: the ideas it added go (with any hand link to them), and each idea it changed or removed is back as it was, where it stood. */
+    fun undo(reshaped: Reshaped) {
+        val added = reshaped.added.toHashSet()
+        val list = notes.filterNot { it.id in added }
+            .map { n -> if (n.links.any { it in added }) n.copy(links = n.links.filterNot { it in added }) else n }.toMutableList()
+        for (kept in reshaped.before.sortedBy { it.index }) {
+            val i = list.indexOfFirst { it.id == kept.note.id }
+            if (i >= 0) list[i] = kept.note else list.add(minOf(kept.index, list.size), kept.note)
+        }
+        notes = list
+        changed()
     }
 
     companion object {

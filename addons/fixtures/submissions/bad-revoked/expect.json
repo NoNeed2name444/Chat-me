@@ -1,0 +1,7 @@
+{
+  "about": "A revoked.json entry with no date.",
+  "verdict": "fail",
+  "reasons": [
+    "review.revoked"
+  ]
+}

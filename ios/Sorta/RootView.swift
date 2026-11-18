@@ -51,11 +51,16 @@ struct RootView: View {
 struct IdeasRoot: View {
     @StateObject private var notes = NoteStore(fileURL: IdeasRoot.storeURL)
     @State private var filing = IdeasFiling()
+    /// Ideas like this, Collide, Split and Join (S06c): what the editor,
+    /// the map and the board share.
+    @State private var shapes = IdeaShapes()
     @State private var mode: SortaMode = .sort
     @State private var draft = ""
     @State private var folderId: UUID?
     /// To sort shown as cards (S06a): on two panes the folders pane takes the map's place.
     @AppStorage(DeckKeys.sortDeck) private var sortDeck = false
+    /// S06b: text shared to Sorta, waiting in the share sheet.
+    @State private var sharing: ShareIntake? = ShareIntake.launched
 
     static var storeURL: URL? {
         #if DEBUG
@@ -130,8 +135,16 @@ struct IdeasRoot: View {
                     if now != frame { frame = now }
                 }
         }
+        // a share from another app (the Share extension's sorta://share)
+        .onOpenURL { url in
+            if let intake = ShareIntake(url: url) { sharing = intake }
+        }
+        .sheet(item: $sharing) { intake in
+            ShareSheet(intake: intake)
+        }
         .environmentObject(notes)
         .environment(filing)
+        .environment(shapes)
     }
 }
 

@@ -1,0 +1,471 @@
+{
+  "api": "sorta-addon",
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "calls": {
+    "sorta.has": {
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": "boolean"
+    },
+    "sorta.ideas.list": {
+      "params": [
+        {
+          "name": "options",
+          "type": "ListOptions",
+          "optional": true
+        }
+      ],
+      "returns": "Promise<IdeaPage>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.ideas.get": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<Idea | null>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.ideas.search": {
+      "params": [
+        {
+          "name": "text",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "SearchOptions",
+          "optional": true
+        }
+      ],
+      "returns": "Promise<Idea[]>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.ideas.capture": {
+      "params": [
+        {
+          "name": "idea",
+          "type": "NewIdea"
+        }
+      ],
+      "returns": "Promise<Captured>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.ideas.tag": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": "string[]"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.ideas.untag": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": "string[]"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.ideas.link": {
+      "params": [
+        {
+          "name": "a",
+          "type": "string"
+        },
+        {
+          "name": "b",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.ideas.unlink": {
+      "params": [
+        {
+          "name": "a",
+          "type": "string"
+        },
+        {
+          "name": "b",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.ideas.file": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "folder",
+          "type": "null | string"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    },
+    "sorta.folders.list": {
+      "params": [],
+      "returns": "Promise<Folder[]>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.commands.on": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "handler",
+          "type": "(event: CommandEvent) => CommandReply | Promise<CommandReply | void> | void"
+        }
+      ],
+      "returns": "void",
+      "permission": [
+        "commands"
+      ]
+    },
+    "sorta.cards.on": {
+      "params": [
+        {
+          "name": "handler",
+          "type": "(idea: Idea) => CardLines | Promise<CardLines>"
+        }
+      ],
+      "returns": "void",
+      "permission": [
+        "cards"
+      ]
+    },
+    "sorta.settings.get": {
+      "params": [],
+      "returns": "Promise<Settings>"
+    },
+    "sorta.settings.on": {
+      "params": [
+        {
+          "name": "handler",
+          "type": "(settings: Settings) => Promise<void> | void"
+        }
+      ],
+      "returns": "void"
+    },
+    "sorta.storage.get": {
+      "params": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<Json | null>"
+    },
+    "sorta.storage.set": {
+      "params": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "Json"
+        }
+      ],
+      "returns": "Promise<void>"
+    },
+    "sorta.storage.remove": {
+      "params": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<void>"
+    },
+    "sorta.net.fetch": {
+      "params": [
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "FetchOptions",
+          "optional": true
+        }
+      ],
+      "returns": "Promise<FetchReply>",
+      "permission": [
+        "net"
+      ]
+    },
+    "console.log": {
+      "params": [
+        {
+          "name": "values",
+          "type": "Json[]",
+          "rest": true
+        }
+      ],
+      "returns": "void"
+    }
+  },
+  "values": {
+    "sorta.api": "ApiVersion"
+  },
+  "types": {
+    "Permission": {
+      "alias": "\"ai\" | \"board.palette\" | \"cards\" | \"commands\" | \"ideas.read\" | \"ideas.read.folder\" | \"ideas.write\" | \"net\""
+    },
+    "Json": {
+      "alias": "Json[] | Record<string, Json> | boolean | null | number | string"
+    },
+    "SettingValue": {
+      "alias": "boolean | string"
+    },
+    "Settings": {
+      "alias": "Record<string, SettingValue>"
+    },
+    "ApiVersion": {
+      "fields": {
+        "major": {
+          "type": "1"
+        },
+        "minor": {
+          "type": "number"
+        }
+      }
+    },
+    "Idea": {
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "\"idea\" | \"page\""
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "string[]"
+        },
+        "links": {
+          "type": "string[]"
+        },
+        "folder": {
+          "type": "null | string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "Folder": {
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "null | string"
+        },
+        "words": {
+          "type": "string[]"
+        }
+      }
+    },
+    "ListOptions": {
+      "fields": {
+        "folder": {
+          "type": "null | string",
+          "optional": true
+        },
+        "kind": {
+          "type": "\"idea\" | \"page\"",
+          "optional": true
+        },
+        "limit": {
+          "type": "number",
+          "optional": true,
+          "max": 200
+        },
+        "cursor": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "IdeaPage": {
+      "fields": {
+        "ideas": {
+          "type": "Idea[]"
+        },
+        "cursor": {
+          "type": "null | string"
+        }
+      }
+    },
+    "SearchOptions": {
+      "fields": {
+        "limit": {
+          "type": "number",
+          "optional": true,
+          "max": 50
+        }
+      }
+    },
+    "NewIdea": {
+      "fields": {
+        "title": {
+          "type": "string",
+          "optional": true
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "Captured": {
+      "fields": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "CommandEvent": {
+      "fields": {
+        "ideas": {
+          "type": "string[]"
+        }
+      }
+    },
+    "CommandReply": {
+      "fields": {
+        "message": {
+          "type": "string",
+          "optional": true,
+          "maxLength": 120
+        }
+      }
+    },
+    "CardLines": {
+      "fields": {
+        "lines": {
+          "type": "string[]",
+          "max": 3,
+          "maxLength": 80
+        }
+      }
+    },
+    "FetchOptions": {
+      "fields": {
+        "method": {
+          "type": "\"DELETE\" | \"GET\" | \"PATCH\" | \"POST\" | \"PUT\"",
+          "optional": true
+        },
+        "headers": {
+          "type": "Record<string, string>",
+          "optional": true
+        },
+        "body": {
+          "type": "string",
+          "optional": true
+        }
+      }
+    },
+    "FetchReply": {
+      "fields": {
+        "status": {
+          "type": "number"
+        },
+        "url": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "Record<string, string>"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "SortaError": {
+      "extends": "Error",
+      "fields": {
+        "code": {
+          "type": "string"
+        }
+      }
+    },
+    "PermissionError": {
+      "extends": "SortaError",
+      "fields": {
+        "permission": {
+          "type": "Permission"
+        }
+      }
+    },
+    "WriteLimitError": {
+      "extends": "SortaError",
+      "fields": {}
+    }
+  }
+}

@@ -12,18 +12,13 @@ import kotlin.math.min
 
 /** "You were saying…": an idea whose details stop mid-sentence (S06a A4). */
 object IdeaStops {
-    /** Marks that close a sentence: . ! ? … and their full-width and Arabic forms. */
-    val closers: Set<Int> = ".!?…。！？؟".codePoints().toArray().toSet()
-    /** What may follow a sentence's close and still leave it closed: spaces, closing quotes and closing brackets. */
-    val trailing: Set<Int> = " \t\n\r \"'”’»)]}」』".codePoints().toArray().toSet()
-
     /**
      * Where the person stopped, as a UTF-16 offset into [body]: null when the text is empty or ends a
-     * sentence; else [caret] held inside the text, or the text's end when no caret is known.
+     * sentence ([IdeaSentence], the rule S06d's Unfinished lens shares); else [caret] held inside the
+     * text, or the text's end when no caret is known.
      */
     fun stoppedAt(body: String, caret: Int?): Int? {
-        val last = body.codePoints().toArray().lastOrNull { it !in trailing } ?: return null
-        if (last in closers) return null
+        if (!IdeaSentence.endsMidSentence(body)) return null
         return caret?.let { min(max(it, 0), body.length) } ?: body.length
     }
 

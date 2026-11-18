@@ -1,0 +1,5 @@
+{
+  "about": "A .json file written in Latin-1, not UTF-8.",
+  "verdict": "refused",
+  "reason": "file.text"
+}

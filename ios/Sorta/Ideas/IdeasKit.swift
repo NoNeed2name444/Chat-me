@@ -318,6 +318,10 @@ struct IdeasNotice: Identifiable {
         /// An idea in the tide was let go (S06a): Undo restores it, and puts
         /// it back where it stood in the tide.
         case letGo(NoteStore.Removal, idea: UUID, at: Int)
+        /// Two ideas were linked by hand (S06c: an idea like the open one).
+        case linked(UUID, UUID)
+        /// An idea was split, two joined, or one made from two (S06c).
+        case reshaped(NoteStore.Reshape)
     }
 
     let id = UUID()

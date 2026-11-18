@@ -1,0 +1,325 @@
+import UIKit
+import XCTest
+
+/// S06b rendered for real (A9), each kept as a named screenshot: comets
+/// with tails of three ages, a loose idea leaning towards the folder whose
+/// word it shares and its card, two ideas shared from the same place
+/// circling each other, the moons row and a lit day in Space and on the
+/// board, the settle as an idea is filed, the folder's words sheet, the
+/// share sheet and the source mark it leaves. CI runs it by day and by
+/// night on the iPhone (tools/run_ui_tests.sh, the ideas set). The ideas
+/// are made up and not medical; their dates count back from now, so the
+/// tails and the moons are the same on any day.
+final class SkyIdeasRenderTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+        Retaps.reset()
+    }
+
+    /// Space, still: the tails, the lean and its card, the pair, the moons
+    /// and a lit day; then the lit day on the board.
+    func testSkyRenders() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try SkyExport.base64(), "-graphFreeze"])
+        importExport(app)
+        openSpace(app)
+        keepShot("sky-1-tails-and-pair")
+
+        // A4: the leaning idea's card says what it shares, and with which folder
+        let leaning = body(app, SkyExport.leaning)
+        XCTAssertTrue(leaning.waitForExistence(timeout: 20), "the leaning idea on the map")
+        tapClear(app, leaning)
+        let lean = app.descendants(matching: .any)["graphPeekLean"].firstMatch
+        XCTAssertTrue(lean.waitForExistence(timeout: 15), "the card's lean line")
+        XCTAssertEqual(lean.label, "Shares ‘garden’ with Raised beds")
+        let fileThere = app.buttons["graphPeekFileThere"]
+        XCTAssertTrue(fileThere.exists, "File there")
+        XCTAssertEqual(fileThere.label, "File there, in Raised beds")
+        assertTarget(fileThere.frame, "File there")
+        sleep(1)
+        keepShot("sky-2-lean-card")
+
+        // A8: a shared idea's card names where it came from. The lean card
+        // goes first, as a person puts it away: on the iPhone it covers the
+        // shared pair, and the tap meant for one landed on the card (CI, 15 Nov)
+        putCardAway(app)
+        tapClear(app, body(app, SkyExport.shared[1]))
+        let mark = app.descendants(matching: .any)["sharedFromMark"].firstMatch
+        XCTAssertTrue(mark.waitForExistence(timeout: 15), "the card's source mark")
+        XCTAssertEqual(mark.label, "Shared from example.org")
+        sleep(1)
+        keepShot("sky-3-shared-card")
+
+        // A5: the moons, from the strip's Days chip
+        let chip = app.descendants(matching: .any)["map-days-chip"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 10), "the Days chip")
+        assertTarget(chip.frame, "Days")
+        chip.tap()
+        let today = app.buttons["moon-0"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10), "today's moon")
+        assertTarget(today.frame, "a moon")
+        XCTAssertTrue(today.label.hasSuffix(", \(SkyExport.today.count) ideas"), "today's moon is read with its count: \(today.label)")
+        XCTAssertTrue(app.buttons["moon-1"].label.hasSuffix(", no ideas"), "yesterday had none")
+        assertMapInSight(app)
+        sleep(1)
+        keepShot("sky-4-moons")
+
+        // A6: today lit, the rest dimmed; Clear ends it
+        today.tap()
+        XCTAssertTrue(today.isSelected, "today's moon is picked")
+        let clear = app.buttons["moons-clear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5), "Clear, with a day lit")
+        assertMapInSight(app)
+        sleep(2)
+        keepShot("sky-5-lit-day-space")
+        app.chooseLook("look-2d")
+        XCTAssertTrue(app.boardCard(SkyExport.today[0]).waitForExistence(timeout: 10), "2D: the board")
+        XCTAssertTrue(app.buttons["moon-0"].waitForExistence(timeout: 5), "the moons stay open on the board")
+        sleep(1)
+        keepShot("sky-6-lit-day-board")
+        app.buttons["moons-clear"].tap()
+        XCTAssertTrue(gone(app.buttons["moons-clear"]), "Clear ends the lit day")
+        XCTAssertFalse(app.buttons["moon-0"].isSelected, "no moon picked")
+        app.buttons["moons-done"].tap()
+        XCTAssertTrue(gone(app.buttons["moon-0"]), "Done closes the moons")
+    }
+
+    /// The moons and a lit day on any device, the iPad's stills among them
+    /// (the iPhone's come from testSkyRenders too): the row is its own
+    /// height, so the map and its lit day show below it. On 15 Nov the row
+    /// took all the top inset gave it, and the moons hid the map.
+    func testMoonsKeepTheMapInSight() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try SkyExport.base64(), "-graphFreeze"])
+        importExport(app)
+        openSpace(app)
+        let chip = app.descendants(matching: .any)["map-days-chip"].firstMatch
+        XCTAssertTrue(chip.waitForExistence(timeout: 10), "the Days chip")
+        chip.tap()
+        let today = app.buttons["moon-0"]
+        XCTAssertTrue(today.waitForExistence(timeout: 10), "today's moon")
+        assertTarget(today.frame, "a moon")
+        assertMapInSight(app)
+        sleep(1)
+        keepShot("sky-moons-in-sight")
+        today.tap()
+        XCTAssertTrue(today.isSelected, "today's moon is picked")
+        XCTAssertTrue(app.buttons["moons-clear"].waitForExistence(timeout: 5), "Clear, with a day lit")
+        assertMapInSight(app)
+        sleep(2)
+        keepShot("sky-lit-day-in-sight")
+    }
+
+    /// A2: File there, lively, shot as the idea settles into the folder's
+    /// system; and A3: the folder's words sheet.
+    func testFilingSettlesAndTheWordsSheet() throws {
+        let app = launchIdeas(IdeasStoreName(), ["-SortaImportFile", try SkyExport.base64()])
+        importExport(app)
+        openSpace(app)
+        // lively, the comet is on its way round: a tap can land where it
+        // just was, so it is tapped again until its card shows
+        let fileThere = app.buttons["graphPeekFileThere"]
+        for _ in 0..<6 where !fileThere.exists {
+            tapClear(app, body(app, SkyExport.leaning))
+            _ = fileThere.waitForExistence(timeout: 3)
+        }
+        XCTAssertTrue(fileThere.exists, "File there, on the leaning comet's card")
+        fileThere.tap()
+        // on its way into the folder's system (CometSettle: 0.9 s), then there
+        keepShot("sky-7-settle")
+        keepShot("sky-7-settle-later")
+        XCTAssertTrue(app.staticTexts["Moved to Raised beds."].waitForExistence(timeout: 10), "the filing's notice")
+
+        app.switchMode(to: "mode-sort")
+        app.folderRow("Garden").tap()
+        app.openFolderMenu("Raised beds", showing: "Folder words…")
+        app.buttons["Folder words…"].firstMatch.tap()
+        let footnote = app.staticTexts["nameSheetFootnote"]
+        XCTAssertTrue(footnote.waitForExistence(timeout: 10), "the words sheet's footnote")
+        XCTAssertTrue(footnote.label.contains("Saves: garden, soil"), "what a save keeps: \(footnote.label)")
+        sleep(1)
+        keepShot("sky-8-folder-words")
+    }
+
+    /// A7 and A8: a share opens the sheet; a word tapped is left out; the
+    /// idea saved in To sort shows where it came from.
+    func testShareSheetKeepsTheChosenWords() throws {
+        let text = "Bike paths map for the weekend https://www.example.org/paths"
+        let app = launchIdeas(IdeasStoreName(), ["-SortaShare", text])
+        let sheet = app.descendants(matching: .any)["share-sheet"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 15), "the share sheet")
+        let save = app.buttons["share-save"]
+        assertTarget(save.frame, "Save")
+        for word in ["for", "the", "weekend"] {
+            let chip = app.buttons[word].firstMatch
+            XCTAssertTrue(chip.exists, "the word \(word)")
+            assertTarget(chip.frame, word)
+            chip.tap()
+            XCTAssertEqual(chip.value as? String, "Left out", "\(word) is left out")
+        }
+        sleep(1)
+        keepShot("sky-9-share-sheet")
+        save.tap()
+        let row = app.ideaRow("Bike paths map https://www.example.org/paths")
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the kept words, a new idea in To sort")
+        app.openEditor(from: row)
+        let mark = app.descendants(matching: .any)["sharedFromMark"].firstMatch
+        XCTAssertTrue(mark.waitForExistence(timeout: 10), "the editor's source mark")
+        XCTAssertEqual(mark.label, "Shared from example.org")
+        sleep(1)
+        keepShot("sky-10-source-mark")
+    }
+
+    // MARK: helpers
+
+    private func openSpace(_ app: XCUIApplication) {
+        if app.windows.firstMatch.frame.width < 700 { app.switchMode(to: "mode-map") }
+        app.chooseLook("look-space")
+        let map = app.descendants(matching: .any)["graph3D"].firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 60), "Space: the 3D map")
+        XCTAssertTrue(body(app, SkyExport.leaning).waitForExistence(timeout: 60), "the bodies are laid out")
+        // the first-run card put away, as MapModeRenderTests does, so the stills show the sky under it
+        let hint = app.descendants(matching: .any)["universeHint"].firstMatch
+        if hint.waitForExistence(timeout: 5) {
+            hint.buttons["Got it"].tap()
+            XCTAssertTrue(gone(hint), "Got it puts the first-run card away")
+        }
+        // the scene's first frames and its name pills
+        sleep(3)
+    }
+
+    private func body(_ app: XCUIApplication, _ title: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "graphBody")
+            .matching(NSPredicate(format: "label == %@", title)).firstMatch
+    }
+
+    /// A tap on `target` that no other body can take. Map mode's lens row
+    /// (S06d) takes room from Space's first view, so two comets can sit
+    /// closer than a finger: on an iPhone, the leaning one 10 points from
+    /// A bell for the bike, and the space gives a tap on its centre to the
+    /// smaller (CI, 15 Nov). Within 28 points of another body's centre, the
+    /// tap lands 8 points from its centre, on the side away from that body.
+    private func tapClear(_ app: XCUIApplication, _ target: XCUIElement) {
+        let mine: CGRect = target.frame
+        let centre = CGPoint(x: mine.midX, y: mine.midY)
+        let others: [CGPoint] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .map(\.frame).filter { $0 != mine }.map { CGPoint(x: $0.midX, y: $0.midY) }
+        func apart(_ p: CGPoint) -> CGFloat { hypot(p.x - centre.x, p.y - centre.y) }
+        guard let near = others.min(by: { apart($0) < apart($1) }), apart(near) > 0, apart(near) < 28 else {
+            target.tap()
+            return
+        }
+        let away = CGVector(dx: (centre.x - near.x) / apart(near) * 8, dy: (centre.y - near.y) / apart(near) * 8)
+        target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(away).tap()
+    }
+
+    /// The open card put away as a person does: a tap on the empty sky,
+    /// between the lens row and the card, left of the tool circles, where
+    /// no body is within a finger's reach (the space picks within 28 points).
+    private func putCardAway(_ app: XCUIApplication) {
+        let card = app.descendants(matching: .any)["graphPeekCard"].firstMatch
+        guard card.exists else { return }
+        let window: CGRect = app.windows.firstMatch.frame
+        let row = app.descendants(matching: .any)["map-lens-row"].firstMatch
+        let top: CGFloat = (row.exists ? row.frame.maxY : window.minY + 200) + 24
+        let bottom: CGFloat = card.frame.minY - 24
+        let bodies: [CGPoint] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }
+        var best = CGPoint(x: window.midX, y: (top + bottom) / 2)
+        var room: CGFloat = -1
+        var y: CGFloat = top
+        while y <= bottom {
+            var x: CGFloat = window.minX + 40
+            while x <= window.maxX - 90 {
+                let point = CGPoint(x: x, y: y)
+                let near: CGFloat = bodies.map { hypot($0.x - point.x, $0.y - point.y) }.min() ?? .greatestFiniteMagnitude
+                if near > room {
+                    room = near
+                    best = point
+                }
+                x += 16
+            }
+            y += 16
+        }
+        XCTAssertGreaterThan(room, 44, "an empty patch of sky to tap, at \(best)")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: best.x, dy: best.y)).tap()
+        XCTAssertTrue(gone(card), "a tap on the empty sky puts the card away")
+    }
+
+    /// The moons row ends well above the 3D map's centre and the window's,
+    /// and a body below it takes a tap: the row has not taken the screen.
+    private func assertMapInSight(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let row = app.descendants(matching: .any)["moons-row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the moons row", file: file, line: line)
+        let map = app.descendants(matching: .any)["graph3D"].firstMatch
+        XCTAssertTrue(map.exists, "the 3D map under the moons", file: file, line: line)
+        let panel: CGRect = row.frame
+        let window: CGRect = app.windows.firstMatch.frame
+        XCTAssertLessThan(panel.maxY, map.frame.midY - 80,
+                          "the moons end well above the map's centre: row \(panel), map \(map.frame)", file: file, line: line)
+        XCTAssertLessThan(panel.maxY, window.midY,
+                          "the moons take less than the top half: row \(panel), window \(window)", file: file, line: line)
+        let below: [XCUIElement] = app.descendants(matching: .any).matching(identifier: "graphBody").allElementsBoundByIndex
+            .filter { $0.frame.minY > panel.maxY + 8 && $0.frame.maxY < map.frame.maxY }
+        XCTAssertTrue(below.contains { $0.isHittable },
+                      "a body below the moons takes a tap (\(below.count) below the row)", file: file, line: line)
+    }
+
+    private func gone(_ element: XCUIElement) -> Bool {
+        let missing = NSPredicate(format: "exists == false")
+        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: missing, object: element)], timeout: 10) == .completed
+    }
+
+    private func assertTarget(_ frame: CGRect, _ name: String, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertGreaterThanOrEqual(frame.width, 43.5, "\(name) is a target wide: \(frame)", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(frame.height, 43.5, "\(name) is a target tall: \(frame)", file: file, line: line)
+    }
+}
+
+/// The made-up ideas S06b's renders import: a garden folder with Raised
+/// beds inside it, whose words are "garden" and "soil"; ideas in no folder
+/// caught hours, days, weeks and over a month ago; one that shares
+/// "garden"; and two shared from example.org.
+enum SkyExport {
+    static let leaning = "Water the garden path"
+    static let shared = ["Bike paths map", "Night ride route"]
+    /// The ideas caught today.
+    static let today = [leaning] + shared
+
+    static func id(_ n: Int) -> String { MadeUpExport.id(n) }
+
+    static func base64() throws -> String {
+        let now = Date()
+        let iso = ISO8601DateFormatter()
+        func ago(_ hours: Double) -> String { iso.string(from: now.addingTimeInterval(-hours * 3_600)) }
+        // today's three spread over the part of today gone by, so all three
+        // are today's whenever the test runs
+        let hoursToday: Double = now.timeIntervalSince(Calendar.current.startOfDay(for: now)) / 3_600
+        func note(_ n: Int, _ title: String, _ hours: Double, folder: Int? = nil, from: String? = nil) -> String {
+            var fields: [String] = ["\"body\":\"\"", "\"createdAt\":\"\(ago(hours))\"", "\"id\":\"\(id(n))\"",
+                                    "\"kind\":\"idea\"", "\"links\":[]", "\"tags\":[]", "\"title\":\"\(title)\"",
+                                    "\"updatedAt\":\"\(ago(hours))\""]
+            if let folder { fields.append("\"folderId\":\"\(id(folder))\"") }
+            if let from { fields.append("\"sharedFrom\":\"\(from)\"") }
+            return "{" + fields.joined(separator: ",") + "}"
+        }
+        let folders = """
+        {"createdAt":"\(ago(2_000))","id":"\(id(101))","name":"Garden"},\
+        {"createdAt":"\(ago(2_000))","id":"\(id(102))","name":"Raised beds","parentId":"\(id(101))",\
+        "words":["garden","soil"]},\
+        {"createdAt":"\(ago(2_000))","id":"\(id(103))","name":"Kitchen"}
+        """
+        let ideas: [String] = [
+            note(1, "Paint the shed green", 1_000, folder: 101),
+            note(2, "Seed swap list", 900, folder: 102),
+            note(3, "Try a rye starter", 800, folder: 103),
+            note(4, leaning, hoursToday * 0.5),
+            note(5, shared[0], hoursToday * 0.8, from: "example.org"),
+            note(6, shared[1], hoursToday * 0.2, from: "example.org"),
+            note(7, "A bell for the bike", 3 * 24),
+            note(8, "Fix the shed door", 10 * 24),
+            note(9, "Oil the gate", 40 * 24),
+        ]
+        let json = "{\"folders\":[" + folders + "],\"notes\":[" + ideas.joined(separator: ",") + "]}"
+        return try MadeUpExport.base64(notes: json, count: ideas.count)
+    }
+}

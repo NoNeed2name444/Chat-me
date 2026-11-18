@@ -1,0 +1,38 @@
+# Sorta's add-on kit, on every copy pushed to Chat-me's sorta branches
+# (tools/mirror_chatme.py): the checker's rules on every fixture, pack's
+# determinism, the API snapshot and diff, the Word count template, the
+# directory's files and workflows, and the sample pull requests run through
+# check.yml's own Python steps. Python's standard library only, no secret.
+name: Add-ons
+on:
+  push:
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
+permissions:
+  contents: read
+concurrency:
+  group: addons-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    # the tests take about half a minute on a laptop
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Python
+        run: python3 --version
+      - name: The kit's tests, with none skipped
+        run: |
+          python3 -I -B addons/kit/tools/tests/run.py --min-tests 66 2>&1 | tee "$RUNNER_TEMP/kit-tests.txt"
+          tail -n 1 "$RUNNER_TEMP/kit-tests.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: Word count passes check and pack
+        run: |
+          python3 -I -B addons/kit/tools/check.py addons/kit/template
+          python3 -I -B addons/kit/tools/pack.py addons/kit/template --out "$RUNNER_TEMP/word-count.sortaaddon"
+          python3 -I -B addons/kit/tools/check.py "$RUNNER_TEMP/word-count.sortaaddon"
+      - name: The API snapshot matches the declarations
+        run: |
+          python3 -I -B addons/kit/tools/api_snapshot.py addons/kit/api/sorta-addon-v1.d.ts --check addons/kit/api/v1.json
+          python3 -I -B addons/kit/tools/api_diff.py addons/kit/api/v1.json addons/kit/api/v1.json

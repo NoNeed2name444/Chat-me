@@ -1,0 +1,7 @@
+{
+  "about": "net.fetch reaches a host the manifest doesn't declare.",
+  "verdict": "fail",
+  "reasons": [
+    "review.host"
+  ]
+}

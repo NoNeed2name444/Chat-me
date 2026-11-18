@@ -1,0 +1,89 @@
+{
+  "api": "sorta-addon",
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "calls": {
+    "sorta.ideas.get": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        }
+      ],
+      "returns": "Promise<Idea | null>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.ideas.list": {
+      "params": [
+        {
+          "name": "options",
+          "type": "ListOptions",
+          "optional": true
+        }
+      ],
+      "returns": "Promise<Idea[]>",
+      "permission": [
+        "ideas.read",
+        "ideas.read.folder"
+      ]
+    },
+    "sorta.ideas.tag": {
+      "params": [
+        {
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "name": "tags",
+          "type": "string[]"
+        }
+      ],
+      "returns": "Promise<void>",
+      "permission": [
+        "ideas.write"
+      ]
+    }
+  },
+  "values": {
+    "sorta.api": "ApiVersion"
+  },
+  "types": {
+    "ApiVersion": {
+      "fields": {
+        "major": {
+          "type": "1"
+        },
+        "minor": {
+          "type": "number"
+        }
+      }
+    },
+    "Idea": {
+      "fields": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "\"idea\" | \"page\""
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "ListOptions": {
+      "fields": {
+        "limit": {
+          "type": "number",
+          "optional": true,
+          "max": 200
+        }
+      }
+    }
+  }
+}

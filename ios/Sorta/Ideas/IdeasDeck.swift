@@ -65,28 +65,31 @@ enum DeckLayout {
     static let paneCap = 12
 }
 
-/// The frost's look (A6): a cool wash over a card, deeper by step. The kit
-/// has no cool tone, so it is named here, as Android's IdeaFrostLook.
+/// The frost's look (S06a A6) on the board: the page's own colour (the
+/// kit's background token) washed over a card, deeper by step, so a
+/// forgotten idea recedes into the page, its folder's tone fading with it;
+/// the frost glyph and the spoken words say why. The app's screens take no
+/// hue the icon hasn't ("Look" in docs/state.md), so the first pale-blue
+/// ice went (v14), as Stethoscore's blue shade did; washing toward the page
+/// keeps every ink's contrast, by day and by night, and never lifts a card
+/// at night. Space draws its own frost shell, as each map look has its own
+/// colours. As Android's.
 enum IdeaFrostLook {
-    /// The ice by day: pale, over bone.
-    static let dayIce: UInt32 = 0xD6E8F5
-    /// The ice by night: a deep blue that cools a card without lifting it,
-    /// so a forgotten idea never outshines the rest, and every ink on it
-    /// keeps its contrast.
-    static let nightIce: UInt32 = 0x1A3048
     /// The board's wash at each level, 0 to 3, by day and by night.
     static let dayOpacity: [Double] = [0, 0.20, 0.40, 0.60]
     static let nightOpacity: [Double] = [0, 0.30, 0.50, 0.70]
     /// The shell's strength in Space, at each level, 0 to 3.
     static let opacity: [Double] = [0, 0.18, 0.32, 0.46]
 
-    /// The board's wash at `level`, in the scheme it is drawn in.
+    /// The board's wash at `level`, in the scheme it is drawn in: the
+    /// page's colour.
     static func wash(_ level: Int) -> Color {
         let step: Int = max(0, min(3, level))
+        let page = WardPalette.table[.background]!
         return Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? Color.uiColor(nightIce, alpha: nightOpacity[step])
-                : Color.uiColor(dayIce, alpha: dayOpacity[step])
+                ? Color.uiColor(page.dark, alpha: nightOpacity[step])
+                : Color.uiColor(page.light, alpha: dayOpacity[step])
         })
     }
     /// The melt, in seconds (the kit's longest change).
@@ -493,8 +496,6 @@ struct DeckCard: View {
         .padding(WardSpace.l)
         .wardRaised(in: shape, lift: .high, fill: .wardRaised)
         .unfinishedEdge(note.stoppedAt != nil, radius: WardRadius.card, inset: 0)
-        // flying off, it takes no more taps
-        .allowsHitTesting(!leaving)
         .scaleEffect(leaving ? 0.6 : 1)
         .opacity(leaving ? 0 : 1)
         .offset(offset)
@@ -525,22 +526,22 @@ struct DeckCard: View {
     private var buttonRow: some View {
         switch actions {
         case let .sort(_, later, choose):
-            Button(IdeasWords.later) { later(note.id) }
+            Button(IdeasWords.later) { act { later(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("deck-keep-later")
-            Button(IdeasWords.chooseFolder) { choose(note.id) }
+            Button(IdeasWords.chooseFolder) { act { choose(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("deck-choose")
         case let .tide(keep, link, letGo):
-            Button(IdeasWords.keep) { keep(note.id) }
+            Button(IdeasWords.keep) { act { keep(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-keep")
-            Button(IdeasWords.linkTo) { link(note.id) }
+            Button(IdeasWords.linkTo) { act { link(note.id) } }
                 .buttonStyle(.wardCompact).fixedSize()
                 .accessibilityIdentifier("tide-link")
             // compact as its neighbours, its word in the danger red, as the rows' Delete; Undo brings the idea back
             Button {
-                letGo(note.id)
+                act { letGo(note.id) }
             } label: {
                 Text(IdeasWords.letGo).foregroundStyle(Color.wardDanger)
             }
@@ -554,15 +555,24 @@ struct DeckCard: View {
         switch actions {
         case let .sort(file, later, choose):
             ForEach(targets) { folder in
-                Button(IdeasWords.fileIn(folder.name)) { file(note.id, folder.id) }
+                Button(IdeasWords.fileIn(folder.name)) { act { file(note.id, folder.id) } }
             }
-            Button(IdeasWords.later) { later(note.id) }
-            Button(IdeasWords.chooseFolder) { choose(note.id) }
+            Button(IdeasWords.later) { act { later(note.id) } }
+            Button(IdeasWords.chooseFolder) { act { choose(note.id) } }
         case let .tide(keep, link, letGo):
-            Button(IdeasWords.keep) { keep(note.id) }
-            Button(IdeasWords.linkTo) { link(note.id) }
-            Button(IdeasWords.letGo) { letGo(note.id) }
+            Button(IdeasWords.keep) { act { keep(note.id) } }
+            Button(IdeasWords.linkTo) { act { link(note.id) } }
+            Button(IdeasWords.letGo) { act { letGo(note.id) } }
         }
+    }
+
+    /// Flying off, the card takes no more taps (S06a): each of its buttons
+    /// and spoken actions does nothing while it leaves, as its drag. Not
+    /// `.allowsHitTesting` on the card: with it, XCUITest found no point on
+    /// the card or its buttons, on the iPhone and the iPad (CI, 15 Nov).
+    private func act(_ action: () -> Void) {
+        guard !leaving else { return }
+        action()
     }
 
     /// Where the card goes, judged from the finger: from where it took hold

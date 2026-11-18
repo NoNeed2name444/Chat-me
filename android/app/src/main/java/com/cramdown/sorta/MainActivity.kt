@@ -1,6 +1,7 @@
 package com.cramdown.sorta
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ui.SortaTheme
@@ -16,10 +19,15 @@ import com.cramdown.sorta.ui.ideas.IdeasBanner
 import com.cramdown.sorta.ui.ideas.IdeasModel
 import com.cramdown.sorta.ui.ideas.IdeasView
 import com.cramdown.sorta.ui.ideas.MapPreview
+import com.cramdown.sorta.ui.ideas.ShareIntake
+import com.cramdown.sorta.ui.ideas.ShareSheet
 import com.cramdown.sorta.ui.ward.WindowShapeHost
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    /** S06b: text shared to Sorta, waiting in the share sheet; null when none is. */
+    private val shared: MutableState<ShareIntake?> = mutableStateOf(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -43,7 +51,29 @@ class MainActivity : ComponentActivity() {
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             intent?.getLongExtra(NOW, -1L)?.takeIf { it >= 0L }?.let { IdeaClock.fixed = it }
         }
-        setContent { SortaRoot(store, testImport, undoStays) }
+        // a share is taken once: a turn or a fold rebuilds the activity with the same intent
+        if (savedInstanceState == null) shared.value = shareOf(intent)
+        setContent { SortaRoot(store, testImport, undoStays, shared) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        shareOf(intent)?.let { shared.value = it }
+    }
+
+    /**
+     * S06b: the text of a SEND of text/plain, with where it came from: the link's host, else the
+     * sending app's name when the system says which app it was (SharedFrom). Nothing else is read.
+     */
+    private fun shareOf(intent: Intent?): ShareIntake? {
+        if (intent?.action != Intent.ACTION_SEND || intent.type?.startsWith("text/") != true) return null
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: return null
+        val app = runCatching {
+            referrer?.takeIf { it.scheme == "android-app" }?.host?.let { pkg ->
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+            }
+        }.getOrNull()
+        return ShareIntake.of(text, app)
     }
 
     companion object {
@@ -88,11 +118,18 @@ class MainActivity : ComponentActivity() {
 
 /** The first screen: the Sort screen on the store, in the window's shape and the system's light or dark. */
 @Composable
-fun SortaRoot(store: IdeaStore, testImport: File? = null, undoStays: Boolean = false) {
+fun SortaRoot(store: IdeaStore, testImport: File? = null, undoStays: Boolean = false,
+              shared: MutableState<ShareIntake?>? = null) {
     SortaTheme(dark = isSystemInDarkTheme()) {
         WindowShapeHost {
             val model = remember(store) { IdeasModel.open(store) }
             IdeasView(model, testImport, undoStays = undoStays)
+            // S06b: a share's sheet over the Sort screen; Save adds the words kept to To sort
+            shared?.value?.let { intake ->
+                ShareSheet(intake, onDismiss = { shared.value = null }) { text ->
+                    model.book.create(text, sharedFrom = intake.mark)
+                }
+            }
         }
     }
 }

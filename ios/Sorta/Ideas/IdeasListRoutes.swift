@@ -20,11 +20,14 @@ final class IdeasListRoutes {
     enum FolderPrompt: Identifiable {
         case new(parent: UUID?)
         case rename(NoteFolder)
+        /// S06b: a folder's own words.
+        case words(NoteFolder)
 
         var id: String {
             switch self {
             case .new(let parent): return "new-\(parent?.uuidString ?? "top")"
             case .rename(let folder): return "rename-\(folder.id.uuidString)"
+            case .words(let folder): return "words-\(folder.id.uuidString)"
             }
         }
     }
@@ -37,28 +40,32 @@ final class IdeasListRoutes {
                          delete: { filing.deleteIdea($0, notes: notes) },
                          renameFolder: { self.naming = .rename($0) },
                          newFolderInside: { self.naming = .new(parent: $0.id) },
-                         deleteFolder: { self.deletingFolder = $0 })
+                         deleteFolder: { self.deletingFolder = $0 },
+                         folderWords: { self.naming = .words($0) })
     }
 }
 
 extension View {
     /// The sheets and dialog `routes` opens, over the list browsing
     /// `folderId`; a folder made in the chooser goes in it, and when the
-    /// folder is deleted the list goes back to the top.
-    func ideasListSheets(_ routes: IdeasListRoutes, folderId: Binding<UUID?>) -> some View {
-        modifier(IdeasListSheets(routes: routes, folderId: folderId))
+    /// folder is deleted the list goes back to the top. `inline`: the screen
+    /// shows the editor itself, beside the map (IdeasView on two panes,
+    /// S06c), so it is no sheet.
+    func ideasListSheets(_ routes: IdeasListRoutes, folderId: Binding<UUID?>, inline: Bool = false) -> some View {
+        modifier(IdeasListSheets(routes: routes, folderId: folderId, inline: inline))
     }
 }
 
 private struct IdeasListSheets: ViewModifier {
     @Bindable var routes: IdeasListRoutes
     @Binding var folderId: UUID?
+    let inline: Bool
     @EnvironmentObject private var notes: NoteStore
     @Environment(IdeasFiling.self) private var filing
 
     func body(content: Content) -> some View {
         content
-            .sheet(item: $routes.opening, onDismiss: {
+            .sheet(item: inline ? .constant(nil) : $routes.opening, onDismiss: {
                 routes.resuming = nil
                 filing.offerEditorUndo(notes: notes)
             }) { ref in
@@ -106,6 +113,13 @@ private struct IdeasListSheets: ViewModifier {
             NameSheet(title: IdeasWords.renameFolder, prompt: IdeasWords.folderName, initial: folder.name,
                       confirm: IdeasWords.rename) { name in
                 notes.renameFolder(folder.id, to: name)
+            }
+        case .words(let folder):
+            // blank clears them; the footnote says what a save keeps
+            NameSheet(title: SkyWords.folderWordsTitle, prompt: SkyWords.folderWordsPrompt,
+                      initial: folder.words.joined(separator: " "), confirm: SkyWords.save,
+                      footnote: SkyWords.folderWordsFootnote, allowsBlank: true) { text in
+                notes.setWords(folder.id, to: FolderWords.parse(text))
             }
         }
     }

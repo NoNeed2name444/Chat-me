@@ -47,6 +47,9 @@ struct Note: Identifiable, Codable, Hashable {
     /// Where the caret was when the idea was left mid-sentence, a UTF-16
     /// offset into `body` (S06a, "You were saying…"); nil: not marked.
     var stoppedAt: Int? = nil
+    /// Where an idea shared into Sorta came from (S06b): the link's host or
+    /// the sending app's name only; nil for one written here. Not `source`.
+    var sharedFrom: String? = nil
 }
 
 /// A folder of notes. Folders nest: a folder with a parent sits inside it.
@@ -55,6 +58,9 @@ struct NoteFolder: Identifiable, Codable, Hashable {
     var name: String
     var parentId: UUID? = nil
     var createdAt: Date = Date()
+    /// The folder's own words (S06b): at most five, each one word; loose
+    /// ideas sharing one lean towards it in Space (FolderWords).
+    var words: [String] = []
 }
 
 /// Read tolerantly, like the library: a file written by an older or newer
@@ -64,6 +70,7 @@ extension Note {
     private enum Keys: String, CodingKey {
         case id, title, body, folderId, kind, links, tags, boardX, boardY, createdAt, updatedAt, source
         case openedAt, stoppedAt
+        case sharedFrom
     }
 
     init(from decoder: Decoder) throws {
@@ -86,12 +93,14 @@ extension Note {
         source = try? c.decodeIfPresent(NoteSource.self, forKey: .source)
         openedAt = try? c.decodeIfPresent(Date.self, forKey: .openedAt)
         stoppedAt = try? c.decodeIfPresent(Int.self, forKey: .stoppedAt)
+        sharedFrom = try? c.decodeIfPresent(String.self, forKey: .sharedFrom)
     }
 }
 
 extension NoteFolder {
     private enum Keys: String, CodingKey {
         case id, name, parentId, createdAt
+        case words
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +113,19 @@ extension NoteFolder {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? id
         parentId = try c.decodeIfPresent(UUID.self, forKey: .parentId)
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? createdAt
+        words = (try? c.decodeIfPresent([String].self, forKey: .words)) ?? []
+    }
+
+    /// Written with `words` only when there are some, as Android's IdeaJson
+    /// writes a folder: one without words stays the file it was, and S06d's
+    /// capsule fixtures (written before the words came) still match.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: Keys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encodeIfPresent(parentId, forKey: .parentId)
+        try c.encode(createdAt, forKey: .createdAt)
+        if !words.isEmpty { try c.encode(words, forKey: .words) }
     }
 }
 
@@ -239,10 +261,11 @@ final class NoteStore: ObservableObject {
     @discardableResult
     func create(title: String, body: String = "", kind: NoteKind = .idea,
                 folderId: UUID? = nil, at point: (x: Double, y: Double)? = nil,
-                source: NoteSource? = nil) -> Note {
+                source: NoteSource? = nil, sharedFrom: String? = nil) -> Note {
         var note = Note(id: makeID(), title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                         body: body, folderId: folderId, kind: kind)
         note.source = source
+        note.sharedFrom = sharedFrom
         let spot = point ?? nextBoardSpot()
         note.boardX = spot.x
         note.boardY = spot.y
@@ -485,6 +508,16 @@ final class NoteStore: ObservableObject {
         save()
     }
 
+    /// Gives a folder its own words (S06b), as FolderWords.parse keeps them
+    /// from what was typed: at most five; none clears them.
+    func setWords(_ id: UUID, to kept: [String]) {
+        guard let index = folders.firstIndex(where: { $0.id == id }) else { return }
+        let words: [String] = Array(kept.prefix(5))
+        guard words != folders[index].words else { return }
+        folders[index].words = words
+        save()
+    }
+
     /// Deletes a folder but nothing in it: its notes and folders move up into
     /// its parent, so deleting a folder never deletes an idea.
     func deleteFolder(_ id: UUID) {
@@ -568,5 +601,16 @@ final class NoteStore: ObservableObject {
                                         card: IdeaBoardDrop.tallest,
                                         others: notes.map { CGPoint(x: $0.boardX, y: $0.boardY) })
         return (Double(spot.x), Double(spot.y))
+    }
+}
+
+// MARK: - Reshaping (S06c): split, join and collide live in NoteStoreReshape.swift
+
+extension NoteStore {
+    /// Changes the ideas in one step and saves them, for a split, a join, a
+    /// collision and their Undo (NoteStoreReshape.swift).
+    func reshapeNotes(_ change: (inout [Note]) -> Void) {
+        change(&notes)
+        save()
     }
 }

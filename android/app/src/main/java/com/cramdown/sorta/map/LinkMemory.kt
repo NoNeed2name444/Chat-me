@@ -17,7 +17,12 @@ package com.cramdown.sorta.map
  * [departures] (S05h2) are the bodies of the scene on screen this one lacks, as that scene's renderer
  * made them, for their deaths to play (MapDeathStage); empty across different kinds of scene.
  */
-class LinkRecall(val fresh: Set<String>?, val gone: List<Pair<String, String>>, val departures: List<MapDeparture> = emptyList()) {
+/**
+ * [settling] (S06b): the comets of the scene on screen this one has filed, each with where it was
+ * drawn, so it eases from there into its folder's system (CometSettle); empty when nothing moves.
+ */
+class LinkRecall(val fresh: Set<String>?, val gone: List<Pair<String, String>>, val departures: List<MapDeparture> = emptyList(),
+                 val settling: Map<String, Vec3> = emptyMap()) {
     /** True when the link between notes [a] and [b] is new to this scene. */
     fun isFresh(a: String, b: String): Boolean = fresh?.contains(LinkMemory.key(a, b)) ?: true
 
@@ -38,6 +43,9 @@ object LinkMemory {
      */
     private var lastKey: String? = null
     private var lastSource: ((Set<String>) -> List<MapDeparture>)? = null
+    /** S06b: the scene on screen's comets, and where its renderer draws a body now, by id. */
+    private var lastComets: Set<String> = emptySet()
+    private var lastPlace: ((String) -> Vec3?)? = null
 
     /** One key for the link between notes [a] and [b], whichever way round (iOS GraphMemory.key). */
     fun key(a: String, b: String): String = if (a < b) a + "\n" + b else b + "\n" + a
@@ -81,11 +89,27 @@ object LinkMemory {
      * [key]: with the bodies it lacks as departures when the scene on screen is of the same kind, even
      * with animations off (a still space's deaths are quick fades, GraphDeathScene.swift:116-121).
      */
-    @Synchronized fun recall(ids: List<String>, links: IntArray, lively: Boolean, key: String? = null): LinkRecall {
+    /**
+     * [comets] (S06b) are this scene's comets: one the scene on screen had as a comet and this one has
+     * as something else was filed, and settles from where it was, while the map moves ([lively]).
+     */
+    @Synchronized fun recall(ids: List<String>, links: IntArray, lively: Boolean, key: String? = null,
+                             comets: Set<String>? = null): LinkRecall {
         val source = lastSource
         val departures = if (key != null && key == lastKey && source != null) source(ids.toHashSet()) else emptyList()
         val recall = recall(lastLinks, lastPairs, ids, links, lively)
-        return if (departures.isEmpty()) recall else LinkRecall(recall.fresh, recall.gone, departures)
+        val place = lastPlace
+        val settling = if (!lively || comets == null || key == null || key != lastKey || place == null) emptyMap()
+            else settling(lastComets, comets, ids, place)
+        return if (departures.isEmpty() && settling.isEmpty()) recall else LinkRecall(recall.fresh, recall.gone, departures, settling)
+    }
+
+    /** The comets in [before] that [ids] still has but not as comets ([now]), each where [place] has it. */
+    fun settling(before: Set<String>, now: Set<String>, ids: List<String>, place: (String) -> Vec3?): Map<String, Vec3> {
+        if (before.isEmpty()) return emptyMap()
+        val out = HashMap<String, Vec3>()
+        for (id in ids) if (id in before && id !in now) place(id)?.let { out[id] = it }
+        return out
     }
 
     /**
@@ -93,13 +117,16 @@ object LinkMemory {
      * renderer's departures (S05h2).
      */
     @Synchronized fun remember(build: Int, ids: List<String>, links: IntArray, key: String? = null,
-                               source: ((Set<String>) -> List<MapDeparture>)? = null) {
+                               source: ((Set<String>) -> List<MapDeparture>)? = null,
+                               comets: Set<String> = emptySet(), place: ((String) -> Vec3?)? = null) {
         val pairs = keys(ids, links)
         lastBuild = build
         lastLinks = pairs.keys.toHashSet()
         lastPairs = pairs
         lastKey = key
         lastSource = source
+        lastComets = comets
+        lastPlace = place
     }
 
     /** Forgets scene [build] as it leaves the screen; a later scene remembered since is kept. */
@@ -110,6 +137,8 @@ object LinkMemory {
         lastPairs = emptyMap()
         lastKey = null
         lastSource = null
+        lastComets = emptySet()
+        lastPlace = null
     }
 
     /** Forgets whatever is remembered. */

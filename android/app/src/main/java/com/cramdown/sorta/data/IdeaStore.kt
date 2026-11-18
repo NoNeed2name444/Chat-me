@@ -37,6 +37,10 @@ enum class ImportRefusal {
     NOT_AN_EXPORT,
     /** A Stethoscore Android export of a version other than the one there is. */
     OTHER_VERSION,
+    /** No capsule's data in the file, or another format's (S06d). */
+    NOT_A_CAPSULE,
+    /** A capsule of a later version than this Sorta reads (S06d). */
+    NEWER_CAPSULE,
 }
 
 class ImportRefused(val refusal: ImportRefusal) : Exception(null, null)
@@ -144,6 +148,40 @@ class IdeaStore(private val directory: File) {
         val added = incoming.notes.filter { it.id !in noteIds }
         val folderIds = folders.map { it.id }.toSet()
         val addedFolders = incoming.folders.filter { it.id !in folderIds }
+        if (added.isEmpty() && addedFolders.isEmpty()) return ImportCounts()
+        notes = notes + added
+        folders = folders + addedFolders
+        save()
+        return ImportCounts(
+            ideas = added.size,
+            folders = addedFolders.size,
+            links = added.sumOf { it.links.size },
+            placed = added.count { it.boardX != 0.0 || it.boardY != 0.0 },
+        )
+    }
+
+    /**
+     * A capsule opened (S06d A5), with the import's rules: over 32 MB is refused, then the capsule's
+     * own checks (Capsule.read); the ideas and folders this device has no id for are added and saved
+     * once, and one already here stays as it is. Ids are compared ignoring case, since iOS writes its
+     * UUIDs in upper case, and each id an added idea or folder carries (its own, its folderId and links,
+     * a folder's parentId) is written as this store spells it, or in lower case when the store has none:
+     * IdeaBook compares ids exactly, so an upper-case folderId put an idea in no folder and its links
+     * went nowhere. Throws [ImportRefused] with nothing changed, or [SaveFailed] (memory put back) when
+     * the save doesn't land.
+     */
+    @Synchronized fun importCapsule(text: String): ImportCounts {
+        if (text.toByteArray(Charsets.UTF_8).size > MAX_IMPORT_BYTES) throw ImportRefused(ImportRefusal.TOO_LARGE)
+        val incoming = Capsule.read(text)
+        val spelled = HashMap<String, String>()
+        (notes.map { it.id } + folders.map { it.id }).forEach { spelled.putIfAbsent(it.uppercase(), it) }
+        fun mine(id: String): String = spelled.getOrPut(id.uppercase()) { id.lowercase() }
+        val noteIds = notes.map { it.id.uppercase() }.toHashSet()
+        val added = incoming.notes.filter { noteIds.add(it.id.uppercase()) }
+            .map { n -> n.copy(id = mine(n.id), folderId = n.folderId?.let(::mine), links = n.links.map(::mine).distinct()) }
+        val folderIds = folders.map { it.id.uppercase() }.toHashSet()
+        val addedFolders = incoming.folders.filter { folderIds.add(it.id.uppercase()) }
+            .map { f -> f.copy(id = mine(f.id), parentId = f.parentId?.let(::mine)) }
         if (added.isEmpty() && addedFolders.isEmpty()) return ImportCounts()
         notes = notes + added
         folders = folders + addedFolders

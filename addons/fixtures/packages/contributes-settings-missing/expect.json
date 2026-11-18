@@ -1,0 +1,5 @@
+{
+  "about": "contributes.settings names a file the add-on doesn't have.",
+  "verdict": "refused",
+  "reason": "contributes"
+}

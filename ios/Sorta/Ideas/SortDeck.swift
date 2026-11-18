@@ -6,19 +6,12 @@ import Foundation
 
 /// "You were saying…": an idea whose details stop mid-sentence (S06a A4).
 enum IdeaStops {
-    /// Marks that close a sentence: . ! ? … and their full-width and Arabic forms.
-    static let closers: Set<Character> = [".", "!", "?", "…", "。", "！", "？", "؟"]
-    /// What may follow a sentence's close and still leave it closed: spaces,
-    /// closing quotes and closing brackets.
-    static let trailing: Set<Character> = [" ", "\t", "\n", "\r", "\u{00A0}", "\"", "'", "\u{201D}", "\u{2019}",
-                                           "\u{00BB}", ")", "]", "}", "\u{300D}", "\u{300F}"]
-
     /// Where the person stopped, as a UTF-16 offset into `body`: nil when
-    /// the text is empty or ends a sentence; else `caret` held inside the
-    /// text, or the text's end when no caret is known.
+    /// the text is empty or ends a sentence (IdeaSentence, the rule S06d's
+    /// Unfinished lens shares); else `caret` held inside the text, or the
+    /// text's end when no caret is known.
     static func stoppedAt(body: String, caret: Int?) -> Int? {
-        guard let last = body.last(where: { !trailing.contains($0) }) else { return nil }
-        if closers.contains(last) { return nil }
+        guard IdeaSentence.endsMidSentence(body) else { return nil }
         let length: Int = body.utf16.count
         guard let caret else { return length }
         return min(max(caret, 0), length)

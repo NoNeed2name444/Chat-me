@@ -1,0 +1,7 @@
+{
+  "about": "No LICENSE file.",
+  "verdict": "fail",
+  "reasons": [
+    "review.files"
+  ]
+}

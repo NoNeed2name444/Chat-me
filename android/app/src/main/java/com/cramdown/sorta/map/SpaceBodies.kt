@@ -190,6 +190,10 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
     var filterBloom: FloatArray? = null
     /** Under Show links, the chosen body's neighbourhood in chunk order, sorted; null when every link shows. */
     var focus: IntArray? = null
+    /** S06b: a lit day's bodies, chunk order (the rest drawn at [MapMark.FADED]); null with no day lit. */
+    var lit: BooleanArray? = null
+    /** S06b: each comet's tail by how long it has waited (CometTail), chunk order; 0 or none, the full tail. */
+    var tails: FloatArray? = null
     /** Bodies drawn faded this frame (MapDrawn.faded), and beams drawn lit (MapDrawn.lit). */
     var fadedCount = 0; private set
     var litCount = 0; private set
@@ -464,6 +468,7 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
                 val sun = nearestSuns(c, self).firstOrNull()?.let { Vec3(it[0], it[1], it[2]) }
                 val (ion, dust) = SpaceOptics.cometTails(c, Vec3.ZERO, sun, KEY)
                 a = ion; b = dust
+                codeA = tails?.getOrNull(self) ?: 0f
             }
         }
         val o = j * STRIDE
@@ -476,8 +481,9 @@ class SpaceBodies(val tree: Octree, val nodeRadius: Float, val capacity: Int = 9
         return o
     }
 
-    /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]. */
+    /** A node's fade under Show links: 1 inside the chosen body's neighbourhood (or with no Show links), else [MapMark.FADED]; the same outside a lit day (S06b). */
     fun fadeOf(node: Int): Float {
+        if (lit?.getOrNull(node) == false) return MapMark.FADED
         val near = focus ?: return 1f
         return if (MapFocus.holdsAny(near, node, node + 1)) 1f else MapMark.FADED
     }

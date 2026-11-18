@@ -1,0 +1,8 @@
+{
+  "about": "One entry that unpacks to about 1,000 times its packed size.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "zeros.json", "repeat": {"text": "0", "times": 200000}, "method": "deflate"}
+  ],
+  "expect": {"verdict": "refused", "reason": "zip.ratio"}
+}

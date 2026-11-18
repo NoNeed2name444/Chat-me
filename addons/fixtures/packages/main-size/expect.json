@@ -1,0 +1,5 @@
+{
+  "about": "A main file just over 256 KB.",
+  "verdict": "refused",
+  "reason": "main.size"
+}

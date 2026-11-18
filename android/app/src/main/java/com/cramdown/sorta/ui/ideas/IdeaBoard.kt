@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.TouchApp
@@ -19,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Path
@@ -32,9 +34,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
@@ -42,6 +47,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.platform.testTag
+import com.cramdown.sorta.R
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,7 +57,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cramdown.sorta.ui.LocalWardDark
-import com.cramdown.sorta.R
 import com.cramdown.sorta.data.Note
 import com.cramdown.sorta.ideas.BoardPoint
 import com.cramdown.sorta.ideas.IdeaBoardDrop
@@ -61,6 +67,7 @@ import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.IdeaLinkShape
 import com.cramdown.sorta.ideas.NoteKind
 import com.cramdown.sorta.ideas.noteKind
+import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 import kotlin.math.max
@@ -78,16 +85,26 @@ private const val CARD_HEIGHT = IdeaBoardDrop.CARD_HEIGHT
 const val BOARD_CARD_TAG = "board-card"
 const val BOARD_KIND_TAG = "board-kind-"
 const val BOARD_PEEK_TAG = "board-peek"
+/** S06b: a card outside the lit day (iOS IdeaBoardView.unlit). */
+const val UNLIT = 0.5f
 
 /** The title's style on a card and over it. */
 @Composable private fun boardTitleStyle() = WardTextStyle.subheadline.textStyle().copy(fontWeight = FontWeight.Medium)
 
-@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp, version: Int = 0) {
+/**
+ * [lit] (S06b): a lit day's ideas, the rest's cards dimmed to [UNLIT]; null for none.
+ * [lens]: the upper-case ids the lenses on let through (S06d), null with none on. A card it leaves out
+ * fades to the filter's ghost (MapFilterView.GHOST_ALPHA), takes no touch and is not read out, and
+ * its links fade with it; the change is at once, so Reduce Motion has nothing to stop.
+ */
+@Composable fun IdeaBoard(book: IdeaBook, settings: IdeasSettings, hidden: Dp, open: (String) -> Unit, top: Dp = 0.dp, version: Int = 0,
+                         lit: Set<String>? = null, lens: Set<String>? = null, still: BoardStill? = null) {
     val density = LocalDensity.current
+    val shapes = LocalIdeaShapes.current
     var size by remember { mutableStateOf(IntSize.Zero) }
-    var zoom by remember { mutableDoubleStateOf(1.0) }
-    var panX by remember { mutableDoubleStateOf(0.0) }
-    var panY by remember { mutableDoubleStateOf(0.0) }
+    var zoom by remember { mutableDoubleStateOf(still?.zoom ?: 1.0) }
+    var panX by remember { mutableDoubleStateOf(still?.panX ?: 0.0) }
+    var panY by remember { mutableDoubleStateOf(still?.panY ?: 0.0) }
     var moved by remember { mutableStateOf(false) }
     var connecting by remember { mutableStateOf(false) }
     var source by remember { mutableStateOf<String?>(null) }
@@ -102,29 +119,29 @@ const val BOARD_PEEK_TAG = "board-peek"
     // board by it, and its cards (a folder renamed beside them) with it
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
-    val style = settings.lineStyle
+    val straight = still?.straight ?: settings.lineStyle.isStraight
     val hiddenDp = hidden.value.toDouble()
     // a board of one kind keeps each card's symbol but drops the kind's word (S05m item 4)
     val oneKind = notes.map { it.noteKind }.toSet().size <= 1
     // a title's line is at most 20 letters of its font wide; every card is as wide as that holds,
     // and never under 150 (S05m item 5)
-    val measurer = rememberTextMeasurer()
     val titleStyle = boardTitleStyle()
-    val titleWidth = with(density) { measurer.measure(IdeaBoardDrop.TITLE_SAMPLE, titleStyle, maxLines = 1).size.width.toDp().value.toDouble() }
-    val cardWidth = max(CARD_WIDTH, kotlin.math.ceil(titleWidth) + 2 * WardSpace.m)
+    val cardWidth = boardCardWidth()
     // the tool cluster's box: three targets and their spacing, in the gutter (IdeaToolCluster)
     val tools = IdeaBoardFit.Tools(WardControlSize.target + 2 * WardSpace.gutter,
         3 * WardControlSize.target + 2 * WardSpace.l + 2 * WardSpace.gutter, currentWindowShape().isBroad)
 
-    val widthDp = size.width / density.density.toDouble()
-    val heightDp = size.height / density.density.toDouble()
+    // held still, the picture's size, known before the first layout
+    val widthDp = still?.widthDp ?: (size.width / density.density.toDouble())
+    val heightDp = still?.heightDp ?: (size.height / density.density.toDouble())
     val midY = (heightDp - hiddenDp) / 2
 
     // each card's drawn size as it lays out, in px; the places the cards are drawn at, worked out
     // again only when a stored place, a card or a size changes (S05c)
     val sizes = remember { mutableStateMapOf<String, IntSize>() }
     val cards = notes.map { note ->
-        val seen = sizes[note.id]
+        // held still, every card at the least size the picture's frame was worked out by (capsuleFrame)
+        val seen = if (still == null) sizes[note.id] else null
         val w = if (seen == null) cardWidth else seen.width / density.density.toDouble()
         val h = if (seen == null) CARD_HEIGHT else seen.height / density.density.toDouble()
         IdeaBoardSpread.Card(note.id, BoardPoint(note.boardX, note.boardY), max(w, cardWidth), max(h, CARD_HEIGHT))
@@ -155,11 +172,13 @@ const val BOARD_PEEK_TAG = "board-peek"
     }
     // the first view frames every card, until the board is moved by hand; again as the drawn
     // places change, since sizes arrive after the first layout
-    LaunchedEffect(size, notes.size, hidden, top, drawn) { if (!moved) fitAll() }
+    LaunchedEffect(size, notes.size, hidden, top, drawn) { if (!moved && still == null) fitAll() }
 
     fun tapCard(id: String) {
         val from = source
         when {
+            // S06c: a card edged as like the idea open in the editor links the two, with Undo
+            from == null && !connecting && shapes?.editing != null && shapes.glows(id) -> shapes.link(id)
             from == null && connecting -> source = id
             from == null -> open(id)
             from == id -> { source = null }
@@ -207,7 +226,7 @@ const val BOARD_PEEK_TAG = "board-peek"
                 fun px(v: Double) = (v * d).toFloat()
                 // as iOS's IdeaBoardView.line: Straight one segment, Curved one quadratic
                 val path = Path()
-                if (style.isStraight) {
+                if (straight) {
                     val (from, to) = IdeaLinkShape.straightEnds(p, q, lane, count)
                     path.moveTo(px(from.x), px(from.y))
                     path.lineTo(px(to.x), px(to.y))
@@ -216,19 +235,30 @@ const val BOARD_PEEK_TAG = "board-peek"
                     path.moveTo(px(curve.start.x), px(curve.start.y))
                     path.quadraticTo(px(curve.control.x), px(curve.control.y), px(curve.end.x), px(curve.end.y))
                 }
-                drawPath(path, ink, style = Stroke(width = max(1.0, 1.5 * zoom).toFloat() * d, cap = StrokeCap.Round))
+                val faded = lens != null && (a.uppercase() !in lens || b.uppercase() !in lens)
+                drawPath(path, if (faded) ink.copy(alpha = ink.alpha * MapFilterView.GHOST_ALPHA) else ink, style = Stroke(width = max(1.0, 1.5 * zoom).toFloat() * d, cap = StrokeCap.Round))
             }
         }
 
+        // S06c: TalkBack's words for a tap on a card edged as like the open idea, which links it to that
+        // idea, named; and for Open, kept as an action of its own there
+        val linkWord = stringResource(R.string.echoes_board_link, shapes?.editingLine() ?: "")
+        val openWord = stringResource(R.string.map_peek_open)
         // the cards, each centred on its spot and scaled with the board
         Layout(content = {
             notes.forEach { note ->
                 key(note.id) {
+                    val faded = lens != null && note.id.uppercase() !in lens
                     BoardCard(book, version, note, chosen = note.id == source, lifted = note.id == dragging, zoom = zoom, chosenInk = chosenInk,
-                        width = cardWidth, oneKind = oneKind,
+                        // no edge while connecting: there a tap connects, and the edge would read as chosen
+                        width = cardWidth, oneKind = oneKind, glows = !connecting && shapes?.glows(note.id) == true,
                         modifier = Modifier.layoutId(note.id)
+                            // S06b: outside a lit day, dimmed as iOS's (IdeaBoardView.unlit)
+                            .alpha(if (lit == null || note.id in lit) 1f else UNLIT)
                             // its size before the board's zoom (BoardCard's graphicsLayer), in px
                             .onSizeChanged { sizes[note.id] = it }
+                            // a card the lenses leave out: faded, untouchable, not read out (S06d)
+                            .then(if (faded) Modifier.alpha(MapFilterView.GHOST_ALPHA).clearAndSetSemantics { } else Modifier
                             // the whole title: shown while a mouse or stylus is over the card, or a finger
                             // rests on it; gone as it leaves or lifts (read before the gestures below)
                             .pointerInput(note.id) {
@@ -277,7 +307,10 @@ const val BOARD_PEEK_TAG = "board-peek"
                                 selected = note.id == source
                                 // what this tap does, as tapCard decides it
                                 val from = source
+                                val links = from == null && !connecting && shapes?.editing != null && shapes.glows(note.id)
                                 val action = when {
+                                    // S06c: like the open idea, a tap links it; Open stays an action of its own
+                                    links -> linkWord
                                     from == null -> if (connecting) "Start a connection" else "Open"
                                     from == note.id -> "Cancel"
                                     book.isLinked(from, note.id) -> "Disconnect"
@@ -285,7 +318,8 @@ const val BOARD_PEEK_TAG = "board-peek"
                                 }
                                 onClick(action) { tapCard(note.id); true }
                                 onLongClick("Start a connection") { source = note.id; true }
-                            })
+                                if (links) customActions = listOf(CustomAccessibilityAction(openWord) { open(note.id); true })
+                            }))
                 }
             }
         }, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
@@ -316,6 +350,11 @@ const val BOARD_PEEK_TAG = "board-peek"
                     .padding(WardSpace.m.wardDp))
         }
 
+        // no idea passes the lenses: the map's empty line, as over Space (S06d)
+        if (lens != null && notes.isNotEmpty() && notes.none { it.id.uppercase() in lens }) Text(stringResource(R.string.map_lens_empty),
+            Modifier.align(Alignment.Center).padding(bottom = hidden).padding(horizontal = WardSpace.xl.wardDp).semantics { testTag = MapPanelTags.FILTER_EMPTY },
+            style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary), textAlign = TextAlign.Center)
+
         if (notes.isEmpty()) {
             // the kit's empty state's gap and message type (WardEmptyState); iOS's outlined hand.tap at Title 2
             Column(Modifier.align(Alignment.Center).padding(bottom = hidden).padding(WardSpace.xl.wardDp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -342,14 +381,18 @@ const val BOARD_PEEK_TAG = "board-peek"
             }
         }
 
-        // bottom-trailing; on the trailing edge, centred, in a broad window (iOS IdeaToolsPlacement)
+        // bottom-trailing; on the trailing edge, centred, in a broad window (iOS IdeaToolsPlacement);
+        // none in the capsule's picture
         val toolsSpot = if (currentWindowShape().isBroad) Alignment.CenterEnd else Alignment.BottomEnd
-        Box(Modifier.align(toolsSpot).padding(bottom = hidden)) {
+        if (still == null) Box(Modifier.align(toolsSpot).padding(bottom = hidden)) {
             IdeaToolCluster {
                 IdeaBoardLookTool(settings)
                 IdeaToolButton(Icons.Outlined.Link, if (connecting) "Stop connecting" else "Connect", active = connecting) {
                     connecting = !connecting; source = null
                 }
+                // S06c: Collide, two far-apart ideas face to face
+                if (shapes != null) IdeaToolButton(Icons.Outlined.Bolt, stringResource(R.string.collide_tool),
+                    modifier = Modifier.testTag(IdeaShapeTags.COLLIDE_TOOL)) { shapes.collideAny() }
                 // iOS's smallcircle.filled.circle, on every Recentre
                 IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { fitAll() }
             }
@@ -362,11 +405,25 @@ const val BOARD_PEEK_TAG = "board-peek"
 }
 
 /**
+ * The board held still for the capsule's picture (S06d A4): its zoom and pan, the picture's size in
+ * dp, and the lines' style. As iOS's IdeaBoardStill.
+ */
+data class BoardStill(val zoom: Double, val panX: Double, val panY: Double, val widthDp: Double, val heightDp: Double, val straight: Boolean)
+
+/** Every card's least width: 20 letters of its title's font, never under 150 (S05m item 5). */
+@Composable internal fun boardCardWidth(): Double {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val titleWidth = with(density) { measurer.measure(IdeaBoardDrop.TITLE_SAMPLE, boardTitleStyle(), maxLines = 1).size.width.toDp().value.toDouble() }
+    return max(CARD_WIDTH, kotlin.math.ceil(titleWidth) + 2 * WardSpace.m)
+}
+
+/**
  * One card: its kind and folder in small type, the title, washed in its folder's colour. [version] is
  * the book's, read by no line here: a folder renamed in place reaches the card by it.
  */
 @Composable private fun BoardCard(book: IdeaBook, @Suppress("UNUSED_PARAMETER") version: Int, note: Note, chosen: Boolean, lifted: Boolean, zoom: Double,
-                                  chosenInk: androidx.compose.ui.graphics.Color, width: Double, oneKind: Boolean, modifier: Modifier) {
+                                  chosenInk: androidx.compose.ui.graphics.Color, width: Double, oneKind: Boolean, modifier: Modifier, glows: Boolean = false) {
     val shape = RoundedCornerShape(WardRadius.card.wardDp)
     val tone = toneColor(note.folderId, book)
     val kind = note.noteKind
@@ -377,7 +434,7 @@ const val BOARD_PEEK_TAG = "board-peek"
     // the frost (S06a A6): deeper with each step since it was last opened; opened, it melts, at once with animations off
     val frost = frostOf(note)
     val reduce = wardReduceMotion()
-    // by night a deep ice, so a forgotten idea never outshines the rest
+    // the page's colour washed over the card, deeper by step (IdeaFrostLook)
     val night = LocalWardDark.current
     val wash by animateFloatAsState(IdeaFrostLook.opacity(night)[frost], wardEaseOut(WardMotion.longest, reduce), label = "frost")
     val frostWords = if (frost > 0) stringResource(R.string.frost_spoken) else null
@@ -390,18 +447,26 @@ const val BOARD_PEEK_TAG = "board-peek"
         .heightIn(min = CARD_HEIGHT.dp)
         .wardRaised(WardRadius.card, if (lifted) WardLift.high else WardLift.low, fill = WardToken.raised)
         .clip(shape).background(tone.copy(alpha = 0.14f))
-        .background(IdeaFrostLook.ice(night).copy(alpha = wash))
-        .then(if (chosen) Modifier.border(2.dp, chosenInk, shape) else Modifier)
+        .background(IdeaFrostLook.wash(night).copy(alpha = wash))
+        .then(if (chosen) Modifier.border(2.dp, chosenInk, shape)
+            // S06c: like the idea open in the editor: the accent's edge, still, so Reduce Motion needs nothing more
+            else if (glows) Modifier.border(3.dp, wardColor(WardToken.accent), shape) else Modifier)
         .padding(WardSpace.m.wardDp)
         .semantics { testTag = BOARD_CARD_TAG; contentDescription = spoken },
         verticalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
+        Row(if (glows) Modifier.fillMaxWidth() else Modifier, verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(WardSpace.xs.wardDp)) {
             // grows with the reader's font scale, as iOS's symbol follows the caption
             Icon(kind.icon, null, tint = tone, modifier = Modifier.size(wardGlyph(12.0)).semantics { testTag = BOARD_KIND_TAG + kind.rawValue })
             FrostGlyph(frost)
             // a folder's name takes two lines before it ends in "…" (S05m item 8)
-            if (caption != null) Text(caption, style = WardTextStyle.caption2.textStyle(), color = wardColor(WardToken.inkSecondary),
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (caption != null) Text(caption, if (glows) Modifier.weight(1f) else Modifier, style = WardTextStyle.caption2.textStyle(),
+                color = wardColor(WardToken.inkSecondary), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // S06c: like the open idea, the strip's link glyph at the card's top end: a tap links it
+            if (glows) {
+                if (caption == null) Spacer(Modifier.weight(1f))
+                Icon(Icons.Outlined.Link, null, tint = wardColor(WardToken.accent), modifier = Modifier.size(wardGlyph(12.0)))
+            }
         }
         // one line, at most 20 letters wide, then "…"; the whole title shows over the card (S05m item 5)
         Text(title, style = boardTitleStyle(), color = wardColor(WardToken.ink), maxLines = 1, overflow = TextOverflow.Ellipsis)

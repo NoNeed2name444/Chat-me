@@ -1,0 +1,8 @@
+{
+  "about": "A folder entry, which pack never writes.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "lib/"}
+  ],
+  "expect": {"verdict": "refused", "reason": "file.type"}
+}

@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -205,9 +206,12 @@ class MapSpaceLivelyTest {
         check((second - first).getDistance() > 1f) { "The chosen planet $planet stayed at $first on the screen over 1.5 s for $name: ${drawn()}" }
         shot(name)
         // a finger held on it: the orbit clock eases to a stop
-        val before = checkNotNull(drawn())
+        // the finger goes where the latest frame, drawn at the camera's pose now, put the planet's name
+        val before = drawnAtRest(name)
         check(before.orbitRate >= 0.5f) { "The orbit clock is not running before the finger comes down for $name: $before" }
-        val at = checkNotNull(named(planet)) { "The chosen planet $planet shows no name to put a finger on for $name" }
+        val at = checkNotNull(before.names.firstOrNull { it.index == planet }?.let { Offset(it.body[0], it.body[1]) }) {
+            "The chosen planet $planet shows no name to put a finger on for $name: $before"
+        }
         val origin = checkNotNull(mapNode()).positionOnScreen
         val x = origin.x + at.x; val y = origin.y + at.y
         // the uptime read before the down is injected: the earliest bound at or before the real down, so
@@ -449,8 +453,13 @@ class MapSpaceLivelyTest {
         onMain { tap.tap(index) }
         try { compose.waitUntil(10_000) { drawn()?.chosen == index && named(index) != null } } catch (_: ComposeTimeoutException) {}
         settle(1_000) // the camera's 0.45 s ease, done
+        drawnAtRest(name)
         clearOfItsCard(index, name)
-        val at = checkNotNull(named(index)) { "Body $index shows no name to put a finger on for $name: ${drawn()}" }
+        // the finger goes where the latest frame, drawn at the camera's pose now, put the body's name
+        val before = drawnAtRest(name)
+        val at = checkNotNull(before.names.firstOrNull { it.index == index }?.let { Offset(it.body[0], it.body[1]) }) {
+            "Body $index shows no name to put a finger on for $name: $before"
+        }
         val node = checkNotNull(mapNode())
         val origin = node.positionOnScreen
         val width = node.size.width.toFloat()
@@ -462,7 +471,6 @@ class MapSpaceLivelyTest {
         // from it at least, so its first move is far past the touch slop
         val side = if (x <= middle) 1f else -1f
         fun fx(step: Int) = middle + side * reach * kotlin.math.cos(step * 0.7f)
-        val before = checkNotNull(drawn())
         val down = SystemClock.uptimeMillis()
         touch(MotionEvent.ACTION_DOWN, down, x, y, down)
         var seen = 0
@@ -489,6 +497,7 @@ class MapSpaceLivelyTest {
             check(picked.grabbed == index) {
                 "A finger held 350 ms on body $index, then moved fast, did not pick it up for $name: down at ($x, $y) on the screen, " +
                     "the name's body at $at in the map at $origin; before the down: build ${before.build}, pose ${before.pose}, " +
+                    "names measured at ${before.boxPose}, " +
                     "chosen ${before.chosen}, names ${before.names}; now: $picked"
             }
             start = picked
@@ -643,9 +652,23 @@ class MapSpaceLivelyTest {
             compose.onNode(item).performClick()
             compose.waitUntil(60_000) { drawn()?.let { it.build != built && framed(it) } == true }
         } else {
-            tapOnScreen(compose.onNode(item).fetchSemanticsNode(), "The Look menu's $label")
+            chooseItem(item, "The Look menu's $label")
             compose.waitUntil(30_000) { drawn()?.build?.let { it != built } == true }
         }
+    }
+
+    /**
+     * The menu item [item] chosen by its own click action, as TalkBack chooses it, on the main thread
+     * and with no wait for Compose to be idle. A tap through the screen raced the menu's window: on
+     * Chat-me copy cfb48d0's phone (run 43694499795, attempt 2) the tap on Comets came 0.3 s after
+     * the Look menu's window was made, and the menu closed as if tapped outside; and on copy
+     * 9e0732f's phone (run 43705809523) UiAutomation found no clickable "Comets" on screen within
+     * 10 s, by day and by night. The menu's own action is what a tap on the item runs.
+     */
+    private fun chooseItem(item: SemanticsMatcher, what: String) {
+        val node = compose.onAllNodes(item).fetchSemanticsNodes().firstOrNull()
+        val click = checkNotNull(node?.config?.getOrNull(SemanticsActions.OnClick)?.action) { "$what has no click action" }
+        check(onMain { click() }) { "$what's click action was refused" }
     }
 
     /** A tap in the middle of [node], through UiAutomation: no wait for Compose to be idle. */
@@ -707,6 +730,33 @@ class MapSpaceLivelyTest {
         check(drawn()?.chosen == index) { "Moving the map let body $index go for $name: ${drawn()}" }
     }
 
+    /**
+     * The record once the camera has stopped and the latest frame was drawn where it stands
+     * (MapDrawn.boxAtPose, S06m): the same pose on [STILL_READS] reads in a row, Compose's frames moving
+     * on between them (so the tap's ease, which runs on them, is done), and the names, which come from
+     * that frame, measured at it. The record's pose is the camera's now and its names the GL's latest
+     * frame's, so after the ease they can lag: on Chat-me run 43632107713's phone the star's name stood
+     * 114 px (by night) and 24 px (by day) below where the eased camera draws it, on the line the ease
+     * moved it along, and the finger put there picked a planet 79 px and 21 px off.
+     */
+    private fun drawnAtRest(name: String): MapDrawn {
+        var pose: List<Float>? = null
+        var still = 0
+        try {
+            compose.waitUntil(10_000) {
+                val d = drawn()
+                still = if (d != null && d.boxAtPose() && d.pose == pose) still + 1 else 0
+                pose = d?.pose
+                still >= STILL_READS
+            }
+        } catch (_: ComposeTimeoutException) {}
+        val d = checkNotNull(drawn())
+        check(still >= STILL_READS && d.boxAtPose()) {
+            "The camera did not come to rest with a frame drawn there within 10 s for $name: the names measured at ${d.boxPose}, the camera at ${d.pose}; $d"
+        }
+        return d
+    }
+
     /** Waits [ms] while Compose's frames move on, as waitUntil moves them. */
     private fun settle(ms: Long) {
         try { compose.waitUntil(ms) { false } } catch (_: ComposeTimeoutException) {}
@@ -752,6 +802,8 @@ class MapSpaceLivelyTest {
         const val DIRECTORY = "/sdcard/Download/sorta-renders"
         /** How long A3's finger is held before the record is read, the test thread asleep: the 0.5 s bar and room. */
         const val HOLD_MS = 1_500L
+        /** Reads in a row, a Compose frame apart, that find the camera still and drawn there (drawnAtRest). */
+        const val STILL_READS = 3
         private const val T = 1_793_000_000_000L
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 
