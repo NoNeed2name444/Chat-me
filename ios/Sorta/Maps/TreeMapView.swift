@@ -51,7 +51,7 @@ enum TreeBook {
     /// What the filter and the lenses leave out of `nodes`, by node: an idea
     /// they don't let through, and a folder with ideas under it none of which
     /// shows. Nil with nothing on.
-    static func hidden(_ nodes: NestNodes, notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
+    @MainActor static func hidden(_ nodes: NestNodes, notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
         if filter == .all && lens == nil { return nil }
         let n = nodes.size
         var hidden = [Bool](repeating: false, count: n)
@@ -504,6 +504,19 @@ private struct TreeNamesLayer: View {
             guard let sink, let colors else { return }
             let ink = colors.ink, halo = colors.sky
             context.withCGContext { cg in
+                // a name set out past the crown has a short leader back to its branch's tip, under the words
+                cg.setStrokeColor(red: CGFloat((ink >> 16) & 255) / 255, green: CGFloat((ink >> 8) & 255) / 255,
+                                  blue: CGFloat(ink & 255) / 255, alpha: 0.55)
+                cg.setLineWidth(1)
+                cg.setLineCap(.round)
+                let inset = CGFloat(TreeNames3D.Style().halo)
+                for p in names {
+                    guard let tip = p.lead else { continue }
+                    let near = CGFloat(tip.x < p.x ? p.left : p.right) + (tip.x < p.x ? inset : -inset)
+                    cg.move(to: CGPoint(x: near, y: CGFloat(p.y)))
+                    cg.addLine(to: CGPoint(x: CGFloat(tip.x), y: CGFloat(tip.y)))
+                }
+                cg.strokePath()
                 sink.cg = cg
                 for p in names {
                     sink.text(p.index, p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)

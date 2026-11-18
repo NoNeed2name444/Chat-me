@@ -120,3 +120,51 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
         }
     }
 }
+
+/**
+ * The Tree's first view, fitted close (S11, the lead's review of 18 Nov): MapFirstView.framing bounds
+ * each point on its own, which left the tree a third of the room; [refine] then projects every point
+ * through the pose and scales and moves it until their box, [margin] round each, fills [fill] of the
+ * window the insets leave on its binding side, centred in it. iOS's TreeFit is the same.
+ */
+object TreeFit {
+    const val ROUNDS = 8
+
+    fun refine(points: List<Vec3>, margin: Float, pose: MapPose, width: Float, height: Float, insets: MapInsets,
+               fill: Float, fovY: Float): MapPose {
+        if (points.isEmpty() || width <= 0f || height <= 0f) return pose
+        val lens = OrbitCamera(yaw = pose.yaw, pitch = pose.pitch, fovY = fovY, roll = pose.roll)
+        val r = lens.right(); val u = lens.up(); val b = lens.forward() * -1f
+        val f = lens.focalPixels(height)
+        val w = kotlin.math.max(width - insets.left - insets.right, 1f)
+        val h = kotlin.math.max(height - insets.top - insets.bottom, 1f)
+        // the window's middle from the view's, x right and y up, and the half box to fill
+        val wx = insets.left + w / 2 - width / 2; val wy = height / 2 - (insets.top + h / 2)
+        val hw = w / 2 * fill; val hh = h / 2 * fill
+        var target = pose.target; var d = pose.distance
+        repeat(ROUNDS) {
+            val box = box(points, margin, target + b * d, r, u, b, f) ?: run { d *= 1.5f; return@repeat }
+            val k = kotlin.math.max((box[1] - box[0]) / 2 / hw, (box[3] - box[2]) / 2 / hh)
+            if (!(k > 0f) || !k.isFinite()) return@repeat
+            val cx = (box[0] + box[1]) / 2; val cy = (box[2] + box[3]) / 2
+            val nd = d * k
+            // the box's middle shrinks toward the view's with the distance; then it is moved onto the window's
+            target = target + (r * (cx * d - wx * nd) + u * (cy * d - wy * nd)) * (1f / f)
+            d = nd
+        }
+        return MapPose(target, d, pose.yaw, pose.pitch, pose.roll)
+    }
+
+    /** The points' box on screen from [eye] (left, right, bottom, top, in pixels from the view's middle, y up); null if one is behind the eye. */
+    fun box(points: List<Vec3>, margin: Float, eye: Vec3, r: Vec3, u: Vec3, b: Vec3, f: Float): FloatArray? {
+        var x0 = Float.POSITIVE_INFINITY; var x1 = Float.NEGATIVE_INFINITY; var y0 = Float.POSITIVE_INFINITY; var y1 = Float.NEGATIVE_INFINITY
+        for (p in points) {
+            val q = p - eye
+            val z = -q.dot(b)
+            if (z <= 1e-4f) return null
+            val k = f / z; val sx = q.dot(r) * k; val sy = q.dot(u) * k; val e = margin * k
+            x0 = kotlin.math.min(x0, sx - e); x1 = kotlin.math.max(x1, sx + e); y0 = kotlin.math.min(y0, sy - e); y1 = kotlin.math.max(y1, sy + e)
+        }
+        return floatArrayOf(x0, x1, y0, y1)
+    }
+}

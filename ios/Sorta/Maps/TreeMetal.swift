@@ -21,8 +21,6 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     static let hidden: UInt8 = 1
     static let chosen: UInt8 = 2
     static let linked: UInt8 = 3
-    /// The least a branch or leaf is drawn across, in pixels, so a far twig never breaks up.
-    static let minPixels: Float = 0.75
     static let light = SIMD3<Float>(-0.42, 0.82, 0.39)
 
     private let device: MTLDevice
@@ -38,7 +36,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     private var leaves: MTLBuffer?
     private var state: MTLBuffer?
     private var stateVersion = -1
-    /// view, projection, light, sky, fog (start, end, cap), accent, pixel: 52 floats, written in place.
+    /// view, projection, light, sky, fog (start, end, cap), accent, the twig's
+    /// and leaf's floors and the crown's reach: 52 floats, written in place.
     private var uniforms = [Float](repeating: 0, count: 52)
     /// Why nothing is drawn, for the readout; nil while it draws.
     private(set) var failure: String?
@@ -92,7 +91,7 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         let size = view.drawableSize
         if size.width > 0, size.height > 0, let tube, let ball, let state {
             fill(host.camera, model: model, focusReach: host.focusReach, contrast: host.contrast,
-                 width: Float(size.width), height: Float(size.height))
+                 width: Float(size.width), height: Float(size.height), scale: Float(view.contentScaleFactor))
             encoder.setDepthStencilState(depthState)
             encoder.setCullMode(.none)
             uniforms.withUnsafeBytes { raw in
@@ -156,7 +155,7 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
 
     /// The frame's uniforms, in place: the camera's matrices with near and far
     /// hugging the tree, the light, the page's colour and the fog.
-    private func fill(_ camera: GraphPerfCamera, model m: TreeModel3D, focusReach: Float, contrast: Bool, width: Float, height: Float) {
+    private func fill(_ camera: GraphPerfCamera, model m: TreeModel3D, focusReach: Float, contrast: Bool, width: Float, height: Float, scale: Float) {
         let reach = Float(m.layout.reach[0])
         let centre = TreeCamera3D.centre(m, 0)
         let toCentre = ((centre - camera.eye) * (centre - camera.eye)).sum().squareRoot()
@@ -169,7 +168,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         put(SIMD4(TreeModel3D.rgb(m.colors.sky), 1), 36)
         put(SIMD4(camera.distance * 0.85, camera.distance + focusReach * 1.6, contrast ? 0.55 : 0.82, 0), 40)
         put(SIMD4(TreeModel3D.rgb(m.colors.accent), 1), 44)
-        put(SIMD4(Self.minPixels / max(camera.focal(viewHeight: height), 1), 0, 0, 0), 48)
+        let focal = camera.focal(viewHeight: height)
+        put(SIMD4(TreeWeight.twigFloor(scale: scale, focal: focal), TreeWeight.leafFloor(scale: scale, focal: focal), m.crown, 0), 48)
     }
 
     private func put(_ v: SIMD4<Float>, _ at: Int) {
@@ -196,6 +196,7 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 normal;
         float3 color;
         float depth;
+        float shade;
         float state [[flat]];
     };
 
@@ -203,6 +204,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         TreeOut o;
         float4 eye = u.view * float4(p, 1.0);
         o.depth = -eye.z; o.normal = n; o.color = color; o.state = state;
+        // deep in the crown, near the trunk's line, is darker: the crown's depth reads
+        o.shade = 0.7 + 0.3 * clamp(length(p.xz) / max(u.extra.z, 1e-4), 0.0, 1.0);
         // a hidden node folds to one point outside the view: nothing is drawn
         o.position = (state > 0.5 && state < 1.5) ? float4(2.0, 2.0, 2.0, 1.0) : u.proj * eye;
         return o;
@@ -245,18 +248,18 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 a; float3 c2;
         across(d, a, c2);
         float depth = max(-(u.view * float4(centre, 1.0)).z, 1e-4);
-        float r = max(l[6], u.extra.x * depth * 2.5);
+        float r = max(l[6], u.extra.y * depth);
         float3 shape = float3(0.62, 1.0, 0.34);
         float3 p = centre + (a * g.x * shape.x + d * g.y * shape.y + c2 * g.z * shape.z) * r;
         float3 n = normalize(a * g.x / shape.x + d * g.y / shape.y + c2 * g.z / shape.z);
         return finish(p, n, float3(l[7], l[8], l[9]), float(state[uint(l[10] + 0.5)]), u);
     }
 
-    // Lambert from one light, both faces, a chosen node toward the accent, then the page's colour with depth
+    // Lambert from one light, both faces, darker deep in the crown, a chosen node toward the accent, then the page's colour with depth
     fragment float4 tree_lit(TreeOut in [[stage_in]], constant TreeU& u [[buffer(0)]]) {
         float3 n = normalize(in.normal);
         float lambert = abs(dot(n, normalize(u.light.xyz)));
-        float3 c = in.color * (0.52 + 0.58 * lambert);
+        float3 c = in.color * (0.46 + 0.64 * lambert) * in.shade;
         if (in.state > 2.5) c = mix(c, u.accent.xyz, 0.4);
         else if (in.state > 1.5) c = mix(c, u.accent.xyz, 0.7);
         float f = clamp((in.depth - u.fog.x) / max(u.fog.y - u.fog.x, 1e-3), 0.0, 1.0) * u.fog.z;

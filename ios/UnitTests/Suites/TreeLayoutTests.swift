@@ -117,6 +117,22 @@ for t in trees {
     check("\(name) 3D: breadth first, every part once, a parent before its children", Set(l.order).count == n && parentFirst)
     check("\(name) 3D: each subtree's ball holds its children's", (1..<n).allSatisfy { i in holds(l, i) })
 }
+// a crown, not a pole with twigs (the lead's review of 18 Nov), as Android's theCrownIsAboutAsWideAsItIsTall
+if let first = trees.first {
+    let l = TreeLayout3D(nodesOf(first)), nodes = l.nodes
+    let kids = (0..<nodes.childCount[0]).map { nodes.child(0, $0) }
+    let offs = kids.map { acos(l.dir[3 * $0 + 1]) * 180 / Double.pi }
+    check("3D: the trunk's branches leave it 35 to 60 degrees off upright", offs.allSatisfy { $0 > 34.999 && $0 < 60.001 }, "\(offs)")
+    let lowest = kids.map { l.base[3 * $0 + 1] }.min() ?? 0
+    var lo = [Double](repeating: .infinity, count: 3), hi = [Double](repeating: -.infinity, count: 3)
+    for i in 1..<nodes.size { for t in [0, l.length[i]] { for a in 0..<3 {
+        let v = l.base[3 * i + a] + l.dir[3 * i + a] * t
+        lo[a] = min(lo[a], v); hi[a] = max(hi[a], v)
+    } } }
+    let wide = max(hi[0] - lo[0], hi[2] - lo[2]), tall = hi[1] - lowest
+    check("3D: the crown is about as wide as it is tall", wide / tall >= 0.8 && wide / tall <= 1.4, "\(wide) x \(tall)")
+    check("3D: the trunk is solid", 2 * l.r0[0] >= 0.14 * l.length[0])
+}
 if let first = trees.first {
     let a = TreeLayout3D(nodesOf(first)), b = TreeLayout3D(nodesOf(first))
     check("3D: the same tree grows the same every time", a.base == b.base && a.dir == b.dir && a.reach == b.reach)

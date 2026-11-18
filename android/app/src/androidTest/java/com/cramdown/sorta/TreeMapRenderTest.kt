@@ -127,23 +127,37 @@ class TreeMapRenderTest {
         check(part.width >= least && part.height >= least) { "Heart failure's element is ${part.width} x ${part.height} for $suffix" }
     }
 
-    /** The names drawn now: none overlapping, [want] among them; their nodes. */
+    /**
+     * The sample's part (its place in [TITLE]) that the map's node [scene] is, by its id: the map orders
+     * its nodes its own way (folders by name), so a node's place is not the part's (run 44389383639
+     * read Cardiology's name as Examples'). The trunk, id "", is part 0; -1 for none.
+     */
+    private fun part(ids: List<String>, scene: Int): Int {
+        val id = ids.getOrNull(scene) ?: return -1
+        if (id.isEmpty()) return 0
+        return (id.takeLast(12).toIntOrNull(16) ?: return -1) - 0x7000
+    }
+
+    private fun ids(): List<String> = checkNotNull(mapNode()?.config?.getOrNull(MapTapKey)) { "The map hands on no ids" }.ids
+
+    /** The names drawn now: none overlapping, [want] among them; their parts (places in [TITLE]). */
     private fun names(what: String, suffix: String, want: List<String>): List<Int> {
-        try { compose.waitUntil(10_000) { drawn()?.names?.map { TITLE.getOrNull(it.index) }?.containsAll(want) == true } } catch (_: ComposeTimeoutException) {}
+        val ids = ids()
+        try { compose.waitUntil(10_000) { drawn()?.names?.map { TITLE.getOrNull(part(ids, it.index)) }?.containsAll(want) == true } } catch (_: ComposeTimeoutException) {}
         val names = checkNotNull(drawn()).names
-        val words = names.map { TITLE.getOrNull(it.index) }
+        val words = names.map { TITLE.getOrNull(part(ids, it.index)) }
         check(words.containsAll(want)) {
             val d = checkNotNull(drawn())
             val card = if (shown(TreeTags.FIRST_VISIT)) node(TreeTags.FIRST_VISIT).boundsInRoot.toString() else "none"
             "$what, $suffix: $want not all named in a ${d.width} x ${d.height} map (its top ${mapNode()?.boundsInRoot?.top}, the card $card): " +
-                names.joinToString { n -> "${TITLE.getOrNull(n.index)} ${n.box.map { it.toInt() }}" }
+                names.joinToString { n -> "${TITLE.getOrNull(part(ids, n.index))} ${n.box.map { it.toInt() }}" }
         }
         for (a in names.indices) for (b in a + 1 until names.size) {
             val p = names[a].box; val q = names[b].box
             val apart = p[2] <= q[0] || q[2] <= p[0] || p[3] <= q[1] || q[3] <= p[1]
             check(apart) { "$what, $suffix: ${words[a]} ${p} overlaps ${words[b]} $q" }
         }
-        return names.map { it.index }
+        return names.map { part(ids, it.index) }
     }
 
     private fun under(p: Int, i: Int): Boolean {

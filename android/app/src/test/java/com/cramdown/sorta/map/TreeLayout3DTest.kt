@@ -74,6 +74,30 @@ class TreeLayout3DTest {
         assertEquals((0 until nodes.size).toSet(), l.order.toSet())
     }
 
+    // the lead's review of 18 Nov: a crown, not a pole with twigs
+    @Test fun theCrownIsAboutAsWideAsItIsTall() {
+        val l = TreeLayout3D(nodesOf(fixture.getJSONArray("trees").getJSONObject(0)))
+        val nodes = l.nodes
+        // the trunk's branches leave it 35 to 60 degrees off upright
+        for (k in 0 until nodes.childCount[0]) {
+            val c = nodes.child(0, k)
+            val off = Math.toDegrees(kotlin.math.acos(l.dir[3 * c + 1]))
+            assertTrue("${nodes.titles[c]} leaves the trunk $off degrees off upright", off in 34.999..60.001)
+        }
+        // the crown, from the trunk's lowest branch to the top, is about as wide as it is tall
+        var lowest = Double.POSITIVE_INFINITY
+        for (k in 0 until nodes.childCount[0]) lowest = minOf(lowest, l.base[3 * nodes.child(0, k) + 1])
+        val lo = DoubleArray(3) { Double.POSITIVE_INFINITY }; val hi = DoubleArray(3) { Double.NEGATIVE_INFINITY }
+        for (i in 1 until nodes.size) for (t in listOf(0.0, l.length[i])) for (a in 0..2) {
+            val v = l.base[3 * i + a] + l.dir[3 * i + a] * t
+            lo[a] = minOf(lo[a], v); hi[a] = maxOf(hi[a], v)
+        }
+        val wide = maxOf(hi[0] - lo[0], hi[2] - lo[2]); val tall = hi[1] - lowest
+        assertTrue("the crown is $wide wide and $tall tall", wide / tall in 0.8..1.4)
+        // the trunk is solid: about a seventh as thick as it is long
+        assertTrue(2 * l.r0[0] >= 0.14 * l.length[0])
+    }
+
     @Test fun eachSubtreeBallHoldsItsBodies() {
         val l = TreeLayout3D(nodesOf(fixture.getJSONArray("trees").getJSONObject(0)))
         val nodes = l.nodes

@@ -555,7 +555,9 @@ enum class MapTheme { PLAIN, SPACE, NEURONS, TREE }
  * the crisp zone); a note past the band's end is not listed at all, so it cannot be picked.
  */
 /** [perUnit] is how many pixels a world unit spans at its depth, which sizes its links' bands for the names. */
-data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f)
+data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f,
+                      /** The Tree's (S11): a branch's tip on screen, where its name goes first; NaN for the rest. */
+                      val tipX: Float = Float.NaN, val tipY: Float = Float.NaN)
 
 /**
  * The screen box of the drawn [nodes], each its drawn size ([ScreenNode.pixels] across) round its
@@ -677,7 +679,7 @@ class GlMapRenderer(
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
     /** S11: the Tree's draw, its own frame as the Neurons' is ([drawTree]). */
-    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast) else null
+    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast, density) else null
     /** The camera's pose the Tree's bodies were last handed on at, and whether its filter changed since. */
     private val treePose = FloatArray(6) { Float.NaN }
     private var treeFilterSent: MapFilterView? = null

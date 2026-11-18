@@ -200,5 +200,87 @@ check("at most \(TreeNames3D.most) names, the first in the order", gridNames.cou
       && gridNames.map(\.index) == Array(TreeNames3D.order(grid, sample).prefix(TreeNames3D.most)).map(\.index), "\(gridNames.count)")
 check("the budget is at least the most", TreeNames3D.budget >= TreeNames3D.most)
 
+// the lead's review of 18 Nov, as Android's TreeNamesTest: the branches level
+// by level, the shallower first, each level by weight
+check("the branches level by level, each by weight", (1..<firstLeaf).allSatisfy { k in
+    let a = ordered[k - 1].index, b = ordered[k].index
+    return sample.depth[a] < sample.depth[b] || (sample.depth[a] == sample.depth[b] && sample.weight[a] >= sample.weight[b])
+})
+// at the whole tree the names leave the trunk clear, a deeper part is named
+// only at its tip, and a leader never runs under another name
+for w in windows {
+    for yaw in [Float(0), rad(40), rad(120)] {
+        let (screen, placed) = names(w, yaw: yaw, into: -1)
+        guard let trunk = screen.first(where: { $0.index == 0 }), let top = trunk.tip else { check("\(w.name) \(yaw): the trunk on screen", false); continue }
+        let a = Float(TreeShape3D.anchor)
+        let stem = TreeNames3D.Segment(a: (SIMD2(trunk.x, trunk.y) - a * top) / (1 - a), b: top, half: trunk.pixels / 2)
+        let first = Set(placed.filter { sample.depth[$0.index] <= 1 }.map(\.index))
+        check("\(w.name) \(yaw): the trunk and its branches named", first.contains(0) && first.count >= 3, "\(first)")
+        check("\(w.name) \(yaw): no name but the trunk's covers the trunk",
+              placed.allSatisfy { $0.index == 0 || !stem.crosses($0.x, $0.y, $0.width, $0.height, gap: 0) })
+        check("\(w.name) \(yaw): a deeper part named only at its tip",
+              placed.allSatisfy { sample.depth[$0.index] <= 1 || $0.spot <= TreeNames3D.aboveTipSpot })
+        check("\(w.name) \(yaw): no leader runs under a name", placed.allSatisfy { p in
+            guard let tip = p.lead else { return true }
+            let line = TreeNames3D.Segment(a: SIMD2(tip.x < p.x ? p.left : p.right, p.y), b: tip, half: 1)
+            return placed.allSatisfy { $0.index == p.index || !line.crosses($0.x, $0.y, $0.width, $0.height, gap: 0) }
+        })
+    }
+}
+
+// the first view fills the room the chrome and the card leave, with a small margin
+func everyPoint(_ m: TreeModel3D) -> [SIMD3<Float>] {
+    let l = m.layout
+    var out: [SIMD3<Float>] = []
+    for i in 0..<m.nodes.size {
+        for t in [0, l.length[i]] {
+            out.append(SIMD3(Float(l.base[3 * i] + l.dir[3 * i] * t), Float(l.base[3 * i + 1] + l.dir[3 * i + 1] * t),
+                             Float(l.base[3 * i + 2] + l.dir[3 * i + 2] * t)))
+        }
+        out.append(SIMD3(Float(l.anchor[3 * i]), Float(l.anchor[3 * i + 1]), Float(l.anchor[3 * i + 2])))
+    }
+    return out
+}
+for (m, tree) in [(light, "concept"), (storeModel, "store")] {
+    let rooms: [(String, Window, (top: Float, left: Float, bottom: Float, right: Float))] = [
+        ("phone with the card", carded[0].1, (carded[0].1.top + 22, 0, carded[0].2 + 22, 0)),
+        ("phone", windows[0], (windows[0].top, 0, windows[0].bottom, 0)),
+        ("tablet", windows[1], (windows[1].top, 0, windows[1].bottom, 0)),
+        ("foldable", windows[2], (windows[2].top, 0, windows[2].bottom, 0))]
+    for (name, w, room) in rooms {
+        let c = TreeCamera3D.whole(m, width: w.width, height: w.height, insets: room)
+        guard let box = TreeFit.box(everyPoint(m), margin: 0, eye: c.eye, r: c.right, u: c.up, b: c.back, f: c.focal(viewHeight: w.height)) else {
+            check("\(tree) \(name): the tree in front of the eye", false); continue
+        }
+        let left = w.width / 2 + box.x0, right = w.width / 2 + box.x1, top = w.height / 2 - box.y1, bottom = w.height / 2 - box.y0
+        check("\(tree) \(name): the first view inside the room", left >= -0.01 && right <= w.width + 0.01 && top >= room.top - 0.01
+              && bottom <= w.height - room.bottom + 0.01, "\(left) \(top) \(right) \(bottom)")
+        let wide = (right - left) / w.width, tall = (bottom - top) / (w.height - room.top - room.bottom)
+        check("\(tree) \(name): the first view fills the room", max(wide, tall) >= 0.86, "\(wide) x \(tall)")
+    }
+}
+
+// the finest twig at least 1.5 points across and a leaf at least 6 long, however far
+var floorsHold = true
+for scale: Float in [1, 2, 3] { for focal: Float in [400, 1200, 3000] { for depth: Float in [0.5, 3, 40] {
+    let twig = TreeWeight.twigFloor(scale: scale, focal: focal) * depth * focal / depth * 2
+    let leaf = TreeWeight.leafFloor(scale: scale, focal: focal) * depth * focal / depth * 2
+    if abs(twig - TreeWeight.twigPoints * scale) > 1e-3 * twig || abs(leaf - TreeWeight.leafPoints * scale) > 1e-3 * leaf { floorsHold = false }
+} } }
+check("the twig's and leaf's floors hold at every scale, focal length and depth", floorsHold)
+// and at the phone's first view the trunk and its big branches are solid, not hairlines
+for (m, tree) in [(light, "concept"), (storeModel, "store")] {
+    let w = windows[0]
+    let c = TreeCamera3D.whole(m, width: w.width, height: w.height, insets: (w.top, 0, w.bottom, 0))
+    let f = c.focal(viewHeight: w.height), l = m.layout, nodes = m.nodes
+    func across(_ i: Int) -> Float {
+        let p = SIMD3<Float>(Float(l.base[3 * i]), Float(l.base[3 * i + 1]), Float(l.base[3 * i + 2])) - c.eye
+        return Float(2 * l.r0[i]) * f / (p * p).sum().squareRoot()
+    }
+    check("\(tree): the trunk is at least 8 points across (\(across(0)))", across(0) >= 8)
+    let big = (0..<nodes.childCount[0]).map { nodes.child(0, $0) }.filter { nodes.weight[$0] >= 8 }
+    check("\(tree): the trunk's big branches at least 3 points across", big.allSatisfy { across($0) >= 3 }, "\(big.map(across))")
+}
+
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

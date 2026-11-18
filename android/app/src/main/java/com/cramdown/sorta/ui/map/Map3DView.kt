@@ -130,6 +130,7 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.map.TreeFit
 import com.cramdown.sorta.map.TreeModel
 import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
@@ -333,7 +334,11 @@ private const val NEURONS_PITCH = (35.0 * Math.PI / 180.0).toFloat()
 /** Space's (GraphTilt.spaceDegrees, 45). */
 private const val SPACE_PITCH = (45.0 * Math.PI / 180.0).toFloat()
 /** The Tree's (S11): a little from above, so the crown's spread reads and the trunk still stands. */
-internal const val TREE_PITCH = (14.0 * Math.PI / 180.0).toFloat()
+// the Tree's first view looks a little down on it from three quarters round, so its depth shows
+internal const val TREE_PITCH = (20.0 * Math.PI / 180.0).toFloat()
+internal const val TREE_YAW = (35.0 * Math.PI / 180.0).toFloat()
+/** How much of the room the chrome and the card leave the Tree's first view fills, on its binding side. */
+internal const val TREE_FILL = 0.9f
 
 /**
  * iOS's camera per theme (S05j item 3), looking at [target]: Space and Neurons look down at GraphTilt's
@@ -345,7 +350,7 @@ internal fun firstCamera(theme: MapTheme, target: Vec3): OrbitCamera = when (the
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     MapTheme.SPACE -> OrbitCamera(target = target, yaw = 0f, pitch = SPACE_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
-    MapTheme.TREE -> OrbitCamera(target = target, yaw = 0f, pitch = TREE_PITCH,
+    MapTheme.TREE -> OrbitCamera(target = target, yaw = TREE_YAW, pitch = TREE_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     else -> OrbitCamera(target = target, yaw = MapFirstView.FAST_YAW, pitch = MapFirstView.FAST_PITCH,
         fovY = MapFirstView.radians(MapFirstView.FAST_FIELD_DEGREES))
@@ -1361,10 +1366,12 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                             (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat())
                     } + bodies()
                     val margin = scene.treeModel?.smallest ?: scene.nodeRadius
+                    // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
-                        MapFirstView.framing(points, margin, w, h, insets, fill = 0.9f, yaw = 0f, pitch = TREE_PITCH,
+                        MapFirstView.framing(points, margin, w, h, insets, fill = TREE_FILL, yaw = TREE_YAW, pitch = TREE_PITCH,
                             fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
-                            ?: MapFirstView.framing(Vec3(0f, 1f, 0f), 1.5f, w, h, insets, yaw = 0f, pitch = TREE_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                            ?.let { TreeFit.refine(points, margin, it, w, h, insets, TREE_FILL, MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES)) }
+                            ?: MapFirstView.framing(Vec3(0f, 1f, 0f), 1.5f, w, h, insets, yaw = TREE_YAW, pitch = TREE_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
                     }
                     first
                 }
