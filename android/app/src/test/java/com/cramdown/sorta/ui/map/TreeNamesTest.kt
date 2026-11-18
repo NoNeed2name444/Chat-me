@@ -139,6 +139,25 @@ class TreeNamesTest {
         }
     }
 
+    // the lead's review of 18 Nov: from three quarters round, two limbs stood one behind the other
+    @Test fun theFirstViewShowsTheCrownSpread() = eachTree {
+        val points = com.cramdown.sorta.map.TreeFit.points(model.layout, 0)
+        fun across(yaw: Float): Float {
+            val xs = points.map { it.x * kotlin.math.cos(yaw) - it.z * kotlin.math.sin(yaw) }
+            return xs.max() - xs.min()
+        }
+        val yaw = com.cramdown.sorta.map.TreeFit.widestYaw(points, TREE_YAW)
+        // the sample's widest is 45 degrees from three quarters round; iOS's TreeModel3DTests holds the same
+        assertEquals(-10.0, Math.toDegrees(yaw.toDouble()), 1e-3)
+        for (k in 0 until 72) assertTrue(across(yaw) >= across(k * 5f * Math.PI.toFloat() / 180f) * (1 - 1e-4f))
+        for (w in windows) {
+            val (screen, _) = names(w, 0f)
+            val xs = screen.map { it.x }; val ys = screen.map { it.y }
+            val wide = xs.max() - xs.min(); val tall = ys.max() - ys.min()
+            assertTrue("${w.name}: the tree is $wide wide and $tall tall", wide >= 0.85f * tall)
+        }
+    }
+
     @Test fun aFlyInComesNearer() = eachTree {
         for (w in windows) {
             val whole = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)

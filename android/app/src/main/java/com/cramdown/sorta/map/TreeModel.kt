@@ -129,6 +129,26 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
  */
 object TreeFit {
     const val ROUNDS = 8
+    /** How many yaws round widestYaw tries, every 5 degrees. */
+    const val YAWS = 72
+
+    /**
+     * The yaw from which [points] stand widest across (S11): a tree has no front, so the first view shows
+     * its crown spread, its limbs apart rather than one behind another. Tried from [prefer] outward, a
+     * step each way in turn, so a tie (within a hair) keeps the nearer. iOS's TreeFit.widestYaw.
+     */
+    fun widestYaw(points: List<Vec3>, prefer: Float): Float {
+        var best = prefer; var most = -1f
+        for (k in 0 until YAWS) {
+            val step = (k + 1) / 2 * (if (k % 2 == 1) 1 else -1)
+            val yaw = prefer + step * (2 * Math.PI / YAWS).toFloat()
+            val c = cos(yaw); val s = sin(yaw)
+            var lo = Float.POSITIVE_INFINITY; var hi = Float.NEGATIVE_INFINITY
+            for (p in points) { val x = p.x * c - p.z * s; lo = min(lo, x); hi = kotlin.math.max(hi, x) }
+            if (hi - lo > most * (1 + 1e-4f)) { most = hi - lo; best = yaw }
+        }
+        return best
+    }
 
     fun refine(points: List<Vec3>, margin: Float, pose: MapPose, width: Float, height: Float, insets: MapInsets,
                fill: Float, fovY: Float): MapPose {

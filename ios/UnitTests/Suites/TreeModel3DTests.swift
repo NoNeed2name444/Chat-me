@@ -260,6 +260,20 @@ for (m, tree) in [(light, "concept"), (storeModel, "store")] {
     }
 }
 
+// the first view from where the crown stands widest, as Android's theFirstViewShowsTheCrownSpread
+for (m, tree) in [(light, "concept"), (storeModel, "store")] {
+    let points = everyPoint(m)
+    func across(_ yaw: Float) -> Float {
+        let c: Float = cos(yaw), s: Float = sin(yaw)
+        let xs: [Float] = points.map { (p: SIMD3<Float>) -> Float in p.x * c - p.z * s }
+        return (xs.max() ?? 0) - (xs.min() ?? 0)
+    }
+    let w = windows[0]
+    let yaw = TreeCamera3D.whole(m, width: w.width, height: w.height, insets: (w.top, 0, w.bottom, 0)).yaw
+    check("\(tree): the first view's yaw is Android's, 10 degrees left of front", abs(yaw * 180 / Float.pi + 10) < 1e-3, "\(yaw * 180 / Float.pi)")
+    check("\(tree): no yaw shows the crown wider", (0..<72).allSatisfy { across(yaw) >= across(Float($0) * 5 * Float.pi / 180) * (1 - 1e-4) })
+}
+
 // the finest twig at least 1.5 points across and a leaf at least 6 long, however far
 var floorsHold = true
 for scale: Float in [1, 2, 3] { for focal: Float in [400, 1200, 3000] { for depth: Float in [0.5, 3, 40] {

@@ -133,6 +133,12 @@ if let first = trees.first {
     check("3D: the crown is about as wide as it is tall", wide / tall >= 0.8 && wide / tall <= 1.4, "\(wide) x \(tall)")
     check("3D: the trunk is solid", 2 * l.r0[0] >= 0.14 * l.length[0])
 }
+// no leaf bigger than a twig's most (flown in to Cardiology, its long limb's leaves walled the view), as Android's noLeafIsBiggerThanATwigsMost
+for (k, t) in trees.enumerated() {
+    let l = TreeLayout3D(nodesOf(t))
+    check("3D tree \(k): no leaf past the most", (1..<l.nodes.size).allSatisfy { l.leaf[$0] <= TreeShape3D.leafMost + 1e-12 })
+    if k == 0 { check("3D: some leaf held to the most", (1..<l.nodes.size).contains { l.leaf[$0] == TreeShape3D.leafMost }) }
+}
 if let first = trees.first {
     let a = TreeLayout3D(nodesOf(first)), b = TreeLayout3D(nodesOf(first))
     check("3D: the same tree grows the same every time", a.base == b.base && a.dir == b.dir && a.reach == b.reach)

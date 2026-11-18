@@ -505,14 +505,18 @@ private struct TreeNamesLayer: View {
             let ink = colors.ink, halo = colors.sky
             context.withCGContext { cg in
                 // a name set out past the crown has a short leader back to its branch's tip, under the words
-                cg.setStrokeColor(red: CGFloat((ink >> 16) & 255) / 255, green: CGFloat((ink >> 8) & 255) / 255,
-                                  blue: CGFloat(ink & 255) / 255, alpha: 0.55)
+                let red: CGFloat = CGFloat((ink >> 16) & 255) / 255
+                let green: CGFloat = CGFloat((ink >> 8) & 255) / 255
+                let blue: CGFloat = CGFloat(ink & 255) / 255
+                cg.setStrokeColor(red: red, green: green, blue: blue, alpha: 0.55)
                 cg.setLineWidth(1)
                 cg.setLineCap(.round)
                 let inset = CGFloat(TreeNames3D.Style().halo)
                 for p in names {
                     guard let tip = p.lead else { continue }
-                    let near = CGFloat(tip.x < p.x ? p.left : p.right) + (tip.x < p.x ? inset : -inset)
+                    let toLeft = tip.x < p.x
+                    let side: CGFloat = CGFloat(toLeft ? p.left : p.right)
+                    let near: CGFloat = toLeft ? side + inset : side - inset
                     cg.move(to: CGPoint(x: near, y: CGFloat(p.y)))
                     cg.addLine(to: CGPoint(x: CGFloat(tip.x), y: CGFloat(tip.y)))
                 }

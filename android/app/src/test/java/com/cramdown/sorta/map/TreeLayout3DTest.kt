@@ -98,6 +98,16 @@ class TreeLayout3DTest {
         assertTrue(2 * l.r0[0] >= 0.14 * l.length[0])
     }
 
+    // the lead's review of 18 Nov: flown in to Cardiology, its long limb's leaves walled the view
+    @Test fun noLeafIsBiggerThanATwigsMost() {
+        val trees = fixture.getJSONArray("trees")
+        for (t in 0 until trees.length()) {
+            val l = TreeLayout3D(nodesOf(trees.getJSONObject(t)))
+            for (i in 1 until l.nodes.size) assertTrue("leaf $i is ${l.leaf[i]} across", l.leaf[i] <= TreeShape3D.LEAF_MOST + 1e-12)
+            assertTrue("some leaf is held to the most", (1 until l.nodes.size).any { l.leaf[it] == TreeShape3D.LEAF_MOST } || t > 0)
+        }
+    }
+
     @Test fun eachSubtreeBallHoldsItsBodies() {
         val l = TreeLayout3D(nodesOf(fixture.getJSONArray("trees").getJSONObject(0)))
         val nodes = l.nodes

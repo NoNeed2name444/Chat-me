@@ -169,7 +169,9 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         put(SIMD4(camera.distance * 0.85, camera.distance + focusReach * 1.6, contrast ? 0.55 : 0.82, 0), 40)
         put(SIMD4(TreeModel3D.rgb(m.colors.accent), 1), 44)
         let focal = camera.focal(viewHeight: height)
-        put(SIMD4(TreeWeight.twigFloor(scale: scale, focal: focal), TreeWeight.leafFloor(scale: scale, focal: focal), m.crown, 0), 48)
+        let twig: Float = TreeWeight.twigFloor(scale: scale, focal: focal)
+        let leaf: Float = TreeWeight.leafFloor(scale: scale, focal: focal)
+        put(SIMD4<Float>(twig, leaf, m.crown, 0), 48)
     }
 
     private func put(_ v: SIMD4<Float>, _ at: Int) {

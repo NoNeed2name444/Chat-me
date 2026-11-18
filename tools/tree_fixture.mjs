@@ -130,6 +130,8 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5)), LIFT = 0.45, TAPER = 0.6, JOIN = 0.
 // along its top DROP1; thicker (ROOT_WID, WID) and bigger leaves (LEAF3) than the flat tree's
 const RISE0 = 35 * Math.PI / 180, RISE1 = 55 * Math.PI / 180, SPLAY0 = 15 * Math.PI / 180, SPLAY1 = 45 * Math.PI / 180;
 const RATIO1 = 0.9, RATIO2 = 0.75, DROP1 = 0.3, ROOT_WID = 0.15, WID = 0.1, LEAF3 = 0.8;
+// a leaf's largest radius (LEAF_MOST, beside the trunk's length): a long limb's leaf no bigger than a twig's
+const LEAF_MOST = 0.07;
 
 function layout3d(T) {
   const N = T.parent.length, PAR = T.parent;
@@ -152,7 +154,7 @@ function layout3d(T) {
     const phi0 = rnd() * TAU;
     const n = CC[i];
     if (!n && i > 0) {
-      const lr = len * LEAF3 * 0.5; E.leaf[i] = lr;
+      const lr = Math.min(len * LEAF3 * 0.5, LEAF_MOST); E.leaf[i] = lr;
       for (let a = 0; a < 3; a++) E.anchor[3 * i + a] = b[a] + D[a] * (len + lr);
       return;
     }

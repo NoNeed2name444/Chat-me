@@ -30,6 +30,9 @@ enum TreeShape3D {
     static let rootWidth = 0.15, width = 0.1
     /// A leaf's length beside its twig's.
     static let leaf = 0.8
+    /// A leaf's largest radius, beside the trunk's length: a long limb's leaf
+    /// no bigger than a twig's, so a fly-in is not walled in leaves.
+    static let leafMost = 0.07
     /// A branch's tip radius beside its base's.
     static let taper = 0.6
     /// A child's base radius at most this much of its parent's where it joins.
@@ -97,7 +100,7 @@ final class TreeLayout3D {
         w.phi0 = rnd.next() * 2 * Double.pi
         let count = nodes.childCount[i]
         if count == 0 && i > 0 {
-            let lr = len * TreeShape3D.leaf * 0.5
+            let lr = min(len * TreeShape3D.leaf * 0.5, TreeShape3D.leafMost)
             leaf[i] = lr
             for a in 0..<3 { anchor[3 * i + a] = base[3 * i + a] + d[a] * (len + lr) }
             return w

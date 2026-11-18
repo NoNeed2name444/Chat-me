@@ -40,6 +40,8 @@ object TreeShape3D {
     const val WIDTH = 0.1
     /** A leaf's length beside its twig's. */
     const val LEAF = 0.8
+    /** A leaf's largest radius, beside the trunk's length: a long limb's leaf no bigger than a twig's, so a fly-in is not walled in leaves. */
+    const val LEAF_MOST = 0.07
     /** A branch's tip radius beside its base's. */
     const val TAPER = 0.6
     /** A child's base radius at most this much of its parent's where it joins. */
@@ -102,7 +104,7 @@ class TreeLayout3D(val nodes: NestNodes) {
         w.phi0 = rnd.next() * 2 * Math.PI
         val count = nodes.childCount[i]
         if (count == 0 && i > 0) {
-            val lr = len * TreeShape3D.LEAF * 0.5
+            val lr = minOf(len * TreeShape3D.LEAF * 0.5, TreeShape3D.LEAF_MOST)
             leaf[i] = lr
             for (a in 0..2) anchor[3 * i + a] = base[3 * i + a] + d[a] * (len + lr)
             return w

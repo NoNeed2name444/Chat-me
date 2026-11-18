@@ -148,6 +148,25 @@ final class TreeModel3D {
 /// TreeFit is the same.
 enum TreeFit {
     static let rounds = 8
+    /// How many yaws round widestYaw tries, every 5 degrees.
+    static let yaws = 72
+
+    /// The yaw from which `points` stand widest across (S11): a tree has no
+    /// front, so the first view shows its crown spread, its limbs apart rather
+    /// than one behind another. Tried from `prefer` outward, a step each way in
+    /// turn, so a tie (within a hair) keeps the nearer. Android's TreeFit.widestYaw.
+    static func widestYaw(_ points: [SIMD3<Float>], prefer: Float) -> Float {
+        var best = prefer, most: Float = -1
+        for k in 0..<yaws {
+            let step = (k + 1) / 2 * (k % 2 == 1 ? 1 : -1)
+            let yaw = prefer + Float(step) * Float(2 * Double.pi / Double(yaws))
+            let c = cos(yaw), s = sin(yaw)
+            var lo = Float.infinity, hi = -Float.infinity
+            for p in points { let x = p.x * c - p.z * s; lo = min(lo, x); hi = max(hi, x) }
+            if hi - lo > most * (1 + 1e-4) { most = hi - lo; best = yaw }
+        }
+        return best
+    }
 
     static func refine(_ points: [SIMD3<Float>], margin: Float, _ pose: GraphPerfCamera, width: Float, height: Float,
                        insets: (top: Float, left: Float, bottom: Float, right: Float), fill: Float) -> GraphPerfCamera {
@@ -166,7 +185,10 @@ enum TreeFit {
             let cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2
             let d = c.distance, nd = d * k
             // the box's middle shrinks toward the view's with the distance; then it is moved onto the window's
-            c.target += (r * (cx * d - wx * nd) + u * (cy * d - wy * nd)) / f
+            // in parts: Xcode's type checker gave up on it as one expression
+            let across: Float = (cx * d - wx * nd) / f
+            let upward: Float = (cy * d - wy * nd) / f
+            c.target += r * across + u * upward
             c.distance = nd
         }
         return c
@@ -231,7 +253,7 @@ enum TreeCamera3D {
     static func whole(_ m: TreeModel3D, width: Float, height: Float,
                       insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
         var c = GraphPerfCamera()
-        c.yaw = yaw; c.pitch = pitch
+        c.pitch = pitch
         let l = m.layout
         var points: [SIMD3<Float>] = []
         points.reserveCapacity(m.branchCount * 2 + m.leafCount)
@@ -246,6 +268,8 @@ enum TreeCamera3D {
         }
         // as Android's framer: the smallest leaf round each point; the fill's own margin holds a leaf's reach
         let margin = m.smallest
+        // from where the crown stands widest, near three quarters round (TreeFit.widestYaw)
+        c.yaw = TreeFit.widestYaw(points, prefer: yaw)
         // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
         if let fit = c.framing(points: points, margin: margin, width: width, height: height, insets: insets, fill: wholeFill) {
             return TreeFit.refine(points, margin: margin, fit, width: width, height: height, insets: insets, fill: wholeFill)
@@ -269,17 +293,23 @@ enum TreeCamera3D {
     }
 
     /// Every branch end and body of part `index`'s subtree, what a view of it frames.
+    /// Branch `i`'s point `t` along it, in steps a type checker settles at once.
+    static func point(_ l: TreeLayout3D, _ i: Int, along t: Double) -> SIMD3<Float> {
+        let x: Double = l.base[3 * i] + l.dir[3 * i] * t
+        let y: Double = l.base[3 * i + 1] + l.dir[3 * i + 1] * t
+        let z: Double = l.base[3 * i + 2] + l.dir[3 * i + 2] * t
+        return SIMD3<Float>(Float(x), Float(y), Float(z))
+    }
+
     static func subtreePoints(_ m: TreeModel3D, _ index: Int) -> [SIMD3<Float>] {
         let l = m.layout, nodes = m.nodes
         var out: [SIMD3<Float>] = []
         out.reserveCapacity((nodes.tout[index] - nodes.tin[index]) * 3)
         for q in nodes.tin[index]..<nodes.tout[index] {
             let i = nodes.order[q]
-            for t in [0, l.length[i]] {
-                out.append(SIMD3(Float(l.base[3 * i] + l.dir[3 * i] * t), Float(l.base[3 * i + 1] + l.dir[3 * i + 1] * t),
-                                 Float(l.base[3 * i + 2] + l.dir[3 * i + 2] * t)))
-            }
-            out.append(SIMD3(Float(l.anchor[3 * i]), Float(l.anchor[3 * i + 1]), Float(l.anchor[3 * i + 2])))
+            for t in [0, l.length[i]] { out.append(point(l, i, along: t)) }
+            let x: Double = l.anchor[3 * i], y: Double = l.anchor[3 * i + 1], z: Double = l.anchor[3 * i + 2]
+            out.append(SIMD3<Float>(Float(x), Float(y), Float(z)))
         }
         return out
     }
@@ -314,9 +344,7 @@ enum TreeCamera3D {
             var tip: SIMD2<Float>?
             // a branch's tip: where its name goes first
             if l.leaf[i] <= 0 {
-                let t = l.length[i]
-                let e = SIMD3<Float>(Float(l.base[3 * i] + l.dir[3 * i] * t), Float(l.base[3 * i + 1] + l.dir[3 * i + 1] * t),
-                                     Float(l.base[3 * i + 2] + l.dir[3 * i + 2] * t))
+                let e = point(l, i, along: l.length[i])
                 let q = camera.project(e, width: width, height: height)
                 if q.depth > 1e-4 { tip = SIMD2(q.x, q.y) }
             }
@@ -435,7 +463,8 @@ enum TreeNames3D {
         if let trunk, let t = trunk.tip {
             // the body is `anchor` up the trunk, so its foot is back past it from the top
             let a = Float(TreeShape3D.anchor)
-            let f = (SIMD2(trunk.x, trunk.y) - a * t) / (1 - a)
+            let body = SIMD2<Float>(trunk.x, trunk.y)
+            let f: SIMD2<Float> = (body - t * a) / (1 - a)
             foot = f
             if whole { stem = Segment(a: f, b: t, half: trunk.pixels / 2) }
         }
@@ -466,7 +495,8 @@ enum TreeNames3D {
                 var line: Segment?
                 if let tip = sp.lead {
                     // a leader runs from the box's near side to the tip, clear of every name
-                    let l = Segment(a: SIMD2(tip.x < b.0 ? b.0 - w / 2 : b.0 + w / 2, b.1), b: tip, half: 1)
+                    let near: Float = tip.x < b.0 ? b.0 - w / 2 : b.0 + w / 2
+                    let l = Segment(a: SIMD2<Float>(near, b.1), b: tip, half: 1)
                     if out.contains(where: { l.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
                     line = l
                 }
