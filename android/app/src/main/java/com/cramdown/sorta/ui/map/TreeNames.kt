@@ -37,6 +37,10 @@ object TreeNames {
      */
     fun floor(insets: com.cramdown.sorta.map.MapInsets, cover: Float): Float = insets.coveringFoot(cover).bottom
 
+    /** The cost guards: at most [BUDGET] bodies are tried for a name a frame, the first in the order, and at most [MOST] names drawn. */
+    const val BUDGET = 380
+    const val MOST = 120
+
     fun bough(nodes: NestNodes, i: Int): Boolean = i == 0 || nodes.childCount[i] > 0 || nodes.folder[i]
 
     /**
@@ -59,7 +63,10 @@ object TreeNames {
                width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0): List<PlacedName> {
         val placed = ArrayList<LabelBox>()
         val out = ArrayList<PlacedName>()
-        for (node in order(screen, nodes, focus)) {
+        val ordered = order(screen, nodes, focus)
+        for (k in 0 until minOf(ordered.size, BUDGET)) {
+            if (out.size >= MOST) break
+            val node = ordered[k]
             val i = node.index
             val isBough = bough(nodes, i)
             if (!isBough && node.pixels < style.leastLeaf) continue

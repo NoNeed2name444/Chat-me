@@ -166,5 +166,16 @@ class TreeNamesTest {
         assertEquals(0, placed[0].index)
     }
 
+    @Test fun theCostGuardsHold() {
+        // every body far apart on a huge view, each with room for its name: only MOST are drawn, the first in the order
+        val grid = (0 until sample.size).map { ScreenNode(it, 400f + (it % 12) * 1600f, 400f + (it / 12) * 400f, 40f) }
+        val placed = TreeNames.layout(grid, sample, Metrics(0.6f), Metrics(0.56f), style(2.625f), 20_000f, 20_000f, 0f, 0f)
+        assertTrue("more bodies than names allowed (${sample.size})", sample.size > TreeNames.MOST)
+        assertEquals(TreeNames.MOST, placed.size)
+        assertFalse(TreeNames.overlaps(placed))
+        assertEquals(TreeNames.order(grid, sample).take(TreeNames.MOST).map { it.index }, placed.map { it.index })
+        assertTrue(TreeNames.BUDGET >= TreeNames.MOST)
+    }
+
     private fun rad(d: Float) = (d * Math.PI / 180).toFloat()
 }

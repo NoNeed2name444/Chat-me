@@ -79,5 +79,48 @@ if trees.count > 1 {
     check("deep: every part has a length and bounds", (0..<deep.size).allSatisfy { layout.length[$0] > 0 && layout.brad[$0] > 0 })
 }
 
+func norm3(_ v: [Double], _ i: Int) -> Double {
+    let x = v[3 * i], y = v[3 * i + 1], z = v[3 * i + 2]
+    return (x * x + y * y + z * z).squareRoot()
+}
+func tapers(_ l: TreeLayout3D, _ i: Int) -> Bool {
+    let tip = abs(l.r1[i] - l.r0[i] * TreeShape3D.taper) < 1e-12
+    let joins = l.r0[i] <= l.r0[l.nodes.parent[i]] * TreeShape3D.join + 1e-12
+    return tip && joins
+}
+func holds(_ l: TreeLayout3D, _ i: Int) -> Bool {
+    let p = l.nodes.parent[i]
+    let d = [l.centre[3 * i] - l.centre[3 * p], l.centre[3 * i + 1] - l.centre[3 * p + 1], l.centre[3 * i + 2] - l.centre[3 * p + 2]]
+    return norm3(d, 0) <= l.reach[p] + 1e-9
+}
+
+// the 3D layout (TreeLayout3D) against the fixture's expect3d, the numbers Android's TreeLayout3DTest reads
+for t in trees {
+    let name = t["name"] as? String ?? "?"
+    let l = TreeLayout3D(nodesOf(t))
+    let expect = t["expect3d"] as? [String: [Double]] ?? [:]
+    let got: [(String, [Double])] = [("base", l.base), ("dir", l.dir), ("len", l.length), ("r0", l.r0), ("r1", l.r1),
+        ("anchor", l.anchor), ("leaf", l.leaf), ("sc", l.centre), ("sr", l.reach)]
+    for (key, values) in got {
+        let want = expect[key] ?? []
+        var worst = 0.0, at = -1
+        for i in values.indices where i < want.count { let d = abs(values[i] - want[i]); if d > worst { worst = d; at = i } }
+        check("\(name) 3D \(key): \(values.count) values, each within 2e-9 of the fixture's", !want.isEmpty && values.count == want.count && worst <= 2e-9,
+              "count \(values.count) vs \(want.count), worst \(worst) at \(at)")
+    }
+    let n = l.nodes.size
+    check("\(name) 3D: the trunk goes straight up", l.dir[0] == 0 && l.dir[1] == 1 && l.dir[2] == 0 && l.base[0] == 0 && l.base[1] == 0)
+    check("\(name) 3D: every direction is whole", (0..<n).allSatisfy { i in abs(norm3(l.dir, i) - 1) < 1e-9 })
+    check("\(name) 3D: each branch tapers, no child thicker than where it joins", (1..<n).allSatisfy { i in tapers(l, i) })
+    var seen = Set<Int>()
+    let parentFirst = l.order.allSatisfy { i in defer { seen.insert(i) }; return i == 0 || seen.contains(l.nodes.parent[i]) }
+    check("\(name) 3D: breadth first, every part once, a parent before its children", Set(l.order).count == n && parentFirst)
+    check("\(name) 3D: each subtree's ball holds its children's", (1..<n).allSatisfy { i in holds(l, i) })
+}
+if let first = trees.first {
+    let a = TreeLayout3D(nodesOf(first)), b = TreeLayout3D(nodesOf(first))
+    check("3D: the same tree grows the same every time", a.base == b.base && a.dir == b.dir && a.reach == b.reach)
+}
+
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)
