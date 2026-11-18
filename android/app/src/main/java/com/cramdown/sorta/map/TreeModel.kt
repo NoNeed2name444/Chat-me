@@ -155,6 +155,32 @@ object TreeFit {
         return MapPose(target, d, pose.yaw, pose.pitch, pose.roll)
     }
 
+    /** Every branch end and body of part [index]'s subtree in [layout], what a view of it frames. */
+    fun points(layout: TreeLayout3D, index: Int): List<Vec3> {
+        val nodes = layout.nodes
+        val out = ArrayList<Vec3>((nodes.tout[index] - nodes.tin[index]) * 3)
+        for (q in nodes.tin[index] until nodes.tout[index]) {
+            val i = nodes.order[q]
+            for (t in doubleArrayOf(0.0, layout.length[i])) out.add(Vec3((layout.base[3 * i] + layout.dir[3 * i] * t).toFloat(),
+                (layout.base[3 * i + 1] + layout.dir[3 * i + 1] * t).toFloat(), (layout.base[3 * i + 2] + layout.dir[3 * i + 2] * t).toFloat()))
+            out.add(Vec3(layout.anchor[3 * i].toFloat(), layout.anchor[3 * i + 1].toFloat(), layout.anchor[3 * i + 2].toFloat()))
+        }
+        return out
+    }
+
+    /**
+     * A fly-in to part [index] (S11): its subtree's own points fitted close, as the first view is, from
+     * the camera's yaw and pitch (an orbit is kept), [fill] of the room the [insets] leave. Its ball
+     * overstated a big part: with the first view fitted close, flying in to Cardiology came no nearer.
+     */
+    fun flyIn(model: TreeModel, index: Int, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float,
+              insets: MapInsets, fill: Float): MapPose? {
+        val points = points(model.layout, index)
+        val first = MapFirstView.framing(points, model.smallest, width, height, insets, fill, yaw, pitch,
+            Math.toDegrees(fovY.toDouble()).toFloat()) ?: return null
+        return refine(points, model.smallest, first, width, height, insets, fill, fovY)
+    }
+
     /** The points' box on screen from [eye] (left, right, bottom, top, in pixels from the view's middle, y up); null if one is behind the eye. */
     fun box(points: List<Vec3>, margin: Float, eye: Vec3, r: Vec3, u: Vec3, b: Vec3, f: Float): FloatArray? {
         var x0 = Float.POSITIVE_INFINITY; var x1 = Float.NEGATIVE_INFINITY; var y0 = Float.POSITIVE_INFINITY; var y1 = Float.NEGATIVE_INFINITY

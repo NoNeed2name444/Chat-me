@@ -80,9 +80,9 @@ class TreeNamesTest {
         HomeView.framer(scene)(w.width.toFloat(), w.height.toFloat(), framed ?: insets).applyTo(camera)
         camera.orbit(yaw, 0f)
         if (into >= 0) {
-            val l = model.layout
-            val c = com.cramdown.sorta.map.Vec3(l.centre[3 * into].toFloat(), l.centre[3 * into + 1].toFloat(), l.centre[3 * into + 2].toFloat())
-            val fit = camera.framing(c, l.reach[into].toFloat(), w.width.toFloat(), w.height.toFloat(), insets, com.cramdown.sorta.map.MapFly.FILL)
+            // as the renderer flies in (flyToBranch): the subtree fitted close
+            val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY,
+                w.width.toFloat(), w.height.toFloat(), insets, com.cramdown.sorta.map.MapFly.FILL))
             camera.target = fit.target; camera.distance = fit.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
@@ -136,6 +136,18 @@ class TreeNamesTest {
             for (want in listOf("All ideas", "Examples", "Cardiology")) assertTrue("${w.name}: $want named, got $labels", want in labels)
             assertFalse("${w.name}: two names overlap", TreeNames.overlaps(placed))
             for (p in placed) assertTrue("${w.name}: ${p.label} above the card", p.box.y + p.box.height / 2 <= w.height - cover)
+        }
+    }
+
+    @Test fun aFlyInComesNearer() = eachTree {
+        for (w in windows) {
+            val whole = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
+            HomeView.framer(MapScene.tree(model))(w.width.toFloat(), w.height.toFloat(), MapInsets(top = w.top, bottom = w.bottom)).applyTo(whole)
+            for (part in listOf(cardiology, sample.titles.indexOf("Examples"), sample.titles.indexOf("Heart failure"))) {
+                val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, part, whole.yaw, whole.pitch, whole.fovY,
+                    w.width.toFloat(), w.height.toFloat(), MapInsets(top = w.top, bottom = w.bottom), com.cramdown.sorta.map.MapFly.FILL))
+                assertTrue("${w.name}: flying in to ${sample.titles[part]} comes nearer (${fit.distance} < ${whole.distance})", fit.distance < whole.distance)
+            }
         }
     }
 

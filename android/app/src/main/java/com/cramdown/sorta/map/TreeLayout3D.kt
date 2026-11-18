@@ -13,8 +13,8 @@ import kotlin.math.sqrt
 // drop (TreeLayout), grown round the trunk instead of across the page. The trunk goes up the y axis;
 // each branch's children leave it spread round it by the golden angle from a seeded start, the
 // heaviest the most upright and the lighter ones further out and lower down; a crown about as wide as
-// it is tall (the trunk's branches 35 to 60 degrees off upright, a deeper one 20 to 50 off its
-// parent's line, lifted a little toward the sky). A branch tapers to TAPER of its base radius and a child is never thicker than JOIN of where
+// it is tall (the trunk's branches 35 to 55 degrees off upright, a deeper one 15 to 45 off its
+// parent's line, lifted toward the sky so a limb curves up). A branch tapers to TAPER of its base radius and a child is never thicker than JOIN of where
 // it joins. A leaf is a shape past its twig's tip. tools/tree_fixture.mjs keeps the same rules
 // (layout3d), and tree-fixture.json's expect3d holds this and iOS's TreeLayout3D.swift to them.
 
@@ -23,18 +23,18 @@ object TreeShape3D {
     /** The golden angle, the turn between one child and the next round their parent. */
     val GOLDEN = Math.PI * (3 - sqrt(5.0))
     /** How far each child is lifted toward the sky before its direction is made whole. */
-    const val LIFT = 0.1
+    const val LIFT = 0.45
     /** The trunk's branches leave it this far off upright, the heaviest the least. */
     const val RISE0 = 35 * Math.PI / 180
-    const val RISE1 = 60 * Math.PI / 180
+    const val RISE1 = 55 * Math.PI / 180
     /** A deeper branch leaves its parent's line this far, before its lift. */
-    const val SPLAY0 = 20 * Math.PI / 180
-    const val SPLAY1 = 50 * Math.PI / 180
-    /** A branch's length beside its parent's: the trunk's branches, then deeper ones. */
-    const val RATIO1 = 0.85
-    const val RATIO2 = 0.72
+    const val SPLAY0 = 15 * Math.PI / 180
+    const val SPLAY1 = 45 * Math.PI / 180
+    /** A branch's length beside its parent's: the trunk's branches (not shortened by rank), then deeper ones. */
+    const val RATIO1 = 0.9
+    const val RATIO2 = 0.75
     /** How far down the trunk its branches start, as a share of it. */
-    const val DROP1 = 0.55
+    const val DROP1 = 0.3
     /** Thickness, across beside length: the trunk's and a branch's. */
     const val ROOT_WIDTH = 0.15
     const val WIDTH = 0.1
@@ -136,7 +136,7 @@ class TreeLayout3D(val nodes: NestNodes) {
         for (a in 0..2) d[a] /= dm
         val drop = if (trunk) TreeShape3D.DROP1 else TreeShape.DROP
         val t = clamp(1 - drop * rel.pow(0.85) + (rnd.next() - 0.5) * 0.05, 1 - drop, 1.0)
-        val cl = len * (if (trunk) TreeShape3D.RATIO1 else TreeShape3D.RATIO2) * (0.5 + 0.5 * sqrt(wp[c] / w.wmax)) * (1 - TreeShape.SHORTEN * rel)
+        val cl = len * (if (trunk) TreeShape3D.RATIO1 else TreeShape3D.RATIO2) * (0.5 + 0.5 * sqrt(wp[c] / w.wmax)) * (if (trunk) 1.0 else 1 - TreeShape.SHORTEN * rel)
         val cs = clamp(2 * fan * wp[c] / w.tot * 0.9 + 0.3, TreeShape.FAN_MIN, TreeShape.FAN_MAX)
         // the child's own across: the parent's, turned square to the child
         var ud = w.u[0] * d[0] + w.u[1] * d[1] + w.u[2] * d[2]

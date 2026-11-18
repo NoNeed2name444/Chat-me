@@ -8,6 +8,7 @@ import android.util.Log
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
+import com.cramdown.sorta.map.MapFit
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.UniverseBeams
 import com.cramdown.sorta.map.UniverseLooks
@@ -1167,15 +1168,18 @@ class GlMapRenderer(
     }
 
     /**
-     * The Tree's fly-in (S11): branch [index]'s subtree ball framed in what the [insets] leave, from the
-     * camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames the whole tree.
+     * The Tree's fly-in (S11): branch [index]'s subtree fitted close in what the [insets] leave
+     * (TreeFit.flyIn), from the camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames
+     * the whole tree. Its ball where the fit has no answer.
      */
     private fun flyToBranch(m: TreeModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         if (!canFlyTo(index)) return false
         val l = m.layout
         val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
         synchronized(camera) {
-            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
+            val fit = com.cramdown.sorta.map.TreeFit.flyIn(m, index, camera.yaw, camera.pitch, camera.fovY, viewWidth, viewHeight, insets, MapFly.FILL)
+                ?.let { MapFit(it.distance, it.target) }
+                ?: camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
             flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
         }
         flown = index

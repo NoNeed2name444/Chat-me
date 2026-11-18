@@ -253,11 +253,35 @@ enum TreeCamera3D {
         return c.framing(centre: centre(m, 0), radius: Float(l.reach[0]), width: width, height: height, insets: insets, fill: wholeFill)
     }
 
-    /// Part `index`'s subtree framed from where the camera looks now.
+    /// Part `index`'s subtree fitted close from where the camera looks now, as
+    /// the first view is (TreeFit), so an orbit is kept; its ball where the fit
+    /// has no answer. The ball overstated a big part: with the first view
+    /// fitted close, flying in to Cardiology came no nearer. Android's
+    /// TreeFit.flyIn is the same.
     static func flyIn(_ m: TreeModel3D, _ index: Int, from camera: GraphPerfCamera, width: Float, height: Float,
                       insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
-        camera.framing(centre: centre(m, index), radius: Float(m.layout.reach[index]), width: width, height: height,
-                       insets: insets, fill: fill)
+        let points = subtreePoints(m, index)
+        if let first = camera.framing(points: points, margin: m.smallest, width: width, height: height, insets: insets, fill: fill) {
+            return TreeFit.refine(points, margin: m.smallest, first, width: width, height: height, insets: insets, fill: fill)
+        }
+        return camera.framing(centre: centre(m, index), radius: Float(m.layout.reach[index]), width: width, height: height,
+                              insets: insets, fill: fill)
+    }
+
+    /// Every branch end and body of part `index`'s subtree, what a view of it frames.
+    static func subtreePoints(_ m: TreeModel3D, _ index: Int) -> [SIMD3<Float>] {
+        let l = m.layout, nodes = m.nodes
+        var out: [SIMD3<Float>] = []
+        out.reserveCapacity((nodes.tout[index] - nodes.tin[index]) * 3)
+        for q in nodes.tin[index]..<nodes.tout[index] {
+            let i = nodes.order[q]
+            for t in [0, l.length[i]] {
+                out.append(SIMD3(Float(l.base[3 * i] + l.dir[3 * i] * t), Float(l.base[3 * i + 1] + l.dir[3 * i + 1] * t),
+                                 Float(l.base[3 * i + 2] + l.dir[3 * i + 2] * t)))
+            }
+            out.append(SIMD3(Float(l.anchor[3 * i]), Float(l.anchor[3 * i + 1]), Float(l.anchor[3 * i + 2])))
+        }
+        return out
     }
 
     static func centre(_ m: TreeModel3D, _ i: Int) -> SIMD3<Float> {
