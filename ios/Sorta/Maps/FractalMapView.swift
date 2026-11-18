@@ -196,11 +196,15 @@ struct FractalPart: Identifiable {
         return tree
     }
 
+    /// The hub flown in to, in the tree as it is now: a tree grown smaller
+    /// before the view puts `focus` back to 0 is seen whole, never read past its end.
+    private var focusNow: Int { focus > 0 && focus < (tree?.count ?? 0) ? focus : 0 }
+
     /// The sight's filter, focus and chosen dot, as the host's.
     private func resight() {
         guard let sight else { return }
         sight.shown = shown
-        sight.focus = focus
+        sight.focus = focusNow
         sight.chosen = chosen
         sight.linksOf = linksOf
     }
@@ -276,7 +280,7 @@ struct FractalPart: Identifiable {
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
         names = FractalNames3D.layout(screen, model.tree, style: style,
                                       measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
-                                      width: width, height: height, top: top, bottom: floor, held: held, focus: focus)
+                                      width: width, height: height, top: top, bottom: floor, held: held, focus: focusNow)
         held.removeAll(keepingCapacity: true)
         for p in names { held[p.index] = p.spot }
         named &+= 1
