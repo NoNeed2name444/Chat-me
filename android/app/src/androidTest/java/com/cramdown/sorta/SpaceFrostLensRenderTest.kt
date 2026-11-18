@@ -82,7 +82,7 @@ class SpaceFrostLensRenderTest {
         // the far edge of the first view, past the depth band's end (the renderer's own band, its view
         // depth against the band's end), so frostGone is 0, 0 and 1, six in all. Cutting the view's far
         // strip is the design on both platforms (iOS GraphDepthFade.spaceHigh and spaceSmooth, Android
-        // SpaceDepth.band); whether the band should cut anything is an open owner decision (owner-log,
+        // SpaceDepth.band), the owner's fix of 28 Oct (owner-log,
         // testDepthGlide). The boiler and the brushes with their halos, and at least one never opened, so
         // the still shows every step. Any other idea lost, a halo missing or another idea cut fails
         fun steps(d: MapDrawn?): Boolean {
