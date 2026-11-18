@@ -51,12 +51,17 @@ class FractalNamesTest {
         override fun descent(size: Float) = 0.27f * size
     }
 
-    private class Window(val name: String, val width: Int, val height: Int, val density: Float, val top: Float, val bottom: Float)
+    /** A map [width] by [height] pixels under [top] and over [bottom] of chrome, naming at least [least] at each pose. */
+    private class Window(val name: String, val width: Int, val height: Int, val density: Float, val top: Float, val bottom: Float,
+                         val least: Int = 6)
     private val windows get() = listOf(
         Window("${trees[tree].first} phone", 1080, 2400, 2.625f, 260f, 420f),
         Window("${trees[tree].first} phone, first visit", 1080, 2400, 2.625f, 270f, 900f),
         Window("${trees[tree].first} tablet", 2560, 1600, 2f, 180f, 200f),
-        Window("${trees[tree].first} foldable open", 2208, 1840, 2.5f, 220f, 260f))
+        Window("${trees[tree].first} foldable open", 2208, 1840, 2.5f, 220f, 260f),
+        // the open foldable's map pane beside the Sort list, under the chips and over the first visit's card, as the
+        // emulator's FractalMapRenderTest draws it (run 44398433580): only All ideas and its four top folders are crisp
+        Window("${trees[tree].first} foldable pane, first visit", 1325, 1777, 2.625f, 280f, 740f, least = 5))
 
     private fun style(d: Float) = TreeNames.Style(bough = 13f * d, leaf = 11.5f * d, halo = 2.5f * d, gapX = 6f * d, gapY = 3f * d,
         edge = 12f * d, leastLeaf = 5f * d)
@@ -64,7 +69,7 @@ class FractalNamesTest {
     private val cardiology get() = sample.titles.indexOf("Cardiology")
 
     /** The dots on screen and the names at [w]'s first view turned by [yaw], or flown in to [into]'s cluster. */
-    private fun names(w: Window, yaw: Float, into: Int = -1): Pair<List<ScreenNode>, List<PlacedName>> {
+    private fun names(w: Window, yaw: Float, into: Int = -1, held: Map<Int, Int> = emptyMap()): Pair<List<ScreenNode>, List<PlacedName>> {
         val scene = fractalScene(model)
         val camera = firstCamera(MapTheme.FRACTAL, Vec3.ZERO)
         val insets = MapInsets(top = w.top, bottom = w.bottom)
@@ -83,7 +88,7 @@ class FractalNamesTest {
         sight.step(viewProj, focal, w.width.toFloat(), w.height.toFloat(), w.density)
         val screen = FractalNames.screen(sight, focal)
         val placed = FractalNames.layout(screen, sample, Metrics(0.6f), Metrics(0.56f), style(w.density), w.width.toFloat(), w.height.toFloat(),
-            w.top, w.bottom, focus = into.coerceAtLeast(0))
+            w.top, w.bottom, held = held, focus = into.coerceAtLeast(0))
         return screen to placed
     }
 
@@ -92,7 +97,7 @@ class FractalNamesTest {
                 Triple("orbited 120", rad(120f), -1), Triple("Cardiology", 0f, cardiology), Triple("Cardiology orbited 40", rad(40f), cardiology))) {
             val (screen, placed) = names(w, yaw, into)
             assertTrue("${w.name} $what: dots on screen (${screen.size})", screen.size > 20)
-            assertTrue("${w.name} $what: names placed (${placed.size})", placed.size >= 6)
+            assertTrue("${w.name} $what: names placed (${placed.size})", placed.size >= w.least)
             assertFalse("${w.name} $what: two names overlap", TreeNames.overlaps(placed))
             assertFalse("${w.name} $what: a name covers a named dot or a bigger one", FractalNames.coversADot(placed, screen))
             for (p in placed) {
@@ -100,6 +105,23 @@ class FractalNamesTest {
                 assertTrue("${w.name} $what: ${p.label} inside the view", b.x - b.width / 2 >= 0f && b.x + b.width / 2 <= w.width)
                 assertTrue("${w.name} $what: ${p.label} clear of the chrome", b.y - b.height / 2 >= w.top && b.y + b.height / 2 <= w.height - w.bottom)
                 assertTrue("${w.name} $what: ${p.label} has its dot", screen.any { it.index == p.index && it.crisp })
+            }
+        }
+    }
+
+    @Test fun turningKeepsTheBigHubsNamed() = eachTree {
+        // each pose places its names trying the last pose's spots first, as the map does: a name held
+        // from the first view must give way to a hub turned under it
+        for (w in windows) {
+            var held = emptyMap<Int, Int>()
+            for ((what, deg, want) in listOf(Triple("whole", 0f, listOf("All ideas", "Examples", "Cardiology")),
+                    Triple("orbited 40", 40f, listOf("All ideas", "Cardiology")), Triple("orbited 120", 120f, listOf("All ideas")))) {
+                val (screen, placed) = names(w, rad(deg), held = held)
+                val labels = placed.map { it.label }.toSet()
+                for (name in want) assertTrue("${w.name} $what: $name named, got $labels", name in labels)
+                assertFalse("${w.name} $what: two names overlap", TreeNames.overlaps(placed))
+                assertFalse("${w.name} $what: a name covers a named dot or a bigger one", FractalNames.coversADot(placed, screen))
+                held = placed.associate { it.index to it.spot }
             }
         }
     }

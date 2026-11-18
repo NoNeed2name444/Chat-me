@@ -122,7 +122,7 @@ nonisolated enum FractalNames3D {
         var out: [TreePlacedName] = []
         out.reserveCapacity(TreeNames3D.most)
         let ordered = order(screen, tree, focus: focus)
-        var dots = Grid(ordered, count: tree.count)
+        var dots = Grid(ordered, count: tree.count) { hub(tree, $0) }
         for node in ordered.prefix(TreeNames3D.budget) {
             if out.count >= TreeNames3D.most { break }
             let i = node.index
@@ -150,13 +150,18 @@ nonisolated enum FractalNames3D {
             }
             var tried: [Int] = Array(spots.indices)
             if let last = held[i], last >= 0, last < spots.count { tried.removeAll { $0 == last }; tried.insert(last, at: 0) }
+            // a spot that hides no hub's dot first, so a name held from the last pose gives way to a hub turned under it
+            var chosen = -1
             for k in tried {
                 guard let s = spots[k] else { continue }
                 if out.allSatisfy({ apart(s, w, h, $0, style) }) && !dots.covered(s.0, s.1, w, h, gap: style.gapY, own: node.pixels / 2) {
-                    out.append(TreePlacedName(index: i, size: size, bold: isHub, x: s.0, y: s.1, width: w, height: h, spot: k))
-                    dots.named[i] = true
-                    break
+                    if chosen < 0 { chosen = k }
+                    if !dots.coversHub(s.0, s.1, w, h, gap: style.gapY, own: i) { chosen = k; break }
                 }
+            }
+            if chosen >= 0, let s = spots[chosen] {
+                out.append(TreePlacedName(index: i, size: size, bold: isHub, x: s.0, y: s.1, width: w, height: h, spot: chosen))
+                dots.named[i] = true
             }
         }
         return out
@@ -174,9 +179,11 @@ nonisolated enum FractalNames3D {
         private var cells: [Int64: [(x: Float, y: Float, r: Float, i: Int)]] = [:]
         private var most: Float = 0
         var named: [Bool]
+        private let hubs: [Bool]
 
-        init(_ nodes: [FractalScreenNode], count: Int) {
+        init(_ nodes: [FractalScreenNode], count: Int, isHub: (Int) -> Bool) {
             named = [Bool](repeating: false, count: count)
+            hubs = (0..<count).map(isHub)
             for n in nodes {
                 let r = n.pixels / 2
                 most = max(most, r)
@@ -194,6 +201,20 @@ nonisolated enum FractalNames3D {
                 for cy in Self.at(y - h / 2 - grow)...Self.at(y + h / 2 + grow) {
                     guard let list = cells[Self.key(cx, cy)] else { continue }
                     for d in list where (named[d.i] || d.r >= own - FractalNames3D.same) && FractalNames3D.covers(x, y, w, h, d.x, d.y, d.r, gap) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        /// Whether the box comes within `gap` of a hub's dot other than `own`'s, of any size.
+        func coversHub(_ x: Float, _ y: Float, _ w: Float, _ h: Float, gap: Float, own: Int) -> Bool {
+            let grow = most + gap
+            for cx in Self.at(x - w / 2 - grow)...Self.at(x + w / 2 + grow) {
+                for cy in Self.at(y - h / 2 - grow)...Self.at(y + h / 2 + grow) {
+                    guard let list = cells[Self.key(cx, cy)] else { continue }
+                    for d in list where d.i != own && hubs[d.i] && FractalNames3D.covers(x, y, w, h, d.x, d.y, d.r, gap) {
                         return true
                     }
                 }

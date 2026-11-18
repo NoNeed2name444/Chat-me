@@ -45,11 +45,15 @@ let store: FractalTree = {
 let models = [("concept", FractalModel(concept, FractalLayout3D(concept), linkEnds: linkEnds)),
               ("store", FractalModel(store, FractalLayout3D(store)))]
 
-struct Window { let name: String; let width: Float; let height: Float; let top: Float; let bottom: Float }
+/// A map `width` by `height` points under `top` and over `bottom` of chrome, naming at least `least` at each pose.
+struct Window { let name: String; let width: Float; let height: Float; let top: Float; let bottom: Float; var least = 6 }
 let windows = [Window(name: "phone", width: 390, height: 844, top: 100, bottom: 160),
                Window(name: "phone, first visit", width: 390, height: 844, top: 100, bottom: 340),
                Window(name: "tablet", width: 1194, height: 834, top: 80, bottom: 80),
-               Window(name: "foldable", width: 884, height: 736, top: 80, bottom: 100)]
+               Window(name: "foldable", width: 884, height: 736, top: 80, bottom: 100),
+               // a foldable's map pane beside the Sort list, over the first visit's card, as Android's emulator drew it
+               // (run 44398433580): only All ideas and its four top folders are crisp
+               Window(name: "foldable pane, first visit", width: 505, height: 677, top: 107, bottom: 282, least: 5)]
 let style = TreeNames3D.Style()
 let rad: (Float) -> Float = { $0 * Float.pi / 180 }
 
@@ -68,7 +72,7 @@ func frame(_ m: FractalModel, _ s: FractalSight, _ w: Window, yaw: Float, into: 
            width: w.width, height: w.height)
 }
 
-func names(_ m: FractalModel, _ w: Window, yaw: Float, into: Int) -> ([FractalScreenNode], [TreePlacedName]) {
+func names(_ m: FractalModel, _ w: Window, yaw: Float, into: Int, held: [Int: Int] = [:]) -> ([FractalScreenNode], [TreePlacedName]) {
     let s = FractalSight(m)
     frame(m, s, w, yaw: yaw, into: into)
     let screen = FractalCamera3D.screen(s)
@@ -76,7 +80,7 @@ func names(_ m: FractalModel, _ w: Window, yaw: Float, into: Int) -> ([FractalSc
         (Float(TreeNames3D.label(m.tree.titles[i]).count) * size * (bold ? 0.6 : 0.56), size * 1.3)
     }
     let placed = FractalNames3D.layout(screen, m.tree, style: style, measure: measure, width: w.width, height: w.height,
-                                       top: w.top, bottom: w.bottom, focus: max(into, 0))
+                                       top: w.top, bottom: w.bottom, held: held, focus: max(into, 0))
     return (screen, placed)
 }
 
@@ -94,12 +98,24 @@ for (name, m) in models {
             let (screen, placed) = names(m, w, yaw: yaw, into: into)
             let label = "\(name) \(w.name) \(what)"
             check("\(label): dots on screen (\(screen.count))", screen.count > 20)
-            check("\(label): names placed (\(placed.count))", placed.count >= 6)
+            check("\(label): names placed (\(placed.count))", placed.count >= w.least)
             check("\(label): no two names overlap", !TreeNames3D.overlaps(placed))
             check("\(label): no name covers a named dot or a bigger one", !FractalNames3D.coversADot(placed, screen))
             check("\(label): every name inside the view and off the chrome", placed.allSatisfy { p in
                 p.left >= style.edge - 0.01 && p.right <= w.width - style.edge + 0.01 && p.top >= w.top - 0.01 && p.bottom <= w.height - w.bottom + 0.01 })
             check("\(label): every name has its dot", placed.allSatisfy { p in screen.contains { $0.index == p.index && $0.crisp } })
+        }
+        // each pose tries the last pose's spots first, as the map does: a name held from the first view gives way to a hub turned under it
+        var held: [Int: Int] = [:]
+        for (what, deg, want) in [("whole", Float(0), ["All ideas", "Examples", "Cardiology"]),
+                                  ("orbited 40", Float(40), ["All ideas", "Cardiology"]), ("orbited 120", Float(120), ["All ideas"])] {
+            let (screen, placed) = names(m, w, yaw: rad(deg), into: -1, held: held)
+            let got = placed.map { tree.titles[$0.index] }
+            let label = "\(name) \(w.name) turned to \(what)"
+            check("\(label): \(want) named", want.allSatisfy { got.contains($0) }, "\(got)")
+            check("\(label): no two names overlap", !TreeNames3D.overlaps(placed))
+            check("\(label): no name covers a named dot or a bigger one", !FractalNames3D.coversADot(placed, screen))
+            held = Dictionary(placed.map { ($0.index, $0.spot) }, uniquingKeysWith: { a, _ in a })
         }
         let whole = names(m, w, yaw: 0, into: -1).1.map { tree.titles[$0.index] }
         check("\(name) \(w.name): All ideas, Examples and Cardiology named at the first view",

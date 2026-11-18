@@ -43,7 +43,7 @@ object FractalNames {
         val out = ArrayList<PlacedName>()
         val ordered = order(screen, tree, focus)
         // the dots a name keeps clear of, found by a grid, not one by one
-        val dots = DotGrid(ordered, tree.count)
+        val dots = DotGrid(ordered, tree.count) { hub(tree, it) }
         for (k in 0 until minOf(ordered.size, TreeNames.BUDGET)) {
             if (out.size >= TreeNames.MOST) break
             val node = ordered[k]
@@ -68,7 +68,9 @@ object FractalNames {
             }
             val last = held[i]
             val tried = (if (last != null && last in spots.indices) listOf(spots[last]) + spots.filterIndexed { q, _ -> q != last } else spots).filterNotNull()
-            val box = tried.firstOrNull { b -> LabelRoom.fits(b, placed, style.gapX, style.gapY) && !dots.covered(b, style.gapY, disc.radius) } ?: continue
+            // a spot that hides no hub's dot first, so a name held from the last pose gives way to a hub turned under it
+            val free = tried.filter { b -> LabelRoom.fits(b, placed, style.gapX, style.gapY) && !dots.covered(b, style.gapY, disc.radius) }
+            val box = free.firstOrNull { b -> !dots.coversHub(b, style.gapY, i) } ?: free.firstOrNull() ?: continue
             placed.add(box)
             dots.named[i] = true
             out.add(PlacedName(i, label, size, box, spots.indexOf(box)))
@@ -77,10 +79,11 @@ object FractalNames {
     }
 
     /** The dots that may be named, by cell of [CELL] pixels, so a box asks only the dots near it; [named] as they are. */
-    private class DotGrid(nodes: List<ScreenNode>, count: Int) {
+    private class DotGrid(nodes: List<ScreenNode>, count: Int, isHub: (Int) -> Boolean) {
         private val cells = HashMap<Long, ArrayList<LabelDisc>>()
         private var most = 0f
         val named = BooleanArray(count)
+        private val hubs = BooleanArray(count) { isHub(it) }
 
         init {
             for (n in nodes) {
@@ -99,6 +102,15 @@ object FractalNames {
             for (cx in cell(box.x - box.width / 2 - grow)..cell(box.x + box.width / 2 + grow))
                 for (cy in cell(box.y - box.height / 2 - grow)..cell(box.y + box.height / 2 + grow))
                     if (cells[key(cx, cy)]?.any { (named[it.index] || it.radius >= own - SAME) && LabelRoom.covers(box, it, gap) } == true) return true
+            return false
+        }
+
+        /** Whether [box] comes within [gap] of a hub's dot other than [own]'s, of any size. */
+        fun coversHub(box: LabelBox, gap: Float, own: Int): Boolean {
+            val grow = most + gap
+            for (cx in cell(box.x - box.width / 2 - grow)..cell(box.x + box.width / 2 + grow))
+                for (cy in cell(box.y - box.height / 2 - grow)..cell(box.y + box.height / 2 + grow))
+                    if (cells[key(cx, cy)]?.any { it.index != own && hubs[it.index] && LabelRoom.covers(box, it, gap) } == true) return true
             return false
         }
     }
