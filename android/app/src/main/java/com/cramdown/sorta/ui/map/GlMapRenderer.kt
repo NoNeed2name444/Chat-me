@@ -20,6 +20,7 @@ import com.cramdown.sorta.map.LinkWant
 import com.cramdown.sorta.map.FilterSlice
 import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.FramePlan
+import com.cramdown.sorta.map.Frustum
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.FrameStats
 import com.cramdown.sorta.map.GuardBand
@@ -345,12 +346,16 @@ data class MapDrawn(
     /**
      * Space's frost (S06a A6): the bodies the latest frame drew a frost halo round, by the level each
      * wants, 1 to 3 (empty when none is drawn). A body far enough off to be drawn as a point has no
-     * halo. No words.
+     * halo, so [frostPoints] counts those: the frosted ideas the latest frame drew as points, by the
+     * same level (empty when none), counted where the test hooks are on. Every frosted idea drawn is in
+     * one of the two. No words.
      */
     val frosted: List<Int> = emptyList(),
+    val frostPoints: List<Int> = emptyList(),
 ) {
-    /** This record with the latest frame's frost halos by level; the same record when nothing changed. */
-    fun frosting(frostedNow: List<Int>): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
+    /** This record with the latest frame's frost halos and frosted points by level; the same record when nothing changed. */
+    fun frosting(frostedNow: List<Int>, pointsNow: List<Int> = emptyList()): MapDrawn =
+        if (frosted == frostedNow && frostPoints == pointsNow) this else copy(frosted = frostedNow, frostPoints = pointsNow)
 
     /**
      * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
@@ -1371,6 +1376,7 @@ class GlMapRenderer(
             sparksCounted = tr.thrownTotal
         }
         frostCount = if (bodies != null && space) writeFrost(bodies, dt) else 0
+        if (bodies != null && space && testHooks) countFrostPoints(bodies, plan) else frostPointLevels.fill(0)
         // the marked body's orbit ring (the held body, else the chosen one), where its node is placed this frame (Space)
         var ring: FloatArray? = null
         var ringDepth = 0f
@@ -1461,7 +1467,8 @@ class GlMapRenderer(
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
-        record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList())
+        record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList(),
+            if (frostPointLevels.all { it == 0 }) emptyList() else frostPointLevels.toList())
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
@@ -2368,6 +2375,36 @@ class GlMapRenderer(
             n++
         }
         return n
+    }
+
+    /** The frosted ideas [countFrostPoints] found drawn as points, by level, 1 to 3, for the record. */
+    private val frostPointLevels = IntArray(3)
+
+    /**
+     * The frosted ideas this frame drew as points (MapDrawn.frostPoints), by level, into [frostPointLevels]:
+     * a node of a chunk drawn node by node (any of it open, as the node pass places it), not a body, not
+     * hidden by the filter, in front of the eye, short of the depth band's end and in view, as the node
+     * pass draws a point (NODE_VS). Only with the test hooks on: a frame of the large maps pays nothing.
+     */
+    private fun countFrostPoints(bodies: SpaceBodies, plan: FramePlan) {
+        frostPointLevels.fill(0)
+        val levels = frost ?: return
+        val frustum = Frustum(viewProj)
+        val m = viewProj
+        for (d in 0 until plan.detailLeaves.size) {
+            val leaf = plan.detailLeaves[d]
+            if (plan.leafState[leaf * 4 + 3] <= 0f) continue
+            val cell = tree.leafCell[leaf]
+            for (k in tree.start[cell] until tree.end[cell]) {
+                val level = levels.getOrNull(tree.order[k])?.toInt()?.coerceIn(0, 3) ?: 0
+                if (level == 0 || bodies.isBody(k)) continue
+                if (filterOn && filterMask[k] == (-1).toByte()) continue
+                val x = nodeAt(k, 0); val y = nodeAt(k, 1); val z = nodeAt(k, 2)
+                val w = m[3] * x + m[7] * y + m[11] * z + m[15]
+                if (w <= 1e-3f || band.gone(w) || !frustum.intersectsSphere(x, y, z, nodeRadius)) continue
+                frostPointLevels[level - 1]++
+            }
+        }
     }
 
     companion object {

@@ -42,8 +42,8 @@ import java.util.UUID
  * iOS's DeckRenderTests keeps deck-5-frost-space and deck-6-lens-space: the deck's made-up ideas
  * (as DeckSeed and DeckIdeas), the clock 200 days after they were made, the gate opened 10 days
  * before (no frost), the boiler 40 (one step), the brushes 100 (two), the rest never (three). Kept in
- * /sdcard/Download/sorta-renders as space-frost-<light|dark>-<device>.png, a halo of each level
- * drawn, then space-lens-<light|dark>-<device>.png, Alone on: the ideas in no link drawn, the
+ * /sdcard/Download/sorta-renders as space-frost-<light|dark>-<device>.png, each of the six frosted
+ * ideas drawn with its halo or, far enough off, as a point, and a halo of each level drawn, then space-lens-<light|dark>-<device>.png, Alone on: the ideas in no link drawn, the
  * rest faded. None of the ideas is medical.
  */
 @RunWith(AndroidJUnit4::class)
@@ -74,12 +74,23 @@ class SpaceFrostLensRenderTest {
         val suffix = "${if (dark) "dark" else "light"}-$device"
         open(dark, suffix)
 
-        // the frost at each step: a halo of each level, round the boiler (one step), the brushes (two)
-        // and the ideas never opened (three); a body far enough off to be a point has none, so of the
-        // six frosted ideas, those drawn as bodies (CI's phone, 15 Nov: one of the four never opened was a point)
-        fun steps(d: MapDrawn?) = d?.frosted?.let { it.size == 3 && it[0] == 1 && it[1] == 1 && it[2] in 1..NEVER_OPENED } == true
+        // the frost: each of the six ideas not opened in 30 days drawn frosted, by its level, the boiler
+        // (one step), the brushes (two) and the four never opened (three): a body with its halo, or a
+        // point (far enough off, a body is drawn as one, with no halo; CI's phone, 15 Nov: one of the four
+        // never opened). The boiler and the brushes with their halos, and at least one never opened, so
+        // the still shows every step
+        fun steps(d: MapDrawn?): Boolean {
+            if (d == null) return false
+            val halos = List(3) { d.frosted.getOrElse(it) { 0 } }
+            val points = List(3) { d.frostPoints.getOrElse(it) { 0 } }
+            return d.frosted.size == 3 && halos[0] == 1 && halos[1] == 1 && halos[2] >= 1 &&
+                (0 until 3).all { halos[it] + points[it] == BY_LEVEL[it] } && halos.sum() + points.sum() == FROSTED
+        }
         try { compose.waitUntil(20_000) { steps(drawn()) } } catch (_: ComposeTimeoutException) {}
-        check(steps(drawn())) { "Space drew frost halos by level ${drawn()?.frosted}, not 1, 1 and 1 to $NEVER_OPENED, for $suffix: ${drawn()}" }
+        check(steps(drawn())) {
+            "Space drew frost halos ${drawn()?.frosted} and frosted points ${drawn()?.frostPoints} by level, not $BY_LEVEL " +
+                "($FROSTED) with a halo of each level, for $suffix: ${drawn()}"
+        }
         settle(1_000)
         shot("space-frost-$suffix")
 
@@ -186,6 +197,10 @@ class SpaceFrostLensRenderTest {
         const val LATER = T + 201 * DAY
         /** Never opened, so frosted three steps: the shed, the compost, the tulips and the bread. */
         const val NEVER_OPENED = 4
+        /** Not opened in 30 days, by level: the boiler (one step), the brushes (two) and the four never opened (three). */
+        val BY_LEVEL = listOf(1, 1, NEVER_OPENED)
+        /** Not opened in 30 days: the boiler, the brushes and the four never opened. */
+        const val FROSTED = 6
         private fun id(n: Int) = "00000000-0000-4000-8000-" + n.toString().padStart(12, '0')
 
         val garden = NoteFolder(id = id(201), name = "Garden", createdAt = T)
