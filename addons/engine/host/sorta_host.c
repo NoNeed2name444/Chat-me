@@ -689,7 +689,9 @@ static char *one_call(sa_runtime *rt, const char *kind, const char *id, const ch
             size_t len;
             const char *text = JS_ToCStringLen(ctx, &len, s);
             if (text) {
-                out = len > SA_JSON_LIMIT ? failure("limit.json", out_len) : copy_out(text, len, out_len);
+                /* the prelude's ok() answers "!limit.json" for a result it stopped writing */
+                out = (len > SA_JSON_LIMIT || text[0] == '!') ? failure("limit.json", out_len)
+                                                              : copy_out(text, len, out_len);
                 JS_FreeCString(ctx, text);
             }
             JS_FreeValue(ctx, s);

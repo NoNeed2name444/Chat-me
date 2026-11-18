@@ -60,9 +60,24 @@ enum AddonApply {
     /// updatedAt, only if it ends up different. O(notes + ops).
     static func apply(_ ops: [AddonOp], to notes: [Note], folders: Set<UUID>, now: Date) -> Result {
         var list = notes
+        // only the ideas the batch names are looked up, so only they are indexed; reading the id in
+        // place keeps an unoptimised build from copying every note
+        var wanted = Set<UUID>()
+        for op in ops {
+            switch op {
+            case .capture: break
+            case let .link(a, b), let .unlink(a, b):
+                if let u = UUID(uuidString: a) { wanted.insert(u) }
+                if let u = UUID(uuidString: b) { wanted.insert(u) }
+            case let .tag(id, _), let .untag(id, _), let .file(id, _):
+                if let u = UUID(uuidString: id) { wanted.insert(u) }
+            }
+        }
         var index: [UUID: Int] = [:]
-        index.reserveCapacity(list.count)
-        for (i, n) in list.enumerated() { index[n.id] = i }
+        index.reserveCapacity(wanted.count + ops.count)
+        if !wanted.isEmpty {
+            for i in notes.indices where wanted.contains(notes[i].id) { index[notes[i].id] = i }
+        }
         var before: [UUID: (Int, Note)] = [:]
         var added: [UUID] = []
         var addedSet = Set<UUID>()

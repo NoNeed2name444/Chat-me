@@ -75,11 +75,13 @@ final class AddonBatchTests: XCTestCase {
         let watch = store.objectWillChange.sink { changes += 1 }
         defer { watch.cancel() }
         let r = store.applyAddonBatch([.tag(id: text(a.id), tags: ["red"]), .untag(id: text(a.id), tags: ["red"])])
-        XCTAssertNotNil(r.reshape, "a touched idea is one Undo step even if it ends the same")
+        // as Android (AddonBatchTest): an idea that ends the same did not change, so nothing is saved and
+        // there is no Undo step that would undo nothing
+        XCTAssertNil(r.reshape, "it ends the same, so there is nothing to undo")
         XCTAssertEqual(r.applied.changed, [], "it ends the same, so it did not change")
-        XCTAssertEqual(changes, 1)
+        XCTAssertEqual(changes, 0)
         XCTAssertNil(store.applyAddonBatch([]).reshape, "an empty batch is no change at all")
-        XCTAssertEqual(changes, 1)
+        XCTAssertEqual(changes, 0)
     }
 
     // MARK: the budget: half a frame at 120 fps

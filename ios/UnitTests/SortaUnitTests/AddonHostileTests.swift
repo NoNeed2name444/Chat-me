@@ -49,7 +49,10 @@ final class AddonHostileTests: XCTestCase {
         let runner = AddonRunner(id: "stack", files: AddonFiles(names: ["main.js"], data: [Data("".utf8)], main: "main.js"))
         defer { runner.close() }
         let (size, main) = runner.onThread { (AddonEngineInfo.currentStackSize, AddonEngineInfo.isMainThread) }
-        XCTAssertEqual(size, 4 * 1024 * 1024, "pthread_get_stacksize_np inside the add-on's thread")
+        // pthread_get_stacksize_np inside the add-on's thread: the 4 MB asked for, and the pages the system
+        // rounds it up by (4,206,592 bytes on the iOS 26 simulator), so never less
+        XCTAssertGreaterThanOrEqual(size, 4 * 1024 * 1024)
+        XCTAssertLessThan(size, 5 * 1024 * 1024)
         XCTAssertFalse(main)
         XCTAssertEqual(AddonThread.stackSize, 4 * 1024 * 1024)
         XCTAssertEqual(AddonEngineInfo.version, "0.18.0")

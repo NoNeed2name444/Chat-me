@@ -204,11 +204,18 @@
     return apply(then, step, [(v) => shaped(kind, v)]);
   }
 
+  // A result past the call's JSON limit (SA_JSON_LIMIT, 1 MB) is refused while it is written, before
+  // its text is built: `room` counts characters, never more than the bytes the host counts afterwards.
+  const LIMIT = {};
+  let room = 0;
+  function spend(n) { room -= n; if (room < 0) throw LIMIT; }
+
   // canonical JSON: keys sorted, no spaces; undefined is null
   function canon(v) {
     if (v === undefined) return 'null';
     if (v !== null && typeof v === 'object' && typeof v.toJSON === 'function') v = v.toJSON();
     if (v === null || typeof v !== 'object') {
+      if (typeof v === 'string') spend(v.length);
       const s = stringify(v);
       return s === undefined ? 'null' : s;
     }
@@ -221,12 +228,17 @@
     for (let i = 0; i < names.length; i++) {
       const item = v[names[i]];
       if (item === undefined || typeof item === 'function' || typeof item === 'symbol') continue;
+      spend(names[i].length);
       apply(push, out, [stringify(names[i]) + ':' + canon(item)]);
     }
     return '{' + apply(join, out, [',']) + '}';
   }
 
-  function ok(v) { return '{"ok":true,"value":' + canon(v) + '}'; }
+  // the envelope, or "!limit.json" for the host to turn into the failure
+  function ok(v) {
+    room = 1048576;
+    try { return '{"ok":true,"value":' + canon(v) + '}'; } catch (e) { if (e === LIMIT) return '!limit.json'; throw e; }
+  }
 
   function failed(reason) {
     let code = 'js.error';
