@@ -24,7 +24,7 @@
 }
 ```
 
-The manifest is one JSON object. Each key appears once, and the check refuses a key the format doesn't define.
+The manifest is one JSON object. Each key appears once, and the check refuses a key the format doesn't define. In the manifest and your other JSON files, lists and objects nest at most 32 deep and a number has at most 32 characters.
 
 ## Fields
 
@@ -33,7 +33,7 @@ The manifest is one JSON object. Each key appears once, and the check refuses a 
 | `format` | Always `"sorta-addon"`. |
 | `formatVersion` | Always `1`. |
 | `id` | Your add-on's name for good, in reverse-DNS form like `io.github.you.tidy-titles`. 3 to 64 characters of `a` to `z`, `0` to `9`, `.` and `-`, with at least one dot and no empty part. Ids starting with `com.cramdown` are Sorta's own. |
-| `name` | 1 to 30 characters, with no control characters and no space at either end. |
+| `name` | 1 to 30 characters, with no space at either end. No control characters, and no invisible ones like zero-width spaces, direction marks or line separators. The same goes for every title. |
 | `version` | A semantic version like `1.2.0` or `1.3.0-beta.1`, with no `+build` part. Each number has at most 9 digits and no leading zero. |
 | `author` | An object with exactly `name` and `url`. The name is 1 to 60 characters with no `@`. The url starts with `https://`, has at most 200 characters and no user name. |
 | `license` | An SPDX id on the OSI's list, like `MIT`, `Apache-2.0` or `GPL-3.0-only`. One id, not an expression like `MIT OR Apache-2.0`. |
@@ -55,7 +55,7 @@ Each host is an exact lowercase name, like `api.example.org`. No `https://`, no 
 | Field | Permission | Rule |
 |---|---|---|
 | `commands` | `commands` | 1 to 5 commands. Each is `{ "id", "title" }`. The id is 1 to 32 characters of `a` to `z`, `0` to `9` and `-`, starting with a letter or digit. The title is 1 to 30 characters. |
-| `cardView` | `cards` | One `{ "id", "title" }`, with the same rules as a command. |
+| `cardView` | `cards`, with `ideas.read` or `ideas.read.folder` | One `{ "id", "title" }`, with the same rules as a command. A card view reads ideas, so it needs one of the read permissions too. |
 | `settings` | none | The name of a `.json` file in your add-on, described below. |
 | `boardPalette` | `board.palette` | The name of a `.json` file in your add-on, described below. |
 
@@ -100,4 +100,4 @@ An add-on holds only these files:
 - `manifest.json`, `README.md`, `CHANGELOG.md` and one of `LICENSE`, `LICENSE.txt` or `LICENSE.md`, at the top;
 - `.js` and `.json` files, at the top or in folders at most two deep.
 
-Every file is UTF-8 text with no NUL byte. Names use only `A` to `Z`, `a` to `z`, `0` to `9`, `.`, `_`, `-` and `/`. No hidden files, no pictures, no fonts and no binaries.
+Every file is UTF-8 text with no NUL byte. Names use only `A` to `Z`, `a` to `z`, `0` to `9`, `.`, `_`, `-` and `/`. No hidden files, no pictures, no fonts and no binaries. A picture written into text counts too: the check refuses an SVG tag or a picture's `data:` address in any file.

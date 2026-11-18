@@ -69,7 +69,7 @@ sorta.cards.on(async (idea) => {
 });
 ```
 
-Needs `cards`. Return at most 3 lines of at most 80 characters each. Sorta works the lines out ahead of time and draws them in its own type and colours.
+Needs `cards`, with `ideas.read` or `ideas.read.folder`. Your handler gets only ideas that permission covers. With `ideas.read.folder`, those are the ideas in the granted folder and the folders inside it, and other cards show no line. Return at most 3 lines of at most 80 characters each. Sorta works the lines out ahead of time and draws them in its own type and colours.
 
 ## Settings
 
@@ -99,6 +99,7 @@ const reply = await sorta.net.fetch("https://api.example.org/v1/rhymes?word=basi
 Needs `net`, and only reaches hosts in your manifest's `hosts` that the person granted. The options are `method`, which is `GET`, `POST`, `PUT`, `PATCH` or `DELETE`, `headers` and `body`, which is text. The reply is `{ status, url, headers, body }`.
 
 - HTTPS only. Sorta follows redirects only within your granted hosts.
+- Sorta drops `Cookie` from the headers you send and `Set-Cookie` from the reply's, so no cookie reaches your add-on or leaves it.
 - No cookies.
 - At most 1 MB each way, and 10 seconds.
 
@@ -114,7 +115,7 @@ Every error a call gives has a `code`, the same on every phone.
 
 | Error | When |
 |---|---|
-| `PermissionError` | The call needs a permission your add-on doesn't hold. Its `permission` names it. |
+| `PermissionError` | The call needs a permission your add-on doesn't hold. Its `permission` names it. When `net` refuses a host, its `host` names the host. |
 | `WriteLimitError` | One call made more than 100 changes or 20 captures. |
 | `SortaError` | Every other error. |
 

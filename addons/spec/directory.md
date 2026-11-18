@@ -79,20 +79,20 @@ engine/                     Sorta's addons/engine, copied by the lead
 
 ## publish.yml
 
-- Runs on `push` to `main`, with `permissions: contents: write`, on `ubuntu-latest`, with the built-in token only.
-- Runs `review.py all`, builds the harness and runs `review.py harness` on every listed version, then `review.py build`.
-- Commits `index.json`, `revoked.json` and `dist/` with no checkout of the `index` branch, its parent being the last `index` commit, and pushes to `refs/heads/index` only. When the tree is unchanged, it pushes nothing.
+- Runs on `push` to `main`, on `ubuntu-latest`, with the built-in token only. The workflow's permissions are `contents: read`.
+- The `build` job can only read, and its checkout keeps no credentials. It runs `review.py all`, builds the harness and runs `review.py harness` on every listed version, then `review.py build`. It uploads the built files as the artifact `index`.
+- The `push` job needs `build` and is the only one with `contents: write`. It runs nothing from the add-ons or the kit. It downloads the artifact and commits `index.json`, `revoked.json` and `dist/` with no checkout of the `index` branch, its parent being the last `index` commit, and pushes to `refs/heads/index` only. When the tree is unchanged, it pushes nothing.
 
 ## The review
 
 `review.py` runs four stages and stops after the first stage with a problem, reporting every problem in that stage. Each line it prints is `<code> <path>: <detail>`.
 
-1. Files, by name and first bytes: `review.picture`, then `review.binary`.
+1. Files: `review.picture` by name, by first bytes, and for `<svg` or `data:image/` anywhere in a file's text. Then `review.binary`.
 2. The package: `check.py`'s rules on the folder packed by `pack.py`, and `review.files`.
 3. Its place: `review.folder`, `review.version` and `review.owner`.
 4. Its content: `review.paid` in any file, `review.points` in `manifest.json`, `README.md` and `CHANGELOG.md`, `review.host` and `review.line` in `.js` files, and `review.base64` in any file.
 
-In a pull request, a change to a listed version's folder gives `review.version`, and a file in `addons/` outside `addons/<id>/<version>/` gives `review.folder`. Files outside `addons/` and `revoked.json` aren't checked by code, and the step summary lists them for the code owner.
+In a pull request, a change to a listed version's folder gives `review.version`, and a file in `addons/` outside `addons/<id>/<version>/` gives `review.folder`. A change to any path outside `addons/` and `revoked.json` gives `review.files`, and the step summary lists those paths. A code owner changes the directory's own files in a pull request that this check fails, and merges it by hand.
 
 ## The harness step
 

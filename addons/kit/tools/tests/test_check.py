@@ -1,8 +1,11 @@
 """A1: the rules, the reason codes and the fixtures."""
+import os
+import shutil
 import unittest
+from pathlib import Path
 from unittest import mock
 
-from common import PACKAGES, ROOT, SPEC, TOOLS, ZIPS, Scratch, folders, python, read_json, walk_files
+from common import PACKAGES, ROOT, SPEC, TEMPLATE, TOOLS, ZIPS, Scratch, folders, python, read_json, walk_files
 
 import check
 import review
@@ -28,7 +31,7 @@ class Reasons(unittest.TestCase):
         listed = [reason["code"] for reason in read_json(SPEC / "reasons.json")["reasons"]]
         self.assertEqual(len(listed), len(set(listed)))
         self.assertEqual(set(listed), set(check.CODES))
-        self.assertEqual(len(listed), 32)
+        self.assertEqual(len(listed), 34)
 
     def test_reasons_have_a_group_and_meaning(self):
         for reason in read_json(SPEC / "reasons.json")["reasons"]:
@@ -51,7 +54,11 @@ class Packages(unittest.TestCase):
             with self.subTest(folder.name):
                 expect = read_json(folder / "expect.json")
                 self.assertIn(expect["verdict"], ("ok", "refused"))
-                verdict = check.check_path(folder, app_for(expect))
+                with Scratch() as scratch:
+                    if "fifo" in expect:
+                        folder = Path(shutil.copytree(folder, scratch / folder.name))
+                        os.mkfifo(folder / expect["fifo"])
+                    verdict = check.check_path(folder, app_for(expect))
                 self.assertEqual(outcome(verdict), expected(expect), verdict.detail)
 
     def test_install_codes_need_the_app(self):
@@ -138,6 +145,52 @@ class Command(unittest.TestCase):
         done = python(self.TOOL, PACKAGES / "install-api", "--app-version", "1.0.0", "--app-api", "1")
         self.assertEqual(done.returncode, 1)
         self.assertTrue(done.stdout.startswith("refused install.api: "), done.stdout)
+
+
+class NeverATraceback(unittest.TestCase):
+    """Hostile input gets a refusal code from both programs, never a crash."""
+
+    def refusals(self, change, code):
+        with Scratch() as scratch:
+            folder = Path(shutil.copytree(TEMPLATE, scratch / "addon"))
+            change(folder)
+            for tool, extra in ((TOOLS / "check.py", []), (TOOLS / "pack.py", ["--out", scratch / "out"])):
+                with self.subTest(tool.name):
+                    done = python(tool, folder, *extra)
+                    self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                    self.assertEqual(done.stderr, "")
+                    self.assertTrue(done.stdout.startswith(f"refused {code}: "), done.stdout[:200])
+                    self.assertFalse((scratch / "out").exists())
+
+    def test_a_manifest_of_200000_nested_lists(self):
+        self.refusals(lambda f: (f / "manifest.json").write_text("[" * 200000 + "]" * 200000), "manifest.json")
+
+    def test_a_settings_file_of_200000_nested_lists(self):
+        self.refusals(lambda f: (f / "settings.json").write_text("[" * 200000 + "]" * 200000), "contributes")
+
+    def test_a_number_of_5001_digits(self):
+        def change(folder):
+            path = folder / "manifest.json"
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('"formatVersion": 1,', text)
+            path.write_text(text.replace('"formatVersion": 1,', '"formatVersion": 1' + "0" * 5000 + ","),
+                            encoding="utf-8")
+        self.refusals(change, "manifest.json")
+
+    def test_a_named_pipe_in_the_folder(self):
+        self.refusals(lambda f: os.mkfifo(f / "p.json"), "file.type")
+
+    def test_the_json_reader_catches_what_the_parser_raises(self):
+        for error in (RecursionError(), ValueError("Exceeds the limit (4300 digits)")):
+            with self.subTest(type(error).__name__), mock.patch.object(check.json, "loads", side_effect=error):
+                with self.assertRaises(check.Refused) as caught:
+                    check.parse_json("{}", "manifest.json", "manifest.json")
+                self.assertEqual(caught.exception.code, "manifest.json")
+
+    def test_refused_is_one_class(self):
+        import pack
+        self.assertIs(check.Refused, sortazip.Refused)
+        self.assertIs(pack.check.Refused, sortazip.Refused)
 
 
 class Repository(unittest.TestCase):

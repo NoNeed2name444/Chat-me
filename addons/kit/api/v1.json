@@ -460,6 +460,10 @@
       "fields": {
         "permission": {
           "type": "Permission"
+        },
+        "host": {
+          "type": "string",
+          "optional": true
         }
       }
     },

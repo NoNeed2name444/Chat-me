@@ -102,6 +102,7 @@ interface CardLines {
 
 interface FetchOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** Sorta drops Cookie, in any letter case, before it sends the request. */
   headers?: Record<string, string>;
   body?: string;
 }
@@ -110,6 +111,7 @@ interface FetchReply {
   status: number;
   /** The address the reply came from, after redirects within the add-on's hosts. */
   url: string;
+  /** Sorta drops Set-Cookie, in any letter case, so no cookie reaches the add-on. */
   headers: Record<string, string>;
   body: string;
 }
@@ -122,6 +124,8 @@ declare class SortaError extends Error {
 /** The add-on asked for something it doesn't hold. */
 declare class PermissionError extends SortaError {
   readonly permission: Permission;
+  /** The host that was refused, when the permission is net and the host isn't declared or granted. */
+  readonly host?: string;
 }
 
 /** One call made more than 100 writes or 20 captures, so none of them were applied. */
@@ -170,7 +174,13 @@ declare namespace sorta {
   }
 
   namespace cards {
-    /** @permission cards */
+    /**
+     * A card view reads ideas, so the manifest also asks for ideas.read or
+     * ideas.read.folder. The handler gets only ideas inside that grant: with
+     * ideas.read.folder, the ideas in the granted folder and the folders
+     * inside it. Sorta shows no line on any other card.
+     * @permission cards
+     */
     function on(handler: (idea: Idea) => CardLines | Promise<CardLines>): void;
   }
 

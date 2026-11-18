@@ -8,7 +8,7 @@ Your add-on asks for permissions in its manifest, and the person installing it d
 | `ideas.read.folder` | Read one folder and the folders inside it. The person picks the folder when they grant it. |
 | `ideas.write` | Capture new ideas, which land in To sort. Tag and untag, link and unlink, and file an idea into a folder. |
 | `commands` | Add up to 5 commands to Sorta's command list. |
-| `cards` | Add up to 3 short lines to each idea's card. |
+| `cards` | Add up to 3 short lines to each idea's card. It needs `ideas.read` or `ideas.read.folder` too, and gets only the ideas that permission covers. |
 | `board.palette` | Recolour the 2D board from a palette file. |
 | `net` | Make HTTPS requests to the hosts in `hosts`. The person grants each host on its own. |
 | `ai` | Reserved for Sorta's AI features, which a later update defines. |

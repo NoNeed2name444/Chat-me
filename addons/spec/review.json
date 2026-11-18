@@ -1,9 +1,9 @@
 {
   "about": "Every reason the public directory's checks can fail a submission, on top of the package reasons in reasons.json. The kit's review.py gives them, in check.yml for each pull request and in publish.yml again on main.",
   "reasons": [
-    { "code": "review.picture", "meaning": "A file is a picture, an icon, a PDF or a font, by its name or by its first bytes." },
+    { "code": "review.picture", "meaning": "A file is a picture, an icon, a PDF or a font, by its name or by its first bytes. Or its text holds '<svg' or 'data:image/'." },
     { "code": "review.binary", "meaning": "A file is a binary: it has a NUL byte, isn't UTF-8, or has a binary file's extension." },
-    { "code": "review.files", "meaning": "The submission has no README.md, or no LICENSE, LICENSE.txt or LICENSE.md." },
+    { "code": "review.files", "meaning": "The submission has no README.md, or no LICENSE, LICENSE.txt or LICENSE.md. Or the pull request changes a path outside addons/ and revoked.json." },
     { "code": "review.folder", "meaning": "A file isn't inside addons/<id>/<version>/, or the manifest's id or version doesn't match its folders." },
     { "code": "review.version", "meaning": "The version isn't above the last one listed, or the pull request changes a version that is already listed." },
     { "code": "review.owner", "meaning": "The id is listed already under another author's url." },

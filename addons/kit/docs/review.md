@@ -19,7 +19,7 @@ Sorta checks these from the zip's list of files before it unpacks anything. `pac
 
 | Code | What's wrong | How to fix it |
 |---|---|---|
-| `zip.unreadable` | It isn't a zip Sorta can read: no end record, a ZIP64 or split archive, an unknown compression method, a damaged entry or a wrong CRC. | Build the file with `pack.py`. |
+| `zip.unreadable` | It isn't a zip Sorta can read: no end record, a ZIP64 or split archive, an unknown compression method, a comment, bytes that belong to no file, a damaged entry or a wrong CRC. | Build the file with `pack.py`. |
 | `zip.path` | A file name is empty, too long or starts with `/`. Or it has a backslash, a drive letter, a `.` or `..` part, or a character outside `A-Z a-z 0-9 . _ - /`. | Rename the file. |
 | `zip.link` | A file is a symbolic link. | Copy the real file in its place. |
 | `zip.duplicate` | Two files have the same name. | Build the file with `pack.py`. |
@@ -36,6 +36,7 @@ Sorta checks these from the zip's list of files before it unpacks anything. `pac
 | `file.type` | A file isn't one an add-on may hold, or is hidden. | Keep only `manifest.json`, `.js`, `.json`, `README.md`, a LICENSE file and `CHANGELOG.md`. |
 | `file.depth` | A file is more than two folders deep. | Move it up. |
 | `file.text` | A file isn't UTF-8, or has a NUL byte. | Save it as UTF-8 text. |
+| `file.picture` | A file's text holds an SVG tag or a picture's `data:` address. | Remove the picture. Add-ons carry none, as files or as text. |
 | `main.missing` | `main` doesn't name a `.js` file in the add-on. | Point `main` at your code. |
 | `main.size` | The `main` file is over 256 KB. | Split it into smaller files, or remove code you don't use. |
 
@@ -44,12 +45,12 @@ Sorta checks these from the zip's list of files before it unpacks anything. `pac
 | Code | What's wrong |
 |---|---|
 | `manifest.missing` | No `manifest.json` at the top of the add-on. |
-| `manifest.json` | It isn't valid JSON, isn't one object, names a key twice, or has a field the format doesn't define. |
+| `manifest.json` | It isn't valid JSON, isn't one object, names a key twice, nests more than 32 deep, has a number over 32 characters long, or has a field the format doesn't define. |
 | `format` | `format` isn't `"sorta-addon"`. |
 | `formatVersion` | `formatVersion` isn't `1`. |
 | `id` | `id` isn't a reverse-DNS name of 3 to 64 characters. |
 | `id.reserved` | `id` starts with `com.cramdown`, which is Sorta's own. |
-| `name` | `name` isn't 1 to 30 characters, has a control character, or starts or ends with a space. |
+| `name` | `name` isn't 1 to 30 characters, has a control character or an invisible one, or starts or ends with a space. |
 | `version` | `version` isn't a semantic version without a `+build` part. |
 | `minSorta` | `minSorta` isn't a semantic version without a `+build` part. |
 | `api` | `api` isn't a whole number from 1 to 99. |
@@ -59,6 +60,7 @@ Sorta checks these from the zip's list of files before it unpacks anything. `pac
 | `hosts` | `hosts` is missing with `net`, given without `net`, or has an entry that isn't an exact lowercase host name. |
 | `commands` | `contributes.commands` isn't 1 to 5 commands, each with its own id and a title of 1 to 30 characters. |
 | `contributes` | `contributes` has an unknown field, doesn't match the permissions, or has a card view, settings file or palette that breaks its rules. |
+| `cards.read` | The add-on has a card view but asks for neither `ideas.read` nor `ideas.read.folder`. |
 
 [The manifest](manifest.md) has every rule in full.
 
@@ -88,9 +90,9 @@ The directory's checks run on each pull request. They use the codes above and th
 
 | Code | What's wrong | How to fix it |
 |---|---|---|
-| `review.picture` | A file is a picture, an icon, a PDF or a font, by its name or by its first bytes. | Remove it. Add-ons carry no pictures. |
+| `review.picture` | A file is a picture, an icon, a PDF or a font, by its name or by its first bytes. Or its text holds an SVG tag or a picture's `data:` address. | Remove it. Add-ons carry no pictures. |
 | `review.binary` | A file has a NUL byte, isn't UTF-8, or has a binary file's extension like `.wasm`. | Ship source text only. |
-| `review.files` | No `README.md`, or no LICENSE file. | Add both. |
+| `review.files` | No `README.md`, or no LICENSE file. Or the pull request changes a file outside `addons/` and `revoked.json`. | Add both, and change nothing else. |
 | `review.folder` | A file isn't inside `addons/<id>/<version>/`, or the manifest's id or version doesn't match those folders. | Move the folder, or fix the manifest. |
 | `review.version` | The version isn't above the last one listed, or the pull request changes a version that's listed already. | Raise the version and add a new folder. |
 | `review.owner` | The id is listed already under another author's url. | Choose an id of your own. |

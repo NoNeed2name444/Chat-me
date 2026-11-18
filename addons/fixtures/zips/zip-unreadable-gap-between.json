@@ -1,0 +1,15 @@
+{
+  "about": "Bytes between two entries that no entry accounts for.",
+  "from": "ok-minimal",
+  "entries": [
+    {
+      "name": "notes.json",
+      "text": "{}",
+      "before": "hidden"
+    }
+  ],
+  "expect": {
+    "verdict": "refused",
+    "reason": "zip.unreadable"
+  }
+}

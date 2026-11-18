@@ -46,10 +46,10 @@ The checks run in four steps. Each step reports every problem it finds, with a c
 
 | Step | Code | It fails when |
 |---|---|---|
-| Files | `review.picture` | a file is a picture, an icon, a PDF or a font, by its name or its first bytes |
+| Files | `review.picture` | a file is a picture, an icon, a PDF or a font, by its name or its first bytes, or its text holds `<svg` or `data:image/` |
 | Files | `review.binary` | a file is a binary |
 | The package | the kit's codes | the kit's check refuses your folder, packed the way `pack.py` packs it |
-| The package | `review.files` | there's no `README.md` or no `LICENSE` |
+| The package | `review.files` | there's no `README.md` or no `LICENSE`, or the pull request changes a file outside `addons/` and `revoked.json` |
 | Its place | `review.folder` | the folders don't match the manifest's id and version |
 | Its place | `review.version` | the version isn't above the last one listed, or a listed version changed |
 | Its place | `review.owner` | the id is listed already under another author |

@@ -41,7 +41,7 @@ def items(folder: Path) -> list[sortazip.Item]:
             elif stat.S_ISREG(mode):
                 found.append(sortazip.Item(raw, path.read_bytes()))
             elif not stat.S_ISDIR(mode):
-                raise check.Refused("file.type", f"{path.relative_to(folder)} isn't a file or a folder.")
+                raise sortazip.Refused("file.type", f"{path.relative_to(folder)} isn't a file or a folder.")
     found.sort(key=lambda item: item.raw_name)
     return found
 
@@ -55,7 +55,7 @@ def pack(folder: Path) -> tuple[bytes, check.Verdict]:
     """The archive and check's verdict on it."""
     try:
         data = archive(folder)
-    except check.Refused as refusal:
+    except sortazip.Refused as refusal:
         return b"", check.Verdict(refusal.code, refusal.detail)
     return data, check.check_archive(data)
 

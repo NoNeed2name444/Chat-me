@@ -1,0 +1,7 @@
+{
+  "about": "A good add-on, and a change to a file outside addons/ and revoked.json.",
+  "verdict": "fail",
+  "reasons": [
+    "review.files"
+  ]
+}

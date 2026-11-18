@@ -1,0 +1,10 @@
+{
+  "about": "Bytes between the last entry and the central directory.",
+  "from": "ok-minimal",
+  "entries": [],
+  "gap": "hidden",
+  "expect": {
+    "verdict": "refused",
+    "reason": "zip.unreadable"
+  }
+}

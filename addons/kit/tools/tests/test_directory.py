@@ -137,12 +137,45 @@ class Publish(unittest.TestCase):
         self.assertNotIn("pull_request", self.text)
         self.assertNotIn("workflow_run", self.text)
 
-    def test_it_can_write_contents_and_nothing_else(self):
-        self.assertEqual(self.flow["permissions"], {"contents": "write"})
+    def test_only_the_push_job_can_write_and_only_contents(self):
+        self.assertEqual(self.flow["permissions"], {"contents": "read"})
+        self.assertEqual(set(self.flow["jobs"]), {"build", "push"})
+        self.assertNotIn("permissions", self.flow["jobs"]["build"])
+        self.assertEqual(self.flow["jobs"]["push"]["permissions"], {"contents": "write"})
+        self.assertEqual(self.flow["jobs"]["push"]["needs"], "build")
         for job in self.flow["jobs"].values():
-            self.assertNotIn("permissions", job)
             self.assertEqual(job["runs-on"], "ubuntu-latest")
         self.assertNotIn("secrets.", self.text)
+
+    def test_the_build_job_keeps_no_credentials_and_uploads_the_built_files(self):
+        build = self.flow["jobs"]["build"]["steps"]
+        checkout = [s for s in build if str(s.get("uses", "")).startswith("actions/checkout@")]
+        self.assertEqual(len(checkout), 1)
+        self.assertIs(checkout[0]["with"]["persist-credentials"], False)
+        runs = [s.get("run", "") for s in build]
+        self.assertIn("python3 -I repo/kit/tools/review.py build --repo repo --out built", runs)
+        self.assertFalse(any("git push" in run or "commit-tree" in run for run in runs))
+        upload = [s for s in build if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+        self.assertEqual([(s["with"]["name"], s["with"]["path"]) for s in upload], [("index", "built")])
+        self.assertEqual(build[-1], upload[0])
+
+    def test_the_push_job_runs_nothing_from_the_repository(self):
+        push = self.flow["jobs"]["push"]["steps"]
+        download = [s for s in push if str(s.get("uses", "")).startswith("actions/download-artifact@")]
+        self.assertEqual([(s["with"]["name"], s["with"]["path"]) for s in download], [("index", "built")])
+        uses = [str(s["uses"]).split("@")[0] for s in push if "uses" in s]
+        self.assertEqual(uses, ["actions/checkout", "actions/download-artifact"])
+        scripts = [s["run"] for s in push if "run" in s]
+        self.assertEqual(len(scripts), 1)
+        self.assertIn('out="$GITHUB_WORKSPACE/built"', scripts[0])
+        for word in ("python", "make", "review.py", "pack.py", "harness", "node"):
+            with self.subTest(word):
+                self.assertNotIn(word, scripts[0])
+        commands = {line.split()[0].strip("(") for line in scripts[0].splitlines()
+                    if line.strip() and not line.strip().startswith("#")}
+        self.assertLessEqual(commands, {"out=\"$GITHUB_WORKSPACE/built\"", "git_dir=\"$PWD/.git\"", "export", "rm",
+                                        "cd", "tree=$(git", "parent=()", "if", "git", "echo", "exit",
+                                        "parent=(-p", "fi", "commit=$(git"})
 
     def test_it_runs_the_same_checks(self):
         runs = [step.get("run", "") for step in steps(self.flow)]
@@ -170,8 +203,9 @@ class Publish(unittest.TestCase):
 
     def test_it_checks_out_main_as_pushed(self):
         checkouts = [s for s in steps(self.flow) if str(s.get("uses", "")).startswith("actions/checkout@")]
-        self.assertEqual(len(checkouts), 1)
-        self.assertNotIn("ref", checkouts[0]["with"])
+        self.assertEqual(len(checkouts), 2)
+        for checkout in checkouts:
+            self.assertNotIn("ref", checkout["with"])
 
 
 class NoPullRequestHeadWhereWritable(unittest.TestCase):

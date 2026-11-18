@@ -15,6 +15,7 @@ import json
 import math
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,13 +30,15 @@ MAX_MAIN = 256 * KB
 MAX_RATIO = 100
 MAX_NAME_BYTES = 255
 MAX_FOLDERS = 2
+MAX_JSON_DEPTH = 32
+MAX_JSON_NUMBER = 32
 
 CODES = (
     "zip.unreadable", "zip.path", "zip.link", "zip.duplicate", "zip.case", "zip.encrypted", "zip.ratio",
     "zip.entries", "zip.size",
-    "file.type", "file.depth", "file.text", "main.missing", "main.size",
+    "file.type", "file.depth", "file.text", "file.picture", "main.missing", "main.size",
     "manifest.missing", "manifest.json", "format", "formatVersion", "id", "id.reserved", "name", "version",
-    "minSorta", "api", "author", "license", "permissions", "hosts", "commands", "contributes",
+    "minSorta", "api", "author", "license", "permissions", "hosts", "commands", "contributes", "cards.read",
     "install.api", "install.minSorta",
 )
 ROOT_FILES = {"manifest.json", "README.md", "LICENSE", "LICENSE.txt", "LICENSE.md", "CHANGELOG.md"}
@@ -59,11 +62,11 @@ NEEDS = {"commands": "commands", "cardView": "cards", "boardPalette": "board.pal
 LICENSES = frozenset(json.loads((Path(__file__).resolve().parent / "osi-licenses.json").read_text())["licenses"])
 
 
-class Refused(Exception):
-    def __init__(self, code: str, detail: str):
-        assert code in CODES, code
-        super().__init__(f"{code}: {detail}")
-        self.code, self.detail = code, detail
+Refused = sortazip.Refused
+PICTURE_TEXT = re.compile(r"<svg|data:image/", re.I)
+JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"', re.S)
+JSON_BRACKET = re.compile(r"[\[\]{}]")
+UNSEEN = ("Cf", "Zl", "Zp")
 
 
 @dataclass
@@ -196,6 +199,11 @@ def package_rules(files: dict[str, bytes]) -> dict:
             content.decode("utf-8")
         except UnicodeDecodeError:
             raise Refused("file.text", f"{name!r} isn't UTF-8 text.") from None
+    for name, content in files.items():
+        found = PICTURE_TEXT.search(content.decode("utf-8"))
+        if found:
+            raise Refused("file.picture", f"{name!r} has {found.group()!r}. Add-ons can't carry pictures, "
+                                          "as files or written into text.")
     if "manifest.json" not in files:
         raise Refused("manifest.missing", "there's no manifest.json at the top of the add-on.")
     manifest = parse_json(files["manifest.json"].decode("utf-8"), "manifest.json", "manifest.json")
@@ -226,10 +234,25 @@ def parse_json(text: str, name: str, code: str):
     def no_constant(word):
         raise Refused(code, f"{name} has {word}, which isn't JSON.")
 
+    def number(kind):
+        def read(digits):
+            if len(digits) > MAX_JSON_NUMBER:
+                raise Refused(code, f"{name} has a number over {MAX_JSON_NUMBER} characters long.")
+            return kind(digits)
+        return read
+
+    depth = 0
+    for bracket in JSON_BRACKET.finditer(JSON_STRING.sub('""', text)):
+        depth += 1 if bracket.group() in "[{" else -1
+        if depth > MAX_JSON_DEPTH:
+            raise Refused(code, f"{name} nests lists and objects more than {MAX_JSON_DEPTH} deep.")
     try:
-        return json.loads(text, object_pairs_hook=no_duplicates, parse_constant=no_constant)
+        return json.loads(text, object_pairs_hook=no_duplicates, parse_constant=no_constant,
+                          parse_int=number(int), parse_float=number(float))
     except json.JSONDecodeError as problem:
         raise Refused(code, f"{name} isn't valid JSON: {problem.msg}, line {problem.lineno}.") from None
+    except (RecursionError, ValueError):
+        raise Refused(code, f"{name} isn't JSON this check can read.") from None
 
 
 def whole(value, low: int, high: int) -> bool:
@@ -243,9 +266,12 @@ def whole(value, low: int, high: int) -> bool:
 
 def label(value, longest: int) -> bool:
     """A short piece of text a person reads: 1 to `longest` characters, no
-    control characters, and no space at either end."""
+    space at either end, no control characters, and none of Unicode's
+    format characters or line and paragraph separators (categories Cf, Zl
+    and Zp), which can hide or reorder what a person sees."""
     return (isinstance(value, str) and 1 <= len(value) <= longest and value[0] != " " and value[-1] != " "
-            and not any(ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F for c in value))
+            and not any(ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F or unicodedata.category(c) in UNSEEN
+                        for c in value))
 
 
 def semver(value) -> tuple | None:
@@ -359,6 +385,9 @@ def contributes_rule(contributes, permissions: set, files: dict[str, bytes]) -> 
         if (field in contributes) != (permission in permissions):
             raise Refused("contributes", f"contributes.{field} and the {permission} permission go together. "
                                          "Ask for both or neither.")
+    if "cardView" in contributes and not permissions & {"ideas.read", "ideas.read.folder"}:
+        raise Refused("cards.read", "a card view shows a line about an idea, so it needs ideas.read or "
+                                    "ideas.read.folder. It gets only the ideas that permission covers.")
     view = contributes.get("cardView")
     if view is not None and (not isinstance(view, dict) or set(view) != {"id", "title"}
                              or not isinstance(view["id"], str) or not COMMAND_ID.fullmatch(view["id"])

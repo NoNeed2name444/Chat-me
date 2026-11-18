@@ -25,13 +25,20 @@ entry has a name, its contents as one of "text" (UTF-8), "hex", "repeat"
   that entry's bytes instead of writing new ones;
 - "count": n, which repeats the entry n times, with {n} in its name
   replaced by 001, 002 and so on;
-- "bad_crc": true, which writes a CRC one bit off.
-A top-level "cut_end": n cuts n bytes from the end of the archive.
+- "bad_crc": true, which writes a CRC one bit off;
+- "comment": text, which gives the directory entry a comment;
+- "before": text, which writes those bytes ahead of the entry's local
+  header, where no entry accounts for them.
+A top-level "cut_end": n cuts n bytes from the end of the archive,
+"comment": text gives the archive a comment, "gap": text writes those bytes
+between the last entry and the central directory, and "prepend": text
+writes those bytes before the first entry and moves every offset to match.
 Standard library only.
 """
 import argparse
 import json
 import stat
+import struct
 import sys
 from pathlib import Path
 
@@ -70,7 +77,8 @@ def items(description: dict, packages: Path = PACKAGES) -> list[sortazip.Item]:
                 flags=1 if entry.get("encrypted") else 0,
                 external=(stat.S_IFLNK | 0o777) << 16 if entry.get("link") else 0,
                 made_by=0x0314 if entry.get("link") else 20,
-                bad_crc=bool(entry.get("bad_crc")))
+                bad_crc=bool(entry.get("bad_crc")), comment=entry.get("comment", "").encode("utf-8"),
+                before=entry.get("before", "").encode("utf-8"))
             if "same_as" in entry:
                 item.same_as = names.index(entry["same_as"])
             listed.append(item)
@@ -85,8 +93,34 @@ def items(description: dict, packages: Path = PACKAGES) -> list[sortazip.Item]:
 
 def build(path: Path, packages: Path = PACKAGES) -> bytes:
     description = json.loads(path.read_text(encoding="utf-8"))
-    data = sortazip.build(items(description, packages))
+    data = sortazip.build(items(description, packages), description.get("comment", "").encode("utf-8"))
+    if "gap" in description:
+        data = with_gap(data, description["gap"].encode("utf-8"))
+    if "prepend" in description:
+        data = prepended(data, description["prepend"].encode("utf-8"))
     return data[:len(data) - description.get("cut_end", 0)]
+
+
+def prepended(data: bytes, first: bytes) -> bytes:
+    """The archive after `first`, with each entry's offset and the
+    directory's moved by its length."""
+    end = sortazip.end_record(data)
+    moved, at = bytearray(data), end.directory_at
+    for _ in range(end.count):
+        name_len, extra_len, comment_len = struct.unpack_from("<HHH", moved, at + 28)
+        struct.pack_into("<I", moved, at + 42, struct.unpack_from("<I", moved, at + 42)[0] + len(first))
+        at += sortazip.CENTRAL_SIZE + name_len + extra_len + comment_len
+    struct.pack_into("<I", moved, end.end_at + 16, end.directory_at + len(first))
+    return first + bytes(moved)
+
+
+def with_gap(data: bytes, gap: bytes) -> bytes:
+    """The archive with `gap` between its last entry and its central
+    directory, and the end record pointing at the directory's new place."""
+    end = sortazip.end_record(data)
+    moved = bytearray(data[:end.directory_at] + gap + data[end.directory_at:])
+    struct.pack_into("<I", moved, end.end_at + len(gap) + 16, end.directory_at + len(gap))
+    return bytes(moved)
 
 
 def main() -> int:

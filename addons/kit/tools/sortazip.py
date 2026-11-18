@@ -24,6 +24,16 @@ class Unreadable(Exception):
     """The bytes aren't a zip this kit can read."""
 
 
+class Refused(Exception):
+    """A package rule refused the add-on. It lives here so that check.py,
+    run as a program, and the copy of it that pack.py imports raise and
+    catch one class."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(f"{code}: {detail}")
+        self.code, self.detail = code, detail
+
+
 @dataclass
 class End:
     count: int
@@ -64,6 +74,8 @@ def end_record(data: bytes) -> End:
                 if 0xFFFF in (here, count) or 0xFFFFFFFF in (size, offset) or \
                         (at >= 20 and data[at - 20:at - 16] == ZIP64_LOCATOR):
                     raise Unreadable("a ZIP64 archive")
+                if comment:
+                    raise Unreadable("the archive has a comment")
                 if offset + size != at:
                     raise Unreadable("the central directory doesn't end where the end record starts")
                 return End(count, offset, size, at)
@@ -83,6 +95,8 @@ def central_directory(data: bytes, end: End) -> list[Entry]:
         at = name_at + name_len + extra_len + comment_len
         if at > stop:
             raise Unreadable("a central directory entry runs past the directory")
+        if comment_len:
+            raise Unreadable("an entry has a comment")
         entries.append(Entry(data[name_at:name_at + name_len], flags, method, crc, packed, size,
                              external, local_at))
     if at != stop:
@@ -93,8 +107,27 @@ def central_directory(data: bytes, end: End) -> list[Entry]:
 def unpack(data: bytes, end: End, entries: list[Entry]) -> list[bytes]:
     """Each entry's contents, checked against its local header and its CRC.
     Entries whose stored bytes overlap are refused: that is how some zip
-    bombs reuse one compressed stream many times."""
+    bombs reuse one compressed stream many times. So are bytes that no
+    entry accounts for, before the first entry, between two, or between the
+    last and the central directory: a file hidden there would reach the
+    phone unchecked."""
     spans, out = [], []
+    for entry in entries:
+        at = entry.local_at
+        if at + LOCAL_SIZE > end.directory_at or data[at:at + 4] != LOCAL:
+            raise Unreadable(f"{entry.name!r}: no local header where the directory points")
+        name_len, extra_len = struct.unpack_from("<HH", data, at + 26)
+        spans.append((at, at + LOCAL_SIZE + name_len + extra_len + entry.packed, entry.name))
+    spans.sort()
+    for (_, first_stop, first), (second_start, _, second) in zip(spans, spans[1:]):
+        if second_start < first_stop:
+            raise Unreadable(f"{first!r} and {second!r} share bytes")
+    reach = 0
+    for start, stop, name in spans + [(end.directory_at, end.directory_at, None)]:
+        if start > reach:
+            before = repr(name) if name else "the central directory"
+            raise Unreadable(f"{start - reach:,} bytes before {before} belong to no entry")
+        reach = max(reach, stop)
     for entry in entries:
         at = entry.local_at
         if at + LOCAL_SIZE > end.directory_at or data[at:at + 4] != LOCAL:
@@ -106,7 +139,6 @@ def unpack(data: bytes, end: End, entries: list[Entry]) -> list[bytes]:
             raise Unreadable(f"{entry.name!r}: the local header doesn't match the directory")
         if stop > end.directory_at:
             raise Unreadable(f"{entry.name!r}: its data runs into the central directory")
-        spans.append((at, stop, entry.name))
         packed = data[start:stop]
         if entry.method == STORE:
             if entry.packed != entry.size:
@@ -125,10 +157,6 @@ def unpack(data: bytes, end: End, entries: list[Entry]) -> list[bytes]:
         if zlib.crc32(content) != entry.crc:
             raise Unreadable(f"{entry.name!r}: the CRC doesn't match")
         out.append(content)
-    spans.sort()
-    for (_, first_stop, first), (second_start, _, second) in zip(spans, spans[1:]):
-        if second_start < first_stop:
-            raise Unreadable(f"{first!r} and {second!r} share bytes")
     return out
 
 
@@ -145,12 +173,15 @@ class Item:
     made_by: int = 20
     same_as: int | None = None
     bad_crc: bool = False
+    comment: bytes = b""
+    before: bytes = b""
 
 
-def build(items: list[Item]) -> bytes:
+def build(items: list[Item], comment: bytes = b"") -> bytes:
     """The archive's bytes: local headers and data in the given order, then
     the central directory and the end record. Times are 1 Jan 1980, and no
-    extra fields or comments are written."""
+    extra fields are written. Comments, and an item's `before` bytes ahead
+    of its local header, are for zipfix's test cases only."""
     body, directory, written = bytearray(), bytearray(), []
     for item in items:
         if item.same_as is not None:
@@ -161,6 +192,7 @@ def build(items: list[Item]) -> bytes:
                 packed = deflater.compress(item.data) + deflater.flush()
             else:
                 packed = item.data
+            body += item.before
             crc, packed_len, size, local_at, method = (zlib.crc32(item.data) ^ item.bad_crc, len(packed),
                                                        len(item.data), len(body), item.method)
             needed = 20 if item.method == DEFLATE else 10
@@ -170,8 +202,9 @@ def build(items: list[Item]) -> bytes:
         written.append((crc, packed_len, size, local_at, method))
         needed = 20 if method == DEFLATE else 10
         directory += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, item.made_by, needed, item.flags, method,
-                                 0, DOS_DATE_1980, crc, packed_len, size, len(item.raw_name), 0, 0, 0, 0,
-                                 item.external, local_at)
-        directory += item.raw_name
-    end = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, len(items), len(items), len(directory), len(body), 0)
-    return bytes(body + directory + end)
+                                 0, DOS_DATE_1980, crc, packed_len, size, len(item.raw_name), 0,
+                                 len(item.comment), 0, 0, item.external, local_at)
+        directory += item.raw_name + item.comment
+    end = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, len(items), len(items), len(directory), len(body),
+                      len(comment))
+    return bytes(body + directory + end + comment)

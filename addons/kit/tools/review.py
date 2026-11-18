@@ -7,10 +7,12 @@
     python3 -I review.py build --repo <dir> --out <dir>    write index.json, revoked.json and dist/
 
 The repository holds each submission's source in addons/<id>/<version>/.
-A pull request may add new versions, and revoked.json entries. The checks
+A pull request may add new versions, and revoked.json entries. A change to
+any other path fails. The checks
 run in four stages, and stop after the first stage that finds a problem,
 listing every problem in that stage:
-1. files: no picture, icon, PDF or font, and no binary;
+1. files: no picture, icon, PDF or font, no "<svg" or "data:image/" in any
+   text, and no binary;
 2. the package: check.py's rules, on the folder packed as pack.py packs it,
    with a README.md and a LICENSE;
 3. its place: the id and version match the folders, the version is above
@@ -34,6 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check  # noqa: E402
 import pack  # noqa: E402
+import sortazip  # noqa: E402
 
 CODES = ("review.picture", "review.binary", "review.files", "review.folder", "review.version", "review.owner",
          "review.paid", "review.points", "review.host", "review.base64", "review.line", "review.revoked")
@@ -161,11 +164,12 @@ def review_folder(folder: Path, ident: str, version: str, before: list[str], own
     where = f"addons/{ident}/{version}"
     try:
         files = folder_files(folder)
-    except check.Refused as refusal:
+    except sortazip.Refused as refusal:
         return [Problem(refusal.code, where, refusal.detail)]
     found = []
     for name, data in sorted(files.items()):
-        kind = picture(name, data)
+        written = check.PICTURE_TEXT.search(data.decode("utf-8", "replace"))
+        kind = picture(name, data) or (f"{written.group()!r} in its text" if written else None)
         if kind:
             found.append(Problem("review.picture", f"{where}/{name}", f"{kind}. Add-ons can't carry pictures, "
                                  "icons or fonts."))
@@ -269,6 +273,9 @@ def review_pr(repo: Path, base: str) -> list[Problem]:
                                      "never changes. Submit a new version."))
             else:
                 groups.setdefault((parts[1], parts[2]), status)
+        else:
+            found.append(Problem("review.files", path, "a pull request here changes only addons/<id>/<version>/ "
+                                 "and revoked.json."))
     for (ident, version), _ in sorted(groups.items()):
         folder = repo / "addons" / ident / version
         if not folder.is_dir():
@@ -319,8 +326,8 @@ def summary(repo: Path, base: str) -> str:
     others = sorted(path for path in git(repo, "diff", "--name-only", "-z", base, "HEAD").decode().split("\0")
                     if path and not path.startswith("addons/") and path != "revoked.json")
     if others:
-        lines += ["This pull request also changes files outside addons/ and revoked.json, so a code owner "
-                  "reviews it as a change to the directory itself:", ""] + [f"- {path}" for path in others] + [""]
+        lines += ["This pull request also changes files outside addons/ and revoked.json, which the check "
+                  "refuses:", ""] + [f"- {path}" for path in others] + [""]
     found = submissions(repo, base)
     if not found:
         return "\n".join(lines + ["This pull request adds no add-on version.", ""])
