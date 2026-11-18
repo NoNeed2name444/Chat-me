@@ -1,5 +1,0 @@
-{
-  "about": "A file three folders deep.",
-  "verdict": "refused",
-  "reason": "file.depth"
-}

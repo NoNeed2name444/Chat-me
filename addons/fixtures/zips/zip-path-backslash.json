@@ -1,8 +1,0 @@
-{
-  "about": "An entry name with a backslash.",
-  "from": "ok-minimal",
-  "entries": [
-    {"name": "lib\\words.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n"}
-  ],
-  "expect": {"verdict": "refused", "reason": "zip.path"}
-}

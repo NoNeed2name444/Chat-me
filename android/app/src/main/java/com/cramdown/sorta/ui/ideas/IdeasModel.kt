@@ -206,11 +206,23 @@ class IdeasSettings(context: Context) {
     fun setTheme(value: String) { heldTheme = value; put { putString(GraphTheme.KEY, value) } }
 
     private var heldBoard by mutableStateOf(bool(MapLook.BOARD_KEY))
+    private var heldFlat by mutableStateOf(str(MapLook.FLAT_KEY, ""))
+    /** S11: whether the Tree's first-visit card has been put away. */
+    private var heldTreeSeen by mutableStateOf(bool(TREE_SEEN_KEY))
+    val treeSeen: Boolean get() = heldTreeSeen
+    fun setTreeSeen() { heldTreeSeen = true; put { putBoolean(TREE_SEEN_KEY, true) } }
+    /** S12: whether the Fractal's first-visit card has been put away. */
+    private var heldFractalSeen by mutableStateOf(bool(FRACTAL_SEEN_KEY))
+    val fractalSeen: Boolean get() = heldFractalSeen
+    fun setFractalSeen() { heldFractalSeen = true; put { putBoolean(FRACTAL_SEEN_KEY, true) } }
     /** Map mode's look (MapLook): the board's choice and the theme, each under its own key. */
-    val look: MapLook get() = MapLook.stored(heldBoard, heldTheme)
+    val look: MapLook get() = MapLook.stored(heldBoard, heldTheme, heldFlat)
     fun setLook(value: MapLook) {
         heldBoard = value == MapLook.TWO_D
         put { putBoolean(MapLook.BOARD_KEY, heldBoard) }
+        // S11: a flat nested map (Tree) is kept under its own key, cleared by any other look
+        heldFlat = if (MapLook.flatOf(value.rawValue) == value) value.rawValue else ""
+        put { putString(MapLook.FLAT_KEY, heldFlat) }
         value.theme?.let { setTheme(it.rawValue) }
     }
 
@@ -253,6 +265,10 @@ class IdeasSettings(context: Context) {
 
     companion object {
         const val FILE = "ideas"
+        /** S11: the Tree's first-visit card was put away. */
+        const val TREE_SEEN_KEY = "vignette.ideas.treeSeen"
+        /** S12: the Fractal's first-visit card was put away. */
+        const val FRACTAL_SEEN_KEY = "vignette.ideas.fractalSeen"
         /** Whether this is a developer's build: never, in Sorta. */
         const val DEVELOPER = false
         const val READOUT_KEY = "vignette.space.readout"
@@ -298,8 +314,10 @@ enum class SortaMode(val rawValue: String, val identifier: String, @StringRes va
 val MapLook.title: Int @StringRes get() = when (this) {
     MapLook.SPACE -> R.string.look_space
     MapLook.NEURON -> R.string.look_neuron
+    MapLook.TREE -> R.string.look_tree
     MapLook.TWO_D -> R.string.look_2d
     MapLook.PERFORMANCE -> R.string.look_performance
+    MapLook.FRACTAL -> R.string.look_fractal
 }
 
 /** The modes' glyphs, the maps' own: Sort is List's list.bullet, Map is Space's cube.transparent. */

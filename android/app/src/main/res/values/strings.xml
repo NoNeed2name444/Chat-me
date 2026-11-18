@@ -409,4 +409,22 @@
     <string name="capsule_not_saved">Couldn\'t save the capsule. Try again, or choose another place.</string>
     <string name="capsule_refused_not_capsule">This file isn\'t a Sorta capsule. Choose another file.</string>
     <string name="capsule_refused_newer">This capsule is from a newer version of Sorta. Check for a Sorta update, then try again.</string>
+    <!-- S11, the Tree look: its name in the look list, its line, the first-visit card and what TalkBack reads (ux-writing, then unslop) -->
+    <string name="look_tree">Tree</string>
+    <string name="tree_line">Each folder grows as a branch, and each idea as a leaf.</string>
+    <string name="tree_first_visit">Drag to turn the tree. Tap a branch to zoom in, or empty space to go back.</string>
+    <string name="tree_map_spoken">Tree map of ideas, showing %1$s</string>
+    <string name="tree_folder_spoken">%1$s, folder</string>
+    <string name="tree_zoom_hint">zoom in</string>
+    <string name="tree_idea_hint">preview the idea</string>
+    <string name="tree_back_spoken">Back to %1$s</string>
+    <!-- S12, the Fractal look in 3D: its name in the look list, its line, the first-visit card and what TalkBack reads (ux-writing, then unslop) -->
+    <string name="look_fractal">Fractal</string>
+    <string name="fractal_line">Each folder is a hub, with what it holds around it.</string>
+    <string name="fractal_first_visit">Drag to turn the map. Tap a hub to zoom in, or empty space to go back.</string>
+    <string name="fractal_map_spoken">Fractal map of ideas, showing %1$s</string>
+    <string name="fractal_folder_spoken">%1$s, folder</string>
+    <string name="fractal_zoom_hint">zoom in</string>
+    <string name="fractal_idea_hint">preview the idea</string>
+    <string name="fractal_back_spoken">Back to %1$s</string>
 </resources>

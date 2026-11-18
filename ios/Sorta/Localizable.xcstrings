@@ -1549,6 +1549,18 @@
         }
       }
     },
+    "look.tree" : {
+      "comment" : "The Tree look's name in the look list (S11); the owner's name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tree"
+          }
+        }
+      }
+    },
     "map.empty.line" : {
       "comment" : "Map mode (S05b), a draft for ux-writing; key map.empty.line",
       "extractionState" : "manual",
@@ -2457,6 +2469,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Low tide"
+          }
+        }
+      }
+    },
+    "tree.backSpoken" : {
+      "comment" : "VoiceOver: the Tree's Back button, with the part it goes to (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to %@"
+          }
+        }
+      }
+    },
+    "tree.firstVisit" : {
+      "comment" : "The Tree's first-visit line (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a branch to zoom in. Tap empty space to go back."
+          }
+        }
+      }
+    },
+    "tree.folderSpoken" : {
+      "comment" : "VoiceOver: a folder's name on the Tree (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, folder"
+          }
+        }
+      }
+    },
+    "tree.ideaHint" : {
+      "comment" : "VoiceOver hint: an idea on the Tree (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previews the idea."
+          }
+        }
+      }
+    },
+    "tree.line" : {
+      "comment" : "The Tree's one line, on its first-visit card (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each folder grows as a branch, and each idea as a leaf."
+          }
+        }
+      }
+    },
+    "tree.mapSpoken" : {
+      "comment" : "VoiceOver: the Tree map and the part in view (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tree map of ideas, showing %@"
+          }
+        }
+      }
+    },
+    "tree.zoomHint" : {
+      "comment" : "VoiceOver hint: a folder on the Tree (S11)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zooms in."
           }
         }
       }

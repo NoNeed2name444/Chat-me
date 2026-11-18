@@ -1,7 +1,0 @@
-{
-  "about": "A picture: PNG bytes in a .json file.",
-  "verdict": "fail",
-  "reasons": [
-    "review.picture"
-  ]
-}

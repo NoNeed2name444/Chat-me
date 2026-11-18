@@ -8,7 +8,7 @@ import Foundation
 /// 2D keeps the theme, so going back to 3D finds the one left. Foundation
 /// only, so it is tested on Linux (tools/swift_suites.txt, suite maplook).
 enum MapLook: String, CaseIterable, Identifiable {
-    case space, neuron, twoD, performance
+    case space, neuron, tree, twoD, performance
 
     var id: String { rawValue }
 
@@ -17,8 +17,15 @@ enum MapLook: String, CaseIterable, Identifiable {
 
     /// The look the two stored values make; an unknown theme is the
     /// standard one (GraphTheme.stored).
-    static func stored(board: Bool, theme raw: String?) -> MapLook {
-        board ? .twoD : MapLook(GraphTheme.stored(raw))
+    static func stored(board: Bool, theme raw: String?, flat: String? = nil) -> MapLook {
+        board ? .twoD : (flatLook(flat) ?? MapLook(GraphTheme.stored(raw)))
+    }
+
+    /// S11: where a flat nested map (Tree) is kept; empty when the look is the board or a theme.
+    static let flatKey = "vignette.ideas.mapFlat"
+    /// S11: the flat nested map `flat` names, or nil for the board, a theme or nothing.
+    static func flatLook(_ flat: String?) -> MapLook? {
+        allCases.first { $0.theme == nil && $0 != .twoD && $0.rawValue == flat }
     }
 
     init(_ theme: GraphTheme) {
@@ -35,7 +42,7 @@ enum MapLook: String, CaseIterable, Identifiable {
         case .space: return .space
         case .neuron: return .neurons
         case .performance: return .performance
-        case .twoD: return nil
+        case .twoD, .tree: return nil
         }
     }
 
@@ -44,6 +51,7 @@ enum MapLook: String, CaseIterable, Identifiable {
         switch self {
         case .space: return "look-space"
         case .neuron: return "look-neuron"
+        case .tree: return "look-tree"
         case .twoD: return "look-2d"
         case .performance: return "look-performance"
         }

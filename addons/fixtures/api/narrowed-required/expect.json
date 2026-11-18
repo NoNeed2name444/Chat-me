@@ -1,7 +1,0 @@
-{
-  "about": "ListOptions.limit becomes required.",
-  "verdict": "fail",
-  "reasons": [
-    "narrowed"
-  ]
-}

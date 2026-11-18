@@ -57,6 +57,8 @@ import com.cramdown.sorta.map.SpaceLod
 import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.ThemeBodyKind
+import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.FractalModel
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.MapPose
 import com.cramdown.sorta.map.PerfForce
@@ -545,8 +547,8 @@ object FrameQuiet {
         stillNanos >= QUIET_NANOS && (finishedSince >= MapDrawn.ENOUGH || stillNanos >= GIVE_UP_NANOS)
 }
 
-/** How the map draws its notes: plain coloured points, the Space theme's bodies, or the Neurons theme's cells (NeuronGl). */
-enum class MapTheme { PLAIN, SPACE, NEURONS }
+/** How the map draws its notes: plain coloured points, the Space theme's bodies, the Neurons theme's cells (NeuronGl), or the Tree's branches and leaves (TreeGl, S11). */
+enum class MapTheme { PLAIN, SPACE, NEURONS, TREE, FRACTAL }
 
 /**
  * A node's place on screen, for labels and taps (real notes only). [crisp] is false where the
@@ -667,12 +669,26 @@ class GlMapRenderer(
      * each phase's line goes to logcat and the phase to the record. Never shown to a person.
      */
     tour: Boolean = false,
+    /** S11: the Tree's branches and leaves ([MapTheme.TREE]); its bodies are drawn by TreeGl, not as points. */
+    private val treeModel: TreeModel? = null,
+    /** S12: the Fractal's hubs and dots ([MapTheme.FRACTAL]); FractalGl draws them, never as the octree's points. */
+    private val fractalModel: FractalModel? = null,
 ) : GLSurfaceView.Renderer {
     private val linkGrowth = LinkGrowth.of(ids, links, recall, lively)
     private val neuronGl: NeuronGl? = if (theme == MapTheme.NEURONS && neurons != null)
         NeuronGl(neurons, lively, linkGrowth.takeIf { it.links == neurons.plan.links.size }
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
+    /** S11: the Tree's draw, its own frame as the Neurons' is ([drawTree]). */
+    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast) else null
+    /** The camera's pose the Tree's bodies were last handed on at, and whether its filter changed since. */
+    private val treePose = FloatArray(6) { Float.NaN }
+    private var treeFilterSent: MapFilterView? = null
+    /** S12: the Fractal's draw ([drawFractal]), and the pose and filter its dots were last handed on at. */
+    private val fractalGl: FractalGl? = if (theme == MapTheme.FRACTAL && fractalModel != null) FractalGl(fractalModel) else null
+    private val fractalPose = FloatArray(6) { Float.NaN }
+    private var fractalFilterSent: MapFilterView? = null
+    private var fractalHidden = 0
     private val lively = lively
     /** The scene's links (pairs of its body indices), for Show links' neighbourhood. */
     private val sceneLinks = links
@@ -1099,6 +1115,8 @@ class GlMapRenderer(
 
     /** Whether body [index] can be flown in to: a Universe folder or the home, with a system to frame; a Performance hub (S05i2). */
     fun canFlyTo(index: Int): Boolean {
+        treeModel?.let { m -> return index == 0 || (index in 1 until m.nodes.size && m.nodes.childCount[index] > 0) }
+        fractalModel?.let { m -> return index == 0 || (index in 1 until m.tree.count && m.tree.childCount[index] > 0) }
         perf?.let { p -> return index >= p.graph.noteCount && index < p.graph.nodeCount }
         val plan = uplan ?: return false
         val body = plan.bodies.getOrNull(index) ?: return false
@@ -1112,6 +1130,8 @@ class GlMapRenderer(
      */
     fun flyTo(index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         neuronGl?.let { gl -> return flyToCell(gl, index, viewWidth, viewHeight, insets) }
+        treeModel?.let { m -> return flyToBranch(m, index, viewWidth, viewHeight, insets) }
+        fractalModel?.let { m -> return flyToHub(m, index, viewWidth, viewHeight, insets) }
         perf?.let { p -> return flyToFolder(p, index, viewWidth, viewHeight, insets) }
         val plan = uplan ?: return false
         if (!canFlyTo(index)) return false
@@ -1152,6 +1172,38 @@ class GlMapRenderer(
         }
         flown = index
         return fit.distance > 0f
+    }
+
+    /**
+     * The Tree's fly-in (S11): branch [index]'s subtree ball framed in what the [insets] leave, from the
+     * camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames the whole tree.
+     */
+    private fun flyToBranch(m: TreeModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
+        if (!canFlyTo(index)) return false
+        val l = m.layout
+        val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
+        synchronized(camera) {
+            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
+            flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
+        }
+        flown = index
+        return true
+    }
+
+    /**
+     * The Fractal's fly-in (S12): hub [index]'s cluster ball framed in what the [insets] leave, from the
+     * camera's own yaw and pitch; All ideas (0) frames the whole map.
+     */
+    private fun flyToHub(m: FractalModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
+        if (!canFlyTo(index)) return false
+        val l = m.layout
+        val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
+        synchronized(camera) {
+            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
+            flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
+        }
+        flown = index
+        return true
     }
 
     /**
@@ -1279,6 +1331,10 @@ class GlMapRenderer(
         lod = LodSelector(tree, cache)
         if (bodies != null) spaceGl?.create(bodies, budget.detail)
         neuronGl?.create()
+        treeGl?.create()
+        treePose.fill(Float.NaN)
+        fractalGl?.create()
+        fractalPose.fill(Float.NaN)
         // a new context: its frames are counted afresh
         record = MapDrawn(renderer = GLES30.glGetString(GLES30.GL_RENDERER) ?: "", maxPointSize = maxPointSize,
             bodyStyles = bodies?.enabled?.count { it } ?: 0, build = build)
@@ -1335,6 +1391,14 @@ class GlMapRenderer(
         val focusDepth = SpaceDepth.depth(target, eye, forward)
         if (neuronGl != null) {
             drawNeurons(neuronGl, start, vsync, intervalMs, eye, view, proj, focal, focusDepth)
+            return
+        }
+        if (treeGl != null && treeModel != null) {
+            drawTree(treeGl, treeModel, start, vsync, intervalMs, eye, target, view, proj, focal, aspect)
+            return
+        }
+        if (fractalGl != null && fractalModel != null) {
+            drawFractal(fractalGl, fractalModel, start, vsync, intervalMs, eye, target, view, focal, aspect)
             return
         }
         band = if (space) SpaceDepth.band(focusDepth, SpaceDepth.reach(focusDepth, viewRadius), tier, contrast) else SpaceDepthBand.OFF
@@ -1589,6 +1653,8 @@ class GlMapRenderer(
         focusedChosen = wanted; focusedShown = show
         val near = if (show && wanted >= 0) MapFocus.neighbourhood(wanted, sceneCount, sceneLinks, parents, notes) else null
         neuronGl?.let { it.chosen = wanted; it.focus = near }
+        treeGl?.let { it.chosen = wanted; it.near = near }
+        fractalGl?.let { it.sight.chosen = wanted; it.sight.linksOf = if (show) wanted else -1 }
         chosenChunk = if (neuronGl != null) -1 else chunkOf.getOrElse(wanted) { -1 }
         val chunks = if (neuronGl != null || near == null) null
             else near.map { chunkOf.getOrElse(it) { -1 } }.filter { it >= 0 }.sorted().toIntArray()
@@ -1702,6 +1768,92 @@ class GlMapRenderer(
         record = record.marking(focusedChosen, gl.hotDrawn, gl.litDrawn, focusOn, if (focusOn) gl.linksDrawn else 0, if (focusOn) gl.fadedDrawn else 0)
         record = record.filtering(appliedFilter != null, count - gl.hiddenDrawn, gl.hiddenDrawn, filterLinksNow, gl.statesDrawn, gl.halosDrawn)
         record = dragRecord(if (grabbedScene >= 0) gl.position(grabbedScene, time) else null, grabbedScene, record.chosen)
+        if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+        finished++
+    }
+
+    /**
+     * The Tree's frame (S11): no octree points, links or summaries, only TreeGl's branches and leaves
+     * on the page's colour. Its bodies (each node's [TreeLayout3D.anchor], in the octree) are handed on
+     * for names and taps only when the camera or the filter moved, so a still tree makes nothing.
+     */
+    private fun drawTree(gl: TreeGl, m: TreeModel, start: Long, vsync: Long, intervalMs: Double, eye: Vec3, target: Vec3,
+                         view: FloatArray, proj: FloatArray, focal: Float, aspect: Float) {
+        val l = m.layout
+        val dx = eye.x - l.centre[0].toFloat(); val dy = eye.y - l.centre[1].toFloat(); val dz = eye.z - l.centre[2].toFloat()
+        val toCentre = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        val distance = (eye - target).length()
+        val focusReach = (if (flown in 0 until m.nodes.size) l.reach[flown] else l.reach[0]).toFloat()
+        val fovY = synchronized(camera) { camera.fovY }
+        gl.draw(view, fovY, aspect, distance, toCentre, l.reach[0].toFloat(), focusReach, focal)
+        val moved = treePose[0] != eye.x || treePose[1] != eye.y || treePose[2] != eye.z ||
+            treePose[3] != target.x || treePose[4] != target.y || treePose[5] != target.z
+        animating = moved || flight != null
+        val f = appliedFilter
+        val count = m.nodes.size
+        val send = moved || f !== treeFilterSent || record.frames < MapDrawn.ENOUGH
+        treePose[0] = eye.x; treePose[1] = eye.y; treePose[2] = eye.z; treePose[3] = target.x; treePose[4] = target.y; treePose[5] = target.z
+        treeFilterSent = f
+        if (send) onScreenNodes?.let { callback ->
+            viewProj = Mat4.multiply(proj, view)
+            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip)
+            callback(out, framePose)
+        }
+        val workMs = (System.nanoTime() - start) / 1e6
+        budget.onFrame(intervalMs, workMs)
+        stats.add(vsync, intervalMs, workMs)
+        val drawnBodies = m.branchCount + m.leafCount
+        if (vsync - lastReadout > 250_000_000L) {
+            lastReadout = vsync
+            onReadout(MapReadout(fps = stats.fps(vsync), displayMaxHz = displayMaxHz, displayHz = displayHz(),
+                frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = 0,
+                drawnNodes = drawnBodies, detail = budget.detail, bodies = count))
+        }
+        record = record.after(count, (System.nanoTime() - surfaceNanos) / 1_000_000, 0, 0, false)
+        record = record.detailing(budget.detail, 0, 0, 0)
+        record = record.marking(focusedChosen, focusedChosen >= 0, 0, false, 0, 0)
+        record = record.filtering(f != null, count - gl.hidden, gl.hidden, 0, emptyList(), emptyList())
+        if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
+        finished++
+    }
+
+    /**
+     * The Fractal's frame (S12): no octree points, links or summaries, only FractalGl's dots and lines on
+     * Performance's sky. Its dots on screen are handed on for names and taps only when the camera or the
+     * filter moved, so a still map makes nothing.
+     */
+    private fun drawFractal(gl: FractalGl, m: FractalModel, start: Long, vsync: Long, intervalMs: Double, eye: Vec3, target: Vec3,
+                            view: FloatArray, focal: Float, aspect: Float) {
+        val l = m.layout
+        val dx = eye.x - l.centre[0].toFloat(); val dy = eye.y - l.centre[1].toFloat(); val dz = eye.z - l.centre[2].toFloat()
+        val toCentre = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        val fovY = synchronized(camera) { camera.fovY }
+        gl.sight.focus = flown.coerceAtLeast(0)
+        gl.draw(view, fovY, aspect, focal, width, height, max(density, 0.1f), toCentre, l.reach[0].toFloat())
+        val moved = fractalPose[0] != eye.x || fractalPose[1] != eye.y || fractalPose[2] != eye.z ||
+            fractalPose[3] != target.x || fractalPose[4] != target.y || fractalPose[5] != target.z
+        animating = moved || flight != null
+        val f = appliedFilter
+        val send = moved || f !== fractalFilterSent || record.frames < MapDrawn.ENOUGH
+        if (f !== fractalFilterSent) fractalHidden = f?.shown?.count { !it } ?: 0
+        fractalPose[0] = eye.x; fractalPose[1] = eye.y; fractalPose[2] = eye.z; fractalPose[3] = target.x; fractalPose[4] = target.y; fractalPose[5] = target.z
+        fractalFilterSent = f
+        if (send) onScreenNodes?.let { callback -> callback(FractalNames.screen(gl.sight, focal), framePose) }
+        val workMs = (System.nanoTime() - start) / 1e6
+        budget.onFrame(intervalMs, workMs)
+        stats.add(vsync, intervalMs, workMs)
+        val count = m.tree.count
+        val drawnDots = gl.sight.count
+        if (vsync - lastReadout > 250_000_000L) {
+            lastReadout = vsync
+            onReadout(MapReadout(fps = stats.fps(vsync), displayMaxHz = displayMaxHz, displayHz = displayHz(),
+                frameMs = stats.medianInterval(), workMs = stats.medianWork(), nodes = count, links = gl.lineCount,
+                drawnNodes = drawnDots, detail = budget.detail, bodies = count))
+        }
+        record = record.after(drawnDots, (System.nanoTime() - surfaceNanos) / 1_000_000, gl.lineCount, 0, false)
+        record = record.detailing(budget.detail, 0, 0, 0)
+        record = record.marking(focusedChosen, focusedChosen >= 0, 0, false, 0, 0)
+        record = record.filtering(f != null, count - fractalHidden, fractalHidden, 0, emptyList(), emptyList())
         if (record != recordPublished) { recordPublished = record; onDrawn?.invoke(record) }
         finished++
     }
@@ -1921,6 +2073,8 @@ class GlMapRenderer(
             filterLinksNow = f?.links?.count { it } ?: gl.linkCount
         }
         if (neuronGl != null) return
+        treeGl?.let { gl -> gl.filter = f; shownNow = 0; hiddenNow = 0; filterLinksNow = 0; return }
+        fractalGl?.let { gl -> gl.sight.shown = f?.shown; shownNow = 0; hiddenNow = 0; filterLinksNow = 0; return }
         // far points and chunk links, every theme: hidden, a ghost (its links hidden), or shown
         filterOn = f != null
         val wanted = BooleanArray(if (f == null) 0 else n)

@@ -1,5 +1,0 @@
-{
-  "about": "A name with a line separator (U+2028, category Zl).",
-  "verdict": "refused",
-  "reason": "name"
-}

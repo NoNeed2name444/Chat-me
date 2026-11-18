@@ -1,9 +1,0 @@
-{
-  "about": "main.js twice.",
-  "from": "ok-minimal",
-  "entries": [
-    {"name": "main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n"},
-    {"name": "main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n"}
-  ],
-  "expect": {"verdict": "refused", "reason": "zip.duplicate"}
-}

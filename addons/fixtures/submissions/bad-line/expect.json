@@ -1,7 +1,0 @@
-{
-  "about": "A 600-character line in main.js.",
-  "verdict": "fail",
-  "reasons": [
-    "review.line"
-  ]
-}

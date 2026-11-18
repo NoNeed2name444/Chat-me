@@ -311,4 +311,20 @@ enum IdeasWords {
     static var capsuleRefusedTooLarge: String {
         String(localized: "capsule.refused.tooLarge", defaultValue: "This file is over 32 MB, too big to import. Choose a smaller file.")
     }
+
+    // S11: the Tree look
+    static var lookTree: String { String(localized: "look.tree", defaultValue: "Tree") }
+    static var treeLine: String { String(localized: "tree.line", defaultValue: "Each folder grows as a branch, and each idea as a leaf.") }
+    static var treeFirstVisit: String { String(localized: "tree.firstVisit", defaultValue: "Tap a branch to zoom in. Tap empty space to go back.") }
+    static func treeMapSpoken(_ part: String) -> String {
+        String(format: String(localized: "tree.mapSpoken", defaultValue: "Tree map of ideas, showing %@"), part)
+    }
+    static func treeFolderSpoken(_ name: String) -> String {
+        String(format: String(localized: "tree.folderSpoken", defaultValue: "%@, folder"), name)
+    }
+    static var treeZoomHint: String { String(localized: "tree.zoomHint", defaultValue: "Zooms in.") }
+    static var treeIdeaHint: String { String(localized: "tree.ideaHint", defaultValue: "Previews the idea.") }
+    static func treeBackSpoken(_ part: String) -> String {
+        String(format: String(localized: "tree.backSpoken", defaultValue: "Back to %@"), part)
+    }
 }

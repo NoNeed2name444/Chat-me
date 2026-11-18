@@ -1,7 +1,0 @@
-{
-  "about": "A binary: a WebAssembly module next to main.js.",
-  "verdict": "fail",
-  "reasons": [
-    "review.binary"
-  ]
-}

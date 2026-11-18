@@ -154,6 +154,8 @@ case "$set_" in
              dark:SortaUITests/SkyIdeasRenderTests/testMoonsKeepTheMapInSight
              light:SortaUITests/PanedVoiceOverTests/testBesideTheEditorTheMapIsReachedAndTheListIsNot)
     fi
+    # S11: the Tree, whole and one level in, by day and by night
+    runs+=(light:SortaUITests/TreeMapRenderTests/testTreeRenders dark:SortaUITests/TreeMapRenderTests/testTreeRenders)
     # S06a: the deck, the offer, the tide and the frost, last, as it leaves
     # the map on its 2D look
     runs+=(light:SortaUITests/DeckRenderTests dark:SortaUITests/DeckRenderTests)

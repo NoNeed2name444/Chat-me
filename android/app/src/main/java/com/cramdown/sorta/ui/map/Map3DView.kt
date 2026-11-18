@@ -130,6 +130,8 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.FractalModel
 import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
@@ -179,7 +181,11 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                val perf: PerfMap? = null,
                val force: PerfForce? = null,
                /** S06b, Space's Universe: the leans, the shared circles, the comets' tails and which bodies are comets (SkySpace). */
-               val sky: SkySpace? = null) {
+               val sky: SkySpace? = null,
+               /** S11, [MapTheme.TREE]: the branches and leaves TreeGl draws; the octree holds each node's body, by node. */
+               val treeModel: TreeModel? = null,
+               /** S12, [MapTheme.FRACTAL]: the hubs and dots FractalGl draws; the octree holds each node's place, by node. */
+               val fractalModel: FractalModel? = null) {
     /** This scene's number, new for every scene built in the process (MapDrawn.build, S05e): a test can tell a redraw from a rebuild. */
     val build: Int = BUILDS.incrementAndGet()
 
@@ -258,6 +264,20 @@ class MapScene(val tree: Octree, val nodeRadius: Float, val titles: List<String>
                 links = graph.edges, perf = map, force = PerfForce(g, map.seed))
         }
 
+        /**
+         * The Tree (S11): node i is the tree's node i at its body (TreeLayout3D.anchor: a leaf's centre,
+         * else along its branch), its group its colour group; [ids] and titles by node, the trunk's id "".
+         * [links] (pairs of node indices) are only lit under Show links; names may cross branches on their halo.
+         */
+        fun tree(model: TreeModel, links: IntArray = IntArray(0)): MapScene {
+            val nodes = model.nodes; val l = model.layout
+            val positions = FloatArray(nodes.size * 3) { l.anchor[it].toFloat() }
+            val graph = MapGraph(positions, ByteArray(nodes.size) { nodes.group[it].toByte() }, IntArray(0), nodes.titles.toList(), nodes.ids.toList())
+            val tree = Octree.build(graph, 4096)
+            return MapScene(tree, (l.length[0] * 0.05).toFloat(), graph.titles, graph.ids, l.reach[0].toFloat(), MapTheme.TREE,
+                links = links, closest = model.smallest * 4, treeModel = model)
+        }
+
         /** A Universe body's Space style (S05h): what it is drawn as. */
         fun universeStyle(role: UniverseRole): SpaceStyle = UniverseBeams.style(role)
 
@@ -315,6 +335,8 @@ internal fun deathKey(scene: MapScene): String? = when {
 private const val NEURONS_PITCH = (35.0 * Math.PI / 180.0).toFloat()
 /** Space's (GraphTilt.spaceDegrees, 45). */
 private const val SPACE_PITCH = (45.0 * Math.PI / 180.0).toFloat()
+/** The Tree's (S11): a little from above, so the crown's spread reads and the trunk still stands. */
+internal const val TREE_PITCH = (14.0 * Math.PI / 180.0).toFloat()
 
 /**
  * iOS's camera per theme (S05j item 3), looking at [target]: Space and Neurons look down at GraphTilt's
@@ -325,6 +347,10 @@ internal fun firstCamera(theme: MapTheme, target: Vec3): OrbitCamera = when (the
     MapTheme.NEURONS -> OrbitCamera(target = target, yaw = 0f, pitch = NEURONS_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     MapTheme.SPACE -> OrbitCamera(target = target, yaw = 0f, pitch = SPACE_PITCH,
+        fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
+    MapTheme.TREE -> OrbitCamera(target = target, yaw = 0f, pitch = TREE_PITCH,
+        fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
+    MapTheme.FRACTAL -> OrbitCamera(target = target, yaw = 0f, pitch = FRACTAL_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     else -> OrbitCamera(target = target, yaw = MapFirstView.FAST_YAW, pitch = MapFirstView.FAST_PITCH,
         fovY = MapFirstView.radians(MapFirstView.FAST_FIELD_DEGREES))
@@ -543,7 +569,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             build = scene.build, straight = straight, links = scene.links, ids = scene.ids, recall = recall,
             universe = scene.universe, universePlan = scene.universePlan,
             departures = recall.departures, testHooks = testHooks, totals = totals, sky = scene.sky, settling = recall.settling,
-            perf = scene.perf, force = scene.force, tour = tour,
+            perf = scene.perf, force = scene.force, tour = tour, treeModel = scene.treeModel, fractalModel = scene.fractalModel,
         ).also { it.choice = MapChoice(-1, cue.ticks) }
     }
     val gles3 = remember(context) { supportsGles3(context) }
@@ -670,7 +696,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     // The names (S05f): in Space and Neurons only the hovered, pressed, held and chosen bodies have
     // one, on iOS's pill, popping in, its words' style kept readable over what is behind it
     // (MapNameShow, LabelContrast); the plain theme keeps MapNames' layout, a name on every body.
-    val pills = scene.theme != MapTheme.PLAIN && scene.titles.isNotEmpty()
+    // the Tree (S11) names every body that has room, as the plain theme does, by TreeNames' order
+    val pills = scene.theme != MapTheme.PLAIN && scene.theme != MapTheme.TREE && scene.theme != MapTheme.FRACTAL && scene.titles.isNotEmpty()
     val lively = remember(scene) { android.animation.ValueAnimator.areAnimatorsEnabled() }
     val nameSettings = remember(scene) { LabelSettings(increaseContrast = increaseContrast(context)) }
     var pressedName by remember(scene) { mutableStateOf<Int?>(null) }
@@ -713,6 +740,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         }
     }
     val drawPaint = remember(namePaint) { android.graphics.Paint(namePaint) }
+    val latestTreeTap by rememberUpdatedState<(Int) -> Unit> { i -> onTap?.invoke(i) }
     // each name's words, cut as iOS's, and their box at full size, measured the first time it shows
     val nameTexts = remember(scene, namePaint) { HashMap<Int, Pair<String, NameText>>() }
     fun nameText(i: Int): Pair<String, NameText> = nameTexts.getOrPut(i) {
@@ -774,6 +802,33 @@ data class MapFlyTo(val id: String, val serial: Int)
                 viewSize.width.toFloat(), MapNameShow.EDGE_DP * density.density) to look
         }
     }
+    // S11, the Tree's names: branches first, then by weight, each clear of every other, its halo the page;
+    // their foot is the chrome's or the card's cover, whichever is higher (TreeNames.floor)
+    // worked out here, not in the drawing, so TalkBack has one element a name
+    val treeModel = scene.treeModel
+    val treeType = remember(context, density) { if (treeModel == null) null else TreeType(context, density.density) }
+    val treeNames: List<PlacedName> = if (treeModel == null || treeType == null) emptyList() else {
+        val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
+        remember(screenNodes, viewSize, insets, cover) {
+            TreeNames.layout(screenNodes, treeModel.nodes, treeType.boughs, treeType.leaves, treeType.style, w, h,
+                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                named.clear(); for (p in placed) named[p.index] = p.spot
+            }
+        }
+    }
+    // S12, the Fractal's names: by the Tree's rules (FractalNames), clear of every other name and of
+    // every dot that may be named, white on a halo of the sky; one TalkBack element a name
+    val fractalModel = scene.fractalModel
+    val fractalType = remember(context, density) { if (fractalModel == null) null else FractalType(context, density.density) }
+    val fractalNames: List<PlacedName> = if (fractalModel == null || fractalType == null) emptyList() else {
+        val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
+        remember(screenNodes, viewSize, insets, cover) {
+            FractalNames.layout(screenNodes, fractalModel.tree, fractalType.hubs, fractalType.ideas, fractalType.style, w, h,
+                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                named.clear(); for (p in placed) named[p.index] = p.spot
+            }
+        }
+    }
     // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card, in
     // every theme (Performance's too, S05g). Only the tests read it, so it is found where the
     // semantics are, in one pass with no lists made
@@ -803,12 +858,18 @@ data class MapFlyTo(val id: String, val serial: Int)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
     // behind the GL: Performance's sky is iOS's (PerfLook.SKY); the other looks keep theirs
-    val behind = if (scene.theme == MapTheme.PLAIN) Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2]) else Color(0xFF0E1B2C)
+    val behind = if (scene.theme == MapTheme.PLAIN) Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2])
+        else if (treeModel != null) Color(0xFF000000.toInt() or treeModel.colors.sky)
+        else if (fractalModel != null) Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2]) else Color(0xFF0E1B2C)
     Box(modifier.background(behind, RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
         mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) { MapDrawn.poseOf(camera) },
-            names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) },
+            names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) } +
+                treeNames.map { p -> MapDrawnName(p.index, listOf(p.box.x - p.box.width / 2, p.box.y - p.box.height / 2, p.box.x + p.box.width / 2,
+                    p.box.y + p.box.height / 2), screenNodes.firstOrNull { it.index == p.index }?.let { listOf(it.x, it.y) } ?: emptyList()) } +
+                fractalNames.map { p -> MapDrawnName(p.index, listOf(p.box.x - p.box.width / 2, p.box.y - p.box.height / 2, p.box.x + p.box.width / 2,
+                    p.box.y + p.box.height / 2), screenNodes.firstOrNull { it.index == p.index }?.let { listOf(it.x, it.y) } ?: emptyList()) },
             spot = spot(), homes = homesNow, cells = cells, boxPose = screenPose,
             glows = screenNodes.filter { it.index in glowNames }.map { it.index }.sorted(), drop = dropName ?: -1,
             ideaSpot = ideaSpot(), near = nearIdea())
@@ -1156,6 +1217,16 @@ data class MapFlyTo(val id: String, val serial: Int)
                 }
                 return@Canvas
             }
+            // the Tree's names (S11): each word's halo in the page's colour, then its ink
+            if (treeType != null && treeModel != null) {
+                drawIntoCanvas { canvas -> treeType.draw(canvas.nativeCanvas, treeNames, treeModel.colors) }
+                return@Canvas
+            }
+            // the Fractal's names (S12): each word's halo in the sky's colour, then white
+            if (fractalType != null && fractalModel != null) {
+                drawIntoCanvas { canvas -> fractalType.draw(canvas.nativeCanvas, fractalNames) }
+                return@Canvas
+            }
             // the names (MapNames): biggest body first, each clear of the names placed, the links and
             // the other bodies, under its body or else beside it; one with no room waits
             if (scene.titles.isEmpty()) return@Canvas
@@ -1185,6 +1256,10 @@ data class MapFlyTo(val id: String, val serial: Int)
                 }
             }
         }
+        // TalkBack (S11): each Tree name is an element at least a touch target big; activating it does what a tap does
+        if (treeModel != null && onTap != null) TreeNameTargets(treeNames, treeModel.nodes) { latestTreeTap(it) }
+        // TalkBack (S12): each Fractal name likewise
+        if (fractalModel != null && onTap != null) FractalNameTargets(fractalNames, fractalModel.tree) { latestTreeTap(it) }
         if (showReadout) Readout(readout, Modifier.align(Alignment.TopStart).padding(10.dp))
         if (showControls) Row(Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color(0xFF1D3047), RoundedCornerShape(24.dp))) {
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
@@ -1303,6 +1378,36 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                 MapTheme.NEURONS -> {
                     val envelope = scene.neurons?.plan?.envelope?.takeIf { it.isNotEmpty() } ?: bodies()
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets -> MapFirstView.tilted(envelope, MapFirstView.PAD, 1.0f, 0.35f, NEURONS_PITCH, w, h, insets) }
+                    first
+                }
+                MapTheme.TREE -> {
+                    // every body and every branch's ends, framed from the first view's yaw and pitch
+                    val l = scene.treeModel?.layout
+                    val points = if (l == null) bodies() else List(l.nodes.size * 2) { k ->
+                        val i = k / 2; val t = if (k % 2 == 0) 0.0 else l.length[i]
+                        Vec3((l.base[3 * i] + l.dir[3 * i] * t).toFloat(), (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(),
+                            (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat())
+                    } + bodies()
+                    val margin = scene.treeModel?.smallest ?: scene.nodeRadius
+                    val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
+                        MapFirstView.framing(points, margin, w, h, insets, fill = 0.9f, yaw = 0f, pitch = TREE_PITCH,
+                            fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                            ?: MapFirstView.framing(Vec3(0f, 1f, 0f), 1.5f, w, h, insets, yaw = 0f, pitch = TREE_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                    }
+                    first
+                }
+                MapTheme.FRACTAL -> {
+                    // All ideas, its parts and theirs, framed from the first view's yaw and pitch
+                    val m = scene.fractalModel
+                    val points = if (m == null) bodies() else (0 until m.tree.count).filter { m.tree.depth[it] <= 2 }.map { i ->
+                        Vec3(m.layout.pos[3 * i].toFloat(), m.layout.pos[3 * i + 1].toFloat(), m.layout.pos[3 * i + 2].toFloat())
+                    }
+                    val margin = m?.let { (it.layout.dot[0] * 3).toFloat() } ?: scene.nodeRadius
+                    val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
+                        MapFirstView.framing(points, margin, w, h, insets, fill = 0.9f, yaw = 0f, pitch = FRACTAL_PITCH,
+                            fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                            ?: MapFirstView.framing(Vec3.ZERO, 1.2f, w, h, insets, yaw = 0f, pitch = FRACTAL_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                    }
                     first
                 }
                 MapTheme.SPACE -> {

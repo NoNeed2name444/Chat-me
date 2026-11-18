@@ -1,7 +1,0 @@
-{
-  "about": "ListOptions.limit may go up to 100 instead of 200.",
-  "verdict": "fail",
-  "reasons": [
-    "narrowed"
-  ]
-}

@@ -46,6 +46,12 @@ import com.cramdown.sorta.ui.wardColor
                 val inset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
                 IdeaBoard(book, settings, hidden = hidden, open = open, top = (top - inset).coerceAtLeast(0.dp), version = version, lit = lit, lens = lens)
             }
+        // S11: the Tree, on the page, under the strip
+        settings.look == MapLook.TREE -> IdeasTree(book, settings, hidden = hidden, open = open, choose = choose, delete = delete,
+            top = top, version = version, lens = lens)
+        // S12: the Fractal, in 3D on Performance's sky
+        settings.look == MapLook.FRACTAL -> IdeasFractal(book, settings, hidden = hidden, open = open, choose = choose, delete = delete,
+            top = top, version = version, lens = lens)
         else -> IdeasSpace(book, settings, covered = false, hidden = hidden, open = open, openFolder = openFolder,
             choose = choose, delete = delete, top = top, version = version, lit = lit, file = file, lens = lens)
     }

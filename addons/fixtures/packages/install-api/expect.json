@@ -1,9 +1,0 @@
-{
-  "about": "api 2, installed on an app with API 1.",
-  "verdict": "refused",
-  "reason": "install.api",
-  "app": {
-    "sorta": "1.0.0",
-    "api": 1
-  }
-}

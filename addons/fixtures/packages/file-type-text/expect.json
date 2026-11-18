@@ -1,5 +1,0 @@
-{
-  "about": "A .txt file, which isn't an allowed kind.",
-  "verdict": "refused",
-  "reason": "file.type"
-}

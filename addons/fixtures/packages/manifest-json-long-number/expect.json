@@ -1,5 +1,0 @@
-{
-  "about": "formatVersion written as a 40-digit number. A number is at most 32 characters.",
-  "verdict": "refused",
-  "reason": "manifest.json"
-}

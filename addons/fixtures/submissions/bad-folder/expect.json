@@ -1,7 +1,0 @@
-{
-  "about": "The manifest's id doesn't match its folder.",
-  "verdict": "fail",
-  "reasons": [
-    "review.folder"
-  ]
-}

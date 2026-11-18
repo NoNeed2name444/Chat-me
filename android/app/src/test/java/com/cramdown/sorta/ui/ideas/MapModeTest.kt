@@ -189,7 +189,7 @@ class MapModeTest {
         openSwitch()
         switchTo(SortaMode.MAP)
         var now = MapLook.TWO_D
-        for (look in listOf(MapLook.SPACE, MapLook.NEURON, MapLook.TWO_D, MapLook.PERFORMANCE)) {
+        for (look in listOf(MapLook.SPACE, MapLook.NEURON, MapLook.TREE, MapLook.TWO_D, MapLook.PERFORMANCE)) {
             chooseLook(now = now, look = look)
             assertFalse("the menu closes on ${look.identifier}", MapLook.entries.any { shown(it.identifier) })
             val name = s(look.title)

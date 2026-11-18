@@ -1,8 +1,0 @@
-{
-  "about": "An entry name with a .. part.",
-  "from": "ok-minimal",
-  "entries": [
-    {"name": "../main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n"}
-  ],
-  "expect": {"verdict": "refused", "reason": "zip.path"}
-}

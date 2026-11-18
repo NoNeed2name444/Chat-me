@@ -87,6 +87,7 @@ extension MapLook {
         switch self {
         case .space: return IdeasWords.lookSpace
         case .neuron: return IdeasWords.lookNeuron
+        case .tree: return IdeasWords.lookTree
         case .twoD: return IdeasWords.look2D
         case .performance: return IdeasWords.lookPerformance
         }

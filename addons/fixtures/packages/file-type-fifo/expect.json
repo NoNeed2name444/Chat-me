@@ -1,6 +1,0 @@
-{
-  "about": "A named pipe, p.json, in the folder. Git can't hold one, so the test makes it in a copy.",
-  "verdict": "refused",
-  "reason": "file.type",
-  "fifo": "p.json"
-}

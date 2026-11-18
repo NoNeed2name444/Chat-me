@@ -372,7 +372,7 @@ internal object IdeasBanner {
         remember(book, model.version, shape, split) { deckTargets(book, paneSlots(shape.width - split.sort - split.gap - 2 * WardSpace.gutter, shape.height)) }
         else null
     val mapShown = mode == SortaMode.MAP && open == null
-    val mapNight = book.notes.isNotEmpty() && settings.look != MapLook.TWO_D
+    val mapNight = book.notes.isNotEmpty() && settings.look != MapLook.TWO_D && settings.look != MapLook.TREE
     val night = split == null && mapShown && mapNight
     // the list sheet covers the map's foot, so the banner shows in it meanwhile
     val sheetUp = split == null && listing && mapShown && book.notes.isNotEmpty()

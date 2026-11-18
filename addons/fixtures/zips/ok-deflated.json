@@ -1,9 +1,0 @@
-{
-  "about": "A good add-on whose files are deflated, as zip tools other than pack write them.",
-  "from": "ok-full",
-  "entries": [
-    {"name": "main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n", "method": "deflate"},
-    {"name": "lib/words.js", "text": "export const words = (t) => t.split(/\\s+/).length;\n", "method": "deflate"}
-  ],
-  "expect": {"verdict": "ok"}
-}

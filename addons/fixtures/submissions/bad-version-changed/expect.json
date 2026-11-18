@@ -1,7 +1,0 @@
-{
-  "about": "A pull request that changes a version that is listed already.",
-  "verdict": "fail",
-  "reasons": [
-    "review.version"
-  ]
-}

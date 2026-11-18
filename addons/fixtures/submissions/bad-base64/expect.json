@@ -1,7 +1,0 @@
-{
-  "about": "A base64 run of 1,200 characters in a .json file.",
-  "verdict": "fail",
-  "reasons": [
-    "review.base64"
-  ]
-}

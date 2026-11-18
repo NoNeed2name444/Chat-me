@@ -346,6 +346,7 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
     open: () -> Unit, flyIn: () -> Unit, chip: (String) -> Unit, option: (MapMenuItem) -> Unit,
     modifier: Modifier = Modifier, linksShown: Boolean = false, showLinks: () -> Unit = {},
     lean: SkyLean? = null, fileThere: () -> Unit = {}, sharedFrom: String? = null,
+    more: List<MapMenuItem>? = null,
 ) {
     val source = remember { MutableInteractionSource() }
     var swiped by remember { mutableFloatStateOf(0f) }
@@ -424,7 +425,7 @@ internal fun Modifier.intoMargin(by: androidx.compose.ui.unit.Dp): Modifier = th
                 var showing by remember { mutableStateOf(false) }
                 Box {
                     WardCircleButton(Icons.Rounded.MoreHoriz, words.more, { showing = true })
-                    MapOptionsMenu(showing, { showing = false }, content.title, MapPeek.menu(folder = false, home = false).filter { it != MapMenuItem.OPEN }, words) {
+                    MapOptionsMenu(showing, { showing = false }, content.title, (more ?: MapPeek.menu(folder = false, home = false)).filter { it != MapMenuItem.OPEN }, words) {
                         showing = false
                         option(it)
                     }

@@ -177,3 +177,16 @@ suite notemarkdown NoteMarkdownTests.swift ios/Sorta/Ideas/NoteMarkdown.swift
 # Map mode (S05b).
 # the map's looks: the menu's order, the stored look, the theme each draws
 suite maplook MapLookTests.swift ios/Sorta/Ideas/MapLook.swift $M/GraphTheme.swift
+# S11: the Tree look: its layout held to the concept's numbers in
+# tree-fixture.json (Android's TreeLayoutTest reads the same file), and its
+# frame: names, zoom, Back, pinch, vines, the filter, the budget and the cost;
+# and its 3D layout held to the fixture's expect3d (Android's TreeLayout3DTest)
+suite treelayout TreeLayoutTests.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.swift $M/Nest/NestDraw.swift $M/TreeLayout.swift \
+      $M/TreeLayout3D.swift
+suite treescene TreeSceneTests.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.swift $M/Nest/NestDraw.swift $M/TreeLayout.swift \
+      $M/TreeColors.swift $M/TreeScene.swift
+# S11: the 3D Tree's draw lists, camera and names (Android's TreeModelTest and
+# TreeNamesTest): no two names overlap on a phone, a tablet and an open foldable
+suite treemodel3d TreeModel3DTests.swift $M/Nest/NestNodes.swift $M/Nest/NestRandom.swift $M/Nest/NestDraw.swift \
+      $M/TreeLayout.swift $M/TreeLayout3D.swift $M/TreeColors.swift $M/TreeModel3D.swift $M/GraphPerfCamera.swift \
+      $S/Space/GraphicsQuality.swift

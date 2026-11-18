@@ -1,8 +1,0 @@
-{
-  "about": "An entry with the encrypted flag.",
-  "from": "ok-minimal",
-  "entries": [
-    {"name": "main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n", "encrypted": true}
-  ],
-  "expect": {"verdict": "refused", "reason": "zip.encrypted"}
-}

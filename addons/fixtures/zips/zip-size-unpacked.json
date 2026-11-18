@@ -1,8 +1,0 @@
-{
-  "about": "Files that add up to about 1.3 MB unpacked, at well under 100:1; the limit is 1 MB.",
-  "from": "ok-minimal",
-  "entries": [
-    {"name": "lines.json", "lines": {"count": 120000}, "method": "deflate"}
-  ],
-  "expect": {"verdict": "refused", "reason": "zip.size"}
-}

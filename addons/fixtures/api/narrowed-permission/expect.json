@@ -1,7 +1,0 @@
-{
-  "about": "sorta.ideas.get needs ideas.read and no longer takes ideas.read.folder.",
-  "verdict": "fail",
-  "reasons": [
-    "narrowed"
-  ]
-}

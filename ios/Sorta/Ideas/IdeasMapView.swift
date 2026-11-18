@@ -22,6 +22,8 @@ struct IdeasMapView: View {
     var paned = false
     @AppStorage(MapLook.boardKey) private var board = false
     @AppStorage(GraphTheme.key) private var themeRaw = GraphTheme.standard.rawValue
+    /// S11: a flat nested map chosen (Tree), empty for the board or a theme.
+    @AppStorage(MapLook.flatKey) private var flat = ""
     @Environment(\.colorScheme) private var scheme
     /// The idea open in the editor, from the board.
     @State private var opening: NoteRef?
@@ -41,11 +43,11 @@ struct IdeasMapView: View {
     /// map's filter.
     @State private var lenses: Set<IdeaLens> = []
 
-    private var look: MapLook { MapLook.stored(board: board, theme: themeRaw) }
+    private var look: MapLook { MapLook.stored(board: board, theme: themeRaw, flat: flat) }
 
     private var empty: Bool { notes.notes.isEmpty }
 
-    private var night: Bool { !empty && look != .twoD }
+    private var night: Bool { !empty && look != .twoD && look != .tree }
 
     /// The ideas the lenses on let through, nil with none on (S06d A2).
     private var lensPass: Set<UUID>? {
@@ -179,6 +181,7 @@ struct IdeasMapView: View {
         cut.disablesAnimations = true
         withTransaction(cut) {
             board = new == .twoD
+            flat = new == .tree ? new.rawValue : ""
             if let theme = new.theme { themeRaw = theme.rawValue }
         }
     }
@@ -195,6 +198,9 @@ struct IdeasMapView: View {
         } else if look == .twoD {
             IdeaBoardView(open: { opening = NoteRef(id: $0) }, lit: litIdeas, lens: lensPass)
                 .wardUnlit()
+        } else if look == .tree {
+            // S11: the Tree, on the page in the phone's own light or dark
+            TreeMapView(open: { opening = NoteRef(id: $0) }, lens: lensPass)
         } else {
             Graph3DView(open: { opening = NoteRef(id: $0) }, openFolder: openFolder, lit: litIdeas, lens: lensPass)
                 .mapSky()

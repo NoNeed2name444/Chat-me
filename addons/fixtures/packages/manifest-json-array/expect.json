@@ -1,5 +1,0 @@
-{
-  "about": "manifest.json holds a list, not an object.",
-  "verdict": "refused",
-  "reason": "manifest.json"
-}

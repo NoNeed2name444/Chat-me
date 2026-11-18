@@ -1,7 +1,0 @@
-{
-  "about": "sorta.ideas.get takes a number instead of a string.",
-  "verdict": "fail",
-  "reasons": [
-    "narrowed"
-  ]
-}
