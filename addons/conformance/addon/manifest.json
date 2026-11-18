@@ -1,0 +1,19 @@
+{
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "id": "org.example.conformance",
+  "name": "Conformance",
+  "version": "1.0.0",
+  "author": { "name": "Sorta tests", "url": "https://example.org/sorta-tests" },
+  "license": "MIT",
+  "minSorta": "0.1.0",
+  "api": 1,
+  "main": "main.js",
+  "permissions": ["ideas.read", "ideas.write", "commands", "cards", "net:api.example.com", "net:cdn.example.com"],
+  "hosts": ["api.example.com", "cdn.example.com"],
+  "contributes": {
+    "commands": [{ "id": "case", "title": "Run a case" }],
+    "cardView": { "id": "lines", "title": "Lines" },
+    "settings": "settings.json"
+  }
+}

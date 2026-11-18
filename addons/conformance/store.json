@@ -1,0 +1,33 @@
+{
+  "folders": [
+    { "id": "00000000-0000-4000-8000-000000000901", "name": "Work", "parent": null, "words": ["launch"] },
+    { "id": "00000000-0000-4000-8000-000000000902", "name": "Projects", "parent": "00000000-0000-4000-8000-000000000901", "words": [] },
+    { "id": "00000000-0000-4000-8000-000000000903", "name": "Home", "parent": null, "words": ["garden", "seeds"] }
+  ],
+  "ideas": [
+    { "id": "00000000-0000-4000-8000-000000000101", "title": "Garden plan", "text": "Beds by the fence", "kind": "idea",
+      "folder": "00000000-0000-4000-8000-000000000903", "tags": ["green"], "links": ["00000000-0000-4000-8000-000000000102"],
+      "createdAt": "2026-10-01T08:00:00.000Z", "updatedAt": "2026-10-05T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000102", "title": "Seed list", "text": "Beans, peas", "kind": "idea",
+      "folder": "00000000-0000-4000-8000-000000000903", "tags": [], "links": [],
+      "createdAt": "2026-10-02T08:00:00.000Z", "updatedAt": "2026-10-02T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000103", "title": "Quarter goals", "text": "Ship the launch", "kind": "page",
+      "folder": "00000000-0000-4000-8000-000000000901", "tags": ["plan"], "links": [],
+      "createdAt": "2026-10-03T08:00:00.000Z", "updatedAt": "2026-10-09T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000104", "title": "Launch notes", "text": "Dates and owners", "kind": "idea",
+      "folder": "00000000-0000-4000-8000-000000000902", "tags": ["plan", "launch"], "links": ["00000000-0000-4000-8000-000000000103"],
+      "createdAt": "2026-10-04T08:00:00.000Z", "updatedAt": "2026-10-06T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000105", "title": "Loose thought", "text": "About the garden and the launch", "kind": "idea",
+      "folder": null, "tags": [], "links": [],
+      "createdAt": "2026-10-05T08:00:00.000Z", "updatedAt": "2026-10-07T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000106", "title": "Reading list", "text": "", "kind": "page",
+      "folder": null, "tags": [], "links": ["00000000-0000-4000-8000-000000000101"],
+      "createdAt": "2026-10-06T08:00:00.000Z", "updatedAt": "2026-10-06T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000108", "title": "Café menu", "text": "Crème brûlée 🍮 and tea", "kind": "idea",
+      "folder": "00000000-0000-4000-8000-000000000902", "tags": ["food"], "links": [],
+      "createdAt": "2026-10-07T08:00:00.000Z", "updatedAt": "2026-10-08T08:00:00.000Z" },
+    { "id": "00000000-0000-4000-8000-000000000107", "title": "Tea shop", "text": "Green tea, oolong", "kind": "idea",
+      "folder": "00000000-0000-4000-8000-000000000902", "tags": ["food"], "links": [],
+      "createdAt": "2026-10-07T08:00:00.000Z", "updatedAt": "2026-10-08T08:00:00.000Z" }
+  ]
+}

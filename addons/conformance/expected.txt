@@ -1,0 +1,750 @@
+== load.ok
+load ok
+log loaded
+== load.bytecode
+load file.text
+result {"code":"file.text","message":"file.text","ok":false}
+applied none
+== load.syntax
+load load.syntax
+result {"code":"load.syntax","message":"load.syntax","ok":false}
+applied none
+== load.module
+load load.module
+result {"code":"load.module","message":"load.module","ok":false}
+applied none
+== load.json
+load load.module
+result {"code":"load.module","message":"load.module","ok":false}
+applied none
+== load.utf8
+load file.text
+result {"code":"file.text","message":"file.text","ok":false}
+applied none
+== load.nul
+load file.text
+result {"code":"file.text","message":"file.text","ok":false}
+applied none
+== load.throws
+load js.error
+result {"code":"js.error","message":"js.error","ok":false}
+applied none
+== load.reads
+load api.load
+result {"code":"api.load","message":"api.load","ok":false}
+applied none
+== load.pending
+load load.pending
+result {"code":"load.pending","message":"load.pending","ok":false}
+applied none
+== engine.globals
+load ok
+log loaded
+log types ["undefined","undefined","function","function"]
+log api {"major":1,"minor":0}
+log frozen [true,true]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== engine.eval.caught
+load ok
+log loaded
+log eval TypeError eval is not supported
+log function TypeError eval is not supported
+log ctor TypeError eval is not supported
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== engine.eval.thrown
+load ok
+log loaded
+result {"code":"eval","message":"eval","ok":false}
+applied none
+== engine.strict
+load ok
+log loaded
+log assign TypeError 'ideas' is read-only
+log console TypeError 'log' is read-only
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== result.null
+load ok
+log loaded
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== result.message
+load ok
+log loaded
+result {"ok":true,"value":{"message":"Done: 3 ideas"}}
+applied {"added":[],"changed":[],"skipped":[]}
+== result.shape
+load ok
+log loaded
+result {"code":"result.shape","message":"result.shape","ok":false}
+applied none
+== result.extra
+load ok
+log loaded
+result {"code":"result.shape","message":"result.shape","ok":false}
+applied none
+== js.error
+load ok
+log loaded
+result {"code":"js.error","message":"boom","ok":false}
+applied none
+== js.string
+load ok
+log loaded
+result {"code":"js.error","message":"plain words","ok":false}
+applied none
+== js.async
+load ok
+log loaded
+result {"code":"js.error","message":"later","ok":false}
+applied none
+== command.unknown
+load ok
+log loaded
+result {"code":"command.unknown","message":"command.unknown","ok":false}
+applied none
+== command.case
+load ok
+log loaded
+result {"code":"js.error","message":"no case no.such","ok":false}
+applied none
+== list.all
+load ok
+log loaded
+log list {"cursor":null,"ideas":[{"createdAt":"2026-10-01T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000102","00000000-0000-4000-8000-000000000106"],"tags":["green"],"text":"Beds by the fence","title":"Garden plan","updatedAt":"2026-10-05T08:00:00.000Z"},{"createdAt":"2026-10-02T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000102","kind":"idea","links":["00000000-0000-4000-8000-000000000101"],"tags":[],"text":"Beans, peas","title":"Seed list","updatedAt":"2026-10-02T08:00:00.000Z"},{"createdAt":"2026-10-03T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000901","id":"00000000-0000-4000-8000-000000000103","kind":"page","links":["00000000-0000-4000-8000-000000000104"],"tags":["plan"],"text":"Ship the launch","title":"Quarter goals","updatedAt":"2026-10-09T08:00:00.000Z"},{"createdAt":"2026-10-04T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000902","id":"00000000-0000-4000-8000-000000000104","kind":"idea","links":["00000000-0000-4000-8000-000000000103"],"tags":["plan","launch"],"text":"Dates and owners","title":"Launch notes","updatedAt":"2026-10-06T08:00:00.000Z"},{"createdAt":"2026-10-05T08:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000105","kind":"idea","links":[],"tags":[],"text":"About the garden and the launch","title":"Loose thought","updatedAt":"2026-10-07T08:00:00.000Z"},{"createdAt":"2026-10-06T08:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000106","kind":"page","links":["00000000-0000-4000-8000-000000000101"],"tags":[],"text":"","title":"Reading list","updatedAt":"2026-10-06T08:00:00.000Z"},{"createdAt":"2026-10-07T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000902","id":"00000000-0000-4000-8000-000000000107","kind":"idea","links":[],"tags":["food"],"text":"Green tea, oolong","title":"Tea shop","updatedAt":"2026-10-08T08:00:00.000Z"},{"createdAt":"2026-10-07T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000902","id":"00000000-0000-4000-8000-000000000108","kind":"idea","links":[],"tags":["food"],"text":"Crème brûlée 🍮 and tea","title":"Café menu","updatedAt":"2026-10-08T08:00:00.000Z"}]}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== list.folder
+load ok
+log loaded
+log home {"cursor":null,"ideas":[{"createdAt":"2026-10-01T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000102","00000000-0000-4000-8000-000000000106"],"tags":["green"],"text":"Beds by the fence","title":"Garden plan","updatedAt":"2026-10-05T08:00:00.000Z"},{"createdAt":"2026-10-02T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000102","kind":"idea","links":["00000000-0000-4000-8000-000000000101"],"tags":[],"text":"Beans, peas","title":"Seed list","updatedAt":"2026-10-02T08:00:00.000Z"}]}
+log loose ["00000000-0000-4000-8000-000000000105","00000000-0000-4000-8000-000000000106"]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== list.kind
+load ok
+log loaded
+log pages ["Quarter goals","Reading list"]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== list.pages
+load ok
+log loaded
+log one [["Garden plan","Seed list","Quarter goals"],"3"]
+log two [["Launch notes","Loose thought","Reading list"],"6"]
+log three [["Tea shop","Café menu"],null]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== list.args
+load ok
+log loaded
+log zero ArgumentError api.args
+log big ArgumentError api.args
+log half ArgumentError api.args
+log cursor ArgumentError api.args
+log past ArgumentError api.args
+log kind ArgumentError api.args
+log max 8
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== get.one
+load ok
+log loaded
+log one {"createdAt":"2026-10-04T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000902","id":"00000000-0000-4000-8000-000000000104","kind":"idea","links":["00000000-0000-4000-8000-000000000103"],"tags":["plan","launch"],"text":"Dates and owners","title":"Launch notes","updatedAt":"2026-10-06T08:00:00.000Z"}
+log missing null
+log number ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== search.words
+load ok
+log loaded
+log garden ["Loose thought","Garden plan"]
+log both ["Quarter goals","Loose thought"]
+log tea ["Tea shop","Café menu"]
+log tag ["Tea shop","Café menu"]
+log accent ["Café menu"]
+log one ["Quarter goals"]
+log big ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== folders.list
+load ok
+log loaded
+log folders [{"id":"00000000-0000-4000-8000-000000000903","name":"Home","parent":null,"words":["garden","seeds"]},{"id":"00000000-0000-4000-8000-000000000902","name":"Projects","parent":"00000000-0000-4000-8000-000000000901","words":[]},{"id":"00000000-0000-4000-8000-000000000901","name":"Work","parent":null,"words":["launch"]}]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== read.none
+load ok
+log loaded
+log has [false,false,false]
+log list PermissionError permission needs ideas.read
+log folders PermissionError permission needs ideas.read
+result {"code":"permission","message":"permission","ok":false}
+applied none
+== read.folder
+load ok
+log loaded
+log has [false,true,true]
+log list [["Quarter goals","00000000-0000-4000-8000-000000000901",["00000000-0000-4000-8000-000000000104"]],["Launch notes","00000000-0000-4000-8000-000000000902",["00000000-0000-4000-8000-000000000103"]],["Tea shop","00000000-0000-4000-8000-000000000902",[]],["Café menu","00000000-0000-4000-8000-000000000902",[]]]
+log folders [{"id":"00000000-0000-4000-8000-000000000902","name":"Projects","parent":"00000000-0000-4000-8000-000000000901","words":[]},{"id":"00000000-0000-4000-8000-000000000901","name":"Work","parent":null,"words":["launch"]}]
+log outside null
+log search []
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== read.subfolder
+load ok
+log loaded
+log has [false,true,true]
+log list [["Launch notes","00000000-0000-4000-8000-000000000902",[]],["Tea shop","00000000-0000-4000-8000-000000000902",[]],["Café menu","00000000-0000-4000-8000-000000000902",[]]]
+log folders [{"id":"00000000-0000-4000-8000-000000000902","name":"Projects","parent":null,"words":[]}]
+log outside null
+log search []
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== read.folder.unknown
+load ok
+log loaded
+log has [false,true,true]
+log list []
+log folders []
+log outside null
+log search []
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== snapshot
+load ok
+log loaded
+log title "Garden plan"
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000101"],"skipped":[]}
+after {"createdAt":"2026-10-01T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000102","00000000-0000-4000-8000-000000000106"],"tags":["green","seen"],"text":"Beds by the fence","title":"Garden plan, changed","updatedAt":"2026-11-01T09:00:00.000Z"}
+== capture.lines
+load ok
+log loaded
+log id {"id":"00000000-0000-4000-8000-000000000001"}
+result {"ok":true,"value":null}
+applied {"added":["00000000-0000-4000-8000-000000000001"],"changed":[],"skipped":[]}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000001","kind":"idea","links":[],"tags":[],"text":"body text","title":"First line","updatedAt":"2026-11-01T09:00:00.000Z"}
+== capture.title
+load ok
+log loaded
+log id {"id":"00000000-0000-4000-8000-000000000001"}
+log id {"id":"00000000-0000-4000-8000-000000000002"}
+result {"ok":true,"value":null}
+applied {"added":["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000002"],"changed":[],"skipped":[]}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000001","kind":"idea","links":[],"tags":[],"text":"Its words","title":"Named","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000002","kind":"idea","links":[],"tags":[],"text":"","title":"Only words","updatedAt":"2026-11-01T09:00:00.000Z"}
+== capture.args
+load ok
+log loaded
+log blank ArgumentError api.args
+log none ArgumentError api.args
+log title ArgumentError api.args
+log string ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== tags
+load ok
+log loaded
+log empty ArgumentError api.args
+log blank ArgumentError api.args
+log missing ArgumentError api.notFound
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000101"],"skipped":[]}
+after {"createdAt":"2026-10-01T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000102","00000000-0000-4000-8000-000000000106"],"tags":["alpha","beta"],"text":"Beds by the fence","title":"Garden plan","updatedAt":"2026-11-01T09:00:00.000Z"}
+== links
+load ok
+log loaded
+log self ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000101","00000000-0000-4000-8000-000000000102"],"skipped":[]}
+after {"createdAt":"2026-10-01T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000106"],"tags":["green"],"text":"Beds by the fence","title":"Garden plan","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-10-02T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000102","kind":"idea","links":["00000000-0000-4000-8000-000000000105"],"tags":[],"text":"Beans, peas","title":"Seed list","updatedAt":"2026-11-01T09:00:00.000Z"}
+== file
+load ok
+log loaded
+log folder ArgumentError api.notFound
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000101","00000000-0000-4000-8000-000000000105"],"skipped":[]}
+after {"createdAt":"2026-10-01T08:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000101","kind":"idea","links":["00000000-0000-4000-8000-000000000102","00000000-0000-4000-8000-000000000106"],"tags":["green"],"text":"Beds by the fence","title":"Garden plan","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-10-05T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000903","id":"00000000-0000-4000-8000-000000000105","kind":"idea","links":[],"tags":[],"text":"About the garden and the launch","title":"Loose thought","updatedAt":"2026-11-01T09:00:00.000Z"}
+== write.none
+load ok
+log loaded
+log has [false,false]
+log tag PermissionError permission needs ideas.write
+log capture PermissionError permission needs ideas.write
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== write.outside
+load ok
+log loaded
+log tag ArgumentError api.notFound
+log file ArgumentError api.notFound
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000104"],"skipped":[]}
+after {"createdAt":"2026-10-04T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000902","id":"00000000-0000-4000-8000-000000000104","kind":"idea","links":["00000000-0000-4000-8000-000000000103"],"tags":["plan","launch","inside"],"text":"Dates and owners","title":"Launch notes","updatedAt":"2026-11-01T09:00:00.000Z"}
+== write.captured
+load ok
+log loaded
+result {"ok":true,"value":null}
+applied {"added":["00000000-0000-4000-8000-000000000001"],"changed":[],"skipped":[]}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":"00000000-0000-4000-8000-000000000901","id":"00000000-0000-4000-8000-000000000001","kind":"idea","links":["00000000-0000-4000-8000-000000000103"],"tags":["fresh"],"text":"","title":"New one","updatedAt":"2026-11-01T09:00:00.000Z"}
+== write.gone
+load ok
+log loaded
+log seen "Seed list"
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000103"],"skipped":["00000000-0000-4000-8000-000000000102"]}
+after {"createdAt":"2026-10-03T08:00:00.000Z","folder":"00000000-0000-4000-8000-000000000901","id":"00000000-0000-4000-8000-000000000103","kind":"page","links":["00000000-0000-4000-8000-000000000104"],"tags":["plan","kept"],"text":"Ship the launch","title":"Quarter goals","updatedAt":"2026-11-01T09:00:00.000Z"}
+== writes.hundred
+load ok
+log loaded
+result {"ok":true,"value":null}
+applied {"added":[],"changed":["00000000-0000-4000-8000-000000000105"],"skipped":[]}
+after {"createdAt":"2026-10-05T08:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000105","kind":"idea","links":[],"tags":["t0","t1","t2","t3","t4","t5","t6","t7","t8","t9","t10","t11","t12","t13","t14","t15","t16","t17","t18","t19","t20","t21","t22","t23","t24","t25","t26","t27","t28","t29","t30","t31","t32","t33","t34","t35","t36","t37","t38","t39","t40","t41","t42","t43","t44","t45","t46","t47","t48","t49","t50","t51","t52","t53","t54","t55","t56","t57","t58","t59","t60","t61","t62","t63","t64","t65","t66","t67","t68","t69","t70","t71","t72","t73","t74","t75","t76","t77","t78","t79","t80","t81","t82","t83","t84","t85","t86","t87","t88","t89","t90","t91","t92","t93","t94","t95","t96","t97"],"text":"About the garden and the launch","title":"Loose thought","updatedAt":"2026-11-01T09:00:00.000Z"}
+== writes.over.caught
+load ok
+log loaded
+log 101st WriteLimitError limit.writes
+log after WriteLimitError limit.writes
+result {"code":"limit.writes","message":"limit.writes","ok":false}
+applied none
+== captures.twenty
+load ok
+log loaded
+result {"ok":true,"value":null}
+applied {"added":["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000002","00000000-0000-4000-8000-000000000003","00000000-0000-4000-8000-000000000004","00000000-0000-4000-8000-000000000005","00000000-0000-4000-8000-000000000006","00000000-0000-4000-8000-000000000007","00000000-0000-4000-8000-000000000008","00000000-0000-4000-8000-000000000009","00000000-0000-4000-8000-000000000010","00000000-0000-4000-8000-000000000011","00000000-0000-4000-8000-000000000012","00000000-0000-4000-8000-000000000013","00000000-0000-4000-8000-000000000014","00000000-0000-4000-8000-000000000015","00000000-0000-4000-8000-000000000016","00000000-0000-4000-8000-000000000017","00000000-0000-4000-8000-000000000018","00000000-0000-4000-8000-000000000019","00000000-0000-4000-8000-000000000020"],"changed":[],"skipped":[]}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000001","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 0","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000002","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 1","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000003","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 2","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000004","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 3","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000005","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 4","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000006","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 5","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000007","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 6","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000008","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 7","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000009","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 8","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000010","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 9","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000011","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 10","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000012","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 11","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000013","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 12","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000014","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 13","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000015","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 14","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000016","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 15","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000017","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 16","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000018","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 17","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000019","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 18","updatedAt":"2026-11-01T09:00:00.000Z"}
+after {"createdAt":"2026-11-01T09:00:00.000Z","folder":null,"id":"00000000-0000-4000-8000-000000000020","kind":"idea","links":[],"tags":[],"text":"","title":"Idea 19","updatedAt":"2026-11-01T09:00:00.000Z"}
+== captures.over.caught
+load ok
+log loaded
+log 21st WriteLimitError limit.captures
+result {"code":"limit.captures","message":"limit.captures","ok":false}
+applied none
+== writes.then.error
+load ok
+log loaded
+result {"code":"js.error","message":"after writing","ok":false}
+applied none
+== storage
+load ok
+log loaded
+log empty null
+log kept {"a":null,"b":[1,"two"]}
+log n 3
+log gone null
+log key ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== storage.limit
+load ok
+log loaded
+log over LimitError limit.storage
+log replace null
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== settings.get
+load ok
+log loaded
+log settings {"mode":"long","words":3}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== has
+load ok
+log loaded
+log has [["ideas.read",true],["ideas.write",false],["commands",true],["cards",false],["board.palette",false],["net",true],["net:api.example.com",true],["net:cdn.example.com",false],["net.fetch",true],["ai",false],["ai.ask",false],["storage.get",true],["console.log",true],["nothing",false]]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== has.netoff
+load ok
+log loaded
+log has [["ideas.read",true],["ideas.write",false],["commands",true],["cards",false],["board.palette",false],["net",false],["net:api.example.com",false],["net:cdn.example.com",false],["net.fetch",false],["ai",false],["ai.ask",false],["storage.get",true],["console.log",true],["nothing",false]]
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== console
+load ok
+log line 6
+log line 7
+log line 8
+log line 9
+log line 10
+log line 11
+log line 12
+log line 13
+log line 14
+log line 15
+log line 16
+log line 17
+log line 18
+log line 19
+log line 20
+log line 21
+log line 22
+log line 23
+log line 24
+log line 25
+log line 26
+log line 27
+log line 28
+log line 29
+log line 30
+log line 31
+log line 32
+log line 33
+log line 34
+log line 35
+log line 36
+log line 37
+log line 38
+log line 39
+log line 40
+log line 41
+log line 42
+log line 43
+log line 44
+log line 45
+log line 46
+log line 47
+log line 48
+log line 49
+log line 50
+log line 51
+log line 52
+log line 53
+log line 54
+log line 55
+log line 56
+log line 57
+log line 58
+log line 59
+log line 60
+log line 61
+log line 62
+log line 63
+log line 64
+log line 65
+log line 66
+log line 67
+log line 68
+log line 69
+log line 70
+log line 71
+log line 72
+log line 73
+log line 74
+log line 75
+log line 76
+log line 77
+log line 78
+log line 79
+log line 80
+log line 81
+log line 82
+log line 83
+log line 84
+log line 85
+log line 86
+log line 87
+log line 88
+log line 89
+log line 90
+log line 91
+log line 92
+log line 93
+log line 94
+log line 95
+log line 96
+log line 97
+log line 98
+log line 99
+log line 100
+log line 101
+log line 102
+log line 103
+log line 104
+log line 105
+log line 106
+log line 107
+log line 108
+log line 109
+log line 110
+log line 111
+log line 112
+log line 113
+log line 114
+log line 115
+log line 116
+log line 117
+log line 118
+log line 119
+log line 120
+log line 121
+log line 122
+log line 123
+log line 124
+log line 125
+log line 126
+log line 127
+log line 128
+log line 129
+log line 130
+log line 131
+log line 132
+log line 133
+log line 134
+log line 135
+log line 136
+log line 137
+log line 138
+log line 139
+log line 140
+log line 141
+log line 142
+log line 143
+log line 144
+log line 145
+log line 146
+log line 147
+log line 148
+log line 149
+log line 150
+log line 151
+log line 152
+log line 153
+log line 154
+log line 155
+log line 156
+log line 157
+log line 158
+log line 159
+log line 160
+log line 161
+log line 162
+log line 163
+log line 164
+log line 165
+log line 166
+log line 167
+log line 168
+log line 169
+log line 170
+log line 171
+log line 172
+log line 173
+log line 174
+log line 175
+log line 176
+log line 177
+log line 178
+log line 179
+log line 180
+log line 181
+log line 182
+log line 183
+log line 184
+log line 185
+log line 186
+log line 187
+log line 188
+log line 189
+log line 190
+log line 191
+log line 192
+log line 193
+log line 194
+log line 195
+log line 196
+log line 197
+log line 198
+log line 199
+log line 200
+log line 201
+log line 202
+log line 203
+log line 204
+log {"b":1,"a":[true,null]} and 2
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== not.load
+load ok
+log loaded
+log commands ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.get
+load ok
+log loaded
+log reply [200,{"content-type":"application/json"},{"items":[1,2]}]
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.refused
+load ok
+log loaded
+log http NetError net.https
+log host PermissionError permission net:other.example.org needs net host other.example.org
+log url ArgumentError api.args
+log userinfo ArgumentError api.args
+log cookie {"body":"{\"items\":[1,2]}","headers":{"content-type":"application/json"},"status":200}
+log method ArgumentError api.args
+log body LimitError limit.json
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.redirects
+load ok
+log loaded
+log same "{\"items\":[1,2]}"
+log granted NetError net.redirect
+log other NetError net.redirect
+log plain NetError net.redirect
+log loop NetError net.redirect
+activity {"bytes":0,"host":"api.example.com","path":"/v1/old","status":302}
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/moved","status":301}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/away","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/plain","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.redirects.granted
+load ok
+log loaded
+log same "{\"items\":[1,2]}"
+log granted "from the cdn"
+log other NetError net.redirect
+log plain NetError net.redirect
+log loop NetError net.redirect
+activity {"bytes":0,"host":"api.example.com","path":"/v1/old","status":302}
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/moved","status":301}
+activity {"bytes":12,"host":"cdn.example.com","path":"/v1/items","status":200}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/away","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/plain","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/loop","status":302}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.limits
+load ok
+log loaded
+log big NetError net.size
+log slow NetError net.time
+log missing 404
+activity {"bytes":1048577,"host":"api.example.com","path":"/v1/big","status":200}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/none","status":404}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.post
+load ok
+log loaded
+log reply [201,"héllo"]
+activity {"bytes":12,"host":"api.example.com","path":"/v1/echo","status":201}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.off
+load ok
+log loaded
+log has [false,false,false]
+log fetch NetError net.off
+log http NetError net.off
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.ask
+load ok
+log loaded
+log first 200
+log second NetError net.declined
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== card.one
+load ok
+log loaded
+result {"ok":true,"value":{"lines":["Launch notes","plan, launch","1"]}}
+applied {"added":[],"changed":[],"skipped":[]}
+== card.write
+load ok
+log loaded
+result {"ok":true,"value":{"lines":["PermissionError permission"]}}
+applied {"added":[],"changed":[],"skipped":[]}
+== card.shape
+load ok
+log loaded
+result {"code":"result.shape","message":"result.shape","ok":false}
+applied none
+== card.none
+load ok
+result {"code":"card.none","message":"card.none","ok":false}
+applied none
+== cards.batch
+load ok
+log loaded
+result {"ok":true,"value":[{"ok":true,"value":{"lines":["Garden plan","green","2"]}},{"code":"limit.time","message":"limit.time","ok":false},{"code":"limit.batch","message":"limit.batch","ok":false}]}
+applied {"added":[],"changed":[],"skipped":[]}
+== cards.many
+load ok
+log loaded
+result {"code":"limit.batch","message":"limit.batch","ok":false}
+applied none
+== card.readless
+load ok
+log loaded
+result {"code":"permission","message":"permission","ok":false}
+applied none
+== card.folder.outside
+load ok
+log loaded
+result {"code":"permission","message":"permission","ok":false}
+applied none
+== card.folder.inside
+load ok
+log loaded
+result {"ok":true,"value":{"lines":["Launch notes","plan, launch","1"]}}
+applied {"added":[],"changed":[],"skipped":[]}
+== cards.folder
+load ok
+log loaded
+result {"ok":true,"value":[{"ok":true,"value":{"lines":["Garden plan","green","1"]}}]}
+applied {"added":[],"changed":[],"skipped":[]}
+== settings.on
+load ok
+log loaded
+result {"ok":true,"value":{"saw":{"mode":"short"}}}
+applied {"added":[],"changed":[],"skipped":[]}
+== settings.throws
+load ok
+log loaded
+result {"code":"js.error","message":"bad settings","ok":false}
+applied none

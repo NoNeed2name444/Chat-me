@@ -25,6 +25,20 @@ android {
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    // S07b, the add-on engine: QuickJS-ng and the shared host (addons/engine), built by src/main/cpp for the
+    // two ABIs Sorta ships. -Psorta.addonsEngine=standin leaves the native build out, for local runs without
+    // an NDK: the tests' Kotlin stand-in engine answers instead, and CI never sets it.
+    if (providers.gradleProperty("sorta.addonsEngine").orNull != "standin") {
+        ndkVersion = "30.0.16248370"
+        defaultConfig { ndk { abiFilters += listOf("arm64-v8a", "x86_64") } }
+        externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    }
+    // SORTA_ADDON_NET (YES unless -Psorta.addonNet=NO) and the add-on directory's index branch, read by AddonConfig
+    defaultConfig.manifestPlaceholders["sortaAddonNet"] = providers.gradleProperty("sorta.addonNet").orNull ?: "YES"
+    defaultConfig.manifestPlaceholders["sortaAddonsIndexUrl"] = providers.gradleProperty("sorta.addonsIndexUrl").orNull ?: ""
+    // the add-on fixtures and conformance cases, for the tests only: resources on the JVM, assets on the emulator
+    sourceSets["test"].resources.srcDirs("../../addons/fixtures", "../../addons/conformance")
+    sourceSets["androidTest"].assets.srcDirs("../../addons/fixtures", "../../addons/conformance")
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 dependencies {

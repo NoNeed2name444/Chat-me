@@ -1,0 +1,33 @@
+{
+  "api": 1,
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "run",
+        "title": "Run"
+      }
+    ]
+  },
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "hosts": [
+    "api.example.com",
+    "cdn.example.com"
+  ],
+  "id": "io.github.example.linkcheck",
+  "license": "MIT",
+  "main": "main.js",
+  "minSorta": "1.0.0",
+  "name": "Link check",
+  "permissions": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "net"
+  ],
+  "version": "1.2.0"
+}

@@ -1,0 +1,10 @@
+{
+  "revoked": [
+    {
+      "id": "io.github.example.tagger",
+      "version": "1.0.0",
+      "reason": "Made up for the tests",
+      "date": "2026-11-01"
+    }
+  ]
+}

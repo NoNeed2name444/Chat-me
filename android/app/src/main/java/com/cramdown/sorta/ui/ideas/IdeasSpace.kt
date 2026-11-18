@@ -108,6 +108,8 @@ import com.cramdown.sorta.map.PerfInput
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
 import com.cramdown.sorta.ui.map.Map3DView
+import com.cramdown.sorta.ui.map.MapReshapeTouches
+import androidx.compose.material.icons.outlined.Bolt
 import com.cramdown.sorta.ui.map.MapEase
 import com.cramdown.sorta.ui.map.MapFlyTo
 import com.cramdown.sorta.ui.map.MapScene
@@ -164,7 +166,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     book: IdeaBook, settings: IdeasSettings, covered: Boolean, hidden: Dp,
     open: (String) -> Unit, openFolder: (String?) -> Unit,
     choose: (String) -> Unit = {}, delete: (String) -> Unit = {}, top: Dp = 0.dp, version: Int = 0,
-    lit: Set<String>? = null, file: (String, String) -> Unit = { _, _ -> },
+    lit: Set<String>? = null, file: (String, String) -> Unit = { _, _ -> }, lens: Set<String>? = null,
 ) {
     val theme = GraphTheme.stored(settings.theme)
     // the demo maps are a developer's, as on iOS, where only the readout offers them
@@ -177,6 +179,7 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
     val panels = rememberMapPanelSettings()
     val resources = LocalContext.current.resources
     val words = remember(resources) { mapPeekWords(resources) }
+    val shapes = LocalIdeaShapes.current
     // the chosen body (its card), the one held (its options, where it was held), and the Link length bar
     var chosen by remember(theme) { mutableStateOf<MapBody?>(null) }
     var held by remember(theme) { mutableStateOf<Pair<MapBody, Offset>?>(null) }
@@ -281,6 +284,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
             MapMenuItem.OPEN -> openBody(body)
             MapMenuItem.RENAME -> renaming = body
             MapMenuItem.MOVE -> note?.let { choose(it.id) }
+            MapMenuItem.SPLIT -> note?.let { shapes?.askSplit(it.id) }
+            MapMenuItem.JOIN -> note?.let { shapes?.askJoin(it.id) }
+            MapMenuItem.COLLIDE -> note?.let { shapes?.askCollide(it.id) }
             MapMenuItem.DELETE -> if (note != null) { react(MapSelectionEvent.Gone(body.id)); delete(note.id) }
                 else book.folders.firstOrNull { body.kind == ThemeBodyKind.FOLDER && it.id.equals(body.id, ignoreCase = true) }?.let { deletingFolder = it }
         }
@@ -303,16 +309,24 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                 // foot, and above the first-run card while it is not put away (S05d): by the card's own
                 // rules, not the moments it steps aside, so those never move the camera
                 else -> NotesMap(book, settings, theme, recenter + reframe, openPath, panels.linkLength, onRoles = { roles = it },
-                    filter = filter, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
+                    filter = filter, lens = lens, onGalaxies = { galaxies = it }, onHidden = { id -> react(MapSelectionEvent.Gone(id)) },
                     top = maxOf(top, WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()), hidden = hidden,
                     card = if (theme != GraphTheme.PERFORMANCE && panels.cardShown(theme) && cardPx > 0)
                         hidden + WardSpace.l.wardDp + with(LocalDensity.current) { cardPx.toDp() } else 0.dp,
-                    onTap = { body -> if (body == null) react(MapSelectionEvent.TapEmpty) else react(MapSelectionEvent.TapBody(body.id), body) },
+                    onTap = { body ->
+                        // S06c: a tap on an idea ringed as like the one open in the editor links the two, with Undo
+                        val echo = body?.takeIf { it.kind == ThemeBodyKind.NOTE && shapes?.editing != null && shapes.glows(it.id) }
+                        when {
+                            echo != null -> book.notes.firstOrNull { it.id.equals(echo.id, ignoreCase = true) }?.let { shapes?.link(it.id) }
+                            body == null -> react(MapSelectionEvent.TapEmpty)
+                            else -> react(MapSelectionEvent.TapBody(body.id), body)
+                        }
+                    },
                     onDoubleTap = { body -> react(MapSelectionEvent.DoubleTap(body.id), body) },
                     onHold = { body, at -> react(MapSelectionEvent.Hold(body.id), body, at) },
                     chosenId = chosen?.id, heldId = held?.first?.id, linksId = linksId, ease = ease, flyTo = flyTo,
                     onHome = { flyTo = null }, peek = peekBounds?.translate(-spaceAt), shown = shown, version = version,
-                    lit = lit.takeIf { theme == GraphTheme.SPACE }) { shown = it }
+                    lit = lit.takeIf { theme == GraphTheme.SPACE }, shapes = shapes) { shown = it }
             }
             val panelsShown = !covered && shown && demo == null && book.notes.isNotEmpty()
             // the chosen idea's role as the latest scene has it: a comet filed with File there is a planet now (as iOS's card)
@@ -396,6 +410,9 @@ fun perfDemoTitle(size: Int): String = "Demo: ${grouped(size)} ideas"
                         showCellByCell = { cellByCell = true })
                     // between Look and Recentre, as on iOS (Graph3DView.swift:765-779)
                     MapFilterTool(filter, mapTopFolders(book, galaxies.takeIf { theme == GraphTheme.SPACE && demo == null })) { filter = it }
+                    // S06c: Collide, two far-apart ideas face to face, above Recentre, as on iOS
+                    if (shapes != null && demo == null) IdeaToolButton(Icons.Outlined.Bolt, stringResource(R.string.collide_tool),
+                        modifier = Modifier.testTag(IdeaShapeTags.COLLIDE_TOOL)) { shapes.collideAny() }
                     // iOS's smallcircle.filled.circle, on every Recentre
                     IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { recenter++ }
                 }
@@ -457,8 +474,8 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
                                   onTap: (MapBody?) -> Unit, onDoubleTap: (MapBody) -> Unit, onHold: (MapBody, Offset) -> Unit,
                                   chosenId: String?, heldId: String?, linksId: String?, ease: MapEase?, flyTo: MapFlyTo?,
                                   onHome: () -> Unit, peek: Rect?,
-                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, onGalaxies: (List<String>?) -> Unit = {},
-                                  onHidden: (String) -> Unit = {}, lit: Set<String>? = null, onShown: (Boolean) -> Unit) {
+                                  shown: Boolean, version: Int, filter: MapFilter = MapFilter.All, lens: Set<String>? = null, onGalaxies: (List<String>?) -> Unit = {},
+                                  onHidden: (String) -> Unit = {}, lit: Set<String>? = null, shapes: IdeaShapes? = null, onShown: (Boolean) -> Unit) {
     val notes = book.notes
     val edges = remember(notes, version) { book.allEdges() }
     val main = settings.nodeStyle
@@ -554,8 +571,19 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val latestGalaxies by rememberUpdatedState(onGalaxies)
     LaunchedEffect(map) { map?.let { latestGalaxies(it.galaxies) } }
     // what the filter shows on this map (S05i): Performance's points and links go at once (GraphPerfRenderer.swift:161-164)
-    val view: MapFilterView? = remember(map, filter) {
-        if (filter == MapFilter.All) null else map?.bodies?.visibility(filter, stored = map.stored)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
+    // and the lenses (S06d), over the filter: a note shows when both let it through
+    val view: MapFilterView? = remember(map, filter, lens) {
+        if (filter == MapFilter.All && lens == null) null
+        else map?.bodies?.visibility(filter, stored = map.stored, lens = lens, ids = map.scene.ids)?.at(instantNow = theme == GraphTheme.PERFORMANCE)
+    }
+    // the frost on ideas left unopened (S06a A6), a level a scene index, in Space only
+    val frost: ByteArray? = remember(map, version) {
+        val m = map
+        if (m == null || theme != GraphTheme.SPACE) null else {
+            val byId = notes.associateBy { it.id.lowercase() }
+            ByteArray(m.scene.ids.size) { i -> (byId[m.scene.ids[i].lowercase()]?.let(::frostOf) ?: 0).toByte() }
+                .takeIf { levels -> levels.any { it > 0 } }
+        }
     }
     // the chosen body filtered away is let go (Graph3DView.swift:2178-2182); Performance keeps it (GraphPerfTheme.swift:313-320)
     val latestHidden by rememberUpdatedState(onHidden)
@@ -598,6 +626,16 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
     val latestTap by rememberUpdatedState(onTap)
     val latestDouble by rememberUpdatedState(onDoubleTap)
     val latestHold by rememberUpdatedState(onHold)
+    // S06c: a held idea let go on another collides them; two fingers split the chosen idea or join it to another
+    val ring = wardColor(WardToken.accent)
+    val touches = if (shapes == null) null else remember(map, shapes, ring) {
+        val idOf: (Int) -> String? = { i -> bodyOf(i)?.takeIf { it.kind == ThemeBodyKind.NOTE }?.let { b -> book.notes.firstOrNull { it.id.equals(b.id, ignoreCase = true) }?.id } }
+        MapReshapeTouches(takes = { i -> bodyOf(i)?.kind == ThemeBodyKind.NOTE },
+            collide = { a, b -> val x = idOf(a); val y = idOf(b); if (x != null && y != null) shapes.collide(x, y) },
+            split = { a -> idOf(a)?.let(shapes::askSplit) },
+            join = { a, b -> val x = idOf(a); val y = idOf(b); if (x != null && y != null) shapes.joinOlderFirst(x, y) },
+            ring = ring)
+    }
     Box(Modifier.fillMaxSize()) {
         Map3DView(ready, Modifier.fillMaxSize(), description = description,
             // the map decides each touch while the finger is down (S05g); a body it can't name is empty space
@@ -609,10 +647,11 @@ private class BuiltMap(val scene: MapScene, val roles: Map<String, String>, val 
             // Lines: Straight reaches the map's renderer as it changes, with no new scene (S05e)
             straight = settings.lineStyle.isStraight,
             // the chosen and held bodies keep their names on show (S05f); Show links and the ease (S05g)
-            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view,
-            lit = lit)
+            chosenId = chosenId, heldId = heldId, linksId = linksId, ease = ease, flyTo = flyTo, onHome = onHome, peek = peek, filter = view, frost = frost,
+            lit = lit, glows = shapes?.glowing?.toSet() ?: emptySet(), reshape = touches)
         // no idea passes: say so, over Space and the Neurons only (Graph3DView.swift:308-313); nothing to touch
-        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(R.string.map_filter_empty),
+        if (view != null && view.notes == 0 && theme != GraphTheme.PERFORMANCE) Text(stringResource(
+                if (filter == MapFilter.All) R.string.map_lens_empty else R.string.map_filter_empty),
             Modifier.align(Alignment.Center).padding(horizontal = WardSpace.xl.wardDp).testTag(MapPanelTags.FILTER_EMPTY),
             style = WardTextStyle.footnote.textStyle(), color = wardColor(WardToken.inkSecondary),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)

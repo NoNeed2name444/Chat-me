@@ -150,7 +150,8 @@ class MapPeekTest {
 
     @Test fun theOptionsAreAndroidsShareOfIOSs() {
         fun labels(folder: Boolean, home: Boolean) = MapPeek.menu(folder, home).map(words::item)
-        assertEquals(listOf("Open", "Rename", "Choose folder", "Delete"), labels(folder = false, home = false))
+        // S06c: an idea's Split…, Join with… and Collide with…, before Delete, as iOS's
+        assertEquals(listOf("Open", "Rename", "Choose folder", "Split…", "Join with…", "Collide with…", "Delete"), labels(folder = false, home = false))
         assertEquals(listOf("Open", "Rename", "Delete"), labels(folder = true, home = false))
         assertEquals(listOf("Open"), labels(folder = false, home = true))
     }

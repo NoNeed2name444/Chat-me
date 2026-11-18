@@ -1,0 +1,28 @@
+{
+  "api": 1,
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "run",
+        "title": "Run"
+      }
+    ]
+  },
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "hosts": [],
+  "id": "io.github.example.wordcount",
+  "license": "MIT",
+  "main": "main.js",
+  "minSorta": "1.0.0",
+  "name": "Word count",
+  "permissions": [
+    "ideas.read",
+    "commands"
+  ],
+  "version": "1.1.0"
+}

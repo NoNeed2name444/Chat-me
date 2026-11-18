@@ -1,0 +1,42 @@
+# Sorta's add-on engine on Linux (S07b): the vendored QuickJS-ng checked
+# against its upstream commit, the prelude header against prelude.js, and the
+# kit's harness built from the same C as the apps, then run on the
+# conformance cases (compared with addons/conformance/expected.txt, which the
+# iOS and Android tests compare with too), the hostile fixtures and the
+# permission table. Chat-me is public, so the standard runner costs nothing;
+# no secret is used. A second run of the same copy is a re-run of this one.
+name: Add-on engine
+on:
+  push:
+    branches: [sorta, sorta-b, sorta-c, sorta-d, sorta-e]
+permissions:
+  contents: read
+concurrency:
+  group: addons-engine-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    # the engine builds in under a minute and the checks take seconds
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: The vendored engine matches its upstream commit
+        run: python3 -I -B addons/engine/verify.py --fetch
+      - name: The prelude header matches prelude.js
+        run: python3 -I -B addons/engine/host/embed_prelude.py --check
+      - name: Build the harness
+        working-directory: addons/kit/harness
+        run: make -j2
+      - name: Conformance, hostile fixtures and the permission table
+        working-directory: addons/kit/harness
+        run: |
+          set -o pipefail
+          make check
+          # the activity log keeps the host and path only: never the query
+          # or a header the add-on sent (the net.get case plants both)
+          if grep -n 'q-token-7731\|h-value-5512\|c-value-4419' build/conformance.txt; then
+            echo "::error::a query or header value reached the conformance output"
+            exit 1
+          fi
+          grep -c '^== ' build/conformance.txt

@@ -1,0 +1,19 @@
+{
+  "routes": [
+    { "method": "GET", "url": "https://api.example.com/v1/items", "status": 200,
+      "headers": { "content-type": "application/json", "set-cookie": "s=c-value-4419" }, "body": "{\"items\":[1,2]}" },
+    { "method": "GET", "url": "https://api.example.com/v1/old", "status": 302, "headers": { "location": "/v1/items" } },
+    { "method": "GET", "url": "https://api.example.com/v1/moved", "status": 301,
+      "headers": { "location": "https://cdn.example.com/v1/items" } },
+    { "method": "GET", "url": "https://cdn.example.com/v1/items", "status": 200, "headers": {}, "body": "from the cdn" },
+    { "method": "GET", "url": "https://api.example.com/v1/away", "status": 302,
+      "headers": { "location": "https://elsewhere.example.net/take" } },
+    { "method": "GET", "url": "https://api.example.com/v1/plain", "status": 302,
+      "headers": { "location": "http://api.example.com/v1/items" } },
+    { "method": "GET", "url": "https://api.example.com/v1/loop", "status": 302, "headers": { "location": "/v1/loop" } },
+    { "method": "GET", "url": "https://api.example.com/v1/big", "status": 200, "headers": {},
+      "bodyRepeat": { "text": "x", "count": 1048577 } },
+    { "method": "GET", "url": "https://api.example.com/v1/slow", "status": 200, "headers": {}, "body": "late", "delayMs": 10001 },
+    { "method": "POST", "url": "https://api.example.com/v1/echo", "status": 201, "headers": {}, "echo": true }
+  ]
+}

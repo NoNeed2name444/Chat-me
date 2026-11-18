@@ -1,0 +1,1285 @@
+{
+ "now": "2026-11-01T09:00:00.000Z",
+ "addon": "addon",
+ "routes": "../fixtures/net/routes.json",
+ "cases": [
+  {
+   "name": "load.ok",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load"
+  },
+  {
+   "name": "load.bytecode",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "bytecodeOf": "export const x = 1;"
+    }
+   }
+  },
+  {
+   "name": "load.syntax",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "export default ("
+    }
+   }
+  },
+  {
+   "name": "load.module",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "import { x } from './missing.js';"
+    }
+   }
+  },
+  {
+   "name": "load.json",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "import x from './manifest.json';"
+    }
+   }
+  },
+  {
+   "name": "load.utf8",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "hex": "2f2f20ff0a"
+    }
+   }
+  },
+  {
+   "name": "load.nul",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "hex": "2f2f0000"
+    }
+   }
+  },
+  {
+   "name": "load.throws",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "throw new Error('top');"
+    }
+   }
+  },
+  {
+   "name": "load.reads",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "await sorta.ideas.list();"
+    }
+   }
+  },
+  {
+   "name": "load.pending",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "load",
+   "files": {
+    "main.js": {
+     "text": "await new Promise(() => {});"
+    }
+   }
+  },
+  {
+   "name": "engine.globals",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "engine.globals",
+    "ideas": []
+   }
+  },
+  {
+   "name": "engine.eval.caught",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "engine.eval.caught",
+    "ideas": []
+   }
+  },
+  {
+   "name": "engine.eval.thrown",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "engine.eval.thrown",
+    "ideas": []
+   }
+  },
+  {
+   "name": "engine.strict",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "engine.strict",
+    "ideas": []
+   }
+  },
+  {
+   "name": "result.null",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "result.null",
+    "ideas": []
+   }
+  },
+  {
+   "name": "result.message",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "result.message",
+    "ideas": []
+   }
+  },
+  {
+   "name": "result.shape",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "result.shape",
+    "ideas": []
+   }
+  },
+  {
+   "name": "result.extra",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "result.extra",
+    "ideas": []
+   }
+  },
+  {
+   "name": "js.error",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "js.error",
+    "ideas": []
+   }
+  },
+  {
+   "name": "js.string",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "js.string",
+    "ideas": []
+   }
+  },
+  {
+   "name": "js.async",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "js.async",
+    "ideas": []
+   }
+  },
+  {
+   "name": "command.unknown",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "command": "nope",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "command.case",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "no.such",
+    "ideas": []
+   }
+  },
+  {
+   "name": "list.all",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "list.all",
+    "ideas": []
+   }
+  },
+  {
+   "name": "list.folder",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "list.folder",
+    "ideas": []
+   }
+  },
+  {
+   "name": "list.kind",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "list.kind",
+    "ideas": []
+   }
+  },
+  {
+   "name": "list.pages",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "list.pages",
+    "ideas": []
+   }
+  },
+  {
+   "name": "list.args",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "list.args",
+    "ideas": []
+   }
+  },
+  {
+   "name": "get.one",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "get.one",
+    "ideas": []
+   }
+  },
+  {
+   "name": "search.words",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "search.words",
+    "ideas": []
+   }
+  },
+  {
+   "name": "folders.list",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "folders.list",
+    "ideas": []
+   }
+  },
+  {
+   "name": "read.none",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "read.none",
+    "ideas": []
+   }
+  },
+  {
+   "name": "read.folder",
+   "grants": [
+    "ideas.read.folder:00000000-0000-4000-8000-000000000901",
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "read.folder",
+    "ideas": []
+   }
+  },
+  {
+   "name": "read.subfolder",
+   "grants": [
+    "ideas.read.folder:00000000-0000-4000-8000-000000000902",
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "read.folder",
+    "ideas": []
+   }
+  },
+  {
+   "name": "read.folder.unknown",
+   "grants": [
+    "ideas.read.folder:no-such-folder",
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "read.folder",
+    "ideas": []
+   }
+  },
+  {
+   "name": "snapshot",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "snapshot",
+    "ideas": []
+   },
+   "changeAfterSnapshot": [
+    {
+     "id": "00000000-0000-4000-8000-000000000101",
+     "title": "Garden plan, changed"
+    }
+   ]
+  },
+  {
+   "name": "capture.lines",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "capture.lines",
+    "ideas": []
+   }
+  },
+  {
+   "name": "capture.title",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "capture.title",
+    "ideas": []
+   }
+  },
+  {
+   "name": "capture.args",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "capture.args",
+    "ideas": []
+   }
+  },
+  {
+   "name": "tags",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "tags",
+    "ideas": []
+   }
+  },
+  {
+   "name": "links",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "links",
+    "ideas": []
+   }
+  },
+  {
+   "name": "file",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "file",
+    "ideas": []
+   }
+  },
+  {
+   "name": "write.none",
+   "grants": [
+    "ideas.read",
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "write.none",
+    "ideas": []
+   }
+  },
+  {
+   "name": "write.outside",
+   "grants": [
+    "ideas.read.folder:00000000-0000-4000-8000-000000000901",
+    "ideas.write",
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "write.outside",
+    "ideas": []
+   }
+  },
+  {
+   "name": "write.captured",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "write.captured",
+    "ideas": []
+   }
+  },
+  {
+   "name": "write.gone",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "write.gone",
+    "ideas": []
+   },
+   "goneAfterSnapshot": [
+    "00000000-0000-4000-8000-000000000102"
+   ]
+  },
+  {
+   "name": "writes.hundred",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "writes.hundred",
+    "ideas": []
+   }
+  },
+  {
+   "name": "writes.over.caught",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "writes.over.caught",
+    "ideas": []
+   }
+  },
+  {
+   "name": "captures.twenty",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "captures.twenty",
+    "ideas": []
+   }
+  },
+  {
+   "name": "captures.over.caught",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "captures.over.caught",
+    "ideas": []
+   }
+  },
+  {
+   "name": "writes.then.error",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "writes.then.error",
+    "ideas": []
+   }
+  },
+  {
+   "name": "storage",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "storage",
+    "ideas": []
+   }
+  },
+  {
+   "name": "storage.limit",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "storage.limit",
+    "ideas": []
+   }
+  },
+  {
+   "name": "settings.get",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "settings.get",
+    "ideas": []
+   },
+   "settings": {
+    "mode": "long",
+    "words": 3
+   }
+  },
+  {
+   "name": "has",
+   "grants": [
+    "ideas.read",
+    "commands",
+    "net:api.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "has",
+    "ideas": []
+   }
+  },
+  {
+   "name": "has.netoff",
+   "grants": [
+    "ideas.read",
+    "commands",
+    "net:api.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "netOff": true,
+   "input": {
+    "case": "has",
+    "ideas": []
+   }
+  },
+  {
+   "name": "console",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "console",
+    "ideas": []
+   }
+  },
+  {
+   "name": "not.load",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "not.load",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.get",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.get",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.refused",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.refused",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.redirects",
+   "grants": [
+    "commands",
+    "net:api.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.redirects",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.redirects.granted",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.redirects",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.limits",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.limits",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.post",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.post",
+    "ideas": []
+   }
+  },
+  {
+   "name": "net.off",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.off",
+    "ideas": []
+   },
+   "netOff": true
+  },
+  {
+   "name": "net.ask",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.ask",
+    "ideas": []
+   },
+   "ask": [
+    "yes",
+    "no"
+   ]
+  },
+  {
+   "name": "card.one",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000104"
+  },
+  {
+   "name": "card.write",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000102"
+  },
+  {
+   "name": "card.shape",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000107"
+  },
+  {
+   "name": "card.none",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000104",
+   "files": {
+    "main.js": {
+     "text": "sorta.commands.on('case', () => null);"
+    }
+   }
+  },
+  {
+   "name": "cards.batch",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "cards",
+   "cards": [
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000106",
+    "00000000-0000-4000-8000-000000000105"
+   ]
+  },
+  {
+   "name": "cards.many",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "cards",
+   "cards": [
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000101"
+   ]
+  },
+  {
+   "name": "card.readless",
+   "grants": [
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000104"
+  },
+  {
+   "name": "card.folder.outside",
+   "grants": [
+    "commands",
+    "cards",
+    "ideas.read.folder:00000000-0000-4000-8000-000000000901"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000101"
+  },
+  {
+   "name": "card.folder.inside",
+   "grants": [
+    "commands",
+    "cards",
+    "ideas.read.folder:00000000-0000-4000-8000-000000000901"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "card",
+   "card": "00000000-0000-4000-8000-000000000104"
+  },
+  {
+   "name": "cards.folder",
+   "grants": [
+    "commands",
+    "cards",
+    "ideas.read.folder:00000000-0000-4000-8000-000000000903"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "cards",
+   "cards": [
+    "00000000-0000-4000-8000-000000000101",
+    "00000000-0000-4000-8000-000000000106",
+    "00000000-0000-4000-8000-000000000105"
+   ]
+  },
+  {
+   "name": "settings.on",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "settings",
+   "settings": {
+    "mode": "short"
+   }
+  },
+  {
+   "name": "settings.throws",
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "case"
+   ],
+   "kind": "settings",
+   "settings": {
+    "fail": true
+   }
+  }
+ ]
+}

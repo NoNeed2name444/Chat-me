@@ -326,7 +326,41 @@ data class MapDrawn(
     val folderLines: Int = 0,
     val settled: Boolean = true,
     val tourPhase: String = "",
+    /**
+     * Added by Map3DView (S06m): the camera's pose ([pose]'s order) the frame that measured [box],
+     * [names], [spot] and [cells] was drawn at. [pose] is the camera's now, read when the record is
+     * composed, and a jump home (Recentre) moves it at once, while those come only with the GL's next
+     * frame, so until then they are the last view's ([boxAtPose]). Empty before any frame. No words.
+     */
+    val boxPose: List<Float> = emptyList(),
+    /**
+     * Added by Map3DView (S06c): the ideas on screen ringed as like the one open in the editor, by index, and
+     * the idea a held body would be let go on ([drop], ringed twice; −1 for none). No words.
+     */
+    val glows: List<Int> = emptyList(),
+    val drop: Int = -1,
+    /** Added by Map3DView (S06c): an idea a test can hold, and the nearest other idea to the held one (else the chosen one), each index, x, y; empty for none. */
+    val ideaSpot: List<Float> = emptyList(),
+    val near: List<Float> = emptyList(),
+    /**
+     * Space's frost (S06a A6): the bodies the latest frame drew a frost halo round, by the level each
+     * wants, 1 to 3 (empty when none is drawn). A body far enough off to be drawn as a point has no
+     * halo. No words.
+     */
+    val frosted: List<Int> = emptyList(),
 ) {
+    /** This record with the latest frame's frost halos by level; the same record when nothing changed. */
+    fun frosting(frostedNow: List<Int>): MapDrawn = if (frosted == frostedNow) this else copy(frosted = frostedNow)
+
+    /**
+     * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
+     * [pose] alike, each value within a thousandth of its size (at least 1). A test reading where the
+     * bodies are waits for this; on Chat-me run 43607814308's phone, after Fly in and Recentre, the box
+     * was still the flown-in view's, so a spot clear of it lay 4 px from a planet of the first view.
+     */
+    fun boxAtPose(): Boolean = pose.size == POSE && boxPose.size == POSE &&
+        pose.indices.all { abs(pose[it] - boxPose[it]) <= 1e-3f * max(1f, abs(pose[it])) }
+
     /** This record with Performance's hubs, folder lines, force and tour as the latest frame had them; the same record when nothing changed. */
     fun performing(hubsNow: Int, folderLinesNow: Int, settledNow: Boolean, tourPhaseNow: String = tourPhase): MapDrawn =
         if (hubs == hubsNow && folderLines == folderLinesNow && settled == settledNow && tourPhase == tourPhaseNow) this
@@ -447,6 +481,12 @@ data class MapDrawn(
     companion object {
         /** Finished frames worth counting: by the last of them, the ones before it were handed to the screen. */
         const val ENOUGH = 3
+        /** A pose's values: target x, y, z, distance, yaw, pitch ([pose], [boxPose]). */
+        const val POSE = 6
+
+        /** [camera]'s pose as [pose] and [boxPose] carry it; the caller holds the camera's lock. */
+        fun poseOf(camera: OrbitCamera): List<Float> =
+            listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
         /** How far the deaths' clock moves before that alone makes a new record (S05h2 repair 8), seconds. */
         const val DYING_CLOCK_STEP = 0.1
     }
@@ -554,7 +594,8 @@ class GlMapRenderer(
     private val displayHz: () -> Float,
     private val displayMaxHz: Float,
     private val onReadout: (MapReadout) -> Unit,
-    private val onScreenNodes: ((List<ScreenNode>) -> Unit)? = null,
+    /** Each frame's bodies on screen, with the camera's pose they were projected at (MapDrawn.boxPose). */
+    private val onScreenNodes: ((List<ScreenNode>, List<Float>) -> Unit)? = null,
     private val theme: MapTheme = MapTheme.PLAIN,
     /** Where the Space theme's Earth maps are read from; null draws the rocky planet from noise. */
     assets: AssetManager? = null,
@@ -656,6 +697,14 @@ class GlMapRenderer(
     private var liveTime = Double.NaN
     /** S06b: the Universe's leans, circles and tails ([sky]), by the plan's body index; null elsewhere. */
     private val skyPlan: SkySpace? = sky?.takeIf { uplan != null && it.tails.size == tree.nodeCount }
+    /** v14: whether a loose idea here leans to a folder, so its comet is kept clear of the folder on screen. */
+    private val leaning: Boolean = skyPlan?.leanTo?.any { it >= 0 } == true
+    /**
+     * v14: the camera this frame keeps the leaning comets clear of their folders for (Leaning.clearOnScreen), and
+     * the one [live] was last written for; null before the first frame, and where nothing leans.
+     */
+    @Volatile private var leanView: Leaning.View? = null
+    private var liveView: Leaning.View? = null
     /** How far a circling idea sits from the one it circles, by body index: three of the larger one's radii. */
     private val circleRadius: FloatArray = skyPlan?.let { s ->
         val b = uplan!!.bodies
@@ -694,6 +743,15 @@ class GlMapRenderer(
     private val sparkOut = FloatArray(if (trails != null) SpaceTrails.CAPACITY * SpaceTrails.OUT_STRIDE else 0)
     private var sparkCount = 0
     private var sparksCounted = 0L
+    /**
+     * The frost on ideas left unopened (S06a A6), set from the page: a level 0 to 3 a scene index, or
+     * null for none. Space draws each frosted body drawn with a pale halo, by the sparks' program.
+     */
+    @Volatile var frost: ByteArray? = null
+    /** The halo shown now, a chunk-order node: it melts toward [frost]'s over [FROST_MELT] seconds while lively. */
+    private val frostShown = FloatArray(if (space) tree.nodeCount else 0) { -1f }
+    private var frostOut = FloatArray(0)
+    private var frostCount = 0
     /** The scene's ids (MapScene.ids), for the departures this renderer hands the next scene. */
     private val sceneIds = ids
 
@@ -933,8 +991,11 @@ class GlMapRenderer(
         val l = live ?: return false
         val t = drag?.orbitTime ?: 0.0
         val settling = settleFrom.isNotEmpty() && !settleDone
-        if (t == liveTime && !settling) return false
+        // v14: a leaning comet's place follows the camera too (skyHome)
+        val view = leanView
+        if (t == liveTime && !settling && view == liveView) return false
         liveTime = t
+        liveView = view
         for (k in 0 until tree.nodeCount) {
             val p = skyHome(tree.order[k], t)
             l[3 * k] = p.x; l[3 * k + 1] = p.y; l[3 * k + 2] = p.z
@@ -966,7 +1027,14 @@ class GlMapRenderer(
             if (place.leader in 0 until i) return skyHome(place.leader, t) + SharedCircle.offset(place, circleRadius[i], t)
         }
         val j = s.leanTo.getOrElse(i) { -1 }
-        if (j >= 0 && j != i && j < plan.bodies.size) return Leaning.place(own, plan.position(j, t), UniverseBeams.radius(plan.bodies[j]))
+        if (j >= 0 && j != i && j < plan.bodies.size) {
+            val folder = plan.position(j, t)
+            val size = UniverseBeams.radius(plan.bodies[j])
+            val at = Leaning.place(own, folder, size)
+            // v14: and clear of the folder's disc on screen, where the camera has them one behind the other
+            val view = leanView ?: return at
+            return Leaning.clearOnScreen(at, UniverseBeams.radius(plan.bodies[i]), folder, size, view)
+        }
         return own
     }
 
@@ -1244,6 +1312,8 @@ class GlMapRenderer(
             eye = camera.eye(); target = camera.target
             view = camera.view(); proj = camera.projection(aspect); focal = camera.focalPixels(height.toFloat())
             forward = camera.forward()
+            if (leaning) leanView = Leaning.View(eye, forward, camera.right(), focal, Leaning.SCREEN_GAP_DP * max(density, 0.1f))
+            if (onScreenNodes != null) framePose = MapDrawn.poseOf(camera)
             frustum = if (perf != null) camera.frustum(width.toFloat(), height.toFloat()) else null
         }
         drag?.step(dt)
@@ -1300,6 +1370,7 @@ class GlMapRenderer(
             totals.sparks += tr.thrownTotal - sparksCounted
             sparksCounted = tr.thrownTotal
         }
+        frostCount = if (bodies != null && space) writeFrost(bodies, dt) else 0
         // the marked body's orbit ring (the held body, else the chosen one), where its node is placed this frame (Space)
         var ring: FloatArray? = null
         var ringDepth = 0f
@@ -1322,7 +1393,7 @@ class GlMapRenderer(
             // the Universe's orbits turn whenever animations run (the packet's question 1: as iOS)
             || orbiting || (uplan != null && lively) || flight != null || filterMoving
             // a death playing, and sparks alive (S05h2)
-            || death?.finished == false || sparkCount > 0
+            || death?.finished == false || sparkCount > 0 || frostMelting
             // Performance's force settling, and the tour under way (S05i2)
             || settling || (touring && !tourDone)
 
@@ -1350,7 +1421,7 @@ class GlMapRenderer(
                 floatArrayOf(view[1], view[5], view[9]), focal, clock, SpaceLod.shaderDetail(budget.detail),
                 bandUniform, focal / max(density, 0.1f), floatArrayOf(forward.x, forward.y, forward.z),
                 straightNow, lively, contrast, ring, ringDepth, pop.glow,
-                death?.setOpacity ?: 1f, sparkOut, sparkCount, maxPointSize)
+                death?.setOpacity ?: 1f, sparkOut, sparkCount, maxPointSize, frostOut, frostCount)
             linksNow = spaceGl.linksDrawn
             ringNow = spaceGl.ringDrawn
             dyingLinksNow = spaceGl.dyingLinksDrawn
@@ -1390,6 +1461,7 @@ class GlMapRenderer(
         record = record.marking(markedChosen(), marked, bodies?.litCount ?: 0, focusOn,
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
+        record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList())
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
@@ -1612,7 +1684,7 @@ class GlMapRenderer(
                 val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
                 out.add(ScreenNode(i, sx, sy, gl.size(i) * focal / clip[3] * 2f, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
             }
-            callback(out)
+            callback(out, framePose)
         }
         val workMs = (System.nanoTime() - start) / 1e6
         budget.onFrame(intervalMs, workMs)
@@ -2195,6 +2267,8 @@ class GlMapRenderer(
     }
 
     private val clip = FloatArray(4)
+    /** The camera's pose this frame's view was built from, read with it (MapDrawn.boxPose). */
+    private var framePose: List<Float> = emptyList()
 
     /** Real notes only: where each node is on screen and how big, for labels and taps. */
     private fun publishScreenNodes(plan: FramePlan) {
@@ -2228,7 +2302,7 @@ class GlMapRenderer(
             }
             out.add(ScreenNode(tree.order[k], sx, sy, pixels, band.crisp(clip[3]) || band == SpaceDepthBand.OFF, focal / clip[3]))
         }
-        callback(out)
+        callback(out, framePose)
     }
 
     // ---- helpers ----
@@ -2255,8 +2329,55 @@ class GlMapRenderer(
         return p
     }
 
+    private var frostMelting = false
+    /** The halos [writeFrost] drew last, by the level each wants, 1 to 3, for the record. */
+    private val frostLevels = IntArray(3)
+
+    /**
+     * The frost halos (S06a A6) for the bodies drawn this frame, into [frostOut] as the sparks' points
+     * (place and size, then colour): a pale ice, brighter a level deeper, round each body at 2.8 its
+     * radius. A level that changes melts over [FROST_MELT] seconds while lively, and snaps otherwise.
+     */
+    private fun writeFrost(bodies: SpaceBodies, dt: Float): Int {
+        val levels = frost
+        frostMelting = false
+        frostLevels.fill(0)
+        if (levels == null && frostShown.none { it > 0f }) return 0
+        if (frostOut.size < bodies.count * 7) frostOut = FloatArray(bodies.count * 7)
+        var n = 0
+        for (j in 0 until bodies.count) {
+            val k = bodies.nodes[j]
+            if (k !in frostShown.indices) continue
+            val scene = tree.order[k]
+            val level = levels?.getOrNull(scene)?.toInt()?.coerceIn(0, 3) ?: 0
+            val want = FROST_WASH[level]
+            val shown = frostShown[k]
+            val now = if (shown < 0f || !lively) want else {
+                val step = dt / FROST_MELT * FROST_WASH[3]
+                if (shown < want) min(want, shown + step) else max(want, shown - step)
+            }
+            frostShown[k] = now
+            if (now != want) frostMelting = true
+            if (now <= 0f) continue
+            val o = j * SpaceBodies.STRIDE
+            val w = n * 7
+            frostOut[w] = bodies.data[o]; frostOut[w + 1] = bodies.data[o + 1]; frostOut[w + 2] = bodies.data[o + 2]
+            frostOut[w + 3] = bodies.data[o + 3] * 2.8f
+            frostOut[w + 4] = FROST_ICE[0] * now; frostOut[w + 5] = FROST_ICE[1] * now; frostOut[w + 6] = FROST_ICE[2] * now
+            if (level > 0) frostLevels[level - 1]++
+            n++
+        }
+        return n
+    }
+
     companion object {
         const val NODE_STRIDE = 12
+        /** The frost's melt, in seconds, as the board's (WardMotion.longest). */
+        const val FROST_MELT = 0.32f
+        /** The halo's strength a frost level, 0 to 3. */
+        val FROST_WASH = floatArrayOf(0f, 0.22f, 0.38f, 0.55f)
+        /** Space's own ice, #D6E8F5, a pale halo on the night sky (the board washes with the page's colour, IdeaFrostLook). */
+        val FROST_ICE = floatArrayOf(0.84f, 0.91f, 0.96f)
         /** The proof tour's logcat tag (S05i2). */
         const val TOUR_TAG = "SortaTour"
 

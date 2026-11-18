@@ -1,0 +1,1 @@
+{ "fields": [{ "id": "mode", "type": "choice", "title": "Mode", "choices": ["short", "long"], "default": "short" }] }

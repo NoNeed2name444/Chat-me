@@ -11,9 +11,12 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -85,10 +88,6 @@ class SpaceSkyRenderTest {
 
         // A4: the leaning idea's card, its line and File there
         val leaning = choose(LEANING, suffix)
-        // where it is drawn, by its name pill's body, for a real tap on it below
-        val leanAt = checkNotNull(drawn()?.names?.firstOrNull { it.index == leaning }?.body?.takeIf { it.size == 2 }) {
-            "The leaning idea shows no name to find it by for $suffix: ${drawn()}"
-        }
         waitFor(SkyTags.LEAN, "the lean line on the card, $suffix")
         val lean = node(SkyTags.LEAN)
         check(spoken(lean) == "Shares ‘garden’ with Raised beds") { "The lean line reads ${spoken(lean)} for $suffix" }
@@ -97,6 +96,15 @@ class SpaceSkyRenderTest {
         target(fileThere, "File there, $suffix")
         settle(1_000)
         shot("sky-lean-card-$suffix")
+        // where it is drawn, by its name pill's body, for a real tap on it below: once the card is up and
+        // the camera has taken it in (a card that grows refits the first view, MapCardCover), from a frame
+        // drawn at the camera's pose now (MapDrawn.boxPose)
+        try { compose.waitUntil(10_000) { drawn()?.let { it.boxAtPose() && it.names.any { n -> n.index == leaning } } == true } } catch (_: ComposeTimeoutException) {}
+        val leanDrawn = drawn()
+        val leanAt = checkNotNull(leanDrawn?.takeIf { it.boxAtPose() }?.names?.firstOrNull { it.index == leaning }?.body?.takeIf { it.size == 2 }) {
+            "The leaning idea shows no name at the camera's pose to find it by for $suffix: $leanDrawn"
+        }
+        val leanPose = checkNotNull(leanDrawn).pose
 
         // A8: a shared idea's card names where it came from
         choose(SHARED[1], suffix)
@@ -106,10 +114,14 @@ class SpaceSkyRenderTest {
         shot("sky-shared-card-$suffix")
 
         // A4 by touch: a finger on the leaning comet chooses it, not the folder it leans to (the comet
-        // is kept three of the folder's radii out, Leaning.place); then back to the shared card's idea
-        val map = checkNotNull(mapNode()) { "No map for $suffix" }
-        val finger = map.positionOnScreen + Offset(leanAt[0], leanAt[1])
-        check(ui.click(finger.x.toInt(), finger.y.toInt())) { "The leaning comet could not be tapped for $suffix" }
+        // is kept three of the folder's radii out, Leaning.place); then back to the shared card's idea.
+        // The camera has not moved since the comet was found (animations are off, so a Select eases
+        // nothing, and the shared card is shorter, so it refits nothing), and the finger is a tap by its events' own times, down and up in one batch: a click
+        // through UiAutomation on a busy emulator once landed its lift past the 0.25 s pick-up
+        // (MapTouchRules.HOLD_TO_DRAG), so the comet was picked up and let go, never chosen
+        check(drawn()?.pose == leanPose) { "The camera moved after the leaning comet was found for $suffix: $leanPose, now ${drawn()}" }
+        val finger = Offset(leanAt[0], leanAt[1])
+        compose.onNode(SemanticsMatcher.keyIsDefined(MapDrawnKey)).performTouchInput { click(finger) }
         try { compose.waitUntil(10_000) { drawn()?.chosen == leaning } } catch (_: ComposeTimeoutException) {}
         check(drawn()?.chosen == leaning) { "A tap on the leaning comet at $finger chose ${drawn()?.chosen}, not $leaning, for $suffix: ${drawn()}" }
         waitFor(SkyTags.LEAN, "the lean line after a tap on the comet, $suffix")

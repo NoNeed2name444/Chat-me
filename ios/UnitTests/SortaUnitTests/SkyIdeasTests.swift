@@ -94,6 +94,52 @@ final class SkyIdeasTests: XCTestCase {
         }
     }
 
+    /// A4, v14: three radii apart in space can still be one behind the
+    /// other on screen, where the folder's disc took the comet's taps
+    /// (Chat-me run 43676492822). Seen through a camera at the origin
+    /// looking down -z, 1000 points per unit at depth 1, the comet's disc
+    /// ends up at least the 44-point gap clear of the folder's, at its own
+    /// depth, out along its lean on screen.
+    func testALeaningCometIsClearOfItsFolderOnScreen() {
+        let view = Leaning.View(eye: .zero, ahead: SIMD3(0, 0, -1), aside: SIMD3(1, 0, 0), focal: 1000)
+        func clearance(_ comet: SIMD3<Float>, _ cr: Float, _ folder: SIMD3<Float>, _ fr: Float) -> Float {
+            let c = SIMD2<Float>(comet.x, comet.y) * (view.focal / -comet.z)
+            let f = SIMD2<Float>(folder.x, folder.y) * (view.focal / -folder.z)
+            return simd_length(c - f) - fr * view.focal / -folder.z - cr * view.focal / -comet.z
+        }
+        let folder = SIMD3<Float>(0, 0, -20)
+        // behind the folder, three radii away along the sight line, and a little up: on screen inside its disc
+        let hidden = Leaning.place(own: SIMD3(0, 0.2, -30), folder: folder, size: 1)
+        XCTAssertLessThan(clearance(hidden, 0.3, folder, 1), 0, "the case: hidden on screen first")
+        let moved = Leaning.clearOnScreen(comet: hidden, cometRadius: 0.3, folder: folder, folderRadius: 1, view: view)
+        XCTAssertGreaterThanOrEqual(clearance(moved, 0.3, folder, 1), 44 - 0.01, "clear by the gap")
+        XCTAssertEqual(moved.z, hidden.z, accuracy: 1e-4, "at its own depth")
+        XCTAssertGreaterThan(moved.y, hidden.y, "out along its lean on screen (up)")
+        XCTAssertEqual(moved.x, 0, accuracy: 1e-4, "out along its lean on screen (up)")
+        // exactly behind it: across the screen along the camera's aside
+        let behind = Leaning.clearOnScreen(comet: SIMD3(0, 0, -26), cometRadius: 0.3, folder: folder, folderRadius: 1,
+                                           view: view)
+        XCTAssertGreaterThanOrEqual(clearance(behind, 0.3, folder, 1), 44 - 0.01, "right behind: clear")
+        XCTAssertGreaterThan(behind.x, 0, "right behind: along the aside")
+        XCTAssertEqual(behind.y, 0, accuracy: 1e-4, "right behind: along the aside")
+        // already clear: left where it is
+        let far = SIMD3<Float>(5, 0, -20)
+        near(Leaning.clearOnScreen(comet: far, cometRadius: 0.3, folder: folder, folderRadius: 1, view: view), far,
+             "clear already: unmoved")
+        // behind the eye: unmoved
+        let back = SIMD3<Float>(0, 0.1, 5)
+        near(Leaning.clearOnScreen(comet: back, cometRadius: 0.3, folder: folder, folderRadius: 1, view: view), back,
+             "behind the eye: unmoved")
+        // every way round, near and far: never short of the gap
+        for k in 0..<60 {
+            let f = SIMD3<Float>(Float(k % 5) - 2, Float(k % 3) - 1, -10 - Float(k % 7) * 3)
+            let c = f + SIMD3<Float>((Float(k % 4) - 1.5) * 0.2, (Float(k % 6) - 2.5) * 0.1, (Float(k % 9) - 4) * 1.5)
+            guard -c.z > 1 else { continue }
+            let at = Leaning.clearOnScreen(comet: c, cometRadius: 0.25, folder: f, folderRadius: 0.8, view: view)
+            XCTAssertGreaterThanOrEqual(clearance(at, 0.25, f, 0.8), 44 - 0.01, "\(c) by \(f)")
+        }
+    }
+
     private func near(_ got: SIMD3<Float>, _ want: SIMD3<Float>, _ what: String,
                       file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertLessThan(simd_length(got - want), 1e-5, "\(what): want \(want), got \(got)", file: file, line: line)
@@ -163,5 +209,38 @@ final class SkyIdeasTests: XCTestCase {
         worded.words = ["garden"]
         let again = try JSONDecoder().decode(NoteFolder.self, from: JSONEncoder().encode(worded))
         XCTAssertEqual(again.words, ["garden"])
+    }
+
+    /// v14: a Space name keeps inside the map's free area. On a phone 390
+    /// wide and 844 tall, with 180 points of glass at the top (the strip
+    /// and the lens row) and 90 at the foot, a comet's name by the right
+    /// edge slides in, never past the comet's middle; one that would run
+    /// under the strip goes under its body; one in the open stays put.
+    func testANameKeepsInsideTheMapsFreeArea() {
+        let room = GraphNameRoom.Room(width: 390, height: 844, glass: GraphInsets(top: 180, left: 0, bottom: 90, right: 0),
+                                      edge: GraphNameRoom.edge)
+        XCTAssertEqual(room.maxX, 183)
+        XCTAssertEqual(room.maxY, 230)
+        XCTAssertEqual(room.minY, -320)
+        let half = SIMD2<Float>(60, 14)
+        // in the open: as it was
+        let open = GraphNameRoom.keep(above: SIMD2(0, 40), under: SIMD2(0, -40), half: half, room: room)
+        XCTAssertFalse(open.under)
+        XCTAssertEqual(open.across, 0)
+        // by the right edge: in, until its right side is 12 from the edge
+        let right = GraphNameRoom.keep(above: SIMD2(160, 40), under: SIMD2(160, -40), half: half, room: room)
+        XCTAssertEqual(right.across, -37)
+        XCTAssertEqual(160 + right.across + half.x, room.maxX)
+        // past the edge: no further than its own half width
+        let past = GraphNameRoom.keep(above: SIMD2(260, 40), under: SIMD2(260, -40), half: half, room: room)
+        XCTAssertEqual(past.across, -60)
+        // by the left edge: out
+        XCTAssertEqual(GraphNameRoom.keep(above: SIMD2(-170, 40), under: SIMD2(-170, -40), half: half, room: room).across, 47)
+        // under the strip's glass: under its body instead
+        let top = GraphNameRoom.keep(above: SIMD2(0, 225), under: SIMD2(0, 150), half: half, room: room)
+        XCTAssertTrue(top.under)
+        // with no room under it either, it stays above
+        let tight = GraphNameRoom.Room(minX: -100, maxX: 100, minY: 0, maxY: 50)
+        XCTAssertFalse(GraphNameRoom.keep(above: SIMD2(0, 45), under: SIMD2(0, 5), half: half, room: tight).under)
     }
 }

@@ -119,7 +119,9 @@ class MapPanelsTouchTargetTest {
             compose.waitForIdle()
             val what = "the options at font scale $s"
             val rows = measure(MapPanelTags.MENU, what)
-            check("$what: Rename, Choose folder and Delete, in order", rows == listOf(words.rename, words.moveToFolder, words.delete), rows.joinToString(" | "))
+            // S06c: an idea's Split…, Join with… and Collide with… come before Delete
+            check("$what: Rename, Choose folder, Split…, Join with…, Collide with… and Delete, in order",
+                rows == listOf(words.rename, words.moveToFolder, words.split, words.joinWith, words.collideWith, words.delete), rows.joinToString(" | "))
         }
     }
 

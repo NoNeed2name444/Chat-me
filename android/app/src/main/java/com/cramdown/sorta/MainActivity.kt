@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.cramdown.sorta.data.IdeaStore
 import com.cramdown.sorta.ui.SortaTheme
+import com.cramdown.sorta.ui.ideas.IdeaClock
 import com.cramdown.sorta.ui.ideas.IdeasBanner
 import com.cramdown.sorta.ui.ideas.IdeasModel
 import com.cramdown.sorta.ui.ideas.IdeasView
@@ -46,6 +47,10 @@ class MainActivity : ComponentActivity() {
         // the tests' Undo notices kept up till acted on (S05h2 repair 3); a release build ignores the extra
         val undoStays = IdeasBanner.undoStays(intent?.getBooleanExtra(UNDO_STAYS, false) == true,
             applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+        // the tests' fixed clock for the frost and the tide (S06a); heeded only in a debuggable build
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            intent?.getLongExtra(NOW, -1L)?.takeIf { it >= 0L }?.let { IdeaClock.fixed = it }
+        }
         // a share is taken once: a turn or a fold rebuilds the activity with the same intent
         if (savedInstanceState == null) shared.value = shareOf(intent)
         setContent { SortaRoot(store, testImport, undoStays, shared) }
@@ -94,6 +99,8 @@ class MainActivity : ComponentActivity() {
          * (IdeasBanner), so a slow device's test clock never runs past it; heeded only in a debuggable build.
          */
         const val UNDO_STAYS = "sortaUndoStays"
+        /** The tests' launch extra (S06a): the time the frost and the tide read, in ms since 1970, as iOS's -SortaNow. */
+        const val NOW = "sortaNow"
 
         /** The extra [name] as a path, only if it lies inside the app's cache directory. */
         fun testPath(activity: ComponentActivity, name: String): File? {

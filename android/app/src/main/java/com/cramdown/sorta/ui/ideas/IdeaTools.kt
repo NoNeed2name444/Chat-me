@@ -120,7 +120,7 @@ const val NAME_SHEET_FOOTNOTE_TAG = "name-sheet-footnote"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun NameSheet(title: String, prompt: String, initial: String, confirm: String, onDismiss: () -> Unit,
                           overMap: Boolean = false, footnote: ((String) -> String)? = null, allowsBlank: Boolean = false,
-                          onConfirm: (String) -> Unit) {
+                          lines: Int = 1, onConfirm: (String) -> Unit) {
     var name by remember { mutableStateOf(initial) }
     val focus = remember { FocusRequester() }
     val source = remember { MutableInteractionSource() }
@@ -141,11 +141,14 @@ const val NAME_SHEET_FOOTNOTE_TAG = "name-sheet-footnote"
                     Modifier.fillMaxWidth().focusRequester(focus).minimumInteractiveComponentSize()
                         .wardFocusRing(RoundedCornerShape(WardRadius.field.wardDp), focused, wardColor(WardControlStates.focusInk))
                         .semantics { contentDescription = prompt },
-                    singleLine = true, interactionSource = source, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
+                    // [lines] over 1 (the words sheet): the text wraps and shows from its start, as iOS's
+                    // field does, not just its end on one scrolled line; Done still saves
+                    singleLine = lines <= 1, maxLines = lines.coerceAtLeast(1),
+                    interactionSource = source, textStyle = WardType.body.textStyle().copy(color = wardColor(WardToken.ink)),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(wardColor(WardToken.primaryInk)),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { submit() }),
                     decorationBox = { inner ->
-                        Box(Modifier.fillMaxWidth().wardField(), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.fillMaxWidth().wardField(), contentAlignment = if (lines <= 1) Alignment.CenterStart else Alignment.TopStart) {
                             if (name.isEmpty()) Text(prompt, style = WardType.body.textStyle(), color = wardDisabledInk())
                             inner()
                         }

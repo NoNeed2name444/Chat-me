@@ -1,0 +1,29 @@
+{
+  "api": 2,
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "run",
+        "title": "Run"
+      }
+    ]
+  },
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "hosts": [],
+  "id": "io.github.example.tagger",
+  "license": "MIT",
+  "main": "main.js",
+  "minSorta": "1.0.0",
+  "name": "Tagger",
+  "permissions": [
+    "ideas.read",
+    "ideas.write",
+    "commands"
+  ],
+  "version": "2.0.0"
+}

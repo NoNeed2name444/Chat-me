@@ -13,7 +13,8 @@ struct MapDaysChip: View {
     var body: some View {
         Button(action: toggle) {
             HStack(spacing: WardSpace.xs) {
-                Image(systemName: "moonphase.waxing.crescent")
+                // the crescent, as Android's NightlightRound (S06b parity)
+                Image(systemName: "moon")
                     .foregroundStyle(Color.wardGlyph)
                     .accessibilityHidden(true)
                 Text(SkyWords.days)
@@ -65,7 +66,12 @@ struct MoonRow: View {
                     }
                 }
                 .padding(.horizontal, WardSpace.m)
+                // room for the raised tiles' shade
+                .padding(.vertical, WardSpace.xs)
             }
+            // the row's own height, not all the top inset offers: the map
+            // and the lit day show below it, as on Android
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(SkyWords.recentDays)
         }
@@ -106,8 +112,10 @@ struct MoonRow: View {
             .frame(minWidth: WardControlSize.target, minHeight: WardControlSize.target)
             .contentShape(Rectangle())
         }
-        .buttonStyle(WardItemButtonStyle(chosen: on,
-                                         shape: RoundedRectangle(cornerRadius: WardRadius.icon, style: .continuous)))
+        // a raised tile, pressed in with the accent edge when lit, as
+        // Android's WardTile
+        .buttonStyle(WardPanelButtonStyle(chosen: on,
+                                          shape: RoundedRectangle(cornerRadius: WardRadius.icon, style: .continuous)))
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
         .accessibilityLabel(SkyWords.moonSpoken(Self.dayName(day.start), day.count))

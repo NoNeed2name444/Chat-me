@@ -299,6 +299,23 @@
     <string name="map_cells">Cells</string>
     <string name="map_cell_by_cell">Cell by cell</string>
     <string name="map_same_as_all">Same as all</string>
+    <!-- S06a: the sorting deck, "You were saying…" and tides (iOS IdeasWords; the strings pass of 14 Nov) -->
+    <string name="deck_show_cards">Show as cards</string>
+    <string name="deck_show_list">Show as list</string>
+    <string name="deck_later">Later</string>
+    <string name="deck_later_done">Moved to the back.</string>
+    <string name="deck_file_in">File in %1$s</string>
+    <string name="deck_unfinished">Unfinished</string>
+    <string name="offer_label">You were saying…</string>
+    <string name="offer_carry_on">Carry on</string>
+    <string name="offer_carry_on_spoken">Carry on with %1$s</string>
+    <string name="offer_not_now">Not now</string>
+    <string name="frost_spoken">not opened in a while</string>
+    <string name="tide_title">Low tide</string>
+    <string name="tide_line">Ideas you haven\'t opened in a while.</string>
+    <string name="tide_keep">Keep</string>
+    <string name="tide_let_go">Let go</string>
+    <string name="tide_close">Close low tide</string>
     <!-- S06b (plugins plan ideas 1, 3, 7, 10), the same words as iOS SkyWords (GraphSkyMap.swift), after the ux-writing, better-writing and unslop passes -->
     <!-- A folder row's menu item and spoken action, and its sheet: the folder's own words -->
     <string name="folder_words">Folder words…</string>
@@ -336,4 +353,60 @@
     <!-- Where a shared idea came from: "From example.org", spoken "Shared from example.org" -->
     <string name="shared_from">From %1$s</string>
     <string name="shared_from_spoken">Shared from %1$s</string>
+    <!-- S06c: older ideas that share rare words (echoes), Collide, Split and Join; the same words as iOS's IdeasWords -->
+    <string name="echoes_title">Ideas like this</string>
+    <!-- TalkBack: "Double-tap to link it to this idea" -->
+    <string name="echoes_link_hint">link it to this idea</string>
+    <string name="echoes_linked">Linked to “%1$s”.</string>
+    <!-- TalkBack, on a board card like the open idea: "Double-tap to link it to “Rain barrel”" -->
+    <string name="echoes_board_link">link it to “%1$s”</string>
+    <string name="collide_tool">Collide two ideas</string>
+    <string name="collide_title">What if both?</string>
+    <string name="collide_field">The idea they make</string>
+    <string name="collide_save">Save idea</string>
+    <string name="collide_another">Try another pair</string>
+    <string name="collide_saved">New idea in To sort.</string>
+    <string name="collide_none">No two ideas are far apart yet. Put ideas in different folders, then try again.</string>
+    <string name="shape_split">Split…</string>
+    <string name="shape_join">Join with…</string>
+    <string name="shape_collide">Collide with…</string>
+    <string name="shape_join_title">Join with</string>
+    <string name="shape_collide_title">Collide with</string>
+    <string name="split_title">Split in two</string>
+    <string name="split_hint">Tap the last sentence of the first idea.</string>
+    <!-- TalkBack, the chosen sentence row's state -->
+    <string name="split_ends_here">First idea ends here</string>
+    <string name="split_first">First idea</string>
+    <string name="split_second">Second idea</string>
+    <string name="split_confirm">Split idea</string>
+    <string name="split_done">Idea split in two.</string>
+    <string name="split_one">This idea has one sentence, so it can’t be split.</string>
+    <string name="join_done">Ideas joined.</string>
+    <!-- S06d: the lenses over the map (plugins-plan idea 8): the row's name, each chip, what a tap does, the empty line -->
+    <string name="map_lenses">Lenses</string>
+    <string name="lens_questions">Questions</string>
+    <string name="lens_late_night">Late night</string>
+    <string name="lens_unfinished">Unfinished</string>
+    <string name="lens_alone">Alone</string>
+    <!-- A chip, spoken: "Questions, 3 ideas" -->
+    <plurals name="lens_spoken">
+        <item quantity="one">%1$s, %2$d idea</item>
+        <item quantity="other">%1$s, %2$d ideas</item>
+    </plurals>
+    <string name="lens_questions_hint">show only ideas with a question mark</string>
+    <string name="lens_late_night_hint">show only ideas caught between 11 PM and 4 AM</string>
+    <string name="lens_unfinished_hint">show only ideas that stop mid-sentence</string>
+    <string name="lens_alone_hint">show only ideas with no links</string>
+    <string name="lens_off_hint">turn this lens off</string>
+    <string name="map_lens_empty">No ideas match. Turn a lens off to see more.</string>
+    <!-- S06d: the capsule (plugins-plan idea 11): the More menu, the monthly offer, the notices, the refusals -->
+    <string name="more_save_capsule">Save a capsule…</string>
+    <string name="more_open_capsule">Open a capsule…</string>
+    <string name="capsule_offer">Keep a copy of your ideas. A capsule is one file that opens in any browser, and Sorta can open it again.</string>
+    <string name="capsule_offer_save">Save a capsule</string>
+    <string name="capsule_offer_later">Not now</string>
+    <string name="capsule_saved">Capsule saved.</string>
+    <string name="capsule_not_saved">Couldn\'t save the capsule. Try again, or choose another place.</string>
+    <string name="capsule_refused_not_capsule">This file isn\'t a Sorta capsule. Choose another file.</string>
+    <string name="capsule_refused_newer">This capsule is from a newer version of Sorta. Check for a Sorta update, then try again.</string>
 </resources>

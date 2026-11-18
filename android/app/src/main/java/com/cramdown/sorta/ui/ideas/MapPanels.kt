@@ -53,6 +53,9 @@ import com.cramdown.sorta.R
 import com.cramdown.sorta.ideas.GraphTheme
 import com.cramdown.sorta.ideas.IdeaBook
 import com.cramdown.sorta.ideas.MapMenuItem
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.automirrored.outlined.CallMerge
+import androidx.compose.material.icons.automirrored.outlined.CallSplit
 import com.cramdown.sorta.ideas.MapPeek
 import com.cramdown.sorta.ideas.MapPeekContent
 import com.cramdown.sorta.ideas.MapPeekInput
@@ -156,6 +159,9 @@ fun mapPeekWords(res: Resources): MapPeekWords = MapPeekWords(
     rename = res.getString(R.string.map_menu_rename),
     moveToFolder = res.getString(R.string.map_menu_move),
     delete = res.getString(R.string.map_menu_delete),
+    split = res.getString(R.string.shape_split),
+    joinWith = res.getString(R.string.shape_join),
+    collideWith = res.getString(R.string.shape_collide),
     // GraphPeek.roleWord (GraphTouchModel.swift:267-281): Space's bodies, and Neurons' roles by number
     roles = mapOf(
         "space:galaxy" to res.getString(R.string.map_role_black_hole),
@@ -455,6 +461,9 @@ private fun menuGlyph(item: MapMenuItem): ImageVector = when (item) {
     MapMenuItem.OPEN -> Icons.Outlined.Description
     MapMenuItem.RENAME -> Icons.Outlined.Edit
     MapMenuItem.MOVE -> Icons.Outlined.Folder
+    MapMenuItem.SPLIT -> Icons.AutoMirrored.Outlined.CallSplit
+    MapMenuItem.JOIN -> Icons.AutoMirrored.Outlined.CallMerge
+    MapMenuItem.COLLIDE -> Icons.Outlined.Bolt
     MapMenuItem.DELETE -> Icons.Outlined.Delete
 }
 

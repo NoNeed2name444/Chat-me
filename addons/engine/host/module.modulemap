@@ -1,0 +1,5 @@
+// Swift's view of the shared C host (ios/project.yml: SWIFT_INCLUDE_PATHS).
+module SortaAddonsC {
+    header "sorta_host.h"
+    export *
+}

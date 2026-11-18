@@ -52,6 +52,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import com.cramdown.sorta.map.MapReshape
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -128,6 +130,7 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
 import com.cramdown.sorta.ui.ward.WardType
@@ -366,6 +369,20 @@ var SemanticsPropertyReceiver.mapTap by MapTapKey
  */
 data class MapEase(val id: String, val glide: Boolean, val serial: Int)
 
+/**
+ * The map's reshaping touches (S06c), on ideas only ([takes]: a body index that is an idea): a held body let
+ * go on another idea is [collide] (the other ringed first, MapDrawn.drop); two fingers on the chosen idea
+ * pushed apart are [split]; one on the chosen idea and one on another, pushed together, are [join]. The
+ * rules are MapReshape's; while one waits the camera does not pinch. [ring]: the accent the rings take.
+ */
+class MapReshapeTouches(
+    val takes: (Int) -> Boolean,
+    val collide: (Int, Int) -> Unit,
+    val split: (Int) -> Unit,
+    val join: (Int, Int) -> Unit,
+    val ring: Color,
+)
+
 /** Fly in to the Universe folder [id] (S05h): each new [serial] flies again. */
 data class MapFlyTo(val id: String, val serial: Int)
 
@@ -446,10 +463,16 @@ data class MapFlyTo(val id: String, val serial: Int)
      * body it hides is not drawn, picked or named; the renderer applies it at the next frame.
      */
     filter: MapFilterView? = null,
+    /** The frost on ideas left unopened (S06a A6): a level 0 to 3 by the scene's index, null for none. Space draws it. */
+    frost: ByteArray? = null,
     /** S06b: a lit day's ideas, by id (any case), their bodies and the folders they sit in drawn whole, the rest faded; null for none. */
     lit: Set<String>? = null,
     /** The proof tour (S05i2, PerfTour): a Performance scene from the layout flies its path by itself. Never shown to a person. */
     tour: Boolean = false,
+    /** S06c: the ideas like the one open in the editor, as [MapScene.ids] ids in any case: each is ringed in [reshape]'s accent. */
+    glows: Set<String> = emptySet(),
+    /** S06c: collide on a drop, split and join with two fingers; null for none (MapReshapeTouches). */
+    reshape: MapReshapeTouches? = null,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -464,6 +487,8 @@ data class MapFlyTo(val id: String, val serial: Int)
     var readout by remember { mutableStateOf(MapReadout(displayMaxHz = maxHz)) }
     // per scene, as its renderer: another scene's bodies and counts are not this one's
     var screenNodes by remember(scene) { mutableStateOf<List<ScreenNode>>(emptyList()) }
+    // the camera's pose those were projected at (MapDrawn.boxPose), handed on with them
+    var screenPose by remember(scene) { mutableStateOf<List<Float>>(emptyList()) }
     // the names drawn last frame, and the spot each took, which count a little bigger in this one (LabelRoom.HOLD)
     val named = remember(scene) { HashMap<Int, Int>() }
     var drawn by remember(scene) { mutableStateOf(MapDrawn()) }
@@ -483,6 +508,12 @@ data class MapFlyTo(val id: String, val serial: Int)
     val home = remember(scene) { HomeView(camera, HomeView.framer(scene)) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
+    // what the first view and a fly-in fit to: half a touch target more under the top glass, so a
+    // body's touch area clears the strip and the lens row too, and half a target more over the
+    // first-run card's cover (fitHome), so the bodies stay centred between them, as iOS's framing
+    // and its card cover keep them (S06d)
+    val half = with(density) { (WardControlSize.target / 2).dp.toPx() }
+    val framed = insets.copy(top = insets.top + half)
     val cover = with(density) { card.toPx() }
     // the card's cover the home was last fitted to
     val framedCover = remember(home) { floatArrayOf(0f) }
@@ -503,7 +534,7 @@ data class MapFlyTo(val id: String, val serial: Int)
         GlMapRenderer(
             scene.tree, camera, scene.nodeRadius, displayHz = { hz[0] }, displayMaxHz = maxHz,
             onReadout = { r -> mainHandler.post { readout = r } },
-            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes -> mainHandler.post { screenNodes = nodes } },
+            onScreenNodes = if (scene.titles.isEmpty()) null else { nodes, pose -> mainHandler.post { screenNodes = nodes; screenPose = pose } },
             theme = scene.theme, assets = context.assets,
             density = context.resources.displayMetrics.density, contrast = increaseContrast(context),
             onDrawn = { d -> mainHandler.post { drawn = d } },
@@ -540,7 +571,7 @@ data class MapFlyTo(val id: String, val serial: Int)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), insets)) loop.touched()
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), framed)) loop.touched()
     }
     // a lit day reaches the renderer as it changes; the next frame dims the rest (S06b)
     LaunchedEffect(renderer, lit) {
@@ -553,6 +584,10 @@ data class MapFlyTo(val id: String, val serial: Int)
         val next = if (!filterSet[0]) filter?.at(instantNow = true) else filter
         filterSet[0] = true
         if (renderer.filter !== next) { renderer.filter = next; loop.moved() }
+    }
+    // the frost reaches the renderer as it changes; the next frame melts toward it (S06a A6)
+    LaunchedEffect(renderer, frost) {
+        if (renderer.frost !== frost) { renderer.frost = frost; loop.moved() }
     }
     // the chosen body and Show links reach the renderer as they change; the next frame draws them (S05g)
     val chosenIndex = remember(scene, chosenId) { scene.indexOf(chosenId) ?: -1 }
@@ -603,9 +638,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // the first view fits the shape the map has (on its size, below) and what the chrome and the
     // first-run card leave of it, again when the chrome changes or the card comes or grows
     fun fitHome(size: IntSize, follow: Boolean = true) {
-        if (synchronized(camera) { home.fit(camera, size.width, size.height, insets.coveringFoot(framedCover[0]), follow) }) loop.moved()
+        if (synchronized(camera) { home.fit(camera, size.width, size.height, framed.coveringFoot(if (framedCover[0] > 0f) framedCover[0] + half else 0f), follow) }) loop.moved()
     }
-    LaunchedEffect(home, insets) { fitHome(viewSize) }
+    LaunchedEffect(home, framed) { fitHome(viewSize) }
     LaunchedEffect(home, cover) {
         val follow = MapCardCover.refits(framedCover[0], cover)
         framedCover[0] = cover
@@ -648,6 +683,11 @@ data class MapFlyTo(val id: String, val serial: Int)
         else MapNameShow.Board { i -> plan.bodies.getOrNull(i)?.galaxy?.let { scene.galaxyTones[it] } }
     }
     val chosenName = remember(scene, chosenId) { scene.indexOf(chosenId) }
+    // S06c: the bodies ringed (ideas like the open one), and the idea a held body would be let go on
+    val glowNames = remember(scene, glows) {
+        if (glows.isEmpty()) emptySet() else { val up = glows.map { it.uppercase() }.toSet(); scene.ids.indices.filter { scene.ids[it].uppercase() in up }.toSet() }
+    }
+    var dropName by remember(scene) { mutableStateOf<Int?>(null) }
     // a body hovered stops the Universe's orbit clock meanwhile (S05h, GraphMotion.swift:1752); a body
     // pressed does too, handed to the renderer by the touch itself (the gestures below), as iOS's is
     LaunchedEffect(renderer, hoveredName) { renderer.hover(hoveredName ?: -1) }
@@ -697,7 +737,12 @@ data class MapFlyTo(val id: String, val serial: Int)
             LabelEstimate.measure(points, lights, backdrop) to shine(i).colour
         }
     }
-    val nameWanted: List<Int> = if (!pills) emptyList() else {
+    val drop = dropName
+    val nameWanted: List<Int> = if (!pills) emptyList()
+        // S06c: the idea a held one would be let go on is named alone: the held idea sits on it, so two
+        // names there would cover each other (iOS's GraphSim.nameDrop)
+        else if (drop != null && screenNodes.any { it.index == drop }) listOf(drop)
+        else {
         // a body picked up takes the chosen body's slot till the let-go, as iOS's grab does (MapNameShow.wanted)
         val asked = listOfNotNull(hoveredName, pressedName, heldName, grabbedName ?: chosenName)
         if (asked.isEmpty()) emptyList() else {
@@ -739,14 +784,34 @@ data class MapFlyTo(val id: String, val serial: Int)
             high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek, below = scene.perf?.graph?.noteCount ?: Int.MAX_VALUE)
         return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
     }
+    // S06c, for the tests too: an idea a finger can hold (as spot(), among the ideas only), and the nearest
+    // other idea on screen to the one held (else to the chosen one, for a push together), each as its index,
+    // centre x and y; empty when there is none
+    fun ideaSpot(): List<Float> {
+        val r = reshape ?: return emptyList()
+        val margin = with(density) { MapSpot.MARGIN_DP.dp.toPx() }
+        val best = MapSpot.pick(screenNodes.filter { r.takes(it.index) }, viewSize.width.toFloat(), viewSize.height.toFloat(),
+            high = insets.top, low = insets.bottom + cover, margin = margin, peek = peek)
+        return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
+    }
+    fun nearIdea(): List<Float> {
+        val r = reshape ?: return emptyList()
+        val held = grabbedName ?: chosenIndex.takeIf { it >= 0 } ?: return emptyList()
+        val at = screenNodes.firstOrNull { it.index == held } ?: return emptyList()
+        val best = screenNodes.filter { it.index != held && it.pixels > 2f && r.takes(it.index) }
+            .minByOrNull { (it.x - at.x) * (it.x - at.x) + (it.y - at.y) * (it.y - at.y) }
+        return best?.let { listOf(it.index.toFloat(), it.x, it.y) } ?: emptyList()
+    }
     // behind the GL: Performance's sky is iOS's (PerfLook.SKY); the other looks keep theirs
     val behind = if (scene.theme == MapTheme.PLAIN) Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2]) else Color(0xFF0E1B2C)
     Box(modifier.background(behind, RoundedCornerShape(corner)).semantics {
         contentDescription = description
         // the drawn bodies' box and the camera's pose, for the emulator's tests (S05d)
-        mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) {
-            listOf(camera.target.x, camera.target.y, camera.target.z, camera.distance, camera.yaw, camera.pitch)
-        }, names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) }, spot = spot(), homes = homesNow, cells = cells)
+        mapDrawn = drawnNow.copy(box = box, pose = synchronized(camera) { MapDrawn.poseOf(camera) },
+            names = namesNow.map { (p, _) -> MapDrawnName(p.index, listOf(p.left, p.top, p.right, p.bottom), listOf(p.bodyX, p.bodyY)) },
+            spot = spot(), homes = homesNow, cells = cells, boxPose = screenPose,
+            glows = screenNodes.filter { it.index in glowNames }.map { it.index }.sorted(), drop = dropName ?: -1,
+            ideaSpot = ideaSpot(), near = nearIdea())
         val tapped = onTap
         if (tapped != null) mapTap = MapTap(scene.ids, { tapped(it.takeIf { i -> i >= 0 }) }, scene.build, cue)
     }
@@ -758,6 +823,8 @@ data class MapFlyTo(val id: String, val serial: Int)
         val latestDouble by rememberUpdatedState(onDoubleTap)
         val latestHome by rememberUpdatedState(onHome)
         val latestHold by rememberUpdatedState(onHold)
+        val latestReshape by rememberUpdatedState(reshape)
+        val latestChosen by rememberUpdatedState(chosenName)
         // the last still lift: when, where and on what, for a double tap
         val lastLift = remember(scene) { LastLift() }
         // the map's touches (S05g), on the drawn map and, where GL can't draw it, on its note: there no body
@@ -809,6 +876,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                 fun letGo(still: Boolean) {
                     if (!picked) return
                     picked = false; dragging = false; farthest = 0f
+                    dropName = null
                     renderer.release(still)
                     grabbedName = null
                     loop.moved()
@@ -821,6 +889,12 @@ data class MapFlyTo(val id: String, val serial: Int)
                 var pressedNow = press.pressed ?: -1
                 renderer.press(pressedNow)
                 if (pills) pressedName = press.pressed
+                // S06c: two fingers on the chosen idea or on it and another, judged by MapReshape in dp, and a lift
+                // that ends the gesture (not a cancel), which lets a held body go on the idea under it
+                var shape: MapReshape.Start? = null
+                var shapeFrom = 0.0
+                var shaped = false
+                var lifted = false
                 try {
                     var now = down.uptimeMillis
                     while (true) {
@@ -861,7 +935,7 @@ data class MapFlyTo(val id: String, val serial: Int)
                         // so a late frame never turns a hold that moved into a turn of the camera
                         if (pickWait && MapTouchRules.picksUp((now - down.uptimeMillis) / 1000.0, moved, slop, holdScale)) pickUp()
                         val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) { liftedAt = now; break }
+                        if (pressed.isEmpty()) { liftedAt = now; lifted = true; break }
                         loop.touched()
                         press.fingers(pressed.size)
                         if (pressed.size >= 2) {
@@ -869,13 +943,51 @@ data class MapFlyTo(val id: String, val serial: Int)
                             // (Android's own rule)
                             letGo(still = false)
                             multi = true
-                            val zoom = event.calculateZoom()
-                            val pan = event.calculatePan()
-                            synchronized(camera) {
-                                camera.zoom(zoom)
-                                camera.pan(pan.x / size.height, pan.y / size.height)
+                            val r = latestReshape
+                            val p0 = pressed[0].position; val p1 = pressed[1].position
+                            val apart = (p0 - p1).getDistance().toDp().value.toDouble()
+                            if (r != null && shape == null) {
+                                // the fingers' ideas as they land: a split or a join in waiting only on the chosen idea
+                                val bodies = screenNodes.filter { r.takes(it.index) }.map(::nameBody)
+                                val within = MapReshape.REACH.toFloat().dp.toPx()
+                                val mid = (p0 + p1) / 2f
+                                val start = MapReshape.start(MapNameShow.pick(bodies, p0.x, p0.y, within)?.index, MapNameShow.pick(bodies, p1.x, p1.y, within)?.index,
+                                    MapNameShow.pick(bodies, mid.x, mid.y, within)?.index, apart)
+                                val c = latestChosen
+                                shape = when {
+                                    c == null -> MapReshape.Start.None
+                                    start is MapReshape.Start.Split && start.a == c -> start
+                                    start is MapReshape.Start.Join && (start.a == c || start.b == c) -> start
+                                    else -> MapReshape.Start.None
+                                }
+                                shapeFrom = apart
                             }
-                            moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
+                            val waiting = shape
+                            var cameraTakes = !shaped
+                            if (r != null && !shaped && waiting != null && waiting != MapReshape.Start.None) {
+                                when (MapReshape.judge(waiting, shapeFrom, apart)) {
+                                    MapReshape.Judged.WAITING -> cameraTakes = false
+                                    MapReshape.Judged.DONE -> {
+                                        shaped = true; cameraTakes = false
+                                        hostView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        when (waiting) {
+                                            is MapReshape.Start.Split -> r.split(waiting.a)
+                                            is MapReshape.Start.Join -> r.join(waiting.a, waiting.b)
+                                            MapReshape.Start.None -> {}
+                                        }
+                                    }
+                                    MapReshape.Judged.FAILED -> shape = MapReshape.Start.None
+                                }
+                            }
+                            if (cameraTakes) {
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                synchronized(camera) {
+                                    camera.zoom(zoom)
+                                    camera.pan(pan.x / size.height, pan.y / size.height)
+                                }
+                                moved += pan.getDistance() + kotlin.math.abs(zoom - 1f) * 100
+                            } else moved += slop + 1f
                         } else {
                             val change = pressed.first()
                             val delta = change.position - change.previousPosition
@@ -893,6 +1005,14 @@ data class MapFlyTo(val id: String, val serial: Int)
                                     val to = synchronized(camera) { camera.unproject(finger.x, finger.y, depth, w, h) } + grabOffset
                                     renderer.dragTo(to)
                                     loop.moved()
+                                    // S06c: the idea under the finger, if any, is where the held one would be let go
+                                    val r = latestReshape
+                                    val held = grabbedName
+                                    if (r != null && held != null && r.takes(held)) {
+                                        val under = screenNodes.filter { it.index != held && r.takes(it.index) }.map(::nameBody)
+                                            .firstOrNull { b -> (Offset(b.x, b.y) - finger).getDistance() <= max(b.radius, MapReshape.DROP_DP.dp.toPx()) }?.index
+                                        if (under != dropName) dropName = under
+                                    }
                                 }
                             } else if ((moved > slop || multi) && !menu) {
                                 // a finger that moves before the pick-up turns the camera, on a body or not
@@ -909,7 +1029,11 @@ data class MapFlyTo(val id: String, val serial: Int)
                     press.up()
                     renderer.press(-1)
                     if (pressedName != null) pressedName = null
+                    val dropped = dropName
+                    val from = grabbedName
                     letGo(still = !dragging)
+                    // S06c: let go on another idea, the held one springs home as before and the two collide
+                    if (lifted && dropped != null && from != null) latestReshape?.collide(from, dropped)
                 }
                 val held = (liftedAt - down.uptimeMillis) / 1000.0
                 val lift = MapTouchRules.judge(MapTouch(onBody = hit != null, held = held, moved = moved, lifted = true,
@@ -1003,6 +1127,20 @@ data class MapFlyTo(val id: String, val serial: Int)
                 }
             },
         ) {
+            // S06c: a ring round each idea like the one open, and two round the idea a held one would be let go on.
+            // They never move or pulse, so Reduce Motion needs nothing more: the ring is the meaning
+            val ring = reshape?.ring
+            if (ring != null && (glowNames.isNotEmpty() || dropName != null)) for (n in screenNodes) {
+                val glow = n.index in glowNames
+                val drop = n.index == dropName
+                if (!glow && !drop) continue
+                val r = max(nameBody(n).radius, 10.dp.toPx()) + 6.dp.toPx()
+                drawCircle(ring, r, Offset(n.x, n.y), style = Stroke(width = 2.5.dp.toPx()))
+                if (drop) {
+                    drawCircle(ring, r + 7.dp.toPx(), Offset(n.x, n.y), style = Stroke(width = 2.5.dp.toPx()))
+                    drawCircle(ring.copy(alpha = 0.25f), r, Offset(n.x, n.y))
+                }
+            }
             if (pills) {
                 // the names on show (S05f): the rim, the pill over it, the words on top, in front of every body
                 drawIntoCanvas { canvas ->

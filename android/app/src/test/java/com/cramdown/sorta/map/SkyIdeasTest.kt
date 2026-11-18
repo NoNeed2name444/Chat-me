@@ -84,6 +84,48 @@ class SkyIdeasTest {
         }
     }
 
+    // A4, v14: three radii apart in space can still be one behind the other on screen, where the folder's disc
+    // took the comet's taps (iOS ideas, Chat-me run 43676492822). Seen through a camera at the origin looking
+    // down -z, 1000 pixels per unit at depth 1, the comet's disc ends up at least the 48 dp gap clear of the
+    // folder's, at its own depth, out along its lean on screen.
+    @Test fun aLeaningCometIsClearOfItsFolderOnScreen() {
+        val gap = 48f * 2.75f
+        val view = Leaning.View(Vec3(0f, 0f, 0f), Vec3(0f, 0f, -1f), Vec3(1f, 0f, 0f), 1000f, gap)
+        fun across(p: Vec3) = Pair(p.x * view.focal / -p.z, p.y * view.focal / -p.z)
+        fun clearance(comet: Vec3, cr: Float, folder: Vec3, fr: Float): Float {
+            val (cx, cy) = across(comet)
+            val (fx, fy) = across(folder)
+            val apart = kotlin.math.sqrt((cx - fx) * (cx - fx) + (cy - fy) * (cy - fy))
+            return apart - fr * view.focal / -folder.z - cr * view.focal / -comet.z
+        }
+        val folder = Vec3(0f, 0f, -20f)
+        // behind the folder, three radii away along the sight line, and a little up: on screen inside its disc
+        val hidden = Leaning.place(Vec3(0f, 0.2f, -30f), folder, 1f)
+        assertTrue("the case: hidden on screen first, ${clearance(hidden, 0.3f, folder, 1f)}", clearance(hidden, 0.3f, folder, 1f) < 0f)
+        val moved = Leaning.clearOnScreen(hidden, 0.3f, folder, 1f, view)
+        assertTrue("clear by the gap: ${clearance(moved, 0.3f, folder, 1f)}", clearance(moved, 0.3f, folder, 1f) >= gap - 0.01f)
+        assertEquals("at its own depth", hidden.z, moved.z, 1e-4f)
+        assertTrue("out along its lean on screen (up)", moved.y > hidden.y && kotlin.math.abs(moved.x) < 1e-4f)
+        // exactly behind it: across the screen along the camera's aside
+        val behind = Leaning.clearOnScreen(Vec3(0f, 0f, -26f), 0.3f, folder, 1f, view)
+        assertTrue("right behind: clear along x, ${clearance(behind, 0.3f, folder, 1f)}",
+            clearance(behind, 0.3f, folder, 1f) >= gap - 0.01f && behind.x > 0f && kotlin.math.abs(behind.y) < 1e-4f)
+        // already clear: left where it is
+        val far = Vec3(5f, 0f, -20f)
+        near("clear already: unmoved", far, Leaning.clearOnScreen(far, 0.3f, folder, 1f, view))
+        // behind the eye: unmoved
+        val back = Vec3(0f, 0.1f, 5f)
+        near("behind the eye: unmoved", back, Leaning.clearOnScreen(back, 0.3f, folder, 1f, view))
+        // every way round, near and far: never short of the gap
+        for (k in 0 until 60) {
+            val f = Vec3((k % 5) - 2f, (k % 3) - 1f, -10f - (k % 7) * 3f)
+            val c = f + Vec3(((k % 4) - 1.5f) * 0.2f, ((k % 6) - 2.5f) * 0.1f, ((k % 9) - 4f) * 1.5f)
+            if (-c.z <= 1f) continue
+            val at = Leaning.clearOnScreen(c, 0.25f, f, 0.8f, view)
+            assertTrue("$c by $f: ${clearance(at, 0.25f, f, 0.8f)}", clearance(at, 0.25f, f, 0.8f) >= gap - 0.01f)
+        }
+    }
+
     private fun near(what: String, want: Vec3, got: Vec3) =
         assertTrue("$what: want $want, got $got", (got - want).length() < 1e-5f)
 

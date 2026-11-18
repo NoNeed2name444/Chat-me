@@ -1,0 +1,210 @@
+{
+ "store": "../../conformance/store.json",
+ "fixtures": [
+  {
+   "name": "loop",
+   "kind": "command",
+   "expect": "limit.time",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "memory",
+   "kind": "command",
+   "expect": "limit.memory",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "recursion",
+   "kind": "command",
+   "expect": "limit.stack",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "json",
+   "kind": "command",
+   "expect": "limit.stack",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "huge",
+   "kind": "settings",
+   "expect": "limit.json",
+   "limitMs": 100,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "settings": {}
+  },
+  {
+   "name": "flood",
+   "kind": "command",
+   "expect": "limit.time",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "eval",
+   "kind": "command",
+   "expect": "eval",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "writes",
+   "kind": "command",
+   "expect": "limit.writes",
+   "limitMs": 500,
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "captures",
+   "kind": "command",
+   "expect": "limit.captures",
+   "limitMs": 500,
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "revoke",
+   "kind": "command",
+   "expect": "stopped",
+   "limitMs": 100,
+   "grants": [
+    "ideas.read",
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   },
+   "stopAfterMs": 100
+  },
+  {
+   "name": "regex",
+   "kind": "command",
+   "expect": "limit.time",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "card",
+   "kind": "card",
+   "expect": "limit.time",
+   "limitMs": 20,
+   "grants": [
+    "ideas.read",
+    "cards"
+   ],
+   "commands": [
+    "run"
+   ],
+   "card": "00000000-0000-4000-8000-000000000101"
+  },
+  {
+   "name": "toplevel",
+   "kind": "load",
+   "expect": "limit.time",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ]
+  }
+ ]
+}

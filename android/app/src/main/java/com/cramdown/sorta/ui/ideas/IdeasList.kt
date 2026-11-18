@@ -28,7 +28,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -105,7 +107,7 @@ internal fun LazyListScope.ideasList(
 }
 
 /** "To sort 3", or the open folder's name and count, as a header; the More circle at its end. */
-@Composable private fun TitleRow(folder: String?, count: Int, more: @Composable () -> Unit) {
+@Composable internal fun TitleRow(folder: String?, count: Int, more: @Composable () -> Unit) {
     val title = folder ?: stringResource(R.string.sort_title)
     val spoken = if (folder == null) pluralStringResource(R.plurals.sort_title_spoken, count, count)
         else pluralStringResource(R.plurals.folder_title_spoken, count, folder, count)
@@ -123,8 +125,9 @@ internal fun LazyListScope.ideasList(
 }
 
 /** A menu's item: an action in the accent's words, a destructive one in danger. */
-@Composable internal fun MenuItem(text: String, destructive: Boolean = false, onClick: () -> Unit) {
-    DropdownMenuItem({ Text(text, style = WardType.body.textStyle(), color = wardColor(if (destructive) WardToken.danger else WardToken.primaryInk)) }, onClick)
+@Composable internal fun MenuItem(text: String, destructive: Boolean = false, tag: String? = null, onClick: () -> Unit) {
+    DropdownMenuItem({ Text(text, style = WardType.body.textStyle(), color = wardColor(if (destructive) WardToken.danger else WardToken.primaryInk)) }, onClick,
+        if (tag != null) Modifier.testTag(tag) else Modifier)
 }
 
 /** The first row in a folder: back to its parent ("To sort" at the top level). */
@@ -153,12 +156,15 @@ internal fun LazyListScope.ideasList(
     val chooseSpoken = stringResource(R.string.row_choose_folder_spoken, line)
     val hint = stringResource(R.string.row_hint)
     val actions = listOf(CustomAccessibilityAction(chooseWords) { choose(); true }, CustomAccessibilityAction(deleteWords) { delete(); true })
+    // left mid-sentence (S06a): a dotted edge, and TalkBack says so after its words
+    val marked = note.stoppedAt != null
+    val unfinished = stringResource(R.string.deck_unfinished)
     SwipeRow(lead = chooseWords to choose, trail = deleteWords to delete) {
         Box {
             @Composable fun Words(modifier: Modifier) {
                 Box(modifier.heightIn(min = WardControlSize.target.wardDp)
                     .combinedClickable(role = Role.Button, onClickLabel = hint, onLongClick = { menu = true }, onClick = open)
-                    .semantics { customActions = actions; testTag = IdeasTags.IDEA_LINE },
+                    .semantics { customActions = actions; testTag = IdeasTags.IDEA_LINE; if (marked) stateDescription = unfinished },
                     contentAlignment = Alignment.CenterStart) {
                     Text(line, style = WardType.body.textStyle(), color = wardColor(WardToken.ink), maxLines = if (ax) 3 else 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -166,10 +172,10 @@ internal fun LazyListScope.ideasList(
             @Composable fun Choose(modifier: Modifier) {
                 WardTextButton(chooseWords, choose, modifier.semantics { contentDescription = chooseSpoken }, kind = WardButtonKind.compact, fills = false)
             }
-            if (ax) Column(Modifier.fillMaxWidth().wardRowTile(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
+            if (ax) Column(Modifier.fillMaxWidth().unfinishedEdge(marked).wardRowTile(), verticalArrangement = Arrangement.spacedBy(WardSpace.s.wardDp)) {
                 Words(Modifier.fillMaxWidth())
                 Choose(Modifier)
-            } else Row(Modifier.fillMaxWidth().wardRowTile(), verticalAlignment = Alignment.CenterVertically,
+            } else Row(Modifier.fillMaxWidth().unfinishedEdge(marked).wardRowTile(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(WardSpace.m.wardDp)) {
                 Words(Modifier.weight(1f))
                 Choose(Modifier)
