@@ -22,6 +22,8 @@ enum AIFiles {
 final class AIBox<T>: @unchecked Sendable { var result: Result<T, Error>? }
 
 /// Runs `work` on a thread of its own and waits, as every AI call must.
+/// A test on the main thread keeps the run loop turning while it waits, as the
+/// app's main thread does: a UserDefaults write on the worker waits for it.
 func aiOffMain<T>(_ work: @escaping () throws -> T) throws -> T {
     let box = AIBox<T>()
     let done = DispatchSemaphore(value: 0)
@@ -31,7 +33,13 @@ func aiOffMain<T>(_ work: @escaping () throws -> T) throws -> T {
     }
     thread.stackSize = 8 << 20
     thread.start()
-    done.wait()
+    if Thread.isMainThread {
+        while done.wait(timeout: .now()) == .timedOut {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+    } else {
+        done.wait()
+    }
     return try box.result!.get()
 }
 
