@@ -222,6 +222,9 @@ enum TreeWeight {
     static func twigFloor(scale: Float, focal: Float) -> Float { twigPoints / 2 * scale / max(focal, 1) }
 
     static func leafFloor(scale: Float, focal: Float) -> Float { leafPoints / 2 * scale / max(focal, 1) }
+    /// Nor is a leaf drawn longer than this: flown in close, leaves would wall the branches off.
+    static let leafMostPoints: Float = 22
+    static func leafCeiling(scale: Float, focal: Float) -> Float { leafMostPoints / 2 * scale / max(focal, 1) }
 }
 
 /// One node's body on screen: where, how big (its leaf, or its branch's
@@ -293,6 +296,19 @@ enum TreeCamera3D {
     }
 
     /// Every branch end and body of part `index`'s subtree, what a view of it frames.
+    /// The room a fly-in frames (S11): `insets` raised past each of the
+    /// chrome's `clear` boxes, under one in the top half, over one in the foot
+    /// half. Android's MapClear.around.
+    static func around(_ insets: (top: Float, left: Float, bottom: Float, right: Float), clear: [CGRect],
+                       height: Float) -> (top: Float, left: Float, bottom: Float, right: Float) {
+        var out = insets
+        for r in clear {
+            let mid = Float(r.midY), low = Float(r.maxY), high = Float(r.minY)
+            if mid < height / 2 { out.top = max(out.top, low) } else { out.bottom = max(out.bottom, height - high) }
+        }
+        return out
+    }
+
     /// Branch `i`'s point `t` along it, in steps a type checker settles at once.
     static func point(_ l: TreeLayout3D, _ i: Int, along t: Double) -> SIMD3<Float> {
         let x: Double = l.base[3 * i] + l.dir[3 * i] * t
@@ -348,7 +364,10 @@ enum TreeCamera3D {
                 let q = camera.project(e, width: width, height: height)
                 if q.depth > 1e-4 { tip = SIMD2(q.x, q.y) }
             }
-            out.append(TreeScreenNode(index: i, x: s.x, y: s.y, pixels: size * f / s.depth, depth: s.depth, tip: tip))
+            var across: Float = size * f / s.depth
+            // a leaf is drawn between its floor and ceiling (TreeWeight), so it is measured so too
+            if l.leaf[i] > 0 { across = min(max(across, TreeWeight.leafPoints), TreeWeight.leafMostPoints) }
+            out.append(TreeScreenNode(index: i, x: s.x, y: s.y, pixels: across, depth: s.depth, tip: tip))
         }
         return out
     }
@@ -409,6 +428,30 @@ enum TreeNames3D {
     static let budget = 380
     static let most = 120
 
+    /// Flown in, a name for about every `roomPerName` square points of the
+    /// room, at least `fewestFlown`, at most `mostFlown`. Android's TreeNames.flownCap.
+    static let roomPerName: Float = 18_000
+    static let fewestFlown = 6
+    static let mostFlown = 30
+
+    /// How many names a flown-in view draws (the lead's review of 18 Nov: 45
+    /// names over a wall of leaves was unreadable): one for about every
+    /// `roomPerName` square points of the `width` by `height` room the chrome
+    /// leaves. A phone gets about 12 to 14.
+    static func flownCap(width: Float, height: Float) -> Int {
+        let area: Float = max(width, 0) * max(height, 0)
+        return min(max(Int(area / roomPerName), fewestFlown), mostFlown)
+    }
+
+    /// Whether part `i` may be named flown in to `focus`: the part itself, what
+    /// grows straight from it, and the ideas further in; never a part of
+    /// another branch, nor a folder deeper in (its ideas speak for it).
+    static func nameable(_ nodes: NestNodes, focus: Int, _ i: Int) -> Bool {
+        if focus <= 0 || i == focus { return true }
+        guard nodes.within(focus, i) else { return false }
+        return nodes.parent[i] == focus || !bough(nodes, i)
+    }
+
     /// How far up from the view's foot the names keep: the chrome's foot,
     /// raised to the first-visit card's `cover` while it is up. The cover is
     /// measured from the view's foot and already holds the chrome under the
@@ -440,13 +483,21 @@ enum TreeNames3D {
     /// `top` and bottom `bottom` points the chrome covers. `measure` gives a
     /// node's words' width and height at a size, bold for a branch. `held` is
     /// last time's spot by node, tried first so a name does not hop as the
-    /// tree turns. `focus` is the part flown in to, whose names come first.
+    /// tree turns. `focus` is the part flown in to, whose names come first;
+    /// flown in, only what `nameable` lets through is named, at most `cap`.
+    /// `clear` are the chrome's boxes over the view (Back, the round tools): no
+    /// name or leader goes under one.
     static func layout(_ screen: [TreeScreenNode], _ nodes: NestNodes, style: Style,
                        measure: (_ node: Int, _ bold: Bool, _ size: Float) -> (width: Float, height: Float),
                        width: Float, height: Float, top: Float, bottom: Float,
-                       held: [Int: Int] = [:], focus: Int = 0) -> [TreePlacedName] {
+                       held: [Int: Int] = [:], focus: Int = 0, clear: [CGRect] = [], cap: Int = most) -> [TreePlacedName] {
         var out: [TreePlacedName] = []
         out.reserveCapacity(most)
+        let limit = focus > 0 ? min(cap, most) : most
+        // the chrome's boxes, taken before any name
+        let blocked: [TreePlacedName] = clear.map { r in
+            TreePlacedName(index: -1, size: 0, bold: false, x: Float(r.midX), y: Float(r.midY), width: Float(r.width), height: Float(r.height), spot: -1)
+        }
         let whole = focus <= 0
         let trunk = screen.first { $0.index == 0 }
         // the crown's sides on screen, every body and tip
@@ -469,8 +520,9 @@ enum TreeNames3D {
             if whole { stem = Segment(a: f, b: t, half: trunk.pixels / 2) }
         }
         for node in order(screen, nodes, focus: focus).prefix(budget) {
-            if out.count >= most { break }
+            if out.count >= limit { break }
             let i = node.index
+            if !nameable(nodes, focus: focus, i) { continue }
             let isBough = bough(nodes, i)
             if !isBough && node.pixels < style.leastLeaf { continue }
             if label(nodes.titles[i]).isEmpty { continue }
@@ -489,6 +541,7 @@ enum TreeNames3D {
             for k in tried {
                 guard let b = boxes[k] else { continue }
                 if !out.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
+                if !blocked.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
                 if kept.contains(where: { $0.crosses(b.0, b.1, w, h, gap: style.gapY) }) { continue }
                 if i != 0, let stem, stem.crosses(b.0, b.1, w, h, gap: style.gapY) { continue }
                 let sp = all[k]
@@ -498,6 +551,7 @@ enum TreeNames3D {
                     let near: Float = tip.x < b.0 ? b.0 - w / 2 : b.0 + w / 2
                     let l = Segment(a: SIMD2<Float>(near, b.1), b: tip, half: 1)
                     if out.contains(where: { l.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
+                    if blocked.contains(where: { l.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
                     line = l
                 }
                 if let line { kept.append(line) }

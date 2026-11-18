@@ -62,18 +62,33 @@ func measure(_ i: Int, _ bold: Bool, _ size: Float) -> (width: Float, height: Fl
 let cardiology = sample.titles.firstIndex(of: "Cardiology") ?? -1
 check("the sample has Cardiology", cardiology > 0)
 
+/// The chrome's boxes over `w`'s map, as the Tree's view measures them:
+/// flown in, Back a gutter in from the top left; always the two round tools,
+/// a gutter in from the foot's right. Android's TreeNamesTest.chrome.
+func chrome(_ w: Window, flown: Bool) -> [CGRect] {
+    let target: CGFloat = 44, gutter: CGFloat = 16
+    let width = CGFloat(w.width), height = CGFloat(w.height)
+    let tools = CGRect(x: width - gutter - target, y: height - gutter - 2 * target - 8, width: target, height: 2 * target + 8)
+    let back = CGRect(x: gutter, y: gutter, width: target, height: target)
+    return flown ? [back, tools] : [tools]
+}
+
 func view(_ w: Window, yaw: Float, into: Int) -> GraphPerfCamera {
     let insets: (top: Float, left: Float, bottom: Float, right: Float) = (w.top, 0, w.bottom, 0)
     var c = TreeCamera3D.whole(light, width: w.width, height: w.height, insets: insets)
     c.orbit(yaw: yaw, pitch: 0)
-    if into > 0 { c = TreeCamera3D.flyIn(light, into, from: c, width: w.width, height: w.height, insets: insets) }
+    if into > 0 {
+        let room = TreeCamera3D.around(insets, clear: chrome(w, flown: true), height: w.height)
+        c = TreeCamera3D.flyIn(light, into, from: c, width: w.width, height: w.height, insets: room)
+    }
     return c
 }
 
 func names(_ w: Window, yaw: Float, into: Int) -> ([TreeScreenNode], [TreePlacedName]) {
     let screen = TreeCamera3D.project(light, view(w, yaw: yaw, into: into), width: w.width, height: w.height, hidden: nil)
+    let cap = TreeNames3D.flownCap(width: w.width, height: w.height - w.top - w.bottom)
     let placed = TreeNames3D.layout(screen, sample, style: style, measure: measure, width: w.width, height: w.height,
-                                    top: w.top, bottom: w.bottom, focus: max(into, 0))
+                                    top: w.top, bottom: w.bottom, focus: max(into, 0), clear: chrome(w, flown: into > 0), cap: cap)
     return (screen, placed)
 }
 
@@ -95,6 +110,38 @@ for w in windows {
     let inside = names(w, yaw: 0, into: cardiology).1.filter { sample.within(cardiology, $0.index) }
     check("\(w.name): flown in, Cardiology's parts named (\(inside.count))", inside.count >= 8)
 }
+
+// flown in: only Cardiology, what grows straight off it and its ideas, up to
+// the cap; never under the chrome; a leaf between its floor and ceiling.
+// Android's flownInOnlyThePartItsChildrenAndItsIdeasAreNamedUpToTheCap,
+// noNameOrLeaderGoesUnderTheChrome and aLeafIsHeldBetweenItsFloorAndCeilingOnScreen
+for w in windows {
+    let cap = TreeNames3D.flownCap(width: w.width, height: w.height - w.top - w.bottom)
+    for yaw in [Float(0), rad(40)] {
+        let placed = names(w, yaw: yaw, into: cardiology).1
+        check("\(w.name): flown in, at most \(cap) names (\(placed.count))", placed.count <= cap)
+        check("\(w.name): flown in, only Cardiology, its own parts and its ideas", placed.allSatisfy { p in
+            sample.within(cardiology, p.index)
+                && (p.index == cardiology || sample.parent[p.index] == cardiology || !TreeNames3D.bough(sample, p.index)) },
+              "\(placed.map { sample.titles[$0.index] })")
+    }
+    for (yaw, into) in [(Float(0), -1), (rad(120), -1), (Float(0), cardiology), (rad(40), cardiology)] {
+        let placed = names(w, yaw: yaw, into: into).1
+        for r in chrome(w, flown: into > 0) {
+            let x0 = Float(r.minX), x1 = Float(r.maxX), y0 = Float(r.minY), y1 = Float(r.maxY)
+            check("\(w.name) \(into): no name under the chrome", placed.allSatisfy { p in
+                p.right <= x0 || p.left >= x1 || p.bottom <= y0 || p.top >= y1 })
+        }
+    }
+    let screen = names(w, yaw: 0, into: cardiology).0
+    check("\(w.name): every leaf between its floor and ceiling on screen", screen.allSatisfy { n in
+        light.layout.leaf[n.index] <= 0 || (n.pixels >= TreeWeight.leafPoints - 1e-3 && n.pixels <= TreeWeight.leafMostPoints + 1e-3) })
+}
+check("a phone's room holds about 12 to 14 names flown in", (12...14).contains(TreeNames3D.flownCap(width: 393, height: 852 - 100 - 160)))
+let inguinal = sample.titles.firstIndex(of: "Inguinal") ?? -1
+check("nameable: another branch's part never", inguinal > 0 && !TreeNames3D.nameable(sample, focus: cardiology, inguinal))
+let room = TreeCamera3D.around((80, 0, 80, 0), clear: chrome(windows[1], flown: true), height: windows[1].height)
+check("a fly-in's room is under Back and over the tools", room.top == 80 && abs(room.bottom - (2 * 44 + 8 + 16)) < 1e-3, "\(room)")
 
 // the order: branches first, then by weight
 let phone = windows[0]

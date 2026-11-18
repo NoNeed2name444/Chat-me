@@ -459,6 +459,11 @@ data class MapFlyTo(val id: String, val serial: Int)
      */
     card: androidx.compose.ui.unit.Dp = 0.dp,
     /**
+     * The chrome over the map besides its top and foot (the Tree's Back button and round tools, S11), in
+     * the map's own pixels: no Tree name goes under one, and a fly-in is framed clear of them.
+     */
+    keepClear: List<androidx.compose.ui.geometry.Rect> = emptyList(),
+    /**
      * Lines: Straight (GraphLineStyle.inForce): the Space theme's links are drawn as straight
      * segments. It reaches the renderer as it changes and the next frame draws it, with no new
      * scene (S05e); the Neurons' bridges ignore it, as iOS's.
@@ -594,10 +599,13 @@ data class MapFlyTo(val id: String, val serial: Int)
         if (recenter != 0) { renderer.goHome(home); homes++; loop.touched() }
     }
     // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
+    val clearNow by rememberUpdatedState(keepClear)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), framed)) loop.touched()
+        // the part flown in to between the chrome's boxes too: under a top one, over a foot one (S11)
+        val room = MapClear.around(framed, clearNow, viewSize.height.toFloat())
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), room)) loop.touched()
     }
     // a lit day reaches the renderer as it changes; the next frame dims the rest (S06b)
     LaunchedEffect(renderer, lit) {
@@ -809,9 +817,11 @@ data class MapFlyTo(val id: String, val serial: Int)
     val treeType = remember(context, density) { if (treeModel == null) null else TreeType(context, density.density) }
     val treeNames: List<PlacedName> = if (treeModel == null || treeType == null) emptyList() else {
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
-        remember(screenNodes, viewSize, insets, cover) {
+        remember(screenNodes, viewSize, insets, cover, keepClear) {
+            val bottom = TreeNames.floor(insets, cover)
             TreeNames.layout(screenNodes, treeModel.nodes, treeType.boughs, treeType.leaves, treeType.style, w, h,
-                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                top = insets.top, bottom = bottom, held = HashMap(named), focus = renderer.flown.coerceAtLeast(0),
+                clear = MapClear.boxes(keepClear), cap = TreeNames.flownCap(w, h - insets.top - bottom, density.density)).also { placed ->
                 named.clear(); for (p in placed) named[p.index] = p.spot
             }
         }
@@ -1476,4 +1486,21 @@ private class LastLift {
     var hit: Int? = null; private set
     fun set(time: Long, position: Offset, body: Int?) { at = time; where = position; hit = body }
     fun clear() { at = -1L; hit = null }
+}
+
+/**
+ * The chrome's boxes over the map (S11; Map3DView's keepClear): as name boxes a placer keeps clear of,
+ * and the room a fly-in frames, the [insets] raised past each box in the top or bottom half.
+ */
+internal object MapClear {
+    fun boxes(rects: List<androidx.compose.ui.geometry.Rect>): List<com.cramdown.sorta.map.LabelBox> =
+        rects.map { com.cramdown.sorta.map.LabelBox(it.center.x, it.center.y, it.width, it.height) }
+
+    fun around(insets: MapInsets, rects: List<androidx.compose.ui.geometry.Rect>, height: Float): MapInsets {
+        var top = insets.top; var bottom = insets.bottom
+        for (r in rects) {
+            if (r.center.y < height / 2) top = kotlin.math.max(top, r.bottom) else bottom = kotlin.math.max(bottom, height - r.top)
+        }
+        return insets.copy(top = top, bottom = bottom)
+    }
 }

@@ -45,6 +45,30 @@ object TreeNames {
     const val BUDGET = 380
     const val MOST = 120
 
+    /** Flown in, a name for about every [ROOM_PER_NAME] square dp of the room, at least [FEWEST_FLOWN], at most [MOST_FLOWN]. */
+    const val ROOM_PER_NAME = 18_000f
+    const val FEWEST_FLOWN = 6
+    const val MOST_FLOWN = 30
+
+    /**
+     * How many names a flown-in view draws (the lead's review of 18 Nov: 45 names over a wall of leaves
+     * was unreadable): one for about every [ROOM_PER_NAME] square dp of the [width] by [height] pixel room
+     * the chrome leaves, at [density] pixels a dp. A phone gets about 12 to 14.
+     */
+    fun flownCap(width: Float, height: Float, density: Float): Int {
+        val d = kotlin.math.max(density, 0.1f)
+        val dp2 = kotlin.math.max(width, 0f) / d * (kotlin.math.max(height, 0f) / d)
+        return (dp2 / ROOM_PER_NAME).toInt().coerceIn(FEWEST_FLOWN, MOST_FLOWN)
+    }
+
+    /**
+     * Whether part [i] may be named flown in to [focus] (the lead's review of 18 Nov): the part itself,
+     * what grows straight from it, and the ideas further in; never a part of another branch, nor a
+     * folder deeper in (its ideas speak for it).
+     */
+    fun nameable(nodes: NestNodes, focus: Int, i: Int): Boolean =
+        focus <= 0 || i == focus || (nodes.within(focus, i) && (nodes.parent[i] == focus || !bough(nodes, i)))
+
     /** The spots, in the order tried: a branch's tip, past the crown, above the tip; the trunk's foot and beside it. */
     const val TIP = 0
     const val OUTSIDE = 1
@@ -71,12 +95,17 @@ object TreeNames {
      * The names to draw for [screen], in a view [width] by [height] whose top [top] and bottom [bottom]
      * pixels the chrome covers. [boughs] and [leaves] measure the two kinds' words. [held] is last
      * frame's spot by node, tried first so a name does not hop as the tree turns. [focus] is the part
-     * flown in to, whose names come first; 0 is the whole tree.
+     * flown in to, whose names come first; 0 is the whole tree. Flown in, only what [nameable] lets
+     * through is named, at most [cap] names. [clear] are the chrome's boxes over the view (the Back
+     * button, the round tools): no name or leader goes under one.
      */
     fun layout(screen: List<ScreenNode>, nodes: NestNodes, boughs: NameMetrics, leaves: NameMetrics, style: Style,
-               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0): List<PlacedName> {
-        val placed = ArrayList<LabelBox>()
+               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0,
+               clear: List<LabelBox> = emptyList(), cap: Int = MOST): List<PlacedName> {
+        // the chrome's boxes are taken before any name
+        val placed = ArrayList<LabelBox>(clear.size + 32).apply { addAll(clear) }
         val out = ArrayList<PlacedName>()
+        val most = if (focus > 0) minOf(cap, MOST) else MOST
         val whole = focus <= 0
         val trunk = screen.firstOrNull { it.index == 0 }
         // the crown's sides on screen, every body and tip
@@ -98,9 +127,10 @@ object TreeNames {
         }
         val ordered = order(screen, nodes, focus)
         for (k in 0 until minOf(ordered.size, BUDGET)) {
-            if (out.size >= MOST) break
+            if (out.size >= most) break
             val node = ordered[k]
             val i = node.index
+            if (!nameable(nodes, focus, i)) continue
             val isBough = bough(nodes, i)
             if (!isBough && node.pixels < style.leastLeaf) continue
             val metrics = if (isBough) boughs else leaves
@@ -192,11 +222,12 @@ object TreeNames {
 /**
  * The Tree's bodies on screen (S11): each node's body ([TreeLayout3D.anchor]) through [viewProj] into a
  * [width] by [height] view, with a branch's tip, those [filter] lets through and in front of the eye, a little past the view
- * kept so a name can slide in. A leaf's size is its own; a branch's its thickness. [clip] is scratch.
+ * kept so a name can slide in. A leaf's size is its own, held between the floor and ceiling it is drawn
+ * with at [density] pixels a dp (TreeWeight); a branch's its thickness. [clip] is scratch.
  */
 object TreeScreen {
     fun project(model: com.cramdown.sorta.map.TreeModel, viewProj: FloatArray, focal: Float, width: Int, height: Int,
-                filter: com.cramdown.sorta.map.MapFilterView?, clip: FloatArray): List<ScreenNode> {
+                filter: com.cramdown.sorta.map.MapFilterView?, clip: FloatArray, density: Float): List<ScreenNode> {
         val l = model.layout
         val count = model.nodes.size
         val out = ArrayList<ScreenNode>(count)
@@ -217,7 +248,9 @@ object TreeScreen {
                     (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(), (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat(), clip)
                 if (clip[3] > 1e-4f) { tx = (clip[0] / clip[3] * 0.5f + 0.5f) * width; ty = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height }
             }
-            out.add(ScreenNode(i, sx, sy, (size * perUnit).toFloat(), true, perUnit, tx, ty))
+            var pixels = (size * perUnit).toFloat()
+            if (l.leaf[i] > 0) pixels = pixels.coerceIn(TreeWeight.LEAF_DP * density, TreeWeight.LEAF_MOST_DP * density)
+            out.add(ScreenNode(i, sx, sy, pixels, true, perUnit, tx, ty))
         }
         return out
     }

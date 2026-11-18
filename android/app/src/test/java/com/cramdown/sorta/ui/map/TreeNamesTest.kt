@@ -1,6 +1,9 @@
 package com.cramdown.sorta.ui.map
 
 import com.cramdown.sorta.map.GraphicsTier
+import com.cramdown.sorta.map.LabelBox
+import com.cramdown.sorta.map.LabelLink
+import com.cramdown.sorta.map.LabelRoom
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.Mat4
 import com.cramdown.sorta.map.TreeColors
@@ -73,22 +76,36 @@ class TreeNamesTest {
         edge = 12f * d, leastLeaf = 5f * d)
 
     /** The names at [w]'s first view turned by [yaw], or flown in to [into]'s branch. */
+    /**
+     * The chrome's boxes over [w]'s map, as the Tree screen measures them: flown in, the Back button
+     * (a 48 dp target a gutter in from the top strip's foot and the left); always the round tools (two
+     * targets and a gap) a gutter in from the right, on the foot.
+     */
+    private fun chrome(w: Window, flown: Boolean): List<androidx.compose.ui.geometry.Rect> {
+        val d = w.density; val target = 48f * d; val gutter = 16f * d
+        val tools = androidx.compose.ui.geometry.Rect(w.width - gutter - target, w.height - w.bottom - 2 * target - 8f * d - gutter,
+            w.width - gutter, w.height - w.bottom)
+        val back = androidx.compose.ui.geometry.Rect(gutter, w.top + gutter, gutter + target, w.top + gutter + target)
+        return if (flown) listOf(back, tools) else listOf(tools)
+    }
+
     private fun names(w: Window, yaw: Float, into: Int = -1, framed: MapInsets? = null): Pair<List<ScreenNode>, List<PlacedName>> {
         val scene = MapScene.tree(model)
         val camera = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
         val insets = MapInsets(top = w.top, bottom = w.bottom)
         HomeView.framer(scene)(w.width.toFloat(), w.height.toFloat(), framed ?: insets).applyTo(camera)
         camera.orbit(yaw, 0f)
+        val clear = chrome(w, into > 0)
         if (into >= 0) {
-            // as the renderer flies in (flyToBranch): the subtree fitted close
+            // as the renderer flies in (flyToBranch): the subtree fitted close, clear of the chrome's boxes
             val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY,
-                w.width.toFloat(), w.height.toFloat(), insets, com.cramdown.sorta.map.MapFly.FILL))
+                w.width.toFloat(), w.height.toFloat(), MapClear.around(insets, clear, w.height.toFloat()), com.cramdown.sorta.map.MapFly.FILL))
             camera.target = fit.target; camera.distance = fit.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
-        val screen = TreeScreen.project(model, viewProj, camera.focalPixels(w.height.toFloat()), w.width, w.height, null, FloatArray(4))
+        val screen = TreeScreen.project(model, viewProj, camera.focalPixels(w.height.toFloat()), w.width, w.height, null, FloatArray(4), w.density)
         val placed = TreeNames.layout(screen, sample, Metrics(0.6f), Metrics(0.56f), style(w.density), w.width.toFloat(), w.height.toFloat(), w.top, w.bottom,
-            focus = into.coerceAtLeast(0))
+            focus = into.coerceAtLeast(0), clear = MapClear.boxes(clear), cap = TreeNames.flownCap(w.width.toFloat(), w.height - w.top - w.bottom, w.density))
         return screen to placed
     }
 
@@ -155,6 +172,61 @@ class TreeNamesTest {
             val xs = screen.map { it.x }; val ys = screen.map { it.y }
             val wide = xs.max() - xs.min(); val tall = ys.max() - ys.min()
             assertTrue("${w.name}: the tree is $wide wide and $tall tall", wide >= 0.85f * tall)
+        }
+    }
+
+    // the lead's review of 18 Nov: flown in to Cardiology, about 45 names over a wall of leaves, some of Examples'
+    @Test fun flownInOnlyThePartItsChildrenAndItsIdeasAreNamedUpToTheCap() = eachTree {
+        for (w in windows) for (yaw in listOf(0f, rad(40f))) {
+            val (_, placed) = names(w, yaw, cardiology)
+            val cap = TreeNames.flownCap(w.width.toFloat(), w.height - w.top - w.bottom, w.density)
+            assertTrue("${w.name}: ${placed.size} names, at most $cap", placed.size <= cap)
+            for (p in placed) {
+                assertTrue("${w.name}: ${p.label} is Cardiology's", sample.within(cardiology, p.index))
+                assertTrue("${w.name}: ${p.label} is Cardiology, a part straight off it, or an idea",
+                    p.index == cardiology || sample.parent[p.index] == cardiology || !TreeNames.bough(sample, p.index))
+            }
+        }
+        // a phone's room holds about 12 to 14
+        assertTrue(TreeNames.flownCap(1080f, 2400f - 260f - 420f, 2.625f) in 12..14)
+        assertTrue(TreeNames.flownCap(2560f, 1600f - 380f, 2f) > 14)
+    }
+
+    @Test fun noNameOrLeaderGoesUnderTheChrome() = eachTree {
+        for (w in windows) for ((yaw, into) in listOf(0f to -1, rad(120f) to -1, 0f to cardiology, rad(40f) to cardiology)) {
+            val (_, placed) = names(w, yaw, into)
+            for (r in chrome(w, into > 0)) for (p in placed) {
+                val b = p.box
+                val apart = b.x + b.width / 2 <= r.left || b.x - b.width / 2 >= r.right || b.y + b.height / 2 <= r.top || b.y - b.height / 2 >= r.bottom
+                assertTrue("${w.name} $into: ${p.label} under the chrome at $r", apart)
+                if (!p.leadX.isNaN()) assertFalse("${w.name}: ${p.label}'s leader under the chrome",
+                    LabelRoom.crosses(LabelBox(r.center.x, r.center.y, r.width, r.height), LabelLink(p.box.x, p.box.y, p.leadX, p.leadY, 1f), 0f))
+            }
+        }
+    }
+
+    @Test fun aFlyInIsFramedClearOfTheChrome() = eachTree {
+        for (w in windows) {
+            val camera = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
+            HomeView.framer(MapScene.tree(model))(w.width.toFloat(), w.height.toFloat(), MapInsets(top = w.top, bottom = w.bottom)).applyTo(camera)
+            val room = MapClear.around(MapInsets(top = w.top, bottom = w.bottom), chrome(w, true), w.height.toFloat())
+            val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, cardiology, camera.yaw, camera.pitch, camera.fovY,
+                w.width.toFloat(), w.height.toFloat(), room, com.cramdown.sorta.map.MapFly.FILL))
+            val lens = com.cramdown.sorta.map.OrbitCamera(yaw = camera.yaw, pitch = camera.pitch, fovY = camera.fovY)
+            val b = lens.forward() * -1f
+            val box = checkNotNull(com.cramdown.sorta.map.TreeFit.box(com.cramdown.sorta.map.TreeFit.points(model.layout, cardiology), 0f,
+                fit.target + b * fit.distance, lens.right(), lens.up(), b, lens.focalPixels(w.height.toFloat())))
+            val top = w.height / 2f - box[3]; val bottom = w.height / 2f - box[2]
+            assertTrue("${w.name}: Cardiology's top $top under the Back button's foot ${room.top}", top >= room.top - 0.5f)
+            assertTrue("${w.name}: its foot $bottom over the tools' top ${w.height - room.bottom}", bottom <= w.height - room.bottom + 0.5f)
+        }
+    }
+
+    @Test fun aLeafIsHeldBetweenItsFloorAndCeilingOnScreen() = eachTree {
+        for (w in windows) {
+            val (screen, _) = names(w, 0f, cardiology)
+            for (n in screen) if (model.layout.leaf[n.index] > 0)
+                assertTrue("${w.name}: leaf ${n.index} is ${n.pixels} px", n.pixels in TreeWeight.LEAF_DP * w.density - 1e-3f..TreeWeight.LEAF_MOST_DP * w.density + 1e-3f)
         }
     }
 

@@ -225,6 +225,8 @@ struct TreePart: Identifiable {
     @ObservationIgnored private var top: Float = 0
     @ObservationIgnored private var bottom: Float = 0
     @ObservationIgnored private(set) var cover: Float = 0
+    /// The chrome's boxes over the map (Back, the round tools), in its points: no name goes under one, and a fly-in is framed clear of them.
+    @ObservationIgnored private(set) var clear: [CGRect] = []
     @ObservationIgnored var reduced = false
     @ObservationIgnored var contrast = false
 
@@ -318,6 +320,12 @@ struct TreePart: Identifiable {
         if grew && home { frameHome() } else { changed() }
     }
 
+    func setClear(_ to: [CGRect]) {
+        if to == clear { return }
+        clear = to
+        changed()
+    }
+
     /// The first visit's card's cover, from the view's foot, 0 once it is put
     /// away. When it comes or grows a camera still at its first view frames
     /// above it; when it goes the camera stays and the next Recentre frames without it.
@@ -349,8 +357,10 @@ struct TreePart: Identifiable {
         guard let model, let nodes, let sink, sized else { return }
         screen = TreeCamera3D.project(model, camera, width: width, height: height, hidden: hidden)
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
+        let cap = TreeNames3D.flownCap(width: width, height: height - top - floor)
         names = TreeNames3D.layout(screen, nodes, style: style, measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
-                                   width: width, height: height, top: top, bottom: floor, held: held, focus: focus)
+                                   width: width, height: height, top: top, bottom: floor, held: held, focus: focus,
+                                   clear: clear, cap: cap)
         held.removeAll(keepingCapacity: true)
         for p in names { held[p.index] = p.spot }
         named &+= 1
@@ -384,13 +394,17 @@ struct TreePart: Identifiable {
     func go(_ i: Int) {
         guard let model, sized else { return }
         focus = max(0, i)
+        // all but the part flown in to fades toward the page
+        restate()
         let to: GraphPerfCamera
         if i <= 0 {
             home = true
             to = TreeCamera3D.whole(model, width: width, height: height, insets: framed)
         } else {
             home = false
-            to = TreeCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: framed)
+            // the part between the chrome's boxes too: under Back, over the round tools
+            let room = TreeCamera3D.around(framed, clear: clear, height: height)
+            to = TreeCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: room)
         }
         if reduced || metal == nil {
             fly = nil
@@ -444,7 +458,7 @@ struct TreePart: Identifiable {
         changed()
     }
 
-    /// One byte a node for the renderer: hidden, chosen, linked to the chosen, or none.
+    /// One byte a node for the renderer: hidden, chosen, linked to the chosen, faded (outside the part flown in to), or none.
     private func restate() {
         guard let nodes else { return }
         let n = nodes.size
@@ -458,6 +472,9 @@ struct TreePart: Identifiable {
             }
         }
         if chosen >= 0, chosen < n { states[chosen] = TreeMetalRenderer.chosen }
+        if focus > 0, focus < n {
+            for i in 0..<n where states[i] == 0 && !nodes.within(focus, i) { states[i] = TreeMetalRenderer.faded }
+        }
         stateVersion &+= 1
     }
 
@@ -598,6 +615,21 @@ struct TreeMapView: View {
     @State private var lastMagnification: CGFloat = 1
     /// The first visit's card's height, 0 while it is not shown.
     @State private var cardHeight: CGFloat = 0
+    /// The map's, Back's and each round tool's frames on screen, for the chrome's boxes over the map.
+    @State private var mapFrame: CGRect = .zero
+    @State private var backFrame: CGRect = .null
+    @State private var filterFrame: CGRect = .null
+    @State private var recentreFrame: CGRect = .null
+
+    /// The chrome's boxes over the map, in its own points (TreeHost.setClear).
+    private var chromeBoxes: [CGRect] {
+        let origin = mapFrame.origin
+        var out: [CGRect] = []
+        if host.focus > 0, !backFrame.isNull { out.append(backFrame.offsetBy(dx: -origin.x, dy: -origin.y)) }
+        let tools = filterFrame.union(recentreFrame)
+        if !tools.isNull { out.append(tools.offsetBy(dx: -origin.x, dy: -origin.y)) }
+        return out
+    }
 
     /// What the chrome covers inside the map: Back's row at the top, the tools' row at the foot.
     private static let topChrome: CGFloat = WardControlSize.target + 2 * WardSpace.gutter
@@ -623,6 +655,7 @@ struct TreeMapView: View {
                 .onGeometryChange(for: CGSize.self) { $0.size } action: {
                     host.resize($0, top: Self.topChrome, bottom: Self.footChrome)
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { mapFrame = $0 }
             TreeNamesLayer(host: host)
             TreeParts(host: host, activate: activate)
             if TreeProbe.on {
@@ -636,6 +669,7 @@ struct TreeMapView: View {
                 IdeaToolButton(symbol: "chevron.backward",
                                label: IdeasWords.treeBackSpoken(nodes.titles[nodes.parent[focus]])) { back() }
                     .accessibilityIdentifier("tree-back")
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { backFrame = $0 }
                     .padding(WardSpace.gutter)
             }
         }
@@ -648,13 +682,15 @@ struct TreeMapView: View {
         .onChange(of: reduceMotion) { _, now in host.reduced = now }
         .onChange(of: contrast) { _, now in host.contrast = now == .increased; host.place() }
         .onChange(of: coverNow) { _, now in host.setCover(now) }
+        .onChange(of: chromeBoxes) { _, now in host.setClear(now) }
         .onChange(of: generation) { _, _ in
             // a new tree starts whole: what was chosen is chosen again if it is still there
             let i = chosen.map { nodes.index($0.uuidString) } ?? -1
             if i <= 0 { chosen = nil; linksShown = false }
+            // whole first, so the states written next fade nothing
+            host.focus = 0
             host.choose(max(-1, i))
             host.showLinks(of: linksShown && i > 0 ? i : -1)
-            host.focus = 0
         }
         .sheet(item: $movingNote) { item in
             FolderChooser(current: notes.note(item.id)?.folderId,
@@ -831,8 +867,10 @@ struct TreeMapView: View {
         .foregroundStyle(IdeaToolFace.ink(active: filter != .all))
         .ideaToolRelief(active: filter != .all)
         .accessibilityLabel("Filter")
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { filterFrame = $0 }
 
         IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") { recentre() }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { recentreFrame = $0 }
     }
 }
 

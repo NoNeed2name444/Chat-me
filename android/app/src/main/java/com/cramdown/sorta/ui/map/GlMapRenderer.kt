@@ -1758,6 +1758,8 @@ class GlMapRenderer(
         val distance = (eye - target).length()
         val focusReach = (if (flown in 0 until m.nodes.size) l.reach[flown] else l.reach[0]).toFloat()
         val fovY = synchronized(camera) { camera.fovY }
+        // all but the part flown in to fades toward the page, so it stands out
+        gl.focus = flown
         gl.draw(view, fovY, aspect, distance, toCentre, l.reach[0].toFloat(), focusReach, focal)
         val moved = treePose[0] != eye.x || treePose[1] != eye.y || treePose[2] != eye.z ||
             treePose[3] != target.x || treePose[4] != target.y || treePose[5] != target.z
@@ -1769,7 +1771,7 @@ class GlMapRenderer(
         treeFilterSent = f
         if (send) onScreenNodes?.let { callback ->
             viewProj = Mat4.multiply(proj, view)
-            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip)
+            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip, density)
             callback(out, framePose)
         }
         val workMs = (System.nanoTime() - start) / 1e6

@@ -36,6 +36,9 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
     /** Show links: the chosen idea's neighbourhood (MapFocus.neighbourhood), each lit; null for none. */
     var near: IntArray? = null
         set(value) { if (!(field contentEquals value)) { field = value; stale = true } }
+    /** The part flown in to (0 or less for the whole tree): all outside its subtree is drawn faded toward the page. */
+    var focus: Int = 0
+        set(value) { if (field != value) { field = value; stale = true } }
     private var stale = true
     private val rows = max(1, (model.nodes.size + WIDTH - 1) / WIDTH)
     private val state = ByteBuffer.allocateDirect(WIDTH * rows).order(ByteOrder.nativeOrder())
@@ -117,6 +120,8 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         val n = model.nodes.size
         var h = 0
         val lit = near
+        val fo = focus
+        val nodes = model.nodes
         state.clear()
         for (i in 0 until WIDTH * rows) {
             val v = when {
@@ -124,6 +129,7 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
                 f != null && !f.reachable(i) -> { h++; HIDDEN }
                 i == chosen -> CHOSEN
                 lit != null && i in lit -> LINKED
+                fo in 1 until n && !nodes.within(fo, i) -> FADED
                 else -> 0
             }
             state.put(v.toByte())
@@ -170,7 +176,7 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
             GLES30.glUseProgram(program)
             GLES30.glUniformMatrix4fv(u[0], 1, false, view, 0)
             GLES30.glUniformMatrix4fv(u[1], 1, false, proj, 0)
-            GLES30.glUniform2f(u[2], TreeWeight.twigFloor(density, focal), TreeWeight.leafFloor(density, focal))
+            GLES30.glUniform3f(u[2], TreeWeight.twigFloor(density, focal), TreeWeight.leafFloor(density, focal), TreeWeight.leafCeiling(density, focal))
             GLES30.glUniform3f(u[3], light[0], light[1], light[2])
             GLES30.glUniform3f(u[4], sky[0], sky[1], sky[2])
             GLES30.glUniform3f(u[5], fogStart, fogEnd, cap)
@@ -201,6 +207,7 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         const val HIDDEN = 1
         const val CHOSEN = 2
         const val LINKED = 3
+        const val FADED = 4
         private val UNIFORMS = arrayOf("uView", "uProj", "uPixel", "uLight", "uSky", "uFog", "uAccent", "uState", "uCrown")
         private const val U_COUNT = 9
 
@@ -211,7 +218,7 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
 precision highp float;
 uniform mat4 uView;
 uniform mat4 uProj;
-uniform vec2 uPixel;
+uniform vec3 uPixel;
 uniform float uCrown;
 uniform highp sampler2D uState;
 out vec3 vNormal;
@@ -271,7 +278,8 @@ void main() {
     vec3 u = normalize(cross(helper, d));
     vec3 v = cross(d, u);
     float depth = max(-(uView * vec4(aCentre, 1.0)).z, 1e-4);
-    float r = max(aRadius, uPixel.y * depth);
+    // never under the floor, nor over the ceiling: flown in, a leaf stays a leaf, not a wall
+    float r = min(max(aRadius, uPixel.y * depth), uPixel.z * depth);
     vec3 shape = vec3(0.62, 1.0, 0.34);
     vec3 p = aCentre + (u * aBall.x * shape.x + d * aBall.y * shape.y + v * aBall.z * shape.z) * r;
     vec3 n = normalize(u * aBall.x / shape.x + d * aBall.y / shape.y + v * aBall.z / shape.z);
@@ -279,7 +287,7 @@ void main() {
 }
 """
 
-        /** Lambert from one light, both faces, a chosen node toward the accent, then the page's colour with depth. */
+        /** Lambert from one light, both faces, a chosen node toward the accent, a faded one (outside the part flown in to) toward the page, then the page's colour with depth. */
         const val LIT_FS = """#version 300 es
 precision mediump float;
 uniform vec3 uLight;
@@ -296,7 +304,8 @@ void main() {
     vec3 n = normalize(vNormal);
     float lambert = abs(dot(n, normalize(uLight)));
     vec3 c = vColor * (0.46 + 0.64 * lambert) * vShade;
-    if (vState > 2.5) c = mix(c, uAccent, 0.4);
+    if (vState > 3.5) c = mix(c, uSky, 0.72);
+    else if (vState > 2.5) c = mix(c, uAccent, 0.4);
     else if (vState > 1.5) c = mix(c, uAccent, 0.7);
     float f = clamp((vDepth - uFog.x) / max(uFog.y - uFog.x, 1e-3), 0.0, 1.0) * uFog.z;
     outColor = vec4(mix(c, uSky, f), 1.0);
@@ -309,12 +318,16 @@ void main() {
  * How thin the Tree may be drawn (S11, the lead's review of 18 Nov): the finest twig at least [TWIG_DP]
  * across and a leaf at least [LEAF_DP] long on screen, however far. Each floor is a radius per unit of
  * depth: a radius of floor x depth projects, at [focal] pixels per unit at depth 1, to half the width.
+ * Nor is a leaf drawn longer than [LEAF_MOST_DP]: flown in close, leaves would wall the branches off.
  */
 object TreeWeight {
     const val TWIG_DP = 1.5f
     const val LEAF_DP = 6f
+    const val LEAF_MOST_DP = 22f
 
     fun twigFloor(density: Float, focal: Float): Float = TWIG_DP / 2 * density / max(focal, 1f)
 
     fun leafFloor(density: Float, focal: Float): Float = LEAF_DP / 2 * density / max(focal, 1f)
+
+    fun leafCeiling(density: Float, focal: Float): Float = LEAF_MOST_DP / 2 * density / max(focal, 1f)
 }

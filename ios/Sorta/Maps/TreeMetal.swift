@@ -21,6 +21,7 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     static let hidden: UInt8 = 1
     static let chosen: UInt8 = 2
     static let linked: UInt8 = 3
+    static let faded: UInt8 = 4
     static let light = SIMD3<Float>(-0.42, 0.82, 0.39)
 
     private let device: MTLDevice
@@ -171,7 +172,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         let focal = camera.focal(viewHeight: height)
         let twig: Float = TreeWeight.twigFloor(scale: scale, focal: focal)
         let leaf: Float = TreeWeight.leafFloor(scale: scale, focal: focal)
-        put(SIMD4<Float>(twig, leaf, m.crown, 0), 48)
+        let ceiling: Float = TreeWeight.leafCeiling(scale: scale, focal: focal)
+        put(SIMD4<Float>(twig, leaf, m.crown, ceiling), 48)
     }
 
     private func put(_ v: SIMD4<Float>, _ at: Int) {
@@ -250,7 +252,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 a; float3 c2;
         across(d, a, c2);
         float depth = max(-(u.view * float4(centre, 1.0)).z, 1e-4);
-        float r = max(l[6], u.extra.y * depth);
+        // never under the floor, nor over the ceiling: flown in, a leaf stays a leaf, not a wall
+        float r = min(max(l[6], u.extra.y * depth), u.extra.w * depth);
         float3 shape = float3(0.62, 1.0, 0.34);
         float3 p = centre + (a * g.x * shape.x + d * g.y * shape.y + c2 * g.z * shape.z) * r;
         float3 n = normalize(a * g.x / shape.x + d * g.y / shape.y + c2 * g.z / shape.z);
@@ -262,7 +265,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 n = normalize(in.normal);
         float lambert = abs(dot(n, normalize(u.light.xyz)));
         float3 c = in.color * (0.46 + 0.64 * lambert) * in.shade;
-        if (in.state > 2.5) c = mix(c, u.accent.xyz, 0.4);
+        if (in.state > 3.5) c = mix(c, u.sky.xyz, 0.72);
+        else if (in.state > 2.5) c = mix(c, u.accent.xyz, 0.4);
         else if (in.state > 1.5) c = mix(c, u.accent.xyz, 0.7);
         float f = clamp((in.depth - u.fog.x) / max(u.fog.y - u.fog.x, 1e-3), 0.0, 1.0) * u.fog.z;
         return float4(mix(c, u.sky.xyz, f), 1.0);
