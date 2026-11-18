@@ -51,7 +51,7 @@ enum TreeBook {
     /// What the filter and the lenses leave out of `nodes`, by node: an idea
     /// they don't let through, and a folder with ideas under it none of which
     /// shows. Nil with nothing on.
-    static func hidden(_ nodes: NestNodes, notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
+    @MainActor static func hidden(_ nodes: NestNodes, notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
         if filter == .all && lens == nil { return nil }
         let n = nodes.size
         var hidden = [Bool](repeating: false, count: n)

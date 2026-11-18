@@ -60,7 +60,7 @@ enum FractalBook {
 
     /// What the filter and the lenses let show of `tree`, by node: an idea
     /// they let through, and a folder with an idea under it that shows. Nil with nothing on.
-    static func shown(_ tree: FractalTree, _ index: [String: Int], notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
+    @MainActor static func shown(_ tree: FractalTree, _ index: [String: Int], notes: NoteStore, filter: GraphFilter, lens: Set<UUID>?) -> [Bool]? {
         if filter == .all && lens == nil { return nil }
         let n = tree.count
         var hidden = [Bool](repeating: false, count: n)
