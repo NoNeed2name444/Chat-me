@@ -22,7 +22,8 @@ set_source_files_properties(
 
 target_include_directories(sorta_addons PRIVATE ${ENGINE}/quickjs-ng ${ENGINE}/host)
 target_compile_definitions(sorta_addons PRIVATE _GNU_SOURCE)
-target_compile_options(sorta_addons PRIVATE -std=gnu11 -fvisibility=hidden)
+# optimised in every build, the debug one too: section 6's limits are in milliseconds
+target_compile_options(sorta_addons PRIVATE -std=gnu11 -fvisibility=hidden -O2)
 # 16 KB pages (Android 15 and later)
 target_link_options(sorta_addons PRIVATE "-Wl,-z,max-page-size=16384")
 target_link_libraries(sorta_addons m)

@@ -44,9 +44,13 @@ targets:
           - "*.c"
         compilerFlags:
           - "-w"
+          # optimised in every build: section 6's limits are in milliseconds
+          - "-O2"
       - path: ../addons/engine/host
         includes:
           - "*.c"
+        compilerFlags:
+          - "-O2"
     info:
       path: Sorta/Info.plist
       properties:

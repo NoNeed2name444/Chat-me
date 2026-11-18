@@ -58,9 +58,10 @@ class AddonHostileTest {
         val runner = AddonRunner("stack", AddonFiles(listOf("main.js"), listOf(ByteArray(0)), "main.js"))
         try {
             val (size, main) = runner.onThread { AddonNative.currentStackSize() to AddonNative.isMainThread() }
-            // the size given to Thread, and the host's report from inside it (ART adds its own guard to what it was asked for)
+            // the size given to Thread, and the host's report from inside it. ART adds its own reserve and guard
+            // pages to what it was asked for (5,275,840 bytes on Android 17's emulator), so never less than 4 MB
             assertEquals(4L * 1024 * 1024, AddonThread.STACK_SIZE)
-            assertTrue("the host reports $size bytes", size >= AddonThread.STACK_SIZE && size < AddonThread.STACK_SIZE + (1L shl 20))
+            assertTrue("the host reports $size bytes", size >= AddonThread.STACK_SIZE && size < AddonThread.STACK_SIZE + (2L shl 20))
             assertFalse(main)
             Log.i("SortaAddons", "add-on thread stack $size bytes")
         } finally {

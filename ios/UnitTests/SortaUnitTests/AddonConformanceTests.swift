@@ -28,7 +28,7 @@ final class AddonConformanceTests: XCTestCase {
         let want = blocks[range].joined()
         if got != want {
             let g = got.components(separatedBy: "\n"), w = want.components(separatedBy: "\n")
-            let i = zip(g, w).firstIndex { $0 != $1 } ?? min(g.count, w.count)
+            let i = Array(zip(g, w)).firstIndex { $0 != $1 } ?? min(g.count, w.count)
             XCTFail("first difference at line \(i):\n got: \(i < g.count ? g[i] : "<end>")\nwant: \(i < w.count ? w[i] : "<end>")")
         }
     }
