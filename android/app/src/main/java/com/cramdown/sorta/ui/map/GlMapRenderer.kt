@@ -347,15 +347,21 @@ data class MapDrawn(
      * Space's frost (S06a A6): the bodies the latest frame drew a frost halo round, by the level each
      * wants, 1 to 3 (empty when none is drawn). A body far enough off to be drawn as a point has no
      * halo, so [frostPoints] counts those: the frosted ideas the latest frame drew as points, by the
-     * same level (empty when none), counted where the test hooks are on. Every frosted idea drawn is in
-     * one of the two. No words.
+     * same level; and [frostGone] the frosted ideas in view but past the depth band's end, dissolved into
+     * the sky and so drawn not at all (SpaceDepthBand.gone, as SpaceBodies.update and the node pass's
+     * rpGone), by level, each of them in [frostCut] with why. Each is empty when none, and all are counted
+     * where the test hooks are on. Every frosted idea in view is in one of the three. No words.
      */
     val frosted: List<Int> = emptyList(),
     val frostPoints: List<Int> = emptyList(),
+    val frostGone: List<Int> = emptyList(),
+    val frostCut: List<MapFrostCut> = emptyList(),
 ) {
-    /** This record with the latest frame's frost halos and frosted points by level; the same record when nothing changed. */
-    fun frosting(frostedNow: List<Int>, pointsNow: List<Int> = emptyList()): MapDrawn =
-        if (frosted == frostedNow && frostPoints == pointsNow) this else copy(frosted = frostedNow, frostPoints = pointsNow)
+    /** This record with the latest frame's frost halos, frosted points and frosted ideas gone, by level; the same record when nothing changed. */
+    fun frosting(frostedNow: List<Int>, pointsNow: List<Int> = emptyList(), goneNow: List<Int> = emptyList(),
+                 cutNow: List<MapFrostCut> = emptyList()): MapDrawn =
+        if (frosted == frostedNow && frostPoints == pointsNow && frostGone == goneNow && frostCut == cutNow) this
+        else copy(frosted = frostedNow, frostPoints = pointsNow, frostGone = goneNow, frostCut = cutNow)
 
     /**
      * Whether [box] (and [names], [spot], [cells]) was measured at the camera's pose now: [boxPose] and
@@ -513,6 +519,12 @@ class MapTotals {
  * (NeuronState.code), its centre (x, y) and its body's size across, in the view's pixels. Its own halo,
  * where it has one, reaches 2.5 times that across (NeuronGl.drawHalo, iOS's five sizes).
  */
+/**
+ * A frosted idea the latest frame did not draw because the depth band cut it (MapDrawn.frostCut): its
+ * id (MapScene.ids), its frost level, 1 to 3, its view depth and the band's end it lies past.
+ */
+data class MapFrostCut(val id: String, val level: Int, val depth: Float, val bandEnd: Float)
+
 data class MapDrawnCell(val index: Int, val state: Int, val x: Float, val y: Float, val across: Float) {
     companion object {
         /** A halo's size across, as a share of its body's (the billboard's half is 2.5 body radii). */
@@ -1376,7 +1388,7 @@ class GlMapRenderer(
             sparksCounted = tr.thrownTotal
         }
         frostCount = if (bodies != null && space) writeFrost(bodies, dt) else 0
-        if (bodies != null && space && testHooks) countFrostPoints(bodies, plan) else frostPointLevels.fill(0)
+        if (bodies != null && space && testHooks) countFrostPoints(bodies, plan) else { frostPointLevels.fill(0); frostGoneLevels.fill(0); frostCuts = emptyList() }
         // the marked body's orbit ring (the held body, else the chosen one), where its node is placed this frame (Space)
         var ring: FloatArray? = null
         var ringDepth = 0f
@@ -1468,7 +1480,8 @@ class GlMapRenderer(
             if (!focusOn) 0 else linksNow + ownChunkLinks, faded)
         record = record.filtering(appliedFilter != null, shownNow, hiddenNow, filterLinksNow, emptyList())
         record = record.frosting(if (frostCount == 0) emptyList() else frostLevels.toList(),
-            if (frostPointLevels.all { it == 0 }) emptyList() else frostPointLevels.toList())
+            if (frostPointLevels.all { it == 0 }) emptyList() else frostPointLevels.toList(),
+            if (frostGoneLevels.all { it == 0 }) emptyList() else frostGoneLevels.toList(), frostCuts)
         if (perf != null) record = record.flying(flown).performing(hubsDrawn, linesDrawn, force?.isSettled ?: true, tourPhase)
         record = dragRecord(if (grabbedChunk >= 0) Vec3(nodeAt(grabbedChunk, 0), nodeAt(grabbedChunk, 1), nodeAt(grabbedChunk, 2)) else null,
             grabbedChunk, chosenChunk)
@@ -2377,18 +2390,27 @@ class GlMapRenderer(
         return n
     }
 
-    /** The frosted ideas [countFrostPoints] found drawn as points, by level, 1 to 3, for the record. */
+    /** The frosted ideas [countFrostPoints] found drawn as points, and those in view past the depth band's end, by level, 1 to 3, for the record. */
     private val frostPointLevels = IntArray(3)
+    private val frostGoneLevels = IntArray(3)
+    /** The frosted ideas [countFrostPoints] found past the depth band's end, each with why (MapDrawn.frostCut). */
+    private var frostCuts: List<MapFrostCut> = emptyList()
 
     /**
      * The frosted ideas this frame drew as points (MapDrawn.frostPoints), by level, into [frostPointLevels]:
      * a node of a chunk drawn node by node (any of it open, as the node pass places it), not a body, not
      * hidden by the filter, in front of the eye, short of the depth band's end and in view, as the node
-     * pass draws a point (NODE_VS). Only with the test hooks on: a frame of the large maps pays nothing.
+     * pass draws a point (NODE_VS); and into [frostGoneLevels] those that would be but lie past the depth
+     * band's end, which neither the bodies (SpaceBodies.update) nor the node pass (rpGone) draw, the same
+     * test (SpaceDepthBand.gone on the view depth), each also into [frostCuts] with its id, depth and the
+     * band's end. Only with the test hooks on: a frame of the large maps pays nothing.
      */
     private fun countFrostPoints(bodies: SpaceBodies, plan: FramePlan) {
         frostPointLevels.fill(0)
+        frostGoneLevels.fill(0)
+        frostCuts = emptyList()
         val levels = frost ?: return
+        var cuts: ArrayList<MapFrostCut>? = null
         val frustum = Frustum(viewProj)
         val m = viewProj
         for (d in 0 until plan.detailLeaves.size) {
@@ -2401,10 +2423,14 @@ class GlMapRenderer(
                 if (filterOn && filterMask[k] == (-1).toByte()) continue
                 val x = nodeAt(k, 0); val y = nodeAt(k, 1); val z = nodeAt(k, 2)
                 val w = m[3] * x + m[7] * y + m[11] * z + m[15]
-                if (w <= 1e-3f || band.gone(w) || !frustum.intersectsSphere(x, y, z, nodeRadius)) continue
-                frostPointLevels[level - 1]++
+                if (w <= 1e-3f || !frustum.intersectsSphere(x, y, z, nodeRadius)) continue
+                if (!band.gone(w)) { frostPointLevels[level - 1]++; continue }
+                frostGoneLevels[level - 1]++
+                (cuts ?: ArrayList<MapFrostCut>().also { cuts = it })
+                    .add(MapFrostCut(sceneIds.getOrElse(tree.order[k]) { "" }, level, w, band.end))
             }
         }
+        frostCuts = cuts?.sortedBy { it.id } ?: emptyList()
     }
 
     companion object {
