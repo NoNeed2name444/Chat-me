@@ -173,7 +173,7 @@ struct FractalPart: Identifiable {
             layout = FractalLayout3D(tree)
             index = FractalBook.index(tree)
             linkEnds = FractalBook.links(notes.allEdges(), index)
-            sink = TreeCGSink(titles: tree.titles.map(TreeNames3D.label))
+            sink = TreeCGSink(titles: tree.titles.map { TreeNames3D.label($0) })
             builtNotes = notes.notes
             builtFolders = notes.folders
             grown = true
