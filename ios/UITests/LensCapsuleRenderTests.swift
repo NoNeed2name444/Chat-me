@@ -220,11 +220,25 @@ struct SaveScreen {
     }
 
     /// Cancel, going back to Browse first where it isn't shown.
+    ///
+    /// The screen is another process's, and it moves by itself twice, so
+    /// this never reads Cancel and then acts on it across a move (CI, 19 Nov):
+    /// - on the iPhone it opens at Browse, with Cancel, and some seconds
+    ///   later goes on to the last place saved to, with the file name field
+    ///   and no Cancel. A Cancel read before that and tapped after it is not
+    ///   found. So it first waits for the field, and takes Browse as the
+    ///   resting place only where the field hasn't come;
+    /// - once Cancel is tapped the screen is going, and asking a going
+    ///   button whether it takes a tap fails. So it waits for the screen to
+    ///   go before it looks again.
     func cancel() {
+        let settle = Date()
+        while !name.exists && Date().timeIntervalSince(settle) < 12 { usleep(250_000) }
         let start = Date()
         while shown && Date().timeIntervalSince(start) < 20 {
             if cancelButton.exists && cancelButton.isHittable {
                 cancelButton.tap()
+                if waitGone() { return }
             } else if back.exists && back.isHittable {
                 back.tap()
             }
