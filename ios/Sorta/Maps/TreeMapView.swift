@@ -79,7 +79,8 @@ enum TreeBook {
 /// Draws a nest's names (and, for the flat TreeScene, its shapes) into a Core
 /// Graphics context, in points, with nothing made per frame: each name's two
 /// lines (upright and bold) are made once, at 100 points, and scaled to the
-/// size asked for.
+/// size asked for; so is its cut form (`shorts`), after the whole names, where
+/// it differs.
 final class TreeCGSink: NestSink {
     var cg: CGContext?
     private var lines: [[CTLine]]
@@ -87,17 +88,27 @@ final class TreeCGSink: NestSink {
     private var halos: [[CGPath]]
     private(set) var widths: [[Float]]
     private let ascent: [CGFloat], descent: [CGFloat]
+    /// How many names there are: a cut name's line is this far after its whole one's.
+    private let count: Int
 
-    init(titles: [String]) {
+    init(titles: [String], shorts: [String]? = nil) {
         let fonts: [CTFont] = [Self.font(700), Self.font(800)]
         var lines: [[CTLine]] = [[], []]
         var widths: [[Float]] = [[], []]
         var halos: [[CGPath]] = [[], []]
+        count = titles.count
+        let cut = shorts ?? titles
         for b in 0..<2 {
-            lines[b].reserveCapacity(titles.count)
-            halos[b].reserveCapacity(titles.count)
-            widths[b].reserveCapacity(titles.count)
-            for title in titles {
+            lines[b].reserveCapacity(2 * titles.count)
+            halos[b].reserveCapacity(2 * titles.count)
+            widths[b].reserveCapacity(2 * titles.count)
+            for (k, title) in (titles + cut).enumerated() {
+                // a cut name the same as its whole one shares its line
+                if k >= titles.count, k - titles.count < titles.count, title == titles[k - titles.count] {
+                    let j = k - titles.count
+                    lines[b].append(lines[b][j]); halos[b].append(halos[b][j]); widths[b].append(widths[b][j])
+                    continue
+                }
                 let attributes: [NSAttributedString.Key: Any] = [
                     NSAttributedString.Key(kCTFontAttributeName as String): fonts[b],
                     NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
@@ -153,10 +164,13 @@ final class TreeCGSink: NestSink {
         return UIFont(descriptor: UIFontDescriptor(fontAttributes: attributes), size: 100) as CTFont
     }
 
-    /// Node `node`'s words' width and height at `size` points, bold for a branch.
-    func box(_ node: Int, bold: Bool, size: Float) -> (width: Float, height: Float) {
+    /// The line node `node`'s name is drawn with, whole or cut (`short`): what `text` takes.
+    func line(_ node: Int, short: Bool) -> Int { short ? count + node : node }
+
+    /// Node `node`'s words' width and height at `size` points, whole or cut (`short`), bold for a branch.
+    func box(_ node: Int, short: Bool = false, bold: Bool, size: Float) -> (width: Float, height: Float) {
         let b = bold ? 1 : 0
-        return (widths[b][node] * size / 100, Float(ascent[b] + descent[b]) * size / 100)
+        return (widths[b][line(node, short: short)] * size / 100, Float(ascent[b] + descent[b]) * size / 100)
     }
 
     func moveTo(_ x: Float, _ y: Float) { cg?.move(to: CGPoint(x: CGFloat(x), y: CGFloat(y))) }
@@ -294,7 +308,8 @@ struct TreePart: Identifiable {
             self.nodes = nodes
             layout = TreeLayout3D(nodes)
             links = TreeBook.links(notes.allEdges(), nodes)
-            sink = TreeCGSink(titles: nodes.titles.map(TreeNames3D.label))
+            sink = TreeCGSink(titles: nodes.titles.map { TreeNames3D.label($0) },
+                              shorts: nodes.titles.map { TreeNames3D.label($0, cut: TreeNames3D.shortCut) })
             builtNotes = notes.notes
             builtFolders = notes.folders
             grown = true
@@ -394,7 +409,7 @@ struct TreePart: Identifiable {
         screen = TreeCamera3D.project(model, camera, width: width, height: height, hidden: hidden)
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
         let cap = TreeNames3D.flownCap(width: width, height: height - top - floor)
-        names = TreeNames3D.layout(screen, nodes, style: style, measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
+        names = TreeNames3D.layout(screen, nodes, style: style, measure: { i, short, bold, size in sink.box(i, short: short, bold: bold, size: size) },
                                    width: width, height: height, top: top, bottom: floor, held: held, focus: focus,
                                    clear: clear, cap: cap)
         held.removeAll(keepingCapacity: true)
@@ -577,7 +592,7 @@ private struct TreeNamesLayer: View {
                 cg.strokePath()
                 sink.cg = cg
                 for p in names {
-                    sink.text(p.index, p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)
+                    sink.text(sink.line(p.index, short: p.short), p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)
                 }
                 sink.cg = nil
             }

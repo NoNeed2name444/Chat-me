@@ -22,6 +22,12 @@ class TreeColors(val dark: Boolean) {
     /** [NestNodes.GROUPS] groups by 9 steps: bark and leaves, from the dimmest (0) to full (8). */
     val barkRamp: Array<IntArray>
     val leafRamp: Array<IntArray>
+    /** The 3D tree's (S11, the owner's review of 19 Nov: a believable tree): its bark a neutral brown,
+     * each folder's leaning [WOOD_TINT] to its colour, and its leaves a living green leaning [LEAF_TINT]. */
+    val wood: Int get() = if (dark) 0xB39880 else 0x6E5443
+    val foliage: Int get() = if (dark) 0x8FC26C else 0x4D7A35
+    val wood3d: IntArray
+    val leaf3d: IntArray
 
     init {
         val tones = IntArray(NestNodes.GROUPS) { g -> if (g < NestNodes.TONES) TONE[g] else GREY }
@@ -30,6 +36,10 @@ class TreeColors(val dark: Boolean) {
         }
         barkRamp = Array(NestNodes.GROUPS) { g -> ramp(barks[g]) }
         leafRamp = Array(NestNodes.GROUPS) { g -> ramp(tones[g]) }
+        wood3d = IntArray(NestNodes.GROUPS) { g ->
+            when (g) { NestNodes.TRUNK -> wood; NestNodes.LOOSE -> mix(wood, GREY, WOOD_TINT); else -> mix(wood, tones[g], WOOD_TINT) }
+        }
+        leaf3d = IntArray(NestNodes.GROUPS) { g -> if (g == NestNodes.TRUNK) foliage else mix(foliage, tones[g], LEAF_TINT) }
     }
 
     private fun ramp(c: Int): IntArray = IntArray(9) { s -> mix(sky, c, DIM + (1 - DIM) * s / 8.0) }
@@ -41,6 +51,9 @@ class TreeColors(val dark: Boolean) {
         val TONE = intArrayOf(0x14B8A6, 0x6366F1, 0xFF9F7A, 0xA78BFA, 0xA3E635, 0xF472B6, 0x3B82F6)
         /** NoteTone's grey. */
         const val GREY = 0x8E8E93
+        /** How far the 3D bark and leaves lean to their folder's colour. */
+        const val WOOD_TINT = 0.2
+        const val LEAF_TINT = 0.45
 
         /** [a] toward [b] by [t], each channel rounded half up, as the concept's toHex(Math.round). */
         fun mix(a: Int, b: Int, t: Double): Int {

@@ -57,8 +57,8 @@ object MapNames {
     )
 
     /** Counted and cut by code point, as MapNameShow.cut: an emoji across the cut stays whole (S05j 6c; iOS counts Characters). */
-    fun label(title: String): String =
-        if (title.codePointCount(0, title.length) > CUT) title.substring(0, title.offsetByCodePoints(0, CUT - 1)) + "…" else title
+    fun label(title: String, cut: Int = CUT): String =
+        if (title.codePointCount(0, title.length) > cut) title.substring(0, title.offsetByCodePoints(0, cut - 1)) + "…" else title
 
     /**
      * The names to draw for [nodes], with [titles] by node index, the scene's [links] (pairs of node

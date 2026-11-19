@@ -1368,14 +1368,10 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                     first
                 }
                 MapTheme.TREE -> {
-                    // every body and every branch's ends, framed from the first view's yaw and pitch
+                    // every body and every branch's ends and middle, framed from the first view's yaw and pitch
                     val l = scene.treeModel?.layout
-                    val points = if (l == null) bodies() else List(l.nodes.size * 2) { k ->
-                        val i = k / 2; val t = if (k % 2 == 0) 0.0 else l.length[i]
-                        Vec3((l.base[3 * i] + l.dir[3 * i] * t).toFloat(), (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(),
-                            (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat())
-                    } + bodies()
-                    val margin = scene.treeModel?.smallest ?: scene.nodeRadius
+                    val points = if (l == null) bodies() else TreeFit.points(l, 0)
+                    val margin = scene.treeModel?.margin ?: scene.nodeRadius
                     // from where the crown stands widest, near three quarters round (TreeFit.widestYaw)
                     val yaw = TreeFit.widestYaw(points, TREE_YAW)
                     // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
