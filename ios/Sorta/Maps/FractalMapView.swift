@@ -244,11 +244,6 @@ struct FractalPart: Identifiable {
     /// Half a touch target: the first view keeps that much more clear of the chrome and the card.
     private var half: Float { Float(WardControlSize.target) / 2 }
 
-    /// The window a fly frames into: the chrome's, and the card's cover while it is up.
-    private var framed: (top: Float, left: Float, bottom: Float, right: Float) {
-        (top + half, 0, max(bottom, cover > 0 ? cover + half : 0), 0)
-    }
-
     /// The window the whole map frames into: Back's row is free there, as Android's first view leaves it
     /// (run 44449703457: the first view kept a row empty under the strip).
     private var framedWhole: (top: Float, left: Float, bottom: Float, right: Float) {
@@ -348,8 +343,9 @@ struct FractalPart: Identifiable {
             to = FractalCamera3D.whole(model, width: width, height: height, insets: room, sight: sight)
         } else {
             home = false
-            // the part between the chrome's boxes too: under Back, over the round tools
-            room = TreeCamera3D.around(framed, clear: clear, height: height)
+            // the part between the chrome's boxes too: under Back, over the round tools; not above the
+            // first visit's card, which this tap puts away (TreeCamera3D.flyRoom, as the Tree's)
+            room = TreeCamera3D.flyRoom(top: top, bottom: bottom, half: half, clear: clear, height: height)
             to = FractalCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: room, sight: sight)
         }
         if reduced || metal == nil {

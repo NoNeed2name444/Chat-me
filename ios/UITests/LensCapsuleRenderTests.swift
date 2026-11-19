@@ -210,7 +210,13 @@ struct SaveScreen {
     private var name: XCUIElement { app.textFields["DOCPicker.filenameTextField"].firstMatch }
     private var cancelButton: XCUIElement { app.buttons["Cancel"].firstMatch }
     private var back: XCUIElement { app.buttons["BackButton"].firstMatch }
-    private var shown: Bool { name.exists || cancelButton.exists }
+    /// The screen's own bar, there in every place it shows.
+    private var bar: XCUIElement { app.navigationBars["FullDocumentManagerViewControllerNavigationBar"].firstMatch }
+    /// Its field, its Cancel or its bar. At an empty "On My iPhone" it shows
+    /// no field and no Cancel button, only Browse to go back (CI, 19 Nov):
+    /// read by the field and Cancel alone it looked gone while it stood over
+    /// the app, and More under it never took a tap.
+    private var shown: Bool { name.exists || cancelButton.exists || bar.exists }
 
     /// Whether it shows within twenty seconds.
     func waitShown() -> Bool {

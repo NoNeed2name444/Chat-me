@@ -338,7 +338,7 @@ enum TreeCamera3D {
     /// round, so its depth shows, as Android's TREE_PITCH and TREE_YAW.
     static let pitch: Float = 20 * Float.pi / 180
     static let yaw: Float = 35 * Float.pi / 180
-    /// A fly-in fills this much of the room the chrome leaves.
+    /// A fly-in fills this much of the room the chrome leaves (flyRoom), as Android's MapFly.FILL.
     static let fill: Float = 0.88
     /// The first view fills this much of it, on its binding side, as Android's TREE_FILL.
     static let wholeFill: Float = 0.9
@@ -391,6 +391,17 @@ enum TreeCamera3D {
             if mid < height / 2 { out.top = max(out.top, low) } else { out.bottom = max(out.bottom, height - high) }
         }
         return out
+    }
+
+    /// The room a fly-in frames (S11): the chrome's window, `half` a touch
+    /// target more under its `top`, raised past each of the chrome's `clear`
+    /// boxes. Never the first visit's card: a fly-in puts the card away, and
+    /// framing above a card about to go left Cardiology small and high on
+    /// iOS, its names cut at the right edge (CI, 19 Nov). Android's
+    /// MapClear.flyRoom is the same rule.
+    static func flyRoom(top: Float, bottom: Float, half: Float, clear: [CGRect],
+                        height: Float) -> (top: Float, left: Float, bottom: Float, right: Float) {
+        around((top + half, 0, bottom, 0), clear: clear, height: height)
     }
 
     /// Branch `i`'s point `t` along it, in steps a type checker settles at once.
