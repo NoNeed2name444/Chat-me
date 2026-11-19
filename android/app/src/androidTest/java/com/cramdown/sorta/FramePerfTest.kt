@@ -285,15 +285,17 @@ class FramePerfTest {
     // MARK: getting there
 
     private fun open(lively: Boolean) {
+        // Before the launch: a wider window composes its map beside Sort at once, and the map reads
+        // the animator scale when it is first composed (the tablet's map was built still, 19 Nov).
+        if (lively) {
+            ui.executeShellCommand("settings put global animator_duration_scale 1")
+            waitFor(5_000, "animations on") { android.animation.ValueAnimator.areAnimatorsEnabled() }
+        }
         val dir = File(context.cacheDir, "frames-" + UUID.randomUUID()).also { it.mkdirs() }
         IdeaStore(dir).replaceIdeas(notes, folders)
         scenario = ActivityScenario.launch(Intent(context, MainActivity::class.java).putExtra(MainActivity.STORE_DIR, dir.path))
         checkNotNull(scenario).onActivity { activity = it }
         waitFor(20_000, "Sorta") { find(IdeasTags.TITLE) }
-        if (lively) {
-            ui.executeShellCommand("settings put global animator_duration_scale 1")
-            waitFor(5_000, "animations on") { android.animation.ValueAnimator.areAnimatorsEnabled() }
-        }
     }
 
     /** A phone's map behind its switch; a wider window's beside Sort already. */
