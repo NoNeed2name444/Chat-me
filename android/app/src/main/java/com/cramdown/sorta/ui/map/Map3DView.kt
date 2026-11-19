@@ -919,7 +919,8 @@ data class MapFlyTo(val id: String, val serial: Int)
                 var menu = false
                 var liftedAt = down.uptimeMillis
                 val reach = MapNameShow.PICK_DP.dp.toPx()
-                val hit = (if (scene.fractalModel != null) FractalNames.nameAt(latestFractalNames, down.position.x, down.position.y) else null)
+                val hit = (if (scene.fractalModel != null) FractalNames.nameAt(latestFractalNames, down.position.x, down.position.y,
+                    WardControlSize.target.toFloat() * density) else null)
                     ?: MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
                 val menuMillis = kotlin.math.ceil(MapTouchRules.HOLD_FOR_MENU * holdScale * 1000).toLong()
                 // hold to move (S05g2): in Space and the Neurons a finger still on a body to the pick-up

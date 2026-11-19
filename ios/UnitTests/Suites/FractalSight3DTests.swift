@@ -129,6 +129,16 @@ for (name, m) in models {
             // a tap on a name lands on its part, before any dot under it
             check("\(label): a tap on a name lands on its part", placed.allSatisfy { p in
                 FractalNames3D.hit(screen, placed, x: p.x, y: p.y, least: 44) == p.index })
+            // S12's iPad UI test: a tap in a name's touch target, off its words, fell to a dot by it. Each way
+            // round a name, just inside its target, a tap lands on it, or on a name whose target holds it nearer
+            check("\(label): a tap in a name's touch target lands on a name", placed.allSatisfy { p in
+                let w = max(44, p.width) / 2 - 0.5, h = max(44, p.height) / 2 - 0.5
+                return [(p.x, p.y + h), (p.x, p.y - h), (p.x + w, p.y), (p.x - w, p.y), (p.x + w, p.y + h)].allSatisfy { t in
+                    let got = FractalNames3D.hit(screen, placed, x: t.0, y: t.1, least: 44)
+                    let others = placed.filter { $0.index != p.index
+                        && abs(t.0 - $0.x) * 2 <= max(44, $0.width) && abs(t.1 - $0.y) * 2 <= max(44, $0.height) }
+                    return got == p.index || others.contains { $0.index == got }
+                } })
             // VoiceOver reaches every hub drawn in the focus, named or not, each a touch target each way at least
             let targets = FractalNames3D.targets(screen, placed, tree, focus: max(into, 0), least: 44)
             let hubsDrawn = Set(screen.filter { FractalNames3D.hub(tree, $0.index) && (into <= 0 || tree.holds(into, $0.index)) }.map(\.index))

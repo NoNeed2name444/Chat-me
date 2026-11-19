@@ -217,9 +217,19 @@ object FractalNames {
      */
     fun ownPart(tree: FractalTree, i: Int, d: Int): Boolean = tree.holds(i, d) && (i != 0 || tree.kind[d] == FractalTree.IDEA)
 
-    /** What a tap at [x], [y] lands on first: the name whose box holds it, or null (then the dots, as iOS's FractalNames3D.hit). */
-    fun nameAt(names: List<PlacedName>, x: Float, y: Float): Int? =
-        names.firstOrNull { kotlin.math.abs(x - it.box.x) * 2 <= it.box.width && kotlin.math.abs(y - it.box.y) * 2 <= it.box.height }?.index
+    /**
+     * What a tap at [x], [y] lands on first: the name whose touch target holds it (its box, at least [least]
+     * pixels each way, as TalkBack's: [targets]), the nearest for its size, or null (then the dots, as iOS's
+     * FractalNames3D.hit).
+     */
+    fun nameAt(names: List<PlacedName>, x: Float, y: Float, least: Float): Int? {
+        var best: Int? = null; var bestScore = Float.MAX_VALUE
+        for (p in names) {
+            val score = max(kotlin.math.abs(x - p.box.x) * 2 / max(least, p.box.width), kotlin.math.abs(y - p.box.y) * 2 / max(least, p.box.height))
+            if (score <= 1f && score < bestScore) { bestScore = score; best = p.index }
+        }
+        return best
+    }
 
     /** One element TalkBack reads: its node, and its box (centre and size, pixels). */
     data class Target(val index: Int, val x: Float, val y: Float, val width: Float, val height: Float)

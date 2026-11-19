@@ -514,11 +514,16 @@ nonisolated enum FractalNames3D {
         return false
     }
 
-    /// What a tap at `x`, `y` lands on: a name's box first, then the dot whose
-    /// disc (at least `least` across) holds it, the nearest for its size; -1 for empty space.
+    /// What a tap at `x`, `y` lands on: a name's touch target first (its box, at least `least` each way,
+    /// as VoiceOver's: `targets`), the nearest for its size, then the dot whose disc (at least `least`
+    /// across) holds it, the nearest for its size; -1 for empty space.
     static func hit(_ screen: [FractalScreenNode], _ names: [TreePlacedName], x: Float, y: Float, least: Float) -> Int {
-        for p in names where abs(x - p.x) * 2 <= p.width && abs(y - p.y) * 2 <= p.height { return p.index }
         var best = -1, bestScore = Float.infinity
+        for p in names {
+            let score = max(abs(x - p.x) * 2 / max(least, p.width), abs(y - p.y) * 2 / max(least, p.height))
+            if score <= 1, score < bestScore { bestScore = score; best = p.index }
+        }
+        if best >= 0 { return best }
         for s in screen {
             let r = max(s.pixels, least) / 2
             let d = ((s.x - x) * (s.x - x) + (s.y - y) * (s.y - y)).squareRoot()

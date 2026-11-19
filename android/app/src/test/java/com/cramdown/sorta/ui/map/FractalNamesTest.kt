@@ -14,6 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
+import kotlin.math.max
 
 // S12, the 3D Fractal's names: no two drawn name boxes ever intersect, halo and all, and no name covers
 // a named dot or a dot as big as its own, on a phone, a tablet and an open foldable, at the first view, orbited 40 and
@@ -150,9 +152,21 @@ class FractalNamesTest {
     @Test fun aTapOnANameLandsOnItsPart() = eachTree {
         for (w in windows) for ((what, yaw, into) in poses()) {
             val (_, placed) = names(w, yaw, into)
+            val least = 48f * w.density
             for (p in placed) {
-                assertEquals("${w.name} $what: ${p.label} at its middle", p.index, FractalNames.nameAt(placed, p.box.x, p.box.y))
-                assertEquals("${w.name} $what: ${p.label} at its end", p.index, FractalNames.nameAt(placed, p.box.x + p.box.width / 2 - 1f, p.box.y))
+                assertEquals("${w.name} $what: ${p.label} at its middle", p.index, FractalNames.nameAt(placed, p.box.x, p.box.y, least))
+                assertEquals("${w.name} $what: ${p.label} at its end", p.index, FractalNames.nameAt(placed, p.box.x + p.box.width / 2 - 1f, p.box.y, least))
+                // S12's iPad UI test: a tap in a name's touch target, off its words, fell to a dot by it. Each way
+                // round a name, just inside its target, a tap lands on it, or on a name whose target holds it nearer
+                val hw = max(least, p.box.width) / 2 - 0.5f; val hh = max(least, p.box.height) / 2 - 0.5f
+                for ((tx, ty) in listOf(p.box.x to p.box.y + hh, p.box.x to p.box.y - hh, p.box.x + hw to p.box.y,
+                        p.box.x - hw to p.box.y, p.box.x + hw to p.box.y + hh)) {
+                    val got = FractalNames.nameAt(placed, tx, ty, least)
+                    val others = placed.filter { it.index != p.index &&
+                        abs(tx - it.box.x) * 2 <= max(least, it.box.width) && abs(ty - it.box.y) * 2 <= max(least, it.box.height) }
+                    assertTrue("${w.name} $what: ${p.label}'s target at $tx, $ty lands on $got",
+                        got == p.index || others.any { it.index == got })
+                }
             }
         }
     }
