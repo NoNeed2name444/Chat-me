@@ -154,9 +154,12 @@ final class AddonCenterTests: XCTestCase {
 
     func testACallQueuedBehindAStoppedOneIsStoppedTooAndTheNextOneRuns() throws {
         let r = try rig()
-        // the first call to make an engine in a process takes the longest, and the revoke may land while it is made, while
-        // the add-on loads or while it spins: each way, both calls end "stopped". The revoke comes from another queue, so
-        // that a busy main thread can't make it late, and the test says when it came, to tell a late revoke from a lost one.
+        // The revoke lands while the add-on spins, and both calls end "stopped". It comes from another queue, so that a
+        // busy main thread can't make it late, and the test says when it came, to tell a late revoke from a lost one.
+        // On a cold CI simulator a revoke at 0.10 s ended both calls at 0.96 s, when the first engine of the process had
+        // been made (CI run 44556980112, the iPhone), and a stop can't reach an engine still being made. So one call makes the engine first, and the bound below holds
+        // the stop to what it is: the time to end a spinning call and the one queued behind it.
+        XCTAssertTrue(try XCTUnwrap(run(r, "go")).outcome.ok)
         let started = Date()
         let revoked = AddonCenterTests.Stamp()
         var codes: [String?] = [], ends: [Double] = []
