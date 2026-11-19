@@ -292,17 +292,22 @@ func pace(_ fast: Int = 120, lively: Bool = true, covered: Bool = false, quiet: 
 }
 
 // The owner (15 Nov): at least 60 frames a second, consistently, then 120 on
-// a 120 Hz screen. These checks were 30 and 20 before; whatever moves runs at
-// the screen's rate, and the floor is 60 wherever the screen has it.
+// a 120 Hz screen. These checks were 30 and 20 before. The rule (the review,
+// 19 Nov: an idle map held 120 forever): the budget's rate while a body is
+// held or within 3 s (a still map) or 20 s (a lively map) of the last touch,
+// then 60; under a sheet or covered, 60 at once; never under 60.
 check("G7a touched, a lively map draws at the budget's rate", pace(quiet: 0) == 120, "\(pace(quiet: 0))")
 check("G7b ...and so does a map that holds still, while touched (120 on ProMotion)",
       pace(lively: false, quiet: 0) == 120)
 check("G7c a lively map 5 s after the last touch: still the budget's rate", pace(quiet: 5) == 120)
-check("G7d ...and after 20 s: still the budget's rate, never 30", pace(quiet: 25) == 120)
+check("G7d rule: a lively map rests 20 s after the last touch, at 60 (never 30), and stays there",
+      pace(quiet: 19.9) == 120 && pace(quiet: 20) == 60 && pace(quiet: 25) == 60 && pace(quiet: 3_600) == 60,
+      "\(pace(quiet: 19.9)) \(pace(quiet: 20)) \(pace(quiet: 25)) \(pace(quiet: 3_600))")
 check("G7e a map that holds still, 5 s after: 60, never 20", pace(lively: false, quiet: 5) == 60)
-check("G7f under a sheet, a lively map still moves at the budget's rate; a still one rests at 60 at once",
-      pace(covered: true, quiet: 0) == 120 && pace(covered: true, quiet: 25) == 120
-      && pace(lively: false, covered: true, quiet: 0) == 60 && pace(lively: false, covered: true, quiet: 25) == 60)
+check("G7f rule: under a sheet or covered the map is idle, at 60 at once, lively or still, held or not",
+      pace(covered: true, quiet: 0) == 60 && pace(covered: true, quiet: 25) == 60
+      && pace(lively: false, covered: true, quiet: 0) == 60 && pace(lively: false, covered: true, quiet: 25) == 60
+      && pace(covered: true, quiet: 0, busy: true) == 60)
 check("G7g a body held long after the last wake: still fast",
       pace(quiet: 25, busy: true) == 120 && pace(lively: false, quiet: 25, busy: true) == 120)
 check("G7h a 60 Hz screen: 60 in every case",
@@ -332,22 +337,24 @@ do {
 }
 
 do {
-    // 120 on a 120 Hz screen (the owner, 15 Nov): whatever moves - a lively
-    // map, a body held, a touch within 3 s - asks for the screen's full rate,
-    // a sheet up or not; only a map with nothing moving asks for less
-    var short: [String] = []
+    // rule, on a 120 Hz screen: uncovered, a body held, a lively map within
+    // 20 s of the last touch, or any map within 3 s of it asks for 120; every
+    // other case (a sheet up, a map left alone past that) asks for 60
+    var wrong: [String] = []
     for covered in [true, false] {
-        for quiet in stride(from: -1.0, through: 120, by: 0.25) {
-            let moving: [(Bool, Bool)] = [(true, false), (true, true), (false, true)]
-            for (lively, busy) in moving where pace(120, lively: lively, covered: covered, quiet: quiet, busy: busy) != 120 {
-                short.append("lively \(lively) busy \(busy) covered \(covered) \(quiet)")
-            }
-            if !covered && quiet < GraphPace.settleAfter && pace(120, lively: false, covered: false, quiet: quiet) != 120 {
-                short.append("touched \(quiet)")
+        for lively in [true, false] {
+            for busy in [true, false] {
+                for quiet in stride(from: -1.0, through: 120, by: 0.25) {
+                    let using: Bool = busy || quiet < (lively ? GraphPace.restAfter : GraphPace.settleAfter)
+                    let want: Int = !covered && using ? 120 : 60
+                    let r: Int = pace(120, lively: lively, covered: covered, quiet: quiet, busy: busy)
+                    if r != want { wrong.append("lively \(lively) busy \(busy) covered \(covered) \(quiet): \(r)") }
+                }
             }
         }
     }
-    check("G7w whatever moves on a 120 Hz screen asks for 120", short.isEmpty, short.prefix(3).joined(separator: "; "))
+    check("G7w 120 while in use (held, or within 3 s / 20 s lively), else 60", wrong.isEmpty,
+          wrong.prefix(3).joined(separator: "; "))
 }
 
 do {
@@ -383,9 +390,12 @@ func look(lively: Bool = true, covered: Bool = false, quiet: Double, busy: Bool 
 check("G7n just touched, a still map: look again just past 3 s",
       look(lively: false, quiet: 0).map { abs($0 - 3.05) < 0.000_1 } == true)
 check("G7o 2 s after: in about 1 s", look(lively: false, quiet: 2).map { abs($0 - 1.05) < 0.000_1 } == true)
-check("G7p a lively map: no look, it stays at the budget's rate", look(quiet: 0) == nil && look(quiet: 5) == nil)
-check("G7q nothing more to change: no look (still and settled, under a sheet)",
-      look(lively: false, quiet: 5) == nil && look(quiet: 25) == nil && look(covered: true, quiet: 0) == nil)
+check("G7p rule: a lively map looks again just past 20 s, when it rests",
+      look(quiet: 0).map { abs($0 - 20.05) < 0.000_1 } == true && look(quiet: 5).map { abs($0 - 15.05) < 0.000_1 } == true,
+      "\(String(describing: look(quiet: 0))) \(String(describing: look(quiet: 5)))")
+check("G7q nothing more to change: no look (still and settled, lively and rested, under a sheet)",
+      look(lively: false, quiet: 5) == nil && look(quiet: 25) == nil && look(covered: true, quiet: 0) == nil
+      && look(covered: true, quiet: 0, busy: true) == nil)
 check("G7r a body held: once a second", look(quiet: 30, busy: true) == 1)
 
 do {
@@ -401,7 +411,7 @@ do {
     }
     let lively: [Int] = steps(lively: true)
     let still: [Int] = steps(lively: false)
-    check("G7s a lively map: fast, and no look", lively == [120], "\(lively)")
+    check("G7s rule: a lively map left alone: fast, then 60 at 20 s, and the looks stop", lively == [120, 60], "\(lively)")
     check("G7t a still map: fast, then 60, and the looks stop", still == [120, 60], "\(still)")
     var shortest: Double = 99
     for quiet in stride(from: -1.0, through: 30, by: 0.01) {

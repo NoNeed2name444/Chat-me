@@ -229,10 +229,12 @@ jobs:
           # whatever happened, animations are off again for what follows
           adb shell settings put global animator_duration_scale 0
           # perf, 15 Nov: Sorta's frames timed: the map lively, dragged and flying to a body, the
-          # board panned, the deck's card carried and an idea typed in (SortaFrames in the log)
+          # board panned, the deck's card carried and an idea typed in (SortaFrames in the log);
+          # the review, 19 Nov: the page's takes of the bodies held under a ceiling, its control (a page
+          # that takes every frame), and the map at rest with animations off
           frames_source=app/src/androidTest/java/com/cramdown/sorta/FramePerfTest.kt
           frames_tests=$(grep -c '@Test' "$frames_source")
-          [ "$frames_tests" -eq 4 ]
+          [ "$frames_tests" -eq 6 ]
           echo "expecting OK ($frames_tests tests) and the frames of each phase" | tee -a test-results/expected.txt
           started=$SECONDS
           adb shell am instrument -w -r -e device "$device" -e class com.cramdown.sorta.FramePerfTest \

@@ -691,7 +691,8 @@ class GlMapRenderer(
         NeuronGl(neurons, lively, linkGrowth.takeIf { it.links == neurons.plan.links.size }
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
-    private val lively = lively
+    /** Animations on (the animator duration scale above 0): only then does anything on the map move by itself. */
+    val lively = lively
     /** The scene's links (pairs of its body indices), for Show links' neighbourhood. */
     private val sceneLinks = links
     private val sceneCount = neurons?.plan?.bodies?.size ?: tree.nodeCount
@@ -868,6 +869,8 @@ class GlMapRenderer(
     private var lod = LodSelector(tree, cache)
 
     @Volatile var animating = true; private set
+    /** A body held under the finger, or one springing home (MapDrag.busy): the frame loop does not rest (RefreshRate.resting). */
+    val holding: Boolean get() = drag?.busy == true
     /** Frames finished (their draw calls issued) on every context so far, for the frame loop's quiet rule (FrameQuiet). */
     @Volatile var finished = 0; private set
     private var frame = 0
@@ -1407,7 +1410,9 @@ class GlMapRenderer(
                 if (ringDepth > 0f && !band.gone(ringDepth)) ring = MapMark.orbitModel(p.x, p.y, p.z, MapMark.orbitSize(nodeRadius, orbitGrow, pop.scale))
             }
         }
-        animating = bodyCount > 0 || (bodies?.beamCount ?: 0) > 0 || moved > 1e-5f || plan.detailLeaves.size.let { n -> (0 until n).any { plan.leafState[plan.detailLeaves[it] * 4 + 3] < 1f } } || cache.uploadedThisFrame > 0
+        // the bodies' and the beams' shaders move on their clock only with animations on (the review, 19 Nov:
+        // under animator scale 0 a Space map with bodies on screen drew forever)
+        animating = (lively && (bodyCount > 0 || (bodies?.beamCount ?: 0) > 0)) || (bodyCount > 0 && spaceGl?.earthWaiting == true) || moved > 1e-5f || plan.detailLeaves.size.let { n -> (0 until n).any { plan.leafState[plan.detailLeaves[it] * 4 + 3] < 1f } } || cache.uploadedThisFrame > 0
             || pop.moving || (markChunk >= 0 && orbitGrow < 1f) || (ring != null && lively) || drag?.busy == true
             // the Universe's orbits turn whenever animations run (the packet's question 1: as iOS)
             || orbiting || (uplan != null && lively) || flight != null || filterMoving

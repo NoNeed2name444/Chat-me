@@ -13,4 +13,13 @@ import QuartzCore
 enum MotionRate {
     /// A display link's range while it moves.
     static let moving = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+    /// Under Reduce Motion: a link that only follows what is drawn (the
+    /// map's rings) ticks at the screen's ordinary 60, never faster.
+    static let calm = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
+
+    /// The range for a link that follows something: `moving`, or `calm`
+    /// with Reduce Motion on (the review, 19 Nov).
+    static func range(reduceMotion: Bool) -> CAFrameRateRange {
+        reduceMotion ? calm : moving
+    }
 }

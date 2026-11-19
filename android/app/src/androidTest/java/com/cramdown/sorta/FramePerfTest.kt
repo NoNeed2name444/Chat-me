@@ -38,12 +38,14 @@ import com.cramdown.sorta.ui.ideas.EDITOR_TAG
 import com.cramdown.sorta.ui.map.MapDrawn
 import com.cramdown.sorta.ui.map.MapDrawnKey
 import com.cramdown.sorta.ui.map.MapTapKey
+import com.cramdown.sorta.ui.map.NodesFeed
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -60,7 +62,15 @@ import kotlin.math.sin
  * The emulator draws GL in software (SwiftShader), so its numbers are read against each other, the
  * same phases before and after a change, and by the work a frame takes, never as a phone's.
  *
- * The guard: each phase's median ui-main frame under [BUDGET_MS] (about 4 ms, the share of an 8.3 ms
+ * - page-takes and page-builds: how often the map's page took the drawn bodies (NodesFeed.take) and
+ *   how often it was composed again, while the GL map was timed.
+ *
+ * A guard that holds whatever the runner's pace (the review, 19 Nov): the lively map, with nothing
+ * following its bodies, takes them at most once a NodesFeed.GAP_NANOS ([takesCeiling]); a slower
+ * runner only takes fewer. [mapEveryFrame] is its control: a page that takes every frame, as before
+ * NodesFeed, must break it. [mapRestsWithoutAnimations]: with animations off the map stops drawing.
+ *
+ * The other guard: each phase's median ui-main frame under [BUDGET_MS] (about 4 ms, the share of an 8.3 ms
  * refresh the app keeps for itself) times [EMULATOR_SCALE]. CI's emulator runs a phone's main-thread
  * work 10 to 25 times slower (a carried deck card's median frame took 8.3 to 12.2 ms there, a panned
  * board's 36.6 to 80.7 ms, runs 43727841564 and 43728974570) and swings about twice over between runs,
@@ -103,7 +113,10 @@ class FramePerfTest {
         waitFor(90_000, "the map drawn") { drawn()?.let { it.frames >= MapDrawn.ENOUGH && it.bodyFrames >= MapDrawn.ENOUGH } == true }
         SystemClock.sleep(1_000)
         val box = bounds(MapDrawnKey)
-        phase("map-lively", 3_000, gl = true)
+        val lively = phase("map-lively", 3_000, gl = true)
+        check(lively.takes <= takesCeiling(lively.seconds)) {
+            "map-lively: the page took the map's bodies ${lively.takes} times in ${lively.seconds} s, over ${takesCeiling(lively.seconds)}"
+        }
         phase("map-drag", 3_000, gl = true) { drag(box.centerX(), box.top + box.height() * 0.3f, box.width() * 0.25f, 3_000) }
         // the biggest body clear of the chrome, else the first
         val body = drawn()?.spot?.takeIf { it.size == 3 }?.get(0)?.toInt() ?: 0
@@ -111,6 +124,46 @@ class FramePerfTest {
             "The map takes no tap"
         }
         phase("map-fly", 2_000, gl = true) { onMain { tap.tap(body) }; SystemClock.sleep(2_000) }
+    }
+
+    /**
+     * The control for map's guard: a page that takes the bodies every frame (the tests' records' pace,
+     * as every page did before NodesFeed) must go over [takesCeiling] in the same phase.
+     */
+    @Test fun mapEveryFrame() {
+        MapAsReleased.on = false
+        open(lively = true)
+        reachMap()
+        waitFor(90_000, "the map drawn") { drawn()?.let { it.frames >= MapDrawn.ENOUGH && it.bodyFrames >= MapDrawn.ENOUGH } == true }
+        SystemClock.sleep(1_000)
+        val every = phase("map-lively-every-frame", 3_000, gl = true)
+        val ceiling = takesCeiling(every.seconds)
+        Log.i(TAG, "$device-map-lively-every-frame control: takes=${every.takes} ceiling=$ceiling gl-frames=${every.glFrames}")
+        check(every.glFrames > ceiling) { "Inconclusive: the map drew only ${every.glFrames} frames in ${every.seconds} s, not over $ceiling" }
+        check(every.takes > ceiling) { "The guard missed a page that takes every frame: ${every.takes} takes, ceiling $ceiling" }
+    }
+
+    /**
+     * Animations off (animator duration scale 0): nothing on Space's map moves by itself, so once drawn
+     * its frame loop stops (the review, 19 Nov: bodies on screen kept it drawing forever). Within 30 s,
+     * two seconds with no GL frame.
+     */
+    @Test fun mapRestsWithoutAnimations() {
+        ui.executeShellCommand("settings put global animator_duration_scale 0")
+        waitFor(5_000, "animations off") { !android.animation.ValueAnimator.areAnimatorsEnabled() }
+        open(lively = false)
+        reachMap()
+        waitFor(90_000, "the map drawn") { drawn()?.let { it.frames >= MapDrawn.ENOUGH && it.bodyFrames >= MapDrawn.ENOUGH } == true }
+        val until = SystemClock.uptimeMillis() + 30_000
+        var last = -1
+        while (SystemClock.uptimeMillis() < until) {
+            MapFrameProbe.start()
+            SystemClock.sleep(2_000)
+            last = MapFrameProbe.stop().first.size
+            Log.i(TAG, "$device-map-still gl-frames-in-2s=$last")
+            if (last == 0) return
+        }
+        error("With animations off the map still drew $last frames in 2 s, 30 s after it was drawn")
     }
 
     /** The 2D board, panned round. */
@@ -165,8 +218,11 @@ class FramePerfTest {
 
     // MARK: the phases
 
+    /** A phase's length, its GL frames, and the map page's takes of the bodies and builds. */
+    private class Phase(val seconds: Double, val glFrames: Int, val takes: Int, val builds: Int)
+
     /** Times [during] (by default [ms] of rest): the window's frames, and with [gl] the map's. */
-    private fun phase(name: String, ms: Long, gl: Boolean, during: () -> Unit = { SystemClock.sleep(ms) }) {
+    private fun phase(name: String, ms: Long, gl: Boolean, during: () -> Unit = { SystemClock.sleep(ms) }): Phase {
         val window = checkNotNull(activity).window
         val hz = onMain { checkNotNull(activity).display?.refreshRate } ?: 60f
         val frames = WindowFrames(window)
@@ -185,6 +241,8 @@ class FramePerfTest {
         if (gl) {
             out += FrameSummary.of(interval).line("$device-$name gl-interval")
             out += FrameSummary.of(work).line("$device-$name gl-work")
+            out += String.format(java.util.Locale.ROOT, "%s-%s page-takes=%d page-builds=%d ceiling=%d", device, name,
+                MapFrameProbe.takes, MapFrameProbe.builds, takesCeiling(seconds))
         }
         for (line in out) Log.i(TAG, line)
         check(total.isNotEmpty() || interval.isNotEmpty()) { "$name drew no frame in ${seconds}s" }
@@ -193,7 +251,11 @@ class FramePerfTest {
             val p50 = FrameSummary.of(main).p50
             check(p50 <= BUDGET_MS * EMULATOR_SCALE) { "$name: the main thread's median frame took $p50 ms" }
         }
+        return Phase(seconds, interval.size, if (gl) MapFrameProbe.takes else 0, if (gl) MapFrameProbe.builds else 0)
     }
+
+    /** The most takes a page following nothing makes in [seconds]: one a NodesFeed gap, the first, and one in flight. */
+    private fun takesCeiling(seconds: Double): Int = ceil(seconds * 1e9 / NodesFeed.GAP_NANOS).toInt() + 2
 
     /** A window's frames, as FrameMetrics hands them over on a thread of their own. */
     private inner class WindowFrames(private val window: Window) : Window.OnFrameMetricsAvailableListener {

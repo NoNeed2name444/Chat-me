@@ -197,6 +197,7 @@ struct IdeaBoardView: View {
 
     private var canvas: some View {
         GeometryReader { geo in
+            let _ = FrameCount.add("board-pass")
             let size = geo.size
             // the reader runs on under the bottom glass (the foot: the
             // notice and the mode switch); this much is hidden. Not
@@ -209,7 +210,7 @@ struct IdeaBoardView: View {
             let edges = notes.allEdges()
             let lineWidth: CGFloat = max(1, 1.5 * scale)
             let style: GraphLineStyle = GraphLineStyle.inForce(still?.straight ?? straightLines)
-            let lanes: [(lane: Int, lanes: Int)] = laneMemo.lanes(edges, Self.lanes)
+            let lanes: [(lane: Int, lanes: Int)] = self.lanes(of: edges)
             // a board of one kind keeps each card's symbol but drops the kind's
             // word (S05m item 4); worked out once a pass, not once a card
             let oneKind: Bool = Set(notes.notes.map(\.kind)).count <= 1
@@ -579,8 +580,18 @@ struct IdeaBoardView: View {
         adding = BoardSpot(x: Double(x), y: Double(y))
     }
 
+    /// The lanes for the board's links, from the memo (BoardLanesMemo).
+    private func lanes(of edges: [(UUID, UUID)]) -> [(lane: Int, lanes: Int)] {
+        #if DEBUG
+        // FramePerfUITests' control (-SortaFrameUndo): worked out on every pass, as before the memo
+        if FrameUndo.on { return Self.lanes(edges) }
+        #endif
+        return laneMemo.lanes(edges, Self.lanes)
+    }
+
     /// Each link's lane among those joining the same two cards.
     private static func lanes(_ edges: [(UUID, UUID)]) -> [(lane: Int, lanes: Int)] {
+        FrameCount.add("board-lanes")
         let keys: [String] = edges.map { edge in edge.0.uuidString + edge.1.uuidString }
         return IdeaLinkShape.lanes(for: keys)
     }

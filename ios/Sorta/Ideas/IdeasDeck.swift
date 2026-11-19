@@ -477,6 +477,12 @@ struct DeckCard: View {
     @State private var leaving = false
 
     var body: some View {
+        let _ = FrameCount.add("deck-card")
+        #if DEBUG
+        // FramePerfUITests' control (-SortaFrameUndo): the card reads the drag's offset itself, as
+        // before DeckCardMove, so every touch builds it again
+        let _ = FrameUndo.on ? mover.offset : .zero
+        #endif
         let line: String = IdeasDesk.firstLine(title: note.title, body: note.body) ?? IdeasWords.untitled
         let shape = RoundedRectangle(cornerRadius: WardRadius.card, style: .continuous)
         DeckCardMove(mover: mover, reduceMotion: reduceMotion) {
@@ -671,6 +677,7 @@ struct DeckCardMove<Face: View>: View {
     }
 
     var body: some View {
+        let _ = FrameCount.add("deck-move")
         let offset: CGSize = mover.offset
         face
             .offset(offset)

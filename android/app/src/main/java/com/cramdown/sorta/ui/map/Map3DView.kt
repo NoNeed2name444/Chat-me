@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.cramdown.sorta.map.MapReshape
 import com.cramdown.sorta.map.MapAsReleased
+import com.cramdown.sorta.map.MapFrameProbe
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -527,7 +528,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     // (NodesFeed), unless the frame tests ask for the released app's pace (MapAsReleased)
     val everyFrame = remember(scene, testHooks) { testHooks && !MapAsReleased.on }
     val feed = remember(scene) { NodesFeed(everyFrame) }
-    val takeNodes = remember(feed) { Runnable { val (nodes, pose) = feed.take(); screenNodes = nodes; screenPose = pose } }
+    val takeNodes = remember(feed) { Runnable { val (nodes, pose) = feed.take(); screenNodes = nodes; screenPose = pose; if (testHooks) MapFrameProbe.take() } }
+    // the frame tests count the page's builds (FramePerfTest); a released app never does
+    if (testHooks) SideEffect { MapFrameProbe.build() }
     val renderer = remember(scene) {
         val lively = android.animation.ValueAnimator.areAnimatorsEnabled()
         // only the links new since the scene on screen grow in; every link when there is none (LinkMemory);
@@ -1238,9 +1241,10 @@ private fun increaseContrast(context: Context): Boolean {
 }
 
 /**
- * The map surface's rate (RefreshRate.surfaceVote): [hz] while its frame loop runs, 0 (the
- * system's choice) once it rests. The rate changes only where the display moves to it without a
- * blink, as the vote comes and goes with every drag.
+ * The map surface's rate (RefreshRate.surfaceVote): [hz], the display's top while its frame loop
+ * runs and the map is in use, 60 while the loop rests (RefreshRate.resting), 0 (the system's choice)
+ * once it stops. The rate changes only where the display moves to it without a blink, as the vote
+ * comes and goes with every drag.
  */
 private fun requestFrameRate(surface: Surface, hz: Float) {
     if (!surface.isValid) return
@@ -1359,42 +1363,75 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
 
 private class FrameLoop(
     private val renderer: GlMapRenderer,
-    private val continuous: Boolean,
-    private var autoOrbit: Boolean,
+    continuous: Boolean,
+    autoOrbit: Boolean,
     private val camera: OrbitCamera,
     private val maxHz: Float,
     private val motion: MotionVote?,
     private val sampleDisplay: () -> Unit,
 ) : Choreographer.FrameCallback {
     var view: GLSurfaceView? = null
+    // animator duration scale 0 (the renderer's lively false): nothing moves by itself, so neither the
+    // demo's turn nor drawing on with nothing to draw
+    private val continuous = continuous && renderer.lively
+    private var autoOrbit = autoOrbit && renderer.lively
     private var running = false
+    /** Running, and nobody has touched or changed the map for RefreshRate.REST_AFTER_MS: at 60, no window vote. */
+    private var resting = false
+    /** The window's vote is the loop's (MotionVote.loop): running and not resting. */
+    private var voting = false
+    private var surfaceAsked = -1f
+    /** Uptime of the last touch, change or start (iOS's lastWake). */
+    private var lastWake = 0L
     private var lastActive = 0L
     /** The renderer's finished frames when the map last moved. */
     private var finishedAtActive = 0
     private var lastFrame = 0L
+    private var lastVsync = 0L
     private var frames = 0
 
-    fun start() { if (!running) { run(true); active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
+    fun start() { if (!running) { lastWake = SystemClock.uptimeMillis(); run(true); active(System.nanoTime()); Choreographer.getInstance().postFrameCallback(this) } }
     fun stop() { run(false); Choreographer.getInstance().removeFrameCallback(this) }
-    /** The surface's rate now: the display's top while the loop runs, the system's choice at rest. */
-    fun surfaceHz() = RefreshRate.surfaceVote(running, maxHz)
+    /** The surface's rate now: the display's top while the map is in use, 60 at rest, the system's choice stopped. */
+    fun surfaceHz() = RefreshRate.surfaceVote(running, maxHz, resting)
 
-    /** Running or at rest: the window's and the surface's votes follow (perf, 15 Nov). */
+    /** Running or not: the window's and the surface's votes follow (perf, 15 Nov). */
     private fun run(on: Boolean) {
         if (running == on) return
         running = on
-        motion?.loop(on, SystemClock.uptimeMillis())
-        view?.holder?.surface?.let { requestFrameRate(it, surfaceHz()) }
+        vote(SystemClock.uptimeMillis())
     }
+
+    /** The votes for now: the window's while in use (not resting), the surface's top, 60 or none (RefreshRate). */
+    private fun vote(nowMs: Long) {
+        resting = RefreshRate.resting(running, renderer.holding, nowMs - lastWake)
+        val wants = running && !resting
+        if (wants != voting) { voting = wants; motion?.loop(wants, nowMs) }
+        val hz = surfaceHz()
+        if (hz != surfaceAsked) { surfaceAsked = hz; view?.holder?.surface?.let { requestFrameRate(it, hz) } }
+    }
+
     fun touched() { autoOrbit = false; moved() }
-    /** The camera moved by itself (HomeView.fit): draw again, and keep any orbit going. */
-    fun moved() { active(System.nanoTime()); if (!running && view != null) start() }
+    /** The camera moved by itself (HomeView.fit), or the map changed: draw again, at the top rate, and keep any orbit going. */
+    fun moved() {
+        lastWake = SystemClock.uptimeMillis()
+        active(System.nanoTime())
+        if (running) vote(lastWake) else if (view != null) start()
+    }
 
     private fun active(nanos: Long) { lastActive = nanos; finishedAtActive = renderer.finished }
 
     override fun doFrame(frameTimeNanos: Long) {
         if (!running) return
         if (frames++ % 60 == 0) sampleDisplay()
+        val vsync = if (lastVsync != 0L) frameTimeNanos - lastVsync else 0L
+        lastVsync = frameTimeNanos
+        vote(SystemClock.uptimeMillis())
+        // at rest, a frame a 60th of a second (RefreshRate.drawsAtRest), whatever the display runs at
+        if (resting && lastFrame != 0L && !RefreshRate.drawsAtRest(frameTimeNanos - lastFrame, vsync)) {
+            Choreographer.getInstance().postFrameCallback(this)
+            return
+        }
         if (autoOrbit && lastFrame != 0L) synchronized(camera) { camera.orbit(((frameTimeNanos - lastFrame) / 1e9f) * 0.08f, 0f) }
         lastFrame = frameTimeNanos
         renderer.vsyncNanos = frameTimeNanos

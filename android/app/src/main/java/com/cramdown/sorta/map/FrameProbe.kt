@@ -48,8 +48,17 @@ object MapFrameProbe {
     private val interval = DoubleArray(CAP)
     private val work = DoubleArray(CAP)
     private var n = 0
+    private var took = 0
+    private var built = 0
 
-    @Synchronized fun start() { n = 0; on = true }
+    @Synchronized fun start() { n = 0; took = 0; built = 0; on = true }
+    /** The page took the map's drawn bodies (NodesFeed.take): one build of the map page. */
+    @Synchronized fun take() { if (on) took++ }
+    /** The map page was composed again (Map3DView). */
+    @Synchronized fun build() { if (on) built++ }
+    /** Since [start]: the page's takes of the bodies, and its builds. Read after [stop] as well. */
+    val takes: Int @Synchronized get() = took
+    val builds: Int @Synchronized get() = built
     @Synchronized fun add(intervalMs: Double, workMs: Double) {
         if (!on || n >= CAP) return
         interval[n] = intervalMs; work[n] = workMs; n++

@@ -211,24 +211,27 @@ nonisolated struct GraphFramePacer: Sendable {
 /// fps not 60". The map used to step down to 30 (a lively map 20 s after a
 /// touch) and 20 (a still map after 3 s, or under a sheet), and the shaders'
 /// twinkle, the orbits and a sheet's slide over the map all showed it. Now
-/// whatever moves on it moves at the screen's own rate, and only a map with
-/// nothing moving rests, at 60:
+/// it draws at the screen's own rate while someone is using it, and rests at
+/// 60, never lower, once they have left it (the review, 19 Nov: an idle map
+/// held at 120 forever):
 ///
-///   touched, or within 3 s of a touch,    the budget's rate (120 on a
-///   a choice, a filter, a fly-in, a       ProMotion screen, either tier)
-///   body held, or a lively map, a sheet
-///   up over it or not
-///   a map that holds still, after 3 s     60, to save the battery
-///   a still map under a sheet             60 at once
+///   a body held under the finger          the budget's rate (120 on a
+///   touched, a choice, a filter or a      ProMotion screen, either tier)
+///   fly-in, within 3 s (a still map) or
+///   within 20 s (a lively map)
+///   after that, untouched                 60, to save the battery
+///   under a sheet, or covered             60 at once, lively or not
 ///
 /// Never above the budget's own rate (a 30 a second screen stays at 30).
 /// Every rate is a whole number of GraphFramePacer's ticks.
 nonisolated enum GraphPace {
     /// This long after the last touch, a still map leaves the fast rate.
     static let settleAfter: Double = 3
-    /// The floor: what a map with nothing moving draws at.
+    /// This long after the last touch, a lively map (twinkle, orbits) rests.
+    static let restAfter: Double = 20
+    /// The floor: what a map nobody is using draws at.
     static let settled: Int = 60
-    /// A still map under a sheet: the floor too.
+    /// A map under a sheet: the floor too.
     static let idle: Int = settled
 
     /// The rate to ask for: `fast` is the budget's rate for this screen
@@ -237,21 +240,25 @@ nonisolated enum GraphPace {
     static func rate(fast: Int, lively: Bool, covered: Bool, quiet: Double, busy: Bool) -> Int {
         let quiet: Double = quiet.isNaN ? 0 : max(quiet, 0)
         let floor: Int = min(settled, fast)
-        // seen past a sheet (an iPad's, a phone's half sheet), a moving map moves at the screen's rate
-        if busy || lively { return fast }
+        // under a sheet, or covered, the map is idle: it rests, however lively
         if covered { return floor }
-        return quiet < settleAfter ? fast : floor
+        if busy { return fast }
+        return quiet < after(lively) ? fast : floor
     }
 
+    /// How long after the last touch the map keeps the fast rate.
+    static func after(_ lively: Bool) -> Double { lively ? restAfter : settleAfter }
+
     /// Seconds until the rate next changes with nothing else happening, to
-    /// look again then; nil when it will not change (a sheet up, a still
-    /// map settled, a lively map). While a body is held, once a second.
+    /// look again then; nil when it will not change (a sheet up, a map
+    /// already resting). While a body is held, once a second.
     static func recheck(lively: Bool, covered: Bool, quiet: Double, busy: Bool) -> Double? {
         let quiet: Double = quiet.isNaN ? 0 : max(quiet, 0)
+        if covered { return nil }
         if busy { return 1 }
-        if lively || covered { return nil }
         // a little after the change is due, so the look lands past it
-        if quiet < settleAfter { return max(settleAfter + 0.05 - quiet, 0.1) }
+        let after: Double = after(lively)
+        if quiet < after { return max(after + 0.05 - quiet, 0.1) }
         return nil
     }
 }

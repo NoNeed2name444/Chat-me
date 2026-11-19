@@ -52,6 +52,8 @@ internal class SpaceGl(private val assets: AssetManager?, val samples: Int = 40)
     private var dayTexture = 0
     private var auxTexture = 0
     private var earthReady = false
+    /** The Earth's maps are on their way (EarthLoader) and not yet on the GPU: frames are needed to take them in. */
+    val earthWaiting: Boolean get() = programs[SpaceStyle.ROCKY.code] != 0 && !earthReady && (EarthLoader.loading || EarthLoader.ready != null)
     private var bodyBuffer: FloatBuffer = floats(96 * SpaceBodies.STRIDE)
     private val strips = LinkStrips(samples)
     private var stripBuffer: FloatBuffer = floats(64 * strips.perLink * LinkStrips.STRIDE)
@@ -357,7 +359,7 @@ internal object EarthLoader {
     class Maps(val day: ByteBuffer, val dayWidth: Int, val dayHeight: Int, val aux: ByteBuffer, val auxWidth: Int, val auxHeight: Int)
 
     @Volatile var ready: Maps? = null; private set
-    @Volatile private var loading = false
+    @Volatile var loading = false; private set
 
     @Synchronized fun request(assets: AssetManager?, large: Boolean) {
         if (assets == null || ready != null || loading) return

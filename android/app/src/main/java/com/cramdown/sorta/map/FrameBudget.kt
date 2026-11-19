@@ -115,16 +115,6 @@ class FrameStats(private val capacity: Int = 240) {
 data class DisplayModeInfo(val id: Int, val width: Int, val height: Int, val refreshHz: Float)
 
 object RefreshRate {
-    /**
-     * The mode to ask for: the highest refresh rate at the current resolution (changing the
-     * resolution would rescale the whole app), or null when the current mode is already it.
-     */
-    fun bestMode(modes: List<DisplayModeInfo>, current: DisplayModeInfo): DisplayModeInfo? {
-        val same = modes.filter { it.width == current.width && it.height == current.height }
-        val best = same.maxByOrNull { it.refreshHz } ?: return null
-        return if (best.refreshHz > current.refreshHz + 0.5f) best else null
-    }
-
     fun maxHz(modes: List<DisplayModeInfo>, fallback: Float = 60f) = modes.maxOfOrNull { it.refreshHz } ?: fallback
 
     /**
@@ -150,10 +140,39 @@ object RefreshRate {
     /** The window's vote: the fastest mode while something moves, else 0, no preference (the system's own rate). */
     fun windowVote(moving: Boolean, fastest: DisplayModeInfo?): Int = if (moving) fastest?.id ?: 0 else 0
 
-    /** The map surface's vote: the display's top rate while its frame loop runs, else 0 (the system's choice). */
-    fun surfaceVote(running: Boolean, maxHz: Float): Float = if (running) maxHz else 0f
+    /**
+     * The map surface's vote: the display's top rate while its frame loop runs and someone uses the map,
+     * [restHz] once it rests (it keeps drawing by itself: orbits, twinkle), else 0 (the system's choice).
+     */
+    fun surfaceVote(running: Boolean, maxHz: Float, resting: Boolean = false): Float =
+        if (!running) 0f else if (resting) restHz(maxHz) else maxHz
+
+    /**
+     * The rest rule, as iOS's GraphPace (the review, 19 Nov: an idle map held the top rate forever): a
+     * running map loop rests once nobody has touched or changed the map for [REST_AFTER_MS] and no body
+     * is held. Resting, it draws at [restHz] and its window vote is let go (MotionVote.loop).
+     */
+    fun resting(running: Boolean, held: Boolean, sinceWakeMs: Long): Boolean =
+        running && !held && sinceWakeMs >= REST_AFTER_MS
+
+    /** The rest rate: 60, or the display's top where that is lower. Never under 60 where the display has it. */
+    fun restHz(maxHz: Float): Float = min(REST_HZ, maxHz)
+
+    /**
+     * Whether a resting loop draws on this vsync: when waiting for the next one would leave more than a
+     * 60th of a second since its last drawn frame ([sinceDrawnNanos]; [vsyncNanos], the last vsync's
+     * length, a little under it for the vsyncs' wobble). So a 120 Hz display draws every other vsync
+     * (60), a 90 Hz one every vsync (90), a 144 Hz one every other (72), a 240 Hz one every fourth (60):
+     * never under 60 where the display reaches it.
+     */
+    fun drawsAtRest(sinceDrawnNanos: Long, vsyncNanos: Long): Boolean =
+        vsyncNanos <= 0L || sinceDrawnNanos + vsyncNanos * 0.95 >= 1e9 / REST_HZ
 
     const val LINGER_MS = 1_500L
+    /** iOS's GraphPace.restAfter: this long after the last touch or change a map that moves by itself rests. */
+    const val REST_AFTER_MS = 20_000L
+    /** iOS's GraphPace.settled: the rate a resting map draws at. */
+    const val REST_HZ = 60f
 }
 
 /** Thousands with commas, the same in every locale (the readout is a meter). */

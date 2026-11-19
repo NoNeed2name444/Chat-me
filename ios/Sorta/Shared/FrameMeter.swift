@@ -18,10 +18,54 @@ extension View {
     }
 }
 
+/// Debug builds' frame tests only (FramePerfUITests; the review, 19 Nov):
+/// how many times named parts of a page were built while a phase ran, a
+/// guard that holds whatever the runner's pace. A drag on the deck's card
+/// builds DeckCardMove ("deck-move") on every touch and the card's face
+/// ("deck-card") hardly ever; a pan or a pinch of the board builds its
+/// canvas ("board-pass") on every touch and its links' lanes
+/// ("board-lanes") only as the links change. The meter reports them on a
+/// "counts" line. Nothing is counted outside a phase, or in a released app.
+nonisolated enum FrameCount {
+    #if DEBUG
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var counts: [String: Int] = [:]
+    nonisolated(unsafe) private static var on: Bool = false
+
+    /// A phase begins (true) or ends: the counts start again from none.
+    static func record(_ now: Bool) -> [String: Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        let taken: [String: Int] = counts
+        counts = [:]
+        on = now
+        return taken
+    }
+    #endif
+
+    /// One more build of `name`, while a phase runs.
+    @inline(__always)
+    static func add(_ name: String) {
+        #if DEBUG
+        lock.lock()
+        if on { counts[name, default: 0] += 1 }
+        lock.unlock()
+        #endif
+    }
+}
+
 #if DEBUG
 import QuartzCore
 import UIKit
 import os
+
+/// Debug builds' frame tests only: launched with `-SortaFrameUndo`, the
+/// deck's card and the board undo their own fixes (DeckCardMove,
+/// BoardLanesMemo), so FramePerfUITests' controls can show the counts'
+/// guards catch them. Never on in a released app, which has none of it.
+nonisolated enum FrameUndo {
+    static let on: Bool = ProcessInfo.processInfo.arguments.contains("-SortaFrameUndo")
+}
 
 /// Debug builds only, launched with `-SortaFrameMeter` (FramePerfUITests;
 /// perf, 15 Nov): Sorta's frames, timed while a UI test's phase runs. The
@@ -34,6 +78,7 @@ import os
 ///   again);
 /// - render-interval and render-work: the map's render-thread steps
 ///   (RenderFrames);
+/// - counts: how many times named parts of a page were built (FrameCount);
 /// and puts the lines on its mark's accessibility value, for the test to
 /// read, and in the log (subsystem com.cramdown.sorta, category frames),
 /// each phase's work wrapped in a signpost.
@@ -90,6 +135,7 @@ final class FrameMeter {
         busy.removeAll()
         lastTick = 0
         RenderFrames.shared.begin()
+        _ = FrameCount.record(true)
         interval = signposter.beginInterval("phase")
         recording = true
     }
@@ -100,6 +146,7 @@ final class FrameMeter {
         if let interval { signposter.endInterval("phase", interval) }
         interval = nil
         let render = RenderFrames.shared.end()
+        let counts: [String: Int] = FrameCount.record(false)
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let hz: Int = scenes.first?.screen.maximumFramesPerSecond ?? 60
         phases += 1
@@ -110,6 +157,8 @@ final class FrameMeter {
             lines.append(FrameSummary.of(render.intervals).line("render-interval"))
             lines.append(FrameSummary.of(render.work).line("render-work"))
         }
+        let counted: [String] = counts.keys.sorted().map { "\($0)=\(counts[$0] ?? 0)" }
+        lines.append("counts " + (counted.isEmpty ? "none" : counted.joined(separator: " ")))
         for line in lines { log.info("\(line, privacy: .public)") }
         report = lines.joined(separator: "\n")
     }

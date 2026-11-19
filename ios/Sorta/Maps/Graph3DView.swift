@@ -77,8 +77,8 @@ struct Graph3DView: View {
     /// a star or black hole in the Universe.
     var openFolder: (UUID?) -> Void = { _ in }
     /// A sheet from the screen around the map is up over it (the Ideas
-    /// bar's note or name): a still map rests at GraphPace's floor, 60,
-    /// under it, and a lively one keeps its rate, as under its own sheets.
+    /// bar's note or name): the map rests at GraphPace's floor, 60, under
+    /// it, lively or not, as under its own sheets.
     var covered: Bool = false
     /// S06b: the ideas of the day picked in the moons row (IdeasMapView),
     /// lit where they are while the rest dim; nil, none picked.
@@ -1048,7 +1048,7 @@ struct Graph3DView: View {
     }
 
     /// One of the map's own sheets is up over it (every one dims the map
-    /// and takes its touches): a still map rests at 60 under them (GraphPace).
+    /// and takes its touches): the map rests at 60 under them (GraphPace).
     private var sheetUp: Bool {
         reading != nil || renaming != nil || linkingFrom != nil || movingNote != nil || addingInto != nil
             || addingFolder || showingLegend || shapes?.sheet != nil
@@ -1747,7 +1747,7 @@ struct GraphSCNView: UIViewRepresentable {
     var linksFor: UUID? = nil
     var labels = GraphLabelSettings()
     var touch = GraphTouchHandlers()
-    /// A sheet is up over the map: a still map rests at 60 under it (GraphPace).
+    /// A sheet is up over the map: the map rests at 60 under it (GraphPace).
     var covered: Bool = false
     /// The frost on ideas left unopened (S06a A6), by id, 1 to 3; and
     /// whether a change melts (not with Reduce Motion).
@@ -2603,7 +2603,7 @@ struct GraphSCNView: UIViewRepresentable {
         /// Any touch, press, pan, tap or hover, a new choice, filter,
         /// framing or fly-in: the fast rate again (GraphPace: the budget's
         /// rate, 120 on ProMotion; a map that holds still steps down to 60
-        /// after 3 s, and nothing ever draws under 60).
+        /// after 3 s, a lively one after 20 s, and nothing draws under 60).
         func wake() {
             lastWake = CACurrentMediaTime()
             pace()
@@ -2872,8 +2872,9 @@ struct GraphSCNView: UIViewRepresentable {
             host.isHidden = false
             if ringLink == nil {
                 let link = CADisplayLink(target: GraphRingTicker(self), selector: #selector(GraphRingTicker.tick))
-                // the rings pulse while they show: 120 a second where the screen has it (MotionRate)
-                link.preferredFrameRateRange = MotionRate.moving
+                // the rings follow the bodies while they show: 120 a second where the screen
+                // has it, 60 with Reduce Motion on (MotionRate)
+                link.preferredFrameRateRange = MotionRate.range(reduceMotion: UIAccessibility.isReduceMotionEnabled)
                 link.add(to: .main, forMode: .common)
                 ringLink = link
             }

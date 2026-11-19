@@ -611,12 +611,11 @@ class FrameBudgetTest {
         assertEquals(2.0, s.medianWork(), 1e-6)
     }
 
-    @Test fun choosesTheHighestRefreshAtTheSameResolution() {
+    @Test fun theDisplaysTopRefresh() {
         val current = DisplayModeInfo(1, 1080, 2400, 60f)
         val modes = listOf(current, DisplayModeInfo(2, 1080, 2400, 120f), DisplayModeInfo(3, 1440, 3200, 144f), DisplayModeInfo(4, 1080, 2400, 90f))
-        assertEquals(2, RefreshRate.bestMode(modes, current)?.id)
-        assertNull(RefreshRate.bestMode(listOf(current), current))
         assertEquals(144f, RefreshRate.maxHz(modes), 0f)
+        assertEquals("no modes: the fallback", 60f, RefreshRate.maxHz(emptyList()), 0f)
         assertEquals("1,000,000", grouped(1_000_000))
         assertEquals("999", grouped(999))
     }
@@ -647,6 +646,61 @@ class FrameBudgetTest {
         assertEquals(0, RefreshRate.windowVote(true, null))
         assertEquals(120f, RefreshRate.surfaceVote(true, 120f), 0f)
         assertEquals(0f, RefreshRate.surfaceVote(false, 120f), 0f)
+    }
+
+    // The rest rule, as iOS's GraphPace (the review, 19 Nov: Neurons, the Performance demo and Space held
+    // the top rate forever): the top rate while a body is held or within 20 s of the last touch or change,
+    // then 60 (never under 60, never above the display's top) with the window's vote let go; stopped, none
+    @Test fun aMapNobodyUsesRestsAt60After20Seconds() {
+        assertEquals(20_000L, RefreshRate.REST_AFTER_MS)
+        assertFalse("just touched", RefreshRate.resting(running = true, held = false, sinceWakeMs = 0))
+        assertFalse(RefreshRate.resting(running = true, held = false, sinceWakeMs = RefreshRate.REST_AFTER_MS - 1))
+        assertTrue("20 s untouched", RefreshRate.resting(running = true, held = false, sinceWakeMs = RefreshRate.REST_AFTER_MS))
+        assertTrue("and for good", RefreshRate.resting(running = true, held = false, sinceWakeMs = 3_600_000))
+        assertFalse("a body held", RefreshRate.resting(running = true, held = true, sinceWakeMs = 3_600_000))
+        assertFalse("a stopped loop is not resting: it votes nothing", RefreshRate.resting(running = false, held = false, sinceWakeMs = 3_600_000))
+        assertEquals(60f, RefreshRate.restHz(120f), 0f)
+        assertEquals(60f, RefreshRate.restHz(144f), 0f)
+        assertEquals("never above the display's top", 48f, RefreshRate.restHz(48f), 0f)
+        assertEquals(120f, RefreshRate.surfaceVote(running = true, maxHz = 120f, resting = false), 0f)
+        assertEquals(60f, RefreshRate.surfaceVote(running = true, maxHz = 120f, resting = true), 0f)
+        assertEquals(0f, RefreshRate.surfaceVote(running = false, maxHz = 120f, resting = true), 0f)
+        // a lively map's votes, second by second from a touch, with a body held from 30 s to 40 s
+        val votes = (0..60).map { t ->
+            val held = t in 30 until 40
+            val wake = if (t >= 40) 40 else 0
+            val resting = RefreshRate.resting(true, held, (t - wake) * 1_000L)
+            RefreshRate.surfaceVote(true, 120f, resting)
+        }
+        assertEquals((0 until 20).map { 120f }, votes.subList(0, 20))
+        assertEquals("rests at 20 s", (20 until 30).map { 60f }, votes.subList(20, 30))
+        assertEquals("held: fast", (30 until 40).map { 120f }, votes.subList(30, 40))
+        assertEquals("let go: fast for 20 s, then 60", (40 until 60).map { 120f } + 60f, votes.subList(40, 61))
+    }
+
+    // resting, the loop draws a frame a 60th of a second, whatever the display runs at: never under 60
+    @Test fun aRestingLoopDrawsAt60WhateverTheDisplay() {
+        fun drawn(hz: Double, seconds: Double = 2.0): Double {
+            val vsync = (1e9 / hz).toLong()
+            var last = 0L
+            var n = 0
+            var t = vsync
+            while (t <= (seconds * 1e9).toLong()) {
+                // a little jitter on each vsync, as a display's
+                val at = t + if ((t / vsync) % 2 == 0L) 100_000L else -100_000L
+                if (RefreshRate.drawsAtRest(at - last, vsync)) { n++; last = at }
+                t += vsync
+            }
+            return n / seconds
+        }
+        assertEquals(60.0, drawn(120.0), 1.0)
+        assertEquals("90 Hz: every vsync, never 45", 90.0, drawn(90.0), 1.0)
+        assertEquals("144 Hz: every other vsync", 72.0, drawn(144.0), 1.0)
+        assertEquals("240 Hz: every fourth", 60.0, drawn(240.0), 1.0)
+        assertEquals("165 Hz: every other, never 55", 82.5, drawn(165.0), 1.0)
+        assertEquals("60 Hz: every vsync", 60.0, drawn(60.0), 1.0)
+        for (hz in listOf(60.0, 72.0, 90.0, 120.0, 144.0, 165.0, 240.0)) assertTrue("$hz Hz: ${drawn(hz)}", drawn(hz) >= 59.0)
+        assertTrue("no vsync known yet: draw", RefreshRate.drawsAtRest(0L, 0L))
     }
 }
 
