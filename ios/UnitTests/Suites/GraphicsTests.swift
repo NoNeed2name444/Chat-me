@@ -398,6 +398,23 @@ check("G7q nothing more to change: no look (still and settled, lively and rested
       && look(covered: true, quiet: 0, busy: true) == nil)
 check("G7r a body held: once a second", look(quiet: 30, busy: true) == 1)
 
+// The rings (an open idea's similar ones) follow the map's own pace (the
+// review, 19 Nov: their link held 120 under the note sheet and at rest):
+// fast only while the map draws above 60, and never with Reduce Motion.
+func rings(_ fast: Int = 120, lively: Bool = true, covered: Bool = false, quiet: Double, busy: Bool = false,
+           reduceMotion: Bool = false) -> Bool {
+    GraphPace.ringsFast(rate: pace(fast, lively: lively, covered: covered, quiet: quiet, busy: busy),
+                        reduceMotion: reduceMotion)
+}
+
+check("G7x rule: rings are fast only while the map is: touched or held, not at rest, not under a sheet",
+      rings(quiet: 0) && rings(quiet: 19.9) && rings(quiet: 60, busy: true)
+      && !rings(quiet: 20) && !rings(quiet: 3600) && !rings(lively: false, quiet: 5)
+      && !rings(covered: true, quiet: 0) && !rings(covered: true, quiet: 0, busy: true))
+check("G7y rule: with Reduce Motion, or on a 60 Hz screen, rings are never fast",
+      !rings(quiet: 0, reduceMotion: true) && !rings(quiet: 0, busy: true, reduceMotion: true)
+      && !rings(60, quiet: 0) && !rings(60, quiet: 0, busy: true))
+
 do {
     // following its own looks from a touch, with nothing else happening
     func steps(lively: Bool) -> [Int] {

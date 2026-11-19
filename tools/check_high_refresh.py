@@ -8,19 +8,23 @@ iOS:
   I1 ios/project.yml sets CADisableMinimumFrameDurationOnPhone (without it an
      iPhone holds every display link and view to 60), and
      tools/check_ios_app.py wants it in the built app's Info.plist.
-  I2 MotionRate.moving is 80 to 120, preferred 120; MotionRate.calm, for
-     Reduce Motion, 60; MotionRate.range(reduceMotion:) picks between them.
+  I2 MotionRate.moving is 80 to 120, preferred 120; MotionRate.calm 60;
+     MotionRate.range(fast:) picks between them.
   I3 every CADisplayLink made in ios/Sorta: the link it was made into (by
-     name) asks for a preferredFrameRateRange that reaches MotionRate, in
-     its file or through the function it calls; the map's ring link asks
-     MotionRate.range(reduceMotion: UIAccessibility.isReduceMotionEnabled).
+     name, or the property it is kept in) asks for a preferredFrameRateRange
+     that reaches MotionRate, in its file or through the function it calls.
+     The map's ring link follows the map's pace (the review, 19 Nov): its
+     range is set only in paceRings(), from GraphPace.ringsFast of the rate
+     the map's view asks for and Reduce Motion read then, and paceRings()
+     runs after each pace() and on each ring tick.
   I4 every SceneKit or Metal view's preferredFramesPerSecond comes from the
      screen's own rate (GraphQuality.frameRate, GraphPace, applyRate), never
      a number, and no Graphics tier caps it below the screen's.
   I5 GraphPace's rest rule (the review, 19 Nov): under a sheet or covered,
      60 at once; else the fast rate while a body is held or within 3 s
      (still) or 20 s (lively) of the last touch, then 60; never "lively
-     means fast" for good.
+     means fast" for good. GraphPace.ringsFast: fast only above the floor
+     and without Reduce Motion.
   I6 the map's work keeps to a little over half a refresh (GraphPerfFrameBudget).
 Android:
   A1 the map's GL surface asks for the display's top rate while its frame loop
@@ -34,6 +38,8 @@ Android:
      as a constant that holds one.
   A4 the map's work keeps to a little over half a refresh (FrameBudget).
   A5 the rest rule, as iOS's (the review, 19 Nov): a running map loop rests
+     at once while covered (another window has the focus: a sheet, dialog
+     or menu; read on attach and on each change, waking when it goes), else
      20 s after the last touch or change with no body held, at min(60, top),
      its window vote let go, drawing a frame a 60th of a second; with
      animations off (animator duration scale 0) Space's bodies and beams do
@@ -129,8 +135,8 @@ def check(files):
          f"I2 {MOTION_RATE}: moving = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)")
     need(has(MOTION_RATE, r"static let calm = CAFrameRateRange\(minimum: 60, maximum: 60, preferred: 60\)"),
          f"I2 {MOTION_RATE}: calm = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60), for Reduce Motion")
-    need(has(MOTION_RATE, r"static func range\(reduceMotion: Bool\) -> CAFrameRateRange \{\s*reduceMotion \? calm : moving\s*\}"),
-         f"I2 {MOTION_RATE}: range(reduceMotion:) is calm with Reduce Motion, else moving")
+    need(has(MOTION_RATE, r"static func range\(fast: Bool\) -> CAFrameRateRange \{\s*fast \? moving : calm\s*\}"),
+         f"I2 {MOTION_RATE}: range(fast:) is moving when fast, else calm")
     # I3 and I4
     links = 0
     for path, text in files.items():
@@ -141,7 +147,11 @@ def check(files):
         for m in re.finditer(r"\b(\w+)\s*=\s*CADisplayLink\(target:", src):
             links += 1
             name = m.group(1)
-            asks = re.search(r"\b" + name + r"\??\.preferredFrameRateRange\s*=\s*([^\n]+)", src[m.end():])
+            # the link itself, or the property it is kept in (ringLink = link)
+            kept = re.search(r"\b(\w+)\s*=\s*" + name + r"\s*$", src[m.end():], re.M)
+            names = name + ("|" + kept.group(1) if kept else "")
+            asks = re.search(r"\b(?:" + names + r")\??\.preferredFrameRateRange\s*=\s*([^\n]+)", src[m.end():]) or (
+                re.search(r"\b(?:" + kept.group(1) + r")\??\.preferredFrameRateRange\s*=\s*([^\n]+)", src) if kept else None)
             need(asks is not None, f"I3 {path}: display link '{name}' asks for no preferredFrameRateRange")
             if asks:
                 need(reaches_motion_rate(asks.group(1), src, files),
@@ -154,9 +164,32 @@ def check(files):
                 source == "rate" and ("GraphPace.rate(" in src or "screenRate(" in src))
             need(ok, f"I4 {path}: preferredFramesPerSecond = {source} (the screen's own rate, through GraphQuality or GraphPace)")
     need(links >= 4, f"I3 the display links were not found ({links})")
-    need(has(GRAPH3D, r"let link = CADisplayLink\(target: GraphRingTicker[^\n]*\n(\s*\n)*\s*link\.preferredFrameRateRange = "
-                      r"MotionRate\.range\(reduceMotion: UIAccessibility\.isReduceMotionEnabled\)"),
-         f"I3 {GRAPH3D}: the ring link asks for MotionRate.range(reduceMotion: UIAccessibility.isReduceMotionEnabled)")
+    # the ring link follows the map's pace, and Reduce Motion read each time
+    g3 = code(files.get(GRAPH3D, ""))
+
+    def body(src, head):
+        """The body of the function whose declaration matches `head` (by its braces)."""
+        m = re.search(head + r"[^{]*\{", src)
+        if not m:
+            return ""
+        depth, i = 1, m.end()
+        while i < len(src) and depth:
+            depth += {"{": 1, "}": -1}.get(src[i], 0)
+            i += 1
+        return src[m.end():i - 1]
+
+    rings = body(g3, r"private func paceRings\(\)")
+    need(re.search(r"let fast: Bool = GraphPace\.ringsFast\(rate: view\.preferredFramesPerSecond,\s*"
+                   r"reduceMotion: UIAccessibility\.isReduceMotionEnabled\)", rings)
+         and re.search(r"ringLink\.preferredFrameRateRange = MotionRate\.range\(fast: fast\)", rings),
+         f"I3 {GRAPH3D}: paceRings() sets the ring link's range from GraphPace.ringsFast(rate: view.preferredFramesPerSecond, "
+         f"reduceMotion: UIAccessibility.isReduceMotionEnabled)")
+    need(len(re.findall(r"\.preferredFrameRateRange\s*=", g3)) == 1,
+         f"I3 {GRAPH3D}: the ring link's range is set in paceRings() only")
+    need(re.search(r"view\.preferredFramesPerSecond = rate \}\s*paceRings\(\)", body(g3, r"private func pace\(\)")),
+         f"I3 {GRAPH3D}: pace() hands its rate on to the rings (paceRings())")
+    need(re.search(r"\bpaceRings\(\)", body(g3, r"func drawRings\(\)")),
+         f"I3 {GRAPH3D}: each ring tick reads the pace and Reduce Motion again (paceRings() in drawRings())")
     need(has(QUALITY, r"static let screenRate: Int = 240"), f"I4 {QUALITY}: screenRate 240, above any screen")
     tiers = re.findall(r"GraphicsBudget\(tier: \.\w+, linkSamples: \d+, maxFPS: (\w+)", code(files.get(QUALITY, "")))
     need(len(tiers) >= 2 and all(t == "screenRate" for t in tiers), f"I4 {QUALITY}: every tier's maxFPS is screenRate ({tiers})")
@@ -172,6 +205,8 @@ def check(files):
     need(re.search(r"static func after\(_ lively: Bool\) -> Double \{ lively \? restAfter : settleAfter \}", pace),
          f"I5 {QUALITY}: after(lively) is restAfter for a lively map, settleAfter for a still one")
     need(not re.search(r"lively\s*\{\s*return fast", pace), f"I5 {QUALITY}: a lively map held at the fast rate for good")
+    need(re.search(r"static func ringsFast\(rate: Int, reduceMotion: Bool\) -> Bool \{ !reduceMotion && rate > settled \}", pace),
+         f"I5 {QUALITY}: ringsFast: fast only above the floor, and never with Reduce Motion")
     # I6
     m = re.search(r"var share: Double = ([0-9.]+)", code(files.get(BUDGET, "")))
     need(m and 0.4 <= float(m.group(1)) <= 0.6, f"I6 {BUDGET}: share {m and m.group(1)}, at most 0.6 of a refresh")
@@ -217,10 +252,18 @@ def check(files):
     # A5
     need(has(FRAME_BUDGET, r"const val REST_AFTER_MS = 20_000L") and has(FRAME_BUDGET, r"const val REST_HZ = 60f"),
          f"A5 {FRAME_BUDGET}: REST_AFTER_MS 20 s and REST_HZ 60, iOS's restAfter and settled")
-    need(has(FRAME_BUDGET, r"fun resting\(running: Boolean, held: Boolean, sinceWakeMs: Long\): Boolean =\s*"
-                           r"running && !held && sinceWakeMs >= REST_AFTER_MS"), f"A5 {FRAME_BUDGET}: resting")
+    need(has(FRAME_BUDGET, r"fun resting\(running: Boolean, held: Boolean, covered: Boolean, sinceWakeMs: Long\): Boolean =\s*"
+                           r"running && \(covered \|\| \(!held && sinceWakeMs >= REST_AFTER_MS\)\)"),
+         f"A5 {FRAME_BUDGET}: resting: covered at once, held or not; else 20 s untouched with no body held")
+    need(has(MAP3D, r"fun cover\(now: Boolean\) \{\s*if \(now == covered\) return\s*covered = now\s*"
+                    r"val nowMs = SystemClock\.uptimeMillis\(\)\s*if \(!now\) lastWake = nowMs\s*if \(running\) vote\(nowMs\)\s*\}"),
+         f"A5 {MAP3D}: FrameLoop.cover votes at once, and uncovered wakes the map")
+    need(has(MAP3D, r"OnWindowFocusChangeListener \{ focused -> loop\.cover\(!focused\) \}")
+         and has(MAP3D, r"addOnWindowFocusChangeListener\(focus\)\s*loop\.cover\(!v\.hasWindowFocus\(\)\)")
+         and has(MAP3D, r"removeOnWindowFocusChangeListener\(focus\)"),
+         f"A5 {MAP3D}: the GL view covers the loop while another window has the focus, from attach to detach")
     need(has(FRAME_BUDGET, r"fun restHz\(maxHz: Float\): Float = min\(REST_HZ, maxHz\)"), f"A5 {FRAME_BUDGET}: restHz, never above the top")
-    need(has(MAP3D, r"resting = RefreshRate\.resting\(running, renderer\.holding, nowMs - lastWake\)"),
+    need(has(MAP3D, r"resting = RefreshRate\.resting\(running, renderer\.holding, covered, nowMs - lastWake\)"),
          f"A5 {MAP3D}: the loop rests by RefreshRate.resting")
     need(has(MAP3D, r"if \(resting && lastFrame != 0L && !RefreshRate\.drawsAtRest\(frameTimeNanos - lastFrame, vsync\)\)"),
          f"A5 {MAP3D}: a resting loop draws a frame a 60th of a second (RefreshRate.drawsAtRest)")
@@ -259,7 +302,16 @@ def self_test(files):
                                                "link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)"),
         "a range from a function that is not MotionRate's": broken(f"{IOS}/Shared/PopOutMotion.swift", "private static func fullRate() -> CAFrameRateRange {\n        MotionRate.moving",
                                                                     "private static func fullRate() -> CAFrameRateRange {\n        idleRate"),
-        "a ring link that ignores Reduce Motion": broken(GRAPH3D, "MotionRate.range(reduceMotion: UIAccessibility.isReduceMotionEnabled)", "MotionRate.moving"),
+        "a ring link that ignores Reduce Motion": broken(GRAPH3D, "reduceMotion: UIAccessibility.isReduceMotionEnabled)", "reduceMotion: false)"),
+        "a ring link that ignores the map's pace (fast while rings show)": broken(
+            GRAPH3D, "GraphPace.ringsFast(rate: view.preferredFramesPerSecond,", "GraphPace.ringsFast(rate: GraphQuality.frameRate,"),
+        "a ring link pinned fast when made": broken(GRAPH3D, "ringsFast = nil\n",
+                                                   "ringsFast = nil\n                link.preferredFrameRateRange = MotionRate.moving\n"),
+        "pace() leaving the rings at their old rate": broken(GRAPH3D, "view.preferredFramesPerSecond = rate }\n            paceRings()\n",
+                                                            "view.preferredFramesPerSecond = rate }\n"),
+        "Reduce Motion read only when the ring link is made": broken(GRAPH3D, "            // each tick: Reduce Motion turned on or off while the rings show is followed\n            paceRings()\n", ""),
+        "rings fast at rest": broken(QUALITY, "{ !reduceMotion && rate > settled }", "{ !reduceMotion }"),
+        "MotionRate.range(fast:) fast always": broken(MOTION_RATE, "fast ? moving : calm", "moving"),
         "a SceneKit view at 30": broken(GRAPH3D, "view.preferredFramesPerSecond = GraphQuality.frameRate",
                                          "view.preferredFramesPerSecond = 30"),
         "a tier capped at 60": broken(QUALITY, "linkSamples: 20, maxFPS: screenRate", "linkSamples: 20, maxFPS: 60"),
@@ -273,7 +325,15 @@ def self_test(files):
                                   "Unit"),
         "a surface at the top rate always": broken(MAP3D, "fun surfaceHz() = RefreshRate.surfaceVote(running, maxHz, resting)", "fun surfaceHz() = maxHz"),
         "a surface that never rests": broken(FRAME_BUDGET, "if (!running) 0f else if (resting) restHz(maxHz) else maxHz", "if (!running) 0f else maxHz"),
-        "a loop that never rests": broken(MAP3D, "resting = RefreshRate.resting(running, renderer.holding, nowMs - lastWake)", "resting = false"),
+        "a loop that never rests": broken(MAP3D, "resting = RefreshRate.resting(running, renderer.holding, covered, nowMs - lastWake)", "resting = false"),
+        "a covered map held at the top rate (no covered rule)": broken(FRAME_BUDGET, "running && (covered || (!held && sinceWakeMs >= REST_AFTER_MS))",
+                                                                       "running && !held && sinceWakeMs >= REST_AFTER_MS"),
+        "a held body fast under a sheet on Android": broken(FRAME_BUDGET, "running && (covered || (!held && sinceWakeMs >= REST_AFTER_MS))",
+                                                            "running && !held && (covered || sinceWakeMs >= REST_AFTER_MS)"),
+        "the loop never told it is covered": broken(MAP3D, "{ focused -> loop.cover(!focused) }", "{ focused -> Unit }"),
+        "covered not read on attach": broken(MAP3D, "loop.cover(!v.hasWindowFocus())", "Unit"),
+        "a focus listener left on the window": broken(MAP3D, "v.viewTreeObserver.removeOnWindowFocusChangeListener(focus)", "Unit"),
+        "a cover that waits for the next frame to rest": broken(MAP3D, "if (running) vote(nowMs)\n    }", "\n    }"),
         "a window vote held at rest": broken(MAP3D, "val wants = running && !resting", "val wants = running"),
         "a resting loop drawing every vsync": broken(MAP3D, "if (resting && lastFrame != 0L && !RefreshRate.drawsAtRest(frameTimeNanos - lastFrame, vsync))",
                                                      "if (false)"),

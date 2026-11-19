@@ -261,6 +261,14 @@ nonisolated enum GraphPace {
         if quiet < after { return max(after + 0.05 - quiet, 0.1) }
         return nil
     }
+
+    /// Whether the map's rings (an open idea's similar ones, a drop's
+    /// target) follow its bodies fast: only while the map itself draws
+    /// above the floor (`rate`, what `rate(...)` gave), and never with
+    /// Reduce Motion on. Idle, resting or under a sheet they tick at the
+    /// floor with the map (the review, 19 Nov: the ring link held 120
+    /// under the note sheet).
+    static func ringsFast(rate: Int, reduceMotion: Bool) -> Bool { !reduceMotion && rate > settled }
 }
 
 // MARK: - Link length

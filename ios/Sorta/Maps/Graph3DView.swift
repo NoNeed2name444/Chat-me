@@ -2640,10 +2640,13 @@ struct GraphSCNView: UIViewRepresentable {
             guard let view else { return }
             let now: CFTimeInterval = CACurrentMediaTime()
             let quiet: Double = now - lastWake
+            // fixed when the scene is built (GraphSim.lively), as Android's: Reduce Motion
+            // turned on later stills the map from its next build
             let lively: Bool = sim?.lively ?? true
             let rate: Int = GraphPace.rate(fast: GraphQuality.frameRate, lively: lively, covered: covered,
                                            quiet: quiet, busy: dragging)
             if view.preferredFramesPerSecond != rate { view.preferredFramesPerSecond = rate }
+            paceRings()
             guard let wait = GraphPace.recheck(lively: lively, covered: covered, quiet: quiet,
                                                busy: dragging) else { return }
             let due: CFTimeInterval = now + wait
@@ -2820,6 +2823,20 @@ struct GraphSCNView: UIViewRepresentable {
         private let dropFill = CAShapeLayer()
         /// Moves the rings with the bodies, each frame, while there are any.
         private var ringLink: CADisplayLink?
+        /// What the ring link last asked for (GraphPace.ringsFast), nil for nothing yet.
+        private var ringsFast: Bool?
+
+        /// The ring link follows the map's own rate (the review, 19 Nov): fast only while
+        /// the map draws above the floor, so at 60 once it rests or under a sheet, and at
+        /// 60 with Reduce Motion on, read each time.
+        private func paceRings() {
+            guard let ringLink, let view else { return }
+            let fast: Bool = GraphPace.ringsFast(rate: view.preferredFramesPerSecond,
+                                                 reduceMotion: UIAccessibility.isReduceMotionEnabled)
+            guard fast != ringsFast else { return }
+            ringsFast = fast
+            ringLink.preferredFrameRateRange = MotionRate.range(fast: fast)
+        }
         weak var reshaper: GraphReshapeRecognizer?
 
         func glow(_ ids: [UUID], drop preview: UUID?, rebuilt: Bool = true) {
@@ -2872,12 +2889,12 @@ struct GraphSCNView: UIViewRepresentable {
             host.isHidden = false
             if ringLink == nil {
                 let link = CADisplayLink(target: GraphRingTicker(self), selector: #selector(GraphRingTicker.tick))
-                // the rings follow the bodies while they show: 120 a second where the screen
-                // has it, 60 with Reduce Motion on (MotionRate)
-                link.preferredFrameRateRange = MotionRate.range(reduceMotion: UIAccessibility.isReduceMotionEnabled)
+                ringsFast = nil
                 link.add(to: .main, forMode: .common)
                 ringLink = link
             }
+            // each tick: Reduce Motion turned on or off while the rings show is followed
+            paceRings()
             let glow = UIBezierPath()
             let drop = UIBezierPath()
             let fill = UIBezierPath()

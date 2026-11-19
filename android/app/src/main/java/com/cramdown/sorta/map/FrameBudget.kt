@@ -149,11 +149,13 @@ object RefreshRate {
 
     /**
      * The rest rule, as iOS's GraphPace (the review, 19 Nov: an idle map held the top rate forever): a
-     * running map loop rests once nobody has touched or changed the map for [REST_AFTER_MS] and no body
-     * is held. Resting, it draws at [restHz] and its window vote is let go (MotionVote.loop).
+     * running map loop rests at once while [covered] (a sheet, dialog or menu has the window's focus),
+     * held or not, as iOS's map under a sheet; else once nobody has touched or changed the map for
+     * [REST_AFTER_MS] and no body is held. Resting, it draws at [restHz] and its window vote is let go
+     * (MotionVote.loop).
      */
-    fun resting(running: Boolean, held: Boolean, sinceWakeMs: Long): Boolean =
-        running && !held && sinceWakeMs >= REST_AFTER_MS
+    fun resting(running: Boolean, held: Boolean, covered: Boolean, sinceWakeMs: Long): Boolean =
+        running && (covered || (!held && sinceWakeMs >= REST_AFTER_MS))
 
     /** The rest rate: 60, or the display's top where that is lower. Never under 60 where the display has it. */
     fun restHz(maxHz: Float): Float = min(REST_HZ, maxHz)

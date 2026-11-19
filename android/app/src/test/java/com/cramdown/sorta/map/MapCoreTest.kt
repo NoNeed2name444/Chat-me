@@ -653,12 +653,12 @@ class FrameBudgetTest {
     // then 60 (never under 60, never above the display's top) with the window's vote let go; stopped, none
     @Test fun aMapNobodyUsesRestsAt60After20Seconds() {
         assertEquals(20_000L, RefreshRate.REST_AFTER_MS)
-        assertFalse("just touched", RefreshRate.resting(running = true, held = false, sinceWakeMs = 0))
-        assertFalse(RefreshRate.resting(running = true, held = false, sinceWakeMs = RefreshRate.REST_AFTER_MS - 1))
-        assertTrue("20 s untouched", RefreshRate.resting(running = true, held = false, sinceWakeMs = RefreshRate.REST_AFTER_MS))
-        assertTrue("and for good", RefreshRate.resting(running = true, held = false, sinceWakeMs = 3_600_000))
-        assertFalse("a body held", RefreshRate.resting(running = true, held = true, sinceWakeMs = 3_600_000))
-        assertFalse("a stopped loop is not resting: it votes nothing", RefreshRate.resting(running = false, held = false, sinceWakeMs = 3_600_000))
+        assertFalse("just touched", RefreshRate.resting(running = true, held = false, covered = false, sinceWakeMs = 0))
+        assertFalse(RefreshRate.resting(running = true, held = false, covered = false, sinceWakeMs = RefreshRate.REST_AFTER_MS - 1))
+        assertTrue("20 s untouched", RefreshRate.resting(running = true, held = false, covered = false, sinceWakeMs = RefreshRate.REST_AFTER_MS))
+        assertTrue("and for good", RefreshRate.resting(running = true, held = false, covered = false, sinceWakeMs = 3_600_000))
+        assertFalse("a body held", RefreshRate.resting(running = true, held = true, covered = false, sinceWakeMs = 3_600_000))
+        assertFalse("a stopped loop is not resting: it votes nothing", RefreshRate.resting(running = false, held = false, covered = false, sinceWakeMs = 3_600_000))
         assertEquals(60f, RefreshRate.restHz(120f), 0f)
         assertEquals(60f, RefreshRate.restHz(144f), 0f)
         assertEquals("never above the display's top", 48f, RefreshRate.restHz(48f), 0f)
@@ -669,13 +669,33 @@ class FrameBudgetTest {
         val votes = (0..60).map { t ->
             val held = t in 30 until 40
             val wake = if (t >= 40) 40 else 0
-            val resting = RefreshRate.resting(true, held, (t - wake) * 1_000L)
+            val resting = RefreshRate.resting(true, held, false, (t - wake) * 1_000L)
             RefreshRate.surfaceVote(true, 120f, resting)
         }
         assertEquals((0 until 20).map { 120f }, votes.subList(0, 20))
         assertEquals("rests at 20 s", (20 until 30).map { 60f }, votes.subList(20, 30))
         assertEquals("held: fast", (30 until 40).map { 120f }, votes.subList(30, 40))
         assertEquals("let go: fast for 20 s, then 60", (40 until 60).map { 120f } + 60f, votes.subList(40, 61))
+    }
+
+    // the rule: under a sheet, dialog or menu (the window's focus elsewhere) a running map rests at once,
+    // held or just touched, as iOS's GraphPace (G7f); once uncovered it wakes, fast for 20 s, then 60
+    @Test fun aCoveredMapRestsAt60AtOnce() {
+        assertTrue("covered, just touched", RefreshRate.resting(running = true, held = false, covered = true, sinceWakeMs = 0))
+        assertTrue("covered, a body held", RefreshRate.resting(running = true, held = true, covered = true, sinceWakeMs = 0))
+        assertTrue("covered for good", RefreshRate.resting(running = true, held = false, covered = true, sinceWakeMs = 3_600_000))
+        assertFalse("a stopped loop votes nothing, covered or not", RefreshRate.resting(running = false, held = false, covered = true, sinceWakeMs = 0))
+        assertEquals(60f, RefreshRate.surfaceVote(true, 120f, RefreshRate.resting(true, false, true, 0)), 0f)
+        assertEquals("a 60 Hz display keeps its 60", 60f, RefreshRate.surfaceVote(true, 60f, RefreshRate.resting(true, false, true, 0)), 0f)
+        // a lively map's votes, second by second from a touch: a sheet up from 5 s to 15 s, which wakes it as it goes
+        val votes = (0..40).map { t ->
+            val covered = t in 5 until 15
+            val wake = if (t >= 15) 15 else 0
+            RefreshRate.surfaceVote(true, 120f, RefreshRate.resting(true, false, covered, (t - wake) * 1_000L))
+        }
+        assertEquals((0 until 5).map { 120f }, votes.subList(0, 5))
+        assertEquals("under the sheet: 60 at once", (5 until 15).map { 60f }, votes.subList(5, 15))
+        assertEquals("uncovered: fast for 20 s, then 60", (15 until 35).map { 120f } + (35..40).map { 60f }, votes.subList(15, 41))
     }
 
     // resting, the loop draws a frame a 60th of a second, whatever the display runs at: never under 60

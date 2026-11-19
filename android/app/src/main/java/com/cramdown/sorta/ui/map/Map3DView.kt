@@ -12,6 +12,8 @@ import android.view.Display
 import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.SurfaceHolder
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -1108,6 +1110,16 @@ data class MapFlyTo(val id: String, val serial: Int)
                             override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) = requestFrameRate(h.surface, loop.surfaceHz())
                             override fun surfaceDestroyed(h: SurfaceHolder) {}
                         })
+                        // a sheet, dialog or menu over the map is a window of its own and takes the focus:
+                        // the map is covered (FrameLoop.cover), read when attached and on each change
+                        val focus = ViewTreeObserver.OnWindowFocusChangeListener { focused -> loop.cover(!focused) }
+                        addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                            override fun onViewAttachedToWindow(v: View) {
+                                v.viewTreeObserver.addOnWindowFocusChangeListener(focus)
+                                loop.cover(!v.hasWindowFocus())
+                            }
+                            override fun onViewDetachedFromWindow(v: View) = v.viewTreeObserver.removeOnWindowFocusChangeListener(focus)
+                        })
                         loop.view = this
                     }
                 },
@@ -1372,12 +1384,15 @@ private class FrameLoop(
 ) : Choreographer.FrameCallback {
     var view: GLSurfaceView? = null
     // animator duration scale 0 (the renderer's lively false): nothing moves by itself, so neither the
-    // demo's turn nor drawing on with nothing to draw
+    // demo's turn nor drawing on with nothing to draw. Fixed when the scene is built (the renderer's lively,
+    // as iOS's GraphSim.lively): animations turned off later still the map from its next build
     private val continuous = continuous && renderer.lively
     private var autoOrbit = autoOrbit && renderer.lively
     private var running = false
-    /** Running, and nobody has touched or changed the map for RefreshRate.REST_AFTER_MS: at 60, no window vote. */
+    /** Running, and covered or untouched and unchanged for RefreshRate.REST_AFTER_MS: at 60, no window vote. */
     private var resting = false
+    /** Something else has the window's focus (cover). */
+    private var covered = false
     /** The window's vote is the loop's (MotionVote.loop): running and not resting. */
     private var voting = false
     private var surfaceAsked = -1f
@@ -1402,9 +1417,22 @@ private class FrameLoop(
         vote(SystemClock.uptimeMillis())
     }
 
+    /**
+     * A sheet, dialog or menu has the window's focus, over the map ([now]): the loop rests at once, as
+     * iOS's map under a sheet; once it goes a running map wakes, at the top rate for REST_AFTER_MS. A
+     * stopped loop stays stopped: nothing on the map changed under the cover.
+     */
+    fun cover(now: Boolean) {
+        if (now == covered) return
+        covered = now
+        val nowMs = SystemClock.uptimeMillis()
+        if (!now) lastWake = nowMs
+        if (running) vote(nowMs)
+    }
+
     /** The votes for now: the window's while in use (not resting), the surface's top, 60 or none (RefreshRate). */
     private fun vote(nowMs: Long) {
-        resting = RefreshRate.resting(running, renderer.holding, nowMs - lastWake)
+        resting = RefreshRate.resting(running, renderer.holding, covered, nowMs - lastWake)
         val wants = running && !resting
         if (wants != voting) { voting = wants; motion?.loop(wants, nowMs) }
         val hz = surfaceHz()
