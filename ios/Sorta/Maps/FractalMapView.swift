@@ -171,6 +171,11 @@ struct FractalPart: Identifiable {
             builtFolders = notes.folders
             grown = true
             generation += 1
+            // the last pose's dots and names are the old tree's: none until the new one is placed, so the
+            // names layer never asks the new sink for a name past its end (run 44449703457: Let go on an
+            // iPad beside the Fractal stopped the app)
+            screen = []
+            names = []
             held = [:]
             chosen = -1
             linksOf = -1
@@ -237,6 +242,12 @@ struct FractalPart: Identifiable {
         (top + half, 0, max(bottom, cover > 0 ? cover + half : 0), 0)
     }
 
+    /// The window the whole map frames into: Back's row is free there, as Android's first view leaves it
+    /// (run 44449703457: the first view kept a row empty under the strip).
+    private var framedWhole: (top: Float, left: Float, bottom: Float, right: Float) {
+        (half, 0, max(bottom, cover > 0 ? cover + half : 0), 0)
+    }
+
     func resize(_ to: CGSize, top: CGFloat, bottom: CGFloat) {
         let grew = to != size || Float(top) != self.top || Float(bottom) != self.bottom
         size = to
@@ -259,7 +270,7 @@ struct FractalPart: Identifiable {
     private func frameHome() {
         guard let model, sized else { return }
         fly = nil
-        camera = FractalCamera3D.whole(model, width: width, height: height, insets: framed)
+        camera = FractalCamera3D.whole(model, width: width, height: height, insets: framedWhole)
         changed()
     }
 
@@ -280,7 +291,7 @@ struct FractalPart: Identifiable {
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
         names = FractalNames3D.layout(screen, model.tree, style: style,
                                       measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
-                                      width: width, height: height, top: top, bottom: floor, held: held, focus: focusNow)
+                                      width: width, height: height, top: focusNow > 0 ? top : 0, bottom: floor, held: held, focus: focusNow)
         held.removeAll(keepingCapacity: true)
         for p in names { held[p.index] = p.spot }
         named &+= 1
@@ -317,7 +328,7 @@ struct FractalPart: Identifiable {
         let to: GraphPerfCamera
         if i <= 0 {
             home = true
-            to = FractalCamera3D.whole(model, width: width, height: height, insets: framed)
+            to = FractalCamera3D.whole(model, width: width, height: height, insets: framedWhole)
         } else {
             home = false
             to = FractalCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: framed)
@@ -410,14 +421,17 @@ private struct FractalNamesLayer: View {
 
     var body: some View {
         let named = host.named
-        let names = host.names, sink = host.sink
+        let names = host.names, sink = host.sink, count = host.tree?.count ?? 0
         Canvas { context, _ in
             _ = named
             guard let sink else { return }
             context.withCGContext { cg in
                 sink.cg = cg
-                for p in names {
-                    sink.text(p.index, p.x, p.y, p.size, p.bold, 2, FractalTones.ink, FractalTones.sky, 2 * TreeNames3D.Style().halo)
+                for p in names where p.index < count {
+                    // the sink strokes a name's halo at its 100-point line's scale, so the width is given at that
+                    // scale: a halo 2.5 points round the words, not 19, which hid the dots and lines round a name
+                    // (run 44449703457's stills)
+                    sink.text(p.index, p.x, p.y, p.size, p.bold, 2, FractalTones.ink, FractalTones.sky, 2 * TreeNames3D.Style().halo * p.size / 100)
                 }
                 sink.cg = nil
             }

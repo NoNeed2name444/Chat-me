@@ -53,7 +53,10 @@ let windows = [Window(name: "phone", width: 390, height: 844, top: 100, bottom: 
                Window(name: "foldable", width: 884, height: 736, top: 80, bottom: 100),
                // a foldable's map pane beside the Sort list, over the first visit's card, as Android's emulator drew it
                // (run 44398433580): only All ideas and its four top folders are crisp
-               Window(name: "foldable pane, first visit", width: 505, height: 677, top: 107, bottom: 282, least: 5)]
+               Window(name: "foldable pane, first visit", width: 505, height: 677, top: 107, bottom: 282, least: 5),
+               // the iPhone's map under the strip and over the first visit's card, its whole view free of Back's row,
+               // as FractalMapRenderTests draws it (run 44449703457 named 5 there with Back's row kept)
+               Window(name: "iPhone, first visit", width: 402, height: 660, top: 22, bottom: 343)]
 let style = TreeNames3D.Style()
 let rad: (Float) -> Float = { $0 * Float.pi / 180 }
 
