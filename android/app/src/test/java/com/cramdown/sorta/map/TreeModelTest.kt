@@ -23,7 +23,7 @@ class TreeModelTest {
         assertEquals((1 until nodes.size).count { nodes.childCount[it] == 0 }, m.leafCount)
         assertFalse(m.capped)
         assertEquals(m.branchCount * TreeModel.BRANCH_FLOATS, m.branches.size)
-        assertEquals(m.leafCount * TreeModel.LEAF_FLOATS, m.leaves.size)
+        assertEquals((m.leafCount + m.fillerCount) * TreeModel.LEAF_FLOATS, m.leaves.size)
         // the trunk first, from the origin up, its curve's control point on its line (it stands straight)
         assertEquals(0f, m.branches[14], 0f)
         assertEquals(1f, m.branches[4], 1e-6f)
@@ -83,11 +83,45 @@ class TreeModelTest {
         val leafNodes = (0 until m.leafCount).map { m.leaves[it * TreeModel.LEAF_FLOATS + 11].toInt() }
         assertEquals(leafNodes.size, leafNodes.toSet().size)
         assertEquals((1 until nodes.size).filter { nodes.childCount[it] == 0 }.toSet(), leafNodes.toSet())
-        assertEquals(m.branchCount * 12 * 7 * 2 + m.leafCount * 6 * 4, m.triangles)
-        assertEquals(m.triangles, TreeModel.tube(m.segments, m.rings).second.size / 3 * m.branchCount + TreeModel.blade(m.bladeRows).second.size / 3 * m.leafCount)
+        assertEquals(m.branchCount * 12 * 7 * 2 + (m.leafCount + m.fillerCount) * 6 * 4, m.triangles)
+        assertEquals(m.triangles, TreeModel.tube(m.segments, m.rings).second.size / 3 * m.branchCount + TreeModel.blade(m.bladeRows).second.size / 3 * m.blades)
         val s = TreeModel(nodes, m.layout, TreeColors(false), GraphicsTier.SMOOTH)
-        assertEquals(s.branchCount * 7 * 5 * 2 + s.leafCount * 4 * 4, s.triangles)
-        println("Tree triangles, High: ${m.triangles} (${m.branchCount} branches, ${m.leafCount} leaves); Smooth: ${s.triangles}; 2 draws a frame")
+        assertEquals(s.branchCount * 7 * 5 * 2 + (s.leafCount + s.fillerCount) * 4 * 4, s.triangles)
+        println("Tree triangles, High: ${m.triangles} (${m.branchCount} branches, ${m.leafCount} ideas' leaves, ${m.fillerCount} fillers); " +
+            "Smooth: ${s.triangles} (${s.fillerCount} fillers); 2 draws a frame")
+    }
+
+    // the lead's review of 19 Nov ("a bare winter tree"): round each idea's leaf a few smaller filler
+    // leaves on its stalk, drawn only, after the ideas' leaves, marked, capped; the ideas still counted exactly
+    @Test fun fillerLeavesAreDrawnOnlyAndCapped() {
+        val nodes = wide(30, 400)
+        val m = TreeModel(nodes, TreeLayout3D(nodes), TreeColors(false), GraphicsTier.HIGH)
+        val l = m.layout
+        assertEquals(m.leafCount * TreeModel.FILLERS_HIGH, m.fillerCount)
+        for (f in 0 until m.fillerCount) {
+            val o = (m.leafCount + f) * TreeModel.LEAF_FLOATS
+            val node = m.leaves[o + 11]; val i = node.toInt()
+            assertEquals("filler $f marked", TreeModel.FILLER_MARK, node - i, 1e-6f)
+            assertEquals("filler $f is an idea's", 0, nodes.childCount[i]); assertTrue(l.leaf[i] > 0)
+            // smaller than its idea's leaf, at most its stalk's length and its own blade from the stalk's base
+            assertTrue(m.leaves[o + 6] < l.leaf[i] && m.leaves[o + 6] >= l.leaf[i] * TreeModel.FILLER_SIZE_LEAST - 1e-6)
+            val reach = Math.sqrt((0..2).sumOf { a -> (m.leaves[o + a] - l.base[3 * i + a]).let { it * it } })
+            assertTrue("filler $f within its idea's reach", reach <= l.length[i] + m.leaves[o + 6] + 1e-5)
+            assertTrue(kotlin.math.abs(m.leaves[o + 7]) <= TreeModel.ROLL + 1e-6)
+            val axis = Math.sqrt((3..5).sumOf { a -> (m.leaves[o + a] * m.leaves[o + a]).toDouble() })
+            assertEquals(1.0, axis, 1e-5)
+        }
+        // no filler stands in for an idea: the ideas' leaves, read up to leafCount, are each idea once
+        val ideas = (0 until m.leafCount).map { m.leaves[it * TreeModel.LEAF_FLOATS + 11] }
+        assertTrue(ideas.all { it == kotlin.math.floor(it) })
+        // a big vault: the fillers capped by tier
+        val big = wide(60, TreeModel.SMOOTH_CAP + 500)
+        val bl = TreeLayout3D(big)
+        assertEquals(TreeModel.FILLER_CAP_SMOOTH, TreeModel(big, bl, TreeColors(true), GraphicsTier.SMOOTH).fillerCount)
+        assertEquals(TreeModel.FILLER_CAP_HIGH, TreeModel(big, bl, TreeColors(true), GraphicsTier.HIGH).fillerCount)
+        // seeded as iOS's: suite treemodel3d pins the first filler the same
+        val o = m.leafCount * TreeModel.LEAF_FLOATS
+        println("First filler: " + (0..11).joinToString(" ") { "%.6f".format(m.leaves[o + it]) })
     }
 
     // seeded the same as iOS's (suite treemodel3d holds these numbers too)
@@ -106,17 +140,35 @@ class TreeModelTest {
         val m = TreeModel(nodes, TreeLayout3D(nodes), c, GraphicsTier.HIGH)
         val trunk = c.wood3d[NestNodes.TRUNK]
         assertEquals(((trunk shr 16) and 255) / 255f, m.branches[11], 1e-6f)
-        // the bark brown leaning a fifth to its folder's colour, a leaf a green leaning nearly half to it
+        // the bark brown leaning a fifth to its folder's colour; a top folder's leaves in its colour's hue at
+        // the green's lightness (the lead's review of 19 Nov), each with the green's contrast with the sky
         for (dark in listOf(false, true)) {
             val k = TreeColors(dark)
             assertEquals(k.wood, k.wood3d[NestNodes.TRUNK])
             assertEquals(TreeColors.mix(k.wood, TreeColors.TONE[0], 0.2), k.wood3d[0])
-            assertEquals(TreeColors.mix(k.foliage, TreeColors.TONE[0], 0.45), k.leaf3d[0])
+            // pinned, as iOS's suite treemodel3d pins the same
+            assertEquals(if (dark) 0x4DD3C4 else 0x218379, k.leaf3d[0])
+            assertEquals(k.foliage, k.leaf3d[NestNodes.TRUNK]); assertEquals(k.foliage, k.leaf3d[NestNodes.LOOSE])
+            for (g in 0 until NestNodes.TONES) {
+                val leaf = k.leaf3d[g]
+                assertTrue("group $g: ${Integer.toHexString(leaf)} against the sky", contrast(leaf, k.sky) >= 3.5)
+                val most = maxOf((leaf shr 16) and 255, (leaf shr 8) and 255, leaf and 255); val least = minOf((leaf shr 16) and 255, (leaf shr 8) and 255, leaf and 255)
+                assertTrue("group $g: coloured, not grey", most - least >= 60)
+                for (h in 0 until g) assertTrue("groups $h and $g told apart", k.leaf3d[h] != leaf)
+            }
             // brown: red over green over blue; green: green the most
             assertTrue(((k.wood shr 16) and 255) > ((k.wood shr 8) and 255) && ((k.wood shr 8) and 255) > (k.wood and 255))
             assertTrue(((k.foliage shr 8) and 255) > ((k.foliage shr 16) and 255) && ((k.foliage shr 8) and 255) > (k.foliage and 255))
         }
         assertEquals(((c.sky shr 8) and 255) / 255f, m.sky[1], 1e-6f)
+    }
+
+    /** The WCAG contrast of two colours. */
+    private fun contrast(a: Int, b: Int): Double {
+        fun lin(c: Int): Double { val x = c / 255.0; return if (x <= 0.04045) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4) }
+        fun y(c: Int) = 0.2126 * lin((c shr 16) and 255) + 0.7152 * lin((c shr 8) and 255) + 0.0722 * lin(c and 255)
+        val p = y(a); val q = y(b)
+        return (maxOf(p, q) + 0.05) / (minOf(p, q) + 0.05)
     }
 
     // the lead's review of the third pass: flown in, the part and all under it draw in full colour and

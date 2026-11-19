@@ -9,15 +9,18 @@ import Foundation
 // kept, and the layout's breadth-first order means a cap drops the finest
 // twigs and leaves first. The owner's review of 19 Nov ("the tree doesn't
 // look realistic neither the leaves"): the bark is a brown leaning a fifth to
-// its folder's colour, a leaf a living green leaning nearly half to it, each
-// leaf a little lighter or darker and turned about its stem, seeded by its
-// node so every run, and Android, agree.
+// its folder's colour, each leaf a little lighter or darker and turned about
+// its stem, seeded by its node so every run, and Android, agree. The lead's
+// review of 19 Nov ("a bare winter tree"): a leaf in its top folder's hue
+// (TreeColors.hued), and round each idea's leaf a few smaller filler leaves on
+// its stalk, drawn only: not ideas, never counted or tapped, after the ideas'.
 
 /// `nodes` grown by `layout`, coloured by `colors` (wood3d and leaf3d), for
 /// `tier`. `branches` holds `branchCount` instances of `branchFloats` (base
 /// xyz, tip xyz, the curve's control point xyz, base and tip radius, rgb,
-/// node), `leaves` `leafCount` of `leafFloats` (centre xyz, axis xyz, radius,
-/// roll about the axis, rgb, node).
+/// node), `leaves` `leafCount` ideas' leaves of `leafFloats` (centre xyz, axis
+/// xyz, radius, roll about the axis, rgb, node) and then `fillerCount` filler
+/// leaves, each marked by its idea's node plus `fillerMark`.
 final class TreeModel3D {
     static let branchFloats = 15
     static let leafFloats = 12
@@ -35,7 +38,18 @@ final class TreeModel3D {
     static let cap: Float = 2, capReach: Float = 0.9
     /// A leaf blade's widest half width, by its half length; how far its edges
     /// rise off the midrib (by its width) and its tip curls down (by its length).
-    static let bladeWide = 0.44, fold = 0.3, curl = 0.3
+    static let bladeWide = 0.52, fold = 0.3, curl = 0.3
+    /// Filler leaves round each idea's leaf, by tier, and at most this many in all.
+    static let fillersHigh = 3, fillersSmooth = 2, fillerCapHigh = 6_000, fillerCapSmooth = 1_500
+    /// Where on its idea's stalk a filler grows (a share of it from its base), how far round it swings (radians), its size by the leaf's.
+    static let fillerAlongLeast = 0.35, fillerAlongSpan = 0.45, fillerSwingLeast = 0.6, fillerSwingSpan = 0.5
+    static let fillerSizeLeast = 0.6, fillerSizeSpan = 0.25
+    /// A filler a shade darker than a leaf.
+    static let fillerShade = 0.86
+    /// A filler's node field: its idea's node plus this, so the renderer hides and fades it with its idea but never lights it as chosen.
+    static let fillerMark: Float = 0.25
+    /// A filler's floor and ceiling on screen, by a leaf's.
+    static let fillerFloor: Float = 0.7
 
     let nodes: NestNodes
     let layout: TreeLayout3D
@@ -45,6 +59,9 @@ final class TreeModel3D {
     let leaves: [Float]
     let branchCount: Int
     let leafCount: Int
+    let fillerCount: Int
+    /// Every blade drawn: the ideas' leaves and the fillers, one instanced draw.
+    var blades: Int { leafCount + fillerCount }
     /// Whether the tier's cap left any branch or leaf out.
     let capped: Bool
     /// The tube's sides round and rings along, and the leaf blade's rows, for the tier.
@@ -66,8 +83,10 @@ final class TreeModel3D {
         let keptBranches = min(n, cap)
         let leafTotal = layout.leaf.reduce(0) { $0 + ($1 > 0 ? 1 : 0) }
         let keptLeaves = min(leafTotal, cap)
+        let each = tier == .high ? Self.fillersHigh : Self.fillersSmooth
+        let keptFillers = min(keptLeaves * each, tier == .high ? Self.fillerCapHigh : Self.fillerCapSmooth)
         var branches = [Float](repeating: 0, count: keptBranches * Self.branchFloats)
-        var leaves = [Float](repeating: 0, count: keptLeaves * Self.leafFloats)
+        var leaves = [Float](repeating: 0, count: (keptLeaves + keptFillers) * Self.leafFloats)
         var b = 0, l = 0
         var least = Double.infinity
         for k in 0..<n {
@@ -106,8 +125,18 @@ final class TreeModel3D {
                 }
             }
         }
+        // the fillers, after every idea's leaf, in the same order: the first ideas' first
+        var f = 0
+        fill: for q in 0..<l {
+            let i = Int(leaves[q * Self.leafFloats + 11])
+            for k in 0..<each {
+                if f >= keptFillers { break fill }
+                Self.filler(i, k, nodes, layout, colors, &leaves, (l + f) * Self.leafFloats)
+                f += 1
+            }
+        }
         self.branches = branches; self.leaves = leaves
-        branchCount = b; leafCount = l
+        branchCount = b; leafCount = l; fillerCount = f
         capped = keptBranches < n || keptLeaves < leafTotal
         smallest = max(Float(least.isFinite ? least : (layout.length.min() ?? 0.1)), 1e-4)
         var most = 1e-4
@@ -121,8 +150,45 @@ final class TreeModel3D {
     /// What a view pads round each framed point (subtreePoints holds every leaf's tip): a blade's half width.
     var margin: Float { smallest * Float(Self.bladeWide) }
 
-    /// Triangles a frame draws: every branch's tube and every leaf's blade, in two instanced draws.
-    var triangles: Int { branchCount * segments * (rings + 1) * 2 + leafCount * (bladeRows - 1) * 4 }
+    /// Idea `i`'s `k`th filler leaf into `out` at `o`: on its stalk part way
+    /// out, swung round its parent's line to one side and the other in turn,
+    /// smaller than its leaf, a shade darker. Android's TreeModel.filler.
+    private static func filler(_ i: Int, _ k: Int, _ nodes: NestNodes, _ layout: TreeLayout3D, _ colors: TreeColors,
+                               _ out: inout [Float], _ o: Int) {
+        let p = nodes.parent[i]
+        let lr = layout.leaf[i], len = layout.length[i]
+        let t = fillerAlongLeast + fillerAlongSpan * hash(i, 10 + k)
+        let swing = (k % 2 == 0 ? 1.0 : -1.0) * (fillerSwingLeast + fillerSwingSpan * hash(i, 20 + k))
+        let s = fillerSizeLeast + fillerSizeSpan * hash(i, 30 + k)
+        // the turn's axis: the parent's line, or, where the stalk runs along it, any square to the stalk
+        let d = [layout.dir[3 * i], layout.dir[3 * i + 1], layout.dir[3 * i + 2]]
+        var ax = [layout.dir[3 * p], layout.dir[3 * p + 1], layout.dir[3 * p + 2]]
+        let cx = ax[1] * d[2] - ax[2] * d[1], cy = ax[2] * d[0] - ax[0] * d[2], cz = ax[0] * d[1] - ax[1] * d[0]
+        if cx * cx + cy * cy + cz * cz < 1e-4 { ax = abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0] }
+        let am = (ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]).squareRoot()
+        let kx = ax[0] / am, ky = ax[1] / am, kz = ax[2] / am
+        let c = cos(swing), sn = sin(swing), dot = kx * d[0] + ky * d[1] + kz * d[2]
+        // Rodrigues: the stalk's line turned about the axis
+        let wx = d[0] * c + (ky * d[2] - kz * d[1]) * sn + kx * dot * (1 - c)
+        let wy = d[1] * c + (kz * d[0] - kx * d[2]) * sn + ky * dot * (1 - c)
+        let wz = d[2] * c + (kx * d[1] - ky * d[0]) * sn + kz * dot * (1 - c)
+        let r = lr * s
+        out[o] = Float(layout.base[3 * i] + d[0] * len * t + wx * r)
+        out[o + 1] = Float(layout.base[3 * i + 1] + d[1] * len * t + wy * r)
+        out[o + 2] = Float(layout.base[3 * i + 2] + d[2] * len * t + wz * r)
+        out[o + 3] = Float(wx); out[o + 4] = Float(wy); out[o + 5] = Float(wz)
+        out[o + 6] = Float(r)
+        out[o + 7] = Float((2 * hash(i, 40 + k) - 1) * roll)
+        let tone = TreeColors.mix(colors.leaf3d[nodes.group[i]], yellow, hash(i, 50 + k) * yellowMost)
+        let light = fillerShade * (1 - lightVar / 2 + lightVar * hash(i, 60 + k))
+        out[o + 8] = Float(min(Double((tone >> 16) & 255) / 255 * light, 1))
+        out[o + 9] = Float(min(Double((tone >> 8) & 255) / 255 * light, 1))
+        out[o + 10] = Float(min(Double(tone & 255) / 255 * light, 1))
+        out[o + 11] = Float(i) + fillerMark
+    }
+
+    /// Triangles a frame draws: every branch's tube and every blade, the fillers' too, in two instanced draws.
+    var triangles: Int { branchCount * segments * (rings + 1) * 2 + blades * (bladeRows - 1) * 4 }
 
     static func rgb(_ c: Int) -> SIMD3<Float> {
         SIMD3(Float((c >> 16) & 255) / 255, Float((c >> 8) & 255) / 255, Float(c & 255) / 255)
@@ -289,7 +355,7 @@ enum TreeFit {
 /// pixels per unit at depth 1, to half the width, at `scale` pixels a point.
 enum TreeWeight {
     static let twigPoints: Float = 1.5
-    static let leafPoints: Float = 6
+    static let leafPoints: Float = 9
 
     static func twigFloor(scale: Float, focal: Float) -> Float { twigPoints / 2 * scale / max(focal, 1) }
 
@@ -341,7 +407,7 @@ enum TreeCamera3D {
     /// A fly-in fills this much of the room the chrome leaves.
     static let fill: Float = 0.88
     /// The first view fills this much of it, on its binding side, as Android's TREE_FILL.
-    static let wholeFill: Float = 0.9
+    static let wholeFill: Float = 0.96
     /// A fly's length, as the map's.
     static let seconds: Double = 0.8
 
@@ -504,8 +570,11 @@ struct TreePlacedName: Equatable {
 /// its whole name and then cut to `shortCut` characters. Only the trunk, the
 /// part flown in to and the view's own branches may then go over another
 /// branch's leaves, again whole and then cut; a lesser name with no clear spot
-/// is left out, so fewer names show where they do not fit. Android's TreeNames
-/// is the same.
+/// is left out, so fewer names show where they do not fit. The lead's review
+/// of 19 Nov: flown in, a name first looks for a spot clear of every leaf, its
+/// own branch's too, so it stands beside its branch, a short leader back to
+/// the tip (nearAboveSpot, nearBelowSpot), halo kept, rather than over the
+/// foliage. Android's TreeNames is the same.
 enum TreeNames3D {
     /// The sizes the names keep, in points.
     struct Style {
@@ -573,8 +642,8 @@ enum TreeNames3D {
             for y in r0...r1 { for x in c0...c1 { f(y * cols + x) } }
         }
 
-        /// Whether the box (centre `x`, `y`) covers a leaf outside `owner`'s subtree.
-        func covers(_ x: Float, _ y: Float, _ w: Float, _ h: Float, owner: Int, _ nodes: NestNodes) -> Bool {
+        /// Whether the box (centre `x`, `y`) covers a leaf outside `owner`'s subtree, or any leaf if `all`.
+        func covers(_ x: Float, _ y: Float, _ w: Float, _ h: Float, owner: Int, _ nodes: NestNodes, all: Bool = false) -> Bool {
             let c0 = max(Int(((x - w / 2) / cell).rounded(.down)), 0), c1 = min(Int(((x + w / 2) / cell).rounded(.down)), cols - 1)
             let r0 = max(Int(((y - h / 2) / cell).rounded(.down)), 0), r1 = min(Int(((y + h / 2) / cell).rounded(.down)), rows - 1)
             if c0 > c1 || r0 > r1 { return false }
@@ -583,7 +652,7 @@ enum TreeNames3D {
                     let k = ry * cols + cx
                     for q in start[k]..<start[k + 1] {
                         let s = screen[items[q]]
-                        if nodes.within(owner, s.index) { continue }
+                        if !all && nodes.within(owner, s.index) { continue }
                         let dx = max(abs(s.x - x) - w / 2, 0), dy = max(abs(s.y - y) - h / 2, 0)
                         if dx * dx + dy * dy < s.pixels * s.pixels / 4 { return true }
                     }
@@ -663,7 +732,9 @@ enum TreeNames3D {
     static func layout(_ screen: [TreeScreenNode], _ nodes: NestNodes, style: Style,
                        measure: (_ node: Int, _ short: Bool, _ bold: Bool, _ size: Float) -> (width: Float, height: Float),
                        width: Float, height: Float, top: Float, bottom: Float,
-                       held: [Int: Int] = [:], focus: Int = 0, clear: [CGRect] = [], cap: Int = most) -> [TreePlacedName] {
+                       held: [Int: Int] = [:], focus asked: Int = 0, clear: [CGRect] = [], cap: Int = most) -> [TreePlacedName] {
+        // a part past the tree's end (one flown in to before the tree shrank) is the whole tree
+        let focus = asked < nodes.size ? asked : 0
         var out: [TreePlacedName] = []
         out.reserveCapacity(most)
         let limit = focus > 0 ? min(cap, most) : most
@@ -708,7 +779,8 @@ enum TreeNames3D {
             let first = i == 0 || i == focus || own == i
             var found: TreePlacedName?
             var line: Segment?
-            search: for overLeaves in 0...(first ? 1 : 0) {
+            // flown in, first clear of every leaf (pass 0); then of another branch's (1); then, for the first, over them (2)
+            search: for pass in (whole ? 1 : 0)...(first ? 2 : 1) {
                 for short in cuts ? [false, true] : [false] {
                     let words = measure(i, short, isBough, size)
                     let w = words.width + 2 * style.halo, h = words.height + 2 * style.halo
@@ -737,7 +809,7 @@ enum TreeNames3D {
                             if blocked.contains(where: { seg.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
                             l = seg
                         }
-                        if overLeaves == 0 && foliage.covers(b.0, b.1, w, h, owner: own, nodes) { continue }
+                        if pass < 2 && foliage.covers(b.0, b.1, w, h, owner: own, nodes, all: pass == 0) { continue }
                         found = TreePlacedName(index: i, size: size, bold: isBough, x: b.0, y: b.1, width: w, height: h, spot: k,
                                                lead: sp.lead, short: short)
                         line = l
@@ -753,9 +825,11 @@ enum TreeNames3D {
     }
 
     /// The spots, in the order tried: a branch's tip, past the crown, above the
-    /// tip, past the crown a row above and below (a leader back to the tip);
-    /// the trunk's foot and beside it.
+    /// tip, past the crown a row above and below (a leader back to the tip),
+    /// just past the tip a row above and below (a short leader back to it),
+    /// then both two rows off; the trunk's foot and beside it.
     static let tipSpot = 0, outsideSpot = 1, aboveTipSpot = 2, pastAboveSpot = 3, pastBelowSpot = 4, footSpot = 0
+    static let nearAboveSpot = 5, nearBelowSpot = 6, lastTipSpot = 10
 
     /// A spot: its box's centre, whether it slides along its row to stay in, and the tip its leader runs to.
     private struct Spot {
@@ -791,6 +865,15 @@ enum TreeNames3D {
                 let row = h + style.gapY
                 out.append(Spot(x: x, y: t.y - row, slides: false, lead: t))
                 out.append(Spot(x: x, y: t.y + row, slides: false, lead: t))
+                // just past the tip a row above and below, a short leader back to it: beside the branch, off its leaves
+                let near = t.x + side * (2 * style.gapX + w / 2)
+                out.append(Spot(x: near, y: t.y - row, slides: false, lead: t))
+                out.append(Spot(x: near, y: t.y + row, slides: false, lead: t))
+                // in a crowd, both two rows off
+                out.append(Spot(x: x, y: t.y - 2 * row, slides: false, lead: t))
+                out.append(Spot(x: x, y: t.y + 2 * row, slides: false, lead: t))
+                out.append(Spot(x: near, y: t.y - 2 * row, slides: false, lead: t))
+                out.append(Spot(x: near, y: t.y + 2 * row, slides: false, lead: t))
             }
         }
         if tipsOnly { return out }

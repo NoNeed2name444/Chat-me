@@ -177,7 +177,7 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
             val u = if (k == 0) tube else leaf
             val vao = if (k == 0) tubeVao else leafVao
             val count = if (k == 0) tubeIndices else leafIndices
-            val instances = if (k == 0) model.branchCount else model.leafCount
+            val instances = if (k == 0) model.branchCount else model.blades
             if (instances == 0) continue
             GLES30.glUseProgram(program)
             GLES30.glUniformMatrix4fv(u[0], 1, false, view, 0)
@@ -294,9 +294,11 @@ void main() {
 
         /**
          * A leaf: the blade (its place and normal) from its stem's tip out along its axis, its face
-         * turned up toward the sky, then rolled about its axis by its own turn.
+         * turned up toward the sky, then rolled about its axis by its own turn. A filler (its node
+         * marked, [TreeModel.FILLER_MARK]) hides and fades with its idea but is never lit as chosen or
+         * linked, and its floor and ceiling are a leaf's by [TreeModel.FILLER_FLOOR].
          */
-        const val LEAF_VS = HEAD + """
+        val LEAF_VS = HEAD + """
 layout(location = 0) in vec3 aPlace;
 layout(location = 1) in vec3 aFace;
 layout(location = 2) in vec3 aCentre;
@@ -315,10 +317,14 @@ void main() {
     vec3 z = up * cr - across * sr;
     float depth = max(-(uView * vec4(aCentre, 1.0)).z, 1e-4);
     // never under the floor, nor over the ceiling: flown in, a leaf stays a leaf, not a wall
-    float r = min(max(aRadius, uPixel.y * depth), uPixel.z * depth);
+    float filler = step(0.1, fract(aNode));
+    float k = mix(1.0, """ + "${TreeModel.FILLER_FLOOR}" + """, filler);
+    float r = min(max(aRadius, uPixel.y * depth * k), uPixel.z * depth * k);
     vec3 p = aCentre + (x * aPlace.x + d * aPlace.y + z * aPlace.z) * r;
     vec3 n = normalize(x * aFace.x + d * aFace.y + z * aFace.z);
-    finish(p, n, aColor, stateOf(aNode), 1.0);
+    float st = stateOf(aNode);
+    if (filler > 0.5 && st > 1.5 && st < 3.5) st = 0.0;
+    finish(p, n, aColor, st, 1.0);
 }
 """
 
@@ -374,7 +380,7 @@ void main() {
  */
 object TreeWeight {
     const val TWIG_DP = 1.5f
-    const val LEAF_DP = 6f
+    const val LEAF_DP = 9f
     const val LEAF_MOST_DP = 22f
 
     fun twigFloor(density: Float, focal: Float): Float = TWIG_DP / 2 * density / max(focal, 1f)

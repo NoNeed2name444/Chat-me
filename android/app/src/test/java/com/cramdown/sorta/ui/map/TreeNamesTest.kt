@@ -163,7 +163,21 @@ class TreeNamesTest {
         }
         println("${trees[tree].first}: $views views, $named names, $overLeaves over another branch's leaves")
         assertEquals(3 * 12 * (1 + tops.size), views)
-        assertTrue("$overLeaves of $named names over another branch's leaves", overLeaves * 10 <= named)
+        // at most 8 in 100 (the lead's review of 19 Nov lowered it from 10: flown in, names stand beside their branches)
+        assertTrue("$overLeaves of $named names over another branch's leaves", overLeaves * 100 <= 8 * named)
+    }
+
+    // a part flown in to before the tree shrank, past the new tree's end, is the whole tree (iOS's
+    // TreeHostRegrowTests: the Fractal's names stopped the app so when Let go shrank its tree)
+    @Test fun aFocusPastTheTreesEndIsTheWholeTree() = eachTree {
+        val w = windows[0]
+        val (screen, whole) = names(w, 0f)
+        val args = { focus: Int -> TreeNames.layout(screen, sample, Metrics(0.6f), Metrics(0.56f), style(w.density), w.width.toFloat(),
+            w.height.toFloat(), w.top, w.bottom, focus = focus, clear = MapClear.boxes(chrome(w, false))) }
+        for (past in listOf(sample.size, sample.size + 40)) {
+            val placed = args(past)
+            assertEquals("focus $past: the whole tree's names", whole.map { it.index to it.label }, placed.map { it.index to it.label })
+        }
     }
 
     @Test fun theBigBranchesAreNamedAtTheFirstView() = eachTree {
@@ -319,7 +333,7 @@ class TreeNamesTest {
             for (p in placed) {
                 if (p.index != 0) assertFalse("${w.name} $yaw: ${p.label} covers the trunk", com.cramdown.sorta.map.LabelRoom.crosses(p.box, stem, 0f))
                 if (sample.depth[p.index] > 1) {
-                    assertTrue("${w.name} $yaw: ${p.label} at its tip (spot ${p.spot})", p.spot <= TreeNames.PAST_BELOW)
+                    assertTrue("${w.name} $yaw: ${p.label} at its tip (spot ${p.spot})", p.spot <= TreeNames.LAST_TIP)
                     // out past the crown, a leader runs back to the tip
                     val s = screen.first { it.index == p.index }
                     if (p.spot == TreeNames.OUTSIDE || p.spot >= TreeNames.PAST_ABOVE)
@@ -354,7 +368,7 @@ class TreeNamesTest {
             assertTrue("$what: inside the room ($left, $top, $right, $bottom)", left >= room.left && right <= base.width - room.right &&
                 top >= room.top && bottom <= base.height - room.bottom)
             val wide = (right - left) / (base.width - room.left - room.right); val tall = (bottom - top) / (base.height - room.top - room.bottom)
-            assertTrue("$what: fills $wide across and $tall down", maxOf(wide, tall) >= 0.86f)
+            assertTrue("$what: fills $wide across and $tall down", maxOf(wide, tall) >= 0.92f)
         }
     }
 

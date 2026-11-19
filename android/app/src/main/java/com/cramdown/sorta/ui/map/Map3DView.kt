@@ -338,7 +338,7 @@ private const val SPACE_PITCH = (45.0 * Math.PI / 180.0).toFloat()
 internal const val TREE_PITCH = (20.0 * Math.PI / 180.0).toFloat()
 internal const val TREE_YAW = (35.0 * Math.PI / 180.0).toFloat()
 /** How much of the room the chrome and the card leave the Tree's first view fills, on its binding side. */
-internal const val TREE_FILL = 0.9f
+internal const val TREE_FILL = 0.96f
 
 /**
  * iOS's camera per theme (S05j item 3), looking at [target]: Space and Neurons look down at GraphTilt's

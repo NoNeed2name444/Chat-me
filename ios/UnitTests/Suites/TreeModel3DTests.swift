@@ -32,11 +32,19 @@ let leafCount = layout.leaf.filter { $0 > 0 }.count
 check("one branch a node, one leaf a leaf", light.branchCount == sample.size && light.leafCount == leafCount && !light.capped,
       "\(light.branchCount) \(light.leafCount)")
 check("the lists' lengths", light.branches.count == light.branchCount * TreeModel3D.branchFloats
-      && light.leaves.count == light.leafCount * TreeModel3D.leafFloats)
+      && light.leaves.count == light.blades * TreeModel3D.leafFloats)
 check("the trunk first, its node kept, its control point on its line", light.branches[14] == 0 && light.branches[4] == 1
       && abs(light.branches[7] - 0.5) < 1e-6)
 check("every instance names its node", (0..<light.branchCount).allSatisfy { k in
     let i = Int(light.branches[k * TreeModel3D.branchFloats + 14]); return i >= 0 && i < sample.size })
+/// The WCAG contrast of two colours.
+func contrast(_ a: Int, _ b: Int) -> Double {
+    func lin(_ c: Int) -> Double { let x = Double(c) / 255; return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+    func y(_ c: Int) -> Double { 0.2126 * lin((c >> 16) & 255) + 0.7152 * lin((c >> 8) & 255) + 0.0722 * lin(c & 255) }
+    let p = y(a), q = y(b)
+    return (max(p, q) + 0.05) / (min(p, q) + 0.05)
+}
+
 /// Whether branch instance `k`'s control point is its node's line's middle plus its bend.
 func controlHolds(_ k: Int) -> Bool {
     let o: Int = k * TreeModel3D.branchFloats
@@ -58,8 +66,16 @@ check("dark mode has its own bark", dark.branches[11] != light.branches[11])
 // the owner's review of 19 Nov: the bark a brown leaning a fifth to its folder's colour, a leaf a green leaning nearly half to it
 for k in [TreeColors(dark: false), TreeColors(dark: true)] {
     check("\(k.dark ? "dark" : "light"): the trunk's bark is the wood", k.wood3d[NestNodes.trunk] == k.wood)
-    check("\(k.dark ? "dark" : "light"): a folder's bark and leaves lean to its colour", k.wood3d[0] == TreeColors.mix(k.wood, TreeColors.tone[0], 0.2)
-          && k.leaf3d[0] == TreeColors.mix(k.foliage, TreeColors.tone[0], 0.45))
+    // a top folder's leaves in its colour's hue at the green's lightness (the lead's review of 19 Nov), pinned as Android's
+    check("\(k.dark ? "dark" : "light"): a folder's bark leans to its colour, its leaves in its hue", k.wood3d[0] == TreeColors.mix(k.wood, TreeColors.tone[0], 0.2)
+          && k.leaf3d[0] == (k.dark ? 0x4DD3C4 : 0x218379) && k.leaf3d[NestNodes.trunk] == k.foliage && k.leaf3d[NestNodes.loose] == k.foliage,
+          String(k.leaf3d[0], radix: 16))
+    for g in 0..<NestNodes.tones {
+        let leaf = k.leaf3d[g]
+        let ch = [(leaf >> 16) & 255, (leaf >> 8) & 255, leaf & 255]
+        check("\(k.dark ? "dark" : "light") group \(g): coloured, against the sky, told apart",
+              contrast(leaf, k.sky) >= 3.5 && ch.max()! - ch.min()! >= 60 && !(0..<g).contains { k.leaf3d[$0] == leaf }, String(leaf, radix: 16))
+    }
     let r = (k.wood >> 16) & 255, g = (k.wood >> 8) & 255, b = k.wood & 255
     let fr = (k.foliage >> 16) & 255, fg = (k.foliage >> 8) & 255, fb = k.foliage & 255
     check("\(k.dark ? "dark" : "light"): the wood is brown and the foliage green", r > g && g > b && fg > fr && fg > fb)
@@ -68,11 +84,39 @@ for k in [TreeColors(dark: false), TreeColors(dark: true)] {
 let leafNodes = (0..<light.leafCount).map { Int(light.leaves[$0 * TreeModel3D.leafFloats + 11]) }
 check("one leaf an idea, each once", Set(leafNodes).count == leafNodes.count
       && Set(leafNodes) == Set((1..<sample.size).filter { sample.childCount[$0] == 0 }))
-check("the triangles a frame draws", light.triangles == light.branchCount * 12 * 7 * 2 + light.leafCount * 6 * 4
-      && smooth.triangles == smooth.branchCount * 7 * 5 * 2 + smooth.leafCount * 4 * 4
+check("the triangles a frame draws", light.triangles == light.branchCount * 12 * 7 * 2 + (light.leafCount + light.fillerCount) * 6 * 4
+      && smooth.triangles == smooth.branchCount * 7 * 5 * 2 + (smooth.leafCount + smooth.fillerCount) * 4 * 4
       && light.triangles == TreeModel3D.tube(light.segments, rings: light.rings).indices.count / 3 * light.branchCount
-         + TreeModel3D.blade(light.bladeRows).indices.count / 3 * light.leafCount)
-print("Tree triangles, High: \(light.triangles) (\(light.branchCount) branches, \(light.leafCount) leaves); Smooth: \(smooth.triangles); 2 draws a frame")
+         + TreeModel3D.blade(light.bladeRows).indices.count / 3 * light.blades)
+print("Tree triangles, High: \(light.triangles) (\(light.branchCount) branches, \(light.leafCount) ideas' leaves, \(light.fillerCount) fillers); Smooth: \(smooth.triangles) (\(smooth.fillerCount) fillers); 2 draws a frame")
+// the lead's review of 19 Nov ("a bare winter tree"): round each idea's leaf a few smaller filler leaves on its stalk,
+// drawn only, after the ideas' leaves, marked, capped; the ideas still counted exactly. As Android's fillerLeavesAreDrawnOnlyAndCapped.
+check("three fillers an idea on High, two on Smooth", light.fillerCount == light.leafCount * TreeModel3D.fillersHigh
+      && smooth.fillerCount == smooth.leafCount * TreeModel3D.fillersSmooth, "\(light.fillerCount) \(smooth.fillerCount)")
+check("every filler marked, an idea's, smaller, within its reach", (0..<light.fillerCount).allSatisfy { f in
+    let o = (light.leafCount + f) * TreeModel3D.leafFloats
+    let node = light.leaves[o + 11], i = Int(node)
+    let reach = (0..<3).map { Double(light.leaves[o + $0]) - layout.base[3 * i + $0] }.map { $0 * $0 }.reduce(0, +).squareRoot()
+    let axis = (3..<6).map { Double(light.leaves[o + $0] * light.leaves[o + $0]) }.reduce(0, +).squareRoot()
+    return abs(node - Float(i) - TreeModel3D.fillerMark) < 1e-6 && sample.childCount[i] == 0 && layout.leaf[i] > 0
+        && Double(light.leaves[o + 6]) < layout.leaf[i] && Double(light.leaves[o + 6]) >= layout.leaf[i] * TreeModel3D.fillerSizeLeast - 1e-6
+        && reach <= layout.length[i] + Double(light.leaves[o + 6]) + 1e-5 && abs(light.leaves[o + 7]) <= Float(TreeModel3D.roll) + 1e-6
+        && abs(axis - 1) < 1e-5 })
+check("no filler stands in for an idea", (0..<light.leafCount).allSatisfy { let v = light.leaves[$0 * TreeModel3D.leafFloats + 11]; return v == v.rounded(.down) })
+// Android's wide(30, 400): the first filler pinned to Android's numbers, and the caps on a big vault
+func wide(_ folders: Int, _ ideas: Int) -> NestNodes {
+    let f = (0..<folders).map { NestFolderIn(id: "f\($0)", parentId: $0 == 0 ? nil : "f\(($0 - 1) / 3)", name: "Folder \($0)") }
+    let i = (0..<ideas).map { NestIdeaIn(id: "i\($0)", folderId: "f\($0 % folders)", title: "Idea \($0)", createdAt: Int64($0)) }
+    return NestNodes.build(trunk: "All ideas", folders: f, ideas: i)
+}
+let w400 = wide(30, 400)
+let m400 = TreeModel3D(w400, TreeLayout3D(w400), colors: TreeColors(dark: false), tier: .high)
+let first = Array(m400.leaves[(m400.leafCount * TreeModel3D.leafFloats)..<(m400.leafCount * TreeModel3D.leafFloats + 12)])
+let android: [Float] = [-0.257504, 1.550355, 0.024805, 0.298981, 0.913322, 0.276503, 0.024756, -0.453821, 0.112804, 0.402435, 0.365850, 5.25]
+check("the first filler is Android's", m400.fillerCount == 1200 && zip(first, android).allSatisfy { abs($0 - $1) < 2e-6 }, "\(first)")
+let big = wide(60, TreeModel3D.smoothCap + 500), bigLayout = TreeLayout3D(big)
+check("the fillers capped by tier", TreeModel3D(big, bigLayout, colors: TreeColors(dark: true), tier: .smooth).fillerCount == TreeModel3D.fillerCapSmooth
+      && TreeModel3D(big, bigLayout, colors: TreeColors(dark: true), tier: .high).fillerCount == TreeModel3D.fillerCapHigh)
 // seeded the same as Android's (TreeModelTest.theSeededNumbersAreIosOwn)
 check("the seeded numbers are Android's", TreeModel3D.hash(0, 0) == 0 && abs(TreeModel3D.hash(1, 1) - 0.9573098756) < 1e-9
       && abs(TreeModel3D.hash(7, 2) - 0.3039142611) < 1e-9 && abs(TreeModel3D.hash(12345, 3) - 0.4494442665) < 1e-9
@@ -323,7 +367,7 @@ for w in windows {
         check("\(w.name) \(yaw): no name but the trunk's covers the trunk",
               placed.allSatisfy { $0.index == 0 || !stem.crosses($0.x, $0.y, $0.width, $0.height, gap: 0) })
         check("\(w.name) \(yaw): a deeper part named only at its tip",
-              placed.allSatisfy { sample.depth[$0.index] <= 1 || $0.spot <= TreeNames3D.pastBelowSpot })
+              placed.allSatisfy { sample.depth[$0.index] <= 1 || $0.spot <= TreeNames3D.lastTipSpot })
         // out past the crown, a leader runs back to the tip
         check("\(w.name) \(yaw): a deeper part's name past the crown has a leader to its tip", placed.allSatisfy { p in
             guard sample.depth[p.index] > 1, p.spot >= TreeNames3D.pastAboveSpot else { return true }
@@ -385,7 +429,18 @@ func sweep(_ tree: String, _ m: TreeModel3D, _ nodes: NestNodes, _ measureOf: (I
     }
     print("\(tree): \(swept) views, \(named) names, \(over) over another branch's leaves")
     check("\(tree): every view swept", swept == 3 * 12 * (1 + tops.count), "\(swept)")
-    check("\(tree): \(over) of \(named) names over another branch's leaves", over * 10 <= named)
+    // at most 8 in 100 (the lead's review of 19 Nov lowered it from 10: flown in, names stand beside their branches)
+    check("\(tree): \(over) of \(named) names over another branch's leaves", over * 100 <= 8 * named)
+}
+// a part flown in to before the tree shrank, past the new tree's end, is the whole tree (TreeHostRegrowTests)
+do {
+    let w = windows[0]
+    let (screen, whole) = names(w, yaw: 0, into: -1)
+    for past in [sample.size, sample.size + 40] {
+        let placed = TreeNames3D.layout(screen, sample, style: style, measure: measure, width: w.width, height: w.height,
+                                        top: w.top, bottom: w.bottom, focus: past, clear: chrome(w, flown: false))
+        check("focus \(past): the whole tree's names", placed == whole, "\(placed.count) and \(whole.count)")
+    }
 }
 sweep("concept", light, sample, measure)
 sweep("store", storeModel, store, storeMeasure)
@@ -408,7 +463,7 @@ for (m, tree) in [(light, "concept"), (storeModel, "store")] {
         check("\(tree) \(name): the first view inside the room", left >= -0.01 && right <= w.width + 0.01 && top >= room.top - 0.01
               && bottom <= w.height - room.bottom + 0.01, "\(left) \(top) \(right) \(bottom)")
         let wide = (right - left) / w.width, tall = (bottom - top) / (w.height - room.top - room.bottom)
-        check("\(tree) \(name): the first view fills the room", max(wide, tall) >= 0.86, "\(wide) x \(tall)")
+        check("\(tree) \(name): the first view fills the room", max(wide, tall) >= 0.92, "\(wide) x \(tall)")
     }
 }
 

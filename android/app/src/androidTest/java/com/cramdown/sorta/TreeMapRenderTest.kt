@@ -45,7 +45,8 @@ import kotlin.math.abs
  * the trunk above it), orbit (a drag of about 40 degrees round the trunk), cardiology (flown in to
  * Cardiology by a tap on it). At each: the names drawn (MapDrawn.names) never overlap, the big branches
  * are named, and the frame is the page's colour with the tree on it and no logo coral. On the tablet the
- * day's pass is shot again at an open foldable's inner screen (wm size 2208x1840, 420 dpi), "foldable".
+ * day's and the night's passes are shot again at an open foldable's inner screen (wm size 2208x1840,
+ * 420 dpi), "foldable".
  */
 @RunWith(AndroidJUnit4::class)
 class TreeMapRenderTest {
@@ -70,19 +71,22 @@ class TreeMapRenderTest {
         ui.executeShellCommand("cmd uimode night no")
     }
 
-    @Test fun treeByDay() {
-        tree(dark = false, window = device)
+    @Test fun treeByDay() = treeAndFoldable(dark = false)
+
+    @Test fun treeByNight() = treeAndFoldable(dark = true)
+
+    /** The tree on this [device], and on the tablet again at an open foldable's inner screen. */
+    private fun treeAndFoldable(dark: Boolean) {
+        tree(dark = dark, window = device)
         if (device == "tablet") {
             scenario?.close(); scenario = null
             ui.executeShellCommand("wm size 2208x1840")
             ui.executeShellCommand("wm density 420")
             SystemClock.sleep(1_500)
             clearChoices()
-            tree(dark = false, window = "foldable")
+            tree(dark = dark, window = "foldable")
         }
     }
-
-    @Test fun treeByNight() = tree(dark = true, window = device)
 
     private fun tree(dark: Boolean, window: String) {
         val suffix = "${if (dark) "dark" else "light"}-$window"

@@ -109,12 +109,12 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
                 encoder.drawIndexedPrimitives(type: .triangle, indexCount: tube.count, indexType: .uint16,
                                               indexBuffer: tube.indices, indexBufferOffset: 0, instanceCount: model.branchCount)
             }
-            if let leaves, model.leafCount > 0 {
+            if let leaves, model.blades > 0 {
                 encoder.setRenderPipelineState(leafPipeline)
                 encoder.setVertexBuffer(blade.vertices, offset: 0, index: 0)
                 encoder.setVertexBuffer(leaves, offset: 0, index: 1)
                 encoder.drawIndexedPrimitives(type: .triangle, indexCount: blade.count, indexType: .uint16,
-                                              indexBuffer: blade.indices, indexBufferOffset: 0, instanceCount: model.leafCount)
+                                              indexBuffer: blade.indices, indexBufferOffset: 0, instanceCount: model.blades)
             }
         }
         encoder.endEncoding()
@@ -141,7 +141,7 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         if let v = floats(t.vertices), let i = shorts(t.indices) { tube = (v, i, t.indices.count) }
         if let v = floats(b.vertices), let i = shorts(b.indices) { blade = (v, i, b.indices.count) }
         branches = m.branchCount > 0 ? floats(m.branches) : nil
-        leaves = m.leafCount > 0 ? floats(m.leaves) : nil
+        leaves = m.blades > 0 ? floats(m.leaves) : nil
         state = device.makeBuffer(length: max(m.nodes.size, 1), options: .storageModeShared)
         stateVersion = -1
     }
@@ -259,7 +259,8 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     }
 
     // a leaf: the blade (its place and normal) from its stem's tip out along its axis, its face turned up toward the sky,
-    // then rolled about its axis by its own turn
+    // then rolled about its axis by its own turn; a filler (its node marked, TreeModel3D.fillerMark) hides and fades with
+    // its idea but is never lit as chosen or linked, and its floor and ceiling are a leaf's by TreeModel3D.fillerFloor
     vertex TreeOut tree_leaf(uint vid [[vertex_id]], uint iid [[instance_id]],
                              const device float* mesh [[buffer(0)]], const device float* inst [[buffer(1)]],
                              constant TreeU& u [[buffer(2)]], const device uchar* state [[buffer(3)]]) {
@@ -276,10 +277,14 @@ final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 z = up * cr - across * sr;
         float depth = max(-(u.view * float4(centre, 1.0)).z, 1e-4);
         // never under the floor, nor over the ceiling: flown in, a leaf stays a leaf, not a wall
-        float r = min(max(l[6], u.extra.y * depth), u.extra.w * depth);
+        float filler = step(0.1, fract(l[11]));
+        float k = mix(1.0, \(TreeModel3D.fillerFloor), filler);
+        float r = min(max(l[6], u.extra.y * depth * k), u.extra.w * depth * k);
         float3 p = centre + (x * place.x + d * place.y + z * place.z) * r;
         float3 n = normalize(x * face.x + d * face.y + z * face.z);
-        return finish(p, n, float3(l[8], l[9], l[10]), float(state[uint(l[11] + 0.5)]), 1.0, u);
+        float st = float(state[uint(l[11] + 0.5)]);
+        if (filler > 0.5 && st > 1.5 && st < 3.5) st = 0.0;
+        return finish(p, n, float3(l[8], l[9], l[10]), st, 1.0, u);
     }
 
     // a key light, a soft ambient brighter from the sky than the ground, and a little rim where a surface turns away;

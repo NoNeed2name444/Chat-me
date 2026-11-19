@@ -20,7 +20,10 @@ import com.cramdown.sorta.map.nest.NestNodes
  * branch here is one of the view's own: a top folder, or flown in, one growing from the part), its
  * whole name and then cut to [SHORT] characters. Only the trunk, the part flown in to and the view's
  * own branches may then go over another branch's leaves, again whole and then cut; a lesser name with
- * no clear spot is left out, so fewer names show where they do not fit. iOS's TreeNames3D is the same.
+ * no clear spot is left out, so fewer names show where they do not fit. The lead's review of 19 Nov:
+ * flown in, a name first looks for a spot clear of every leaf, its own branch's too, so it stands
+ * beside its branch, a short leader back to the tip ([NEAR_ABOVE], [NEAR_BELOW]), halo kept, rather
+ * than over the foliage. iOS's TreeNames3D is the same.
  */
 object TreeNames {
     /** The sizes the names keep, in pixels. */
@@ -81,6 +84,11 @@ object TreeNames {
     /** Past the crown a row above and below the tip's row, a leader back to the tip. */
     const val PAST_ABOVE = 3
     const val PAST_BELOW = 4
+    /** Just past the tip a row above and below, a short leader back to it. */
+    const val NEAR_ABOVE = 5
+    const val NEAR_BELOW = 6
+    /** Then past the crown and just past the tip two rows above and below: the last of a branch's tip spots. */
+    const val LAST_TIP = 10
     const val FOOT = 0
 
     fun bough(nodes: NestNodes, i: Int): Boolean = i == 0 || nodes.childCount[i] > 0 || nodes.folder[i]
@@ -136,15 +144,15 @@ object TreeNames {
             for (j in screen.indices) if (leaf[j]) each(screen[j]) { items[at[it]++] = j }
         }
 
-        /** Whether the box (centre [x], [y]) covers a leaf outside [owner]'s subtree. */
-        fun covers(x: Float, y: Float, w: Float, h: Float, owner: Int, nodes: NestNodes): Boolean {
+        /** Whether the box (centre [x], [y]) covers a leaf outside [owner]'s subtree, or any leaf if [all]. */
+        fun covers(x: Float, y: Float, w: Float, h: Float, owner: Int, nodes: NestNodes, all: Boolean = false): Boolean {
             val c0 = kotlin.math.floor((x - w / 2) / cell).toInt().coerceAtLeast(0); val c1 = kotlin.math.floor((x + w / 2) / cell).toInt().coerceAtMost(cols - 1)
             val r0 = kotlin.math.floor((y - h / 2) / cell).toInt().coerceAtLeast(0); val r1 = kotlin.math.floor((y + h / 2) / cell).toInt().coerceAtMost(rows - 1)
             for (ry in r0..r1) for (cx in c0..c1) {
                 val k = ry * cols + cx
                 for (q in start[k] until start[k + 1]) {
                     val s = screen[items[q]]
-                    if (nodes.within(owner, s.index)) continue
+                    if (!all && nodes.within(owner, s.index)) continue
                     val dx = kotlin.math.max(kotlin.math.abs(s.x - x) - w / 2, 0f); val dy = kotlin.math.max(kotlin.math.abs(s.y - y) - h / 2, 0f)
                     if (dx * dx + dy * dy < s.pixels * s.pixels / 4) return true
                 }
@@ -167,6 +175,8 @@ object TreeNames {
     fun layout(screen: List<ScreenNode>, nodes: NestNodes, boughs: NameMetrics, leaves: NameMetrics, style: Style,
                width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0,
                clear: List<LabelBox> = emptyList(), cap: Int = MOST): List<PlacedName> {
+        // a part past the tree's end (one flown in to before the tree shrank) is the whole tree
+        @Suppress("NAME_SHADOWING") val focus = if (focus < nodes.size) focus else 0
         // the chrome's boxes are taken before any name
         val placed = ArrayList<LabelBox>(clear.size + 32).apply { addAll(clear) }
         val out = ArrayList<PlacedName>()
@@ -208,7 +218,8 @@ object TreeNames {
             // only the trunk, the part and the view's own branches may go over another branch's leaves
             val first = i == 0 || i == focus || owner == i
             var found: PlacedName? = null
-            search@ for (overLeaves in 0..(if (first) 1 else 0)) for (label in if (cut == full) listOf(full) else listOf(full, cut)) {
+            // flown in, first clear of every leaf (pass 0); then of another branch's (1); then, for the first, over them (2)
+            search@ for (pass in (if (whole) 1 else 0)..(if (first) 2 else 1)) for (label in if (cut == full) listOf(full) else listOf(full, cut)) {
                 val w = metrics.width(label, size) + 2 * style.halo
                 val h = metrics.descent(size) - metrics.ascent(size) + 2 * style.halo
                 val spots = spots(node, i, isBough, whole && nodes.depth[i] > 1, w, h, style, middle, crownL, crownR, footX, footY)
@@ -223,7 +234,7 @@ object TreeNames {
                     if (i != 0 && stem != null && LabelRoom.crosses(box, stem, style.gapY)) continue
                     // a leader runs from the box's near side to the tip, clear of every name
                     if (!sp.leadX.isNaN() && placed.any { LabelRoom.crosses(it, lead(box, sp.leadX, sp.leadY), style.gapY) }) continue
-                    if (overLeaves == 0 && foliage.covers(box.x, box.y, box.width, box.height, owner, nodes)) continue
+                    if (pass < 2 && foliage.covers(box.x, box.y, box.width, box.height, owner, nodes, all = pass == 0)) continue
                     found = PlacedName(i, label, size, box, q, sp.leadX, sp.leadY)
                     break@search
                 }
@@ -269,6 +280,12 @@ object TreeNames {
                 // past the crown a row above and a row below, a leader back to the tip: free space for a crowded branch
                 val row = h + style.gapY
                 out.add(Spot(x, ty - row, false, tx, ty)); out.add(Spot(x, ty + row, false, tx, ty))
+                // just past the tip a row above and below, a short leader back to it: beside the branch, off its leaves
+                val near = tx + side * (2 * style.gapX + w / 2)
+                out.add(Spot(near, ty - row, false, tx, ty)); out.add(Spot(near, ty + row, false, tx, ty))
+                // in a crowd, both two rows off
+                out.add(Spot(x, ty - 2 * row, false, tx, ty)); out.add(Spot(x, ty + 2 * row, false, tx, ty))
+                out.add(Spot(near, ty - 2 * row, false, tx, ty)); out.add(Spot(near, ty + 2 * row, false, tx, ty))
             }
         }
         if (tipsOnly) return out

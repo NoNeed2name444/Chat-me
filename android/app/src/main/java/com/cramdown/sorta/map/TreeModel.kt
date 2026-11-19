@@ -11,20 +11,26 @@ import kotlin.math.sin
 // tree and mode, never per frame. The Graphics tier sets the meshes' detail and how many instances
 // are kept; [TreeLayout3D.order] is breadth first, so a cap drops the finest twigs and leaves first.
 // The owner's review of 19 Nov ("the tree doesn't look realistic neither the leaves"): the bark is a
-// brown leaning a fifth to its folder's colour, a leaf a living green leaning nearly half to it, each
-// leaf a little lighter or darker and turned about its stem, seeded by its node so every run agrees.
+// brown leaning a fifth to its folder's colour, each leaf a little lighter or darker and turned about
+// its stem, seeded by its node so every run agrees. The lead's review of 19 Nov ("a bare winter
+// tree"): a leaf in its top folder's hue (TreeColors.hued), and round each idea's leaf a few smaller
+// filler leaves on its stalk, drawn only: not ideas, never counted or tapped, after the ideas' leaves.
 
 /**
  * [nodes] grown by [layout], coloured by [colors] (TreeColors.wood3d and leaf3d), for [tier].
  * [branches] holds [branchCount] instances of [BRANCH_FLOATS] (base xyz, tip xyz, the curve's control
- * point xyz, base and tip radius, rgb, node), [leaves] [leafCount] of [LEAF_FLOATS] (centre xyz, axis
- * xyz, radius, roll about the axis, rgb, node).
+ * point xyz, base and tip radius, rgb, node), [leaves] [leafCount] ideas' leaves of [LEAF_FLOATS] (centre
+ * xyz, axis xyz, radius, roll about the axis, rgb, node) and then [fillerCount] filler leaves, each
+ * marked by its idea's node plus [FILLER_MARK].
  */
 class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: TreeColors, val tier: GraphicsTier) {
     val branches: FloatArray
     val leaves: FloatArray
     val branchCount: Int
     val leafCount: Int
+    val fillerCount: Int
+    /** Every blade drawn: the ideas' leaves and the fillers, one instanced draw. */
+    val blades: Int get() = leafCount + fillerCount
     /** Whether the tier's cap left any branch or leaf out. */
     val capped: Boolean
     /** The tube's sides round and rings along, and the leaf blade's rows, for the tier. */
@@ -45,8 +51,10 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
         var leafTotal = 0
         for (i in 0 until n) if (layout.leaf[i] > 0) leafTotal++
         val keptLeaves = min(leafTotal, cap)
+        val each = if (tier == GraphicsTier.HIGH) FILLERS_HIGH else FILLERS_SMOOTH
+        val keptFillers = min(keptLeaves * each, if (tier == GraphicsTier.HIGH) FILLER_CAP_HIGH else FILLER_CAP_SMOOTH)
         branches = FloatArray(keptBranches * BRANCH_FLOATS)
-        leaves = FloatArray(keptLeaves * LEAF_FLOATS)
+        leaves = FloatArray((keptLeaves + keptFillers) * LEAF_FLOATS)
         var b = 0; var l = 0
         var least = Double.POSITIVE_INFINITY
         for (k in 0 until n) {
@@ -84,12 +92,61 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
             }
         }
         branchCount = b; leafCount = l
+        // the fillers, after every idea's leaf, in the same order: the first ideas' first
+        var f = 0
+        for (q in 0 until l) {
+            if (f >= keptFillers) break
+            val i = leaves[q * LEAF_FLOATS + 11].toInt()
+            for (k in 0 until each) {
+                if (f >= keptFillers) break
+                filler(i, k, nodes.group[i], (l + f) * LEAF_FLOATS)
+                f++
+            }
+        }
+        fillerCount = f
         capped = keptBranches < n || keptLeaves < leafTotal
         smallest = (if (least.isFinite()) least else layout.length.minOrNull() ?: 0.1).toFloat().coerceAtLeast(1e-4f)
     }
 
-    /** Triangles a frame draws: every branch's tube and every leaf's blade, in two instanced draws. */
-    val triangles: Int get() = branchCount * segments * (rings + 1) * 2 + leafCount * (bladeRows - 1) * 4
+    /**
+     * Idea [i]'s [k]th filler leaf into [leaves] at [o]: on its stalk part way out, swung round its
+     * parent's line to one side and the other in turn, smaller than its leaf, a shade darker.
+     */
+    private fun filler(i: Int, k: Int, g: Int, o: Int) {
+        val p = nodes.parent[i]
+        val lr = layout.leaf[i]; val len = layout.length[i]
+        val t = FILLER_ALONG_LEAST + FILLER_ALONG_SPAN * hash(i, 10 + k)
+        val swing = (if (k % 2 == 0) 1 else -1) * (FILLER_SWING_LEAST + FILLER_SWING_SPAN * hash(i, 20 + k))
+        val s = FILLER_SIZE_LEAST + FILLER_SIZE_SPAN * hash(i, 30 + k)
+        // the turn's axis: the parent's line, or, where the stalk runs along it, any square to the stalk
+        val d = DoubleArray(3) { layout.dir[3 * i + it] }
+        var ax = DoubleArray(3) { layout.dir[3 * p + it] }
+        val cx = ax[1] * d[2] - ax[2] * d[1]; val cy = ax[2] * d[0] - ax[0] * d[2]; val cz = ax[0] * d[1] - ax[1] * d[0]
+        if (cx * cx + cy * cy + cz * cz < 1e-4) ax = if (kotlin.math.abs(d[1]) < 0.9) doubleArrayOf(0.0, 1.0, 0.0) else doubleArrayOf(1.0, 0.0, 0.0)
+        val am = Math.sqrt(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2])
+        val kx = ax[0] / am; val ky = ax[1] / am; val kz = ax[2] / am
+        val c = cos(swing); val sn = sin(swing); val dot = kx * d[0] + ky * d[1] + kz * d[2]
+        // Rodrigues: the stalk's line turned about the axis
+        val wx = d[0] * c + (ky * d[2] - kz * d[1]) * sn + kx * dot * (1 - c)
+        val wy = d[1] * c + (kz * d[0] - kx * d[2]) * sn + ky * dot * (1 - c)
+        val wz = d[2] * c + (kx * d[1] - ky * d[0]) * sn + kz * dot * (1 - c)
+        val r = lr * s
+        leaves[o] = (layout.base[3 * i] + d[0] * len * t + wx * r).toFloat()
+        leaves[o + 1] = (layout.base[3 * i + 1] + d[1] * len * t + wy * r).toFloat()
+        leaves[o + 2] = (layout.base[3 * i + 2] + d[2] * len * t + wz * r).toFloat()
+        leaves[o + 3] = wx.toFloat(); leaves[o + 4] = wy.toFloat(); leaves[o + 5] = wz.toFloat()
+        leaves[o + 6] = r.toFloat()
+        leaves[o + 7] = ((2 * hash(i, 40 + k) - 1) * ROLL).toFloat()
+        val tone = TreeColors.mix(colors.leaf3d[g], YELLOW, hash(i, 50 + k) * YELLOW_MOST)
+        val light = FILLER_SHADE * (1 - LIGHT_VAR / 2 + LIGHT_VAR * hash(i, 60 + k))
+        leaves[o + 8] = (((tone shr 16) and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+        leaves[o + 9] = (((tone shr 8) and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+        leaves[o + 10] = ((tone and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+        leaves[o + 11] = i + FILLER_MARK
+    }
+
+    /** Triangles a frame draws: every branch's tube and every blade, the fillers' too, in two instanced draws. */
+    val triangles: Int get() = branchCount * segments * (rings + 1) * 2 + blades * (bladeRows - 1) * 4
 
     companion object {
         const val BRANCH_FLOATS = 15
@@ -103,6 +160,24 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
         const val LIGHT_VAR = 0.2
         const val YELLOW_MOST = 0.15
         const val YELLOW = 0xB9C24A
+        /** Filler leaves round each idea's leaf, by tier, and at most this many in all. */
+        const val FILLERS_HIGH = 3
+        const val FILLERS_SMOOTH = 2
+        const val FILLER_CAP_HIGH = 6_000
+        const val FILLER_CAP_SMOOTH = 1_500
+        /** Where on its idea's stalk a filler grows (a share of it from its base), how far round it swings (radians), its size by the leaf's. */
+        const val FILLER_ALONG_LEAST = 0.35
+        const val FILLER_ALONG_SPAN = 0.45
+        const val FILLER_SWING_LEAST = 0.6
+        const val FILLER_SWING_SPAN = 0.5
+        const val FILLER_SIZE_LEAST = 0.6
+        const val FILLER_SIZE_SPAN = 0.25
+        /** A filler a shade darker than a leaf. */
+        const val FILLER_SHADE = 0.86
+        /** A filler's node field: its idea's node plus this, so the renderer hides and fades it with its idea but never lights it as chosen. */
+        const val FILLER_MARK = 0.25f
+        /** A filler's floor and ceiling on screen, by a leaf's. */
+        const val FILLER_FLOOR = 0.7f
         /** How far a trunk's base flares out and over what share of it; a branch's collar likewise. */
         const val FLARE = 0.55f
         const val FLARE_SPAN = 0.18f
@@ -153,7 +228,7 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
 
         /** A leaf blade's half width at [y] from its stem (0) to its tip (1): a pointed oval, widest below its middle. */
         fun bladeWidth(y: Double): Double = BLADE_WIDE * Math.pow(sin(Math.PI * y), 0.75) * (1.15 - 0.4 * y)
-        const val BLADE_WIDE = 0.44
+        const val BLADE_WIDE = 0.52
         /** How far its edges rise off the midrib (by its width), and its tip curls down (by its length). */
         const val FOLD = 0.3
         const val CURL = 0.3

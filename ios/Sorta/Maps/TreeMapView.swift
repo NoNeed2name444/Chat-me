@@ -314,6 +314,11 @@ struct TreePart: Identifiable {
             builtFolders = notes.folders
             grown = true
             generation += 1
+            // the last pose's bodies and names are the old tree's: none until the new one is placed, so
+            // nothing asks the new sink or nodes for a part past their end (the Fractal's names layer
+            // stopped the app so on an iPad when Let go shrank its tree, run 44449703457)
+            screen = []
+            names = []
             held = [:]
             chosen = -1
             linksOf = -1
@@ -532,14 +537,15 @@ struct TreePart: Identifiable {
 
     /// What a tap at `point` lands on: a name, a body, or -1 for empty space.
     func hit(_ point: CGPoint) -> Int {
-        TreeNames3D.hit(screen, names, x: Float(point.x), y: Float(point.y), least: Float(WardControlSize.target))
+        let i = TreeNames3D.hit(screen, names, x: Float(point.x), y: Float(point.y), least: Float(WardControlSize.target))
+        return i < (nodes?.size ?? 0) ? i : -1
     }
 
     /// The names placed, for VoiceOver: each a touch target each way at least.
     func parts() -> [TreePart] {
         guard let nodes else { return [] }
         let t = CGFloat(WardControlSize.target)
-        return names.map { p in
+        return names.filter { $0.index < nodes.size }.map { p in
             let w = max(t, CGFloat(p.width)), h = max(t, CGFloat(p.height))
             return TreePart(node: p.index, id: nodes.ids[p.index], name: nodes.titles[p.index], folder: nodes.folder[p.index],
                             leaf: nodes.childCount[p.index] == 0,
@@ -553,7 +559,7 @@ struct TreePart: Identifiable {
     func probe() -> String {
         guard let nodes else { return "" }
         var out = "\(Int(size.width)) \(Int(size.height)) \(camera.yaw) \(focus) \(height - cover)"
-        for p in names {
+        for p in names where p.index < nodes.size {
             out += "\n\(nodes.titles[p.index])\t\(p.left) \(p.top) \(p.right) \(p.bottom)"
         }
         return out
@@ -567,7 +573,7 @@ private struct TreeNamesLayer: View {
 
     var body: some View {
         let named = host.named
-        let names = host.names, sink = host.sink, colors = host.model?.colors
+        let names = host.names, sink = host.sink, colors = host.model?.colors, count = host.nodes?.size ?? 0
         Canvas { context, _ in
             _ = named
             guard let sink, let colors else { return }
@@ -581,7 +587,7 @@ private struct TreeNamesLayer: View {
                 cg.setLineWidth(1)
                 cg.setLineCap(.round)
                 let inset = CGFloat(TreeNames3D.Style().halo)
-                for p in names {
+                for p in names where p.index < count {
                     guard let tip = p.lead else { continue }
                     let toLeft = tip.x < p.x
                     let side: CGFloat = CGFloat(toLeft ? p.left : p.right)
@@ -591,7 +597,8 @@ private struct TreeNamesLayer: View {
                 }
                 cg.strokePath()
                 sink.cg = cg
-                for p in names {
+                // a name of a tree since grown again is past the new sink's end: skipped until placed again
+                for p in names where p.index < count {
                     sink.text(sink.line(p.index, short: p.short), p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)
                 }
                 sink.cg = nil
