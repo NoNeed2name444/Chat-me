@@ -1,0 +1,9 @@
+{
+  "about": "151 directory entries that share one entry's bytes. Each entry is under 100:1, but the archive unpacks to about 200 times its size.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "lines.json", "lines": {"count": 2000}, "method": "deflate"},
+    {"name": "copy{n}.json", "same_as": "lines.json", "count": 150}
+  ],
+  "expect": {"verdict": "refused", "reason": "zip.ratio"}
+}

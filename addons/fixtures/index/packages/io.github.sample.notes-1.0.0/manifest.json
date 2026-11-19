@@ -1,0 +1,28 @@
+{
+  "api": 1,
+  "author": {
+    "name": "Sample",
+    "url": "https://github.com/sample"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "run",
+        "title": "Run"
+      }
+    ]
+  },
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "hosts": [],
+  "id": "io.github.sample.notes",
+  "license": "MIT",
+  "main": "main.js",
+  "minSorta": "1.0.0",
+  "name": "Sample notes",
+  "permissions": [
+    "ideas.read",
+    "commands"
+  ],
+  "version": "1.0.0"
+}

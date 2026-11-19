@@ -1,0 +1,7 @@
+{
+  "about": "Day count 1.1.0 when 1.2.0 is listed already: the version isn't raised.",
+  "verdict": "fail",
+  "reasons": [
+    "review.version"
+  ]
+}

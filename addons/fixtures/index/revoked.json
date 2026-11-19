@@ -1,10 +1,32 @@
 {
+  "format": "sorta-addons-revoked",
+  "formatVersion": 1,
   "revoked": [
     {
       "id": "io.github.example.tagger",
-      "version": "1.0.0",
-      "reason": "Made up for the tests",
+      "versions": [
+        "1.0.0"
+      ],
+      "reason": "Made up for the tests: one version.",
       "date": "2026-11-01"
+    },
+    {
+      "id": "io.github.example.linkcheck",
+      "versions": [
+        "1.2.0"
+      ],
+      "reason": "Made up for the tests: a version nobody here has.",
+      "date": "2026-11-02"
+    },
+    {
+      "id": "io.github.example.badsum",
+      "reason": "Made up for the tests: every version.",
+      "date": "2026-11-03"
+    },
+    {
+      "author": "https://github.com/sample",
+      "reason": "Made up for the tests: an author.",
+      "date": "2026-11-04"
     }
   ]
 }

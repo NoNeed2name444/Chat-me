@@ -10,22 +10,29 @@ import java.util.concurrent.LinkedBlockingQueue
 // engine code, so a runtime never hops threads. The C host (addons/engine/host) checks it is on its own
 // thread, not the main thread, at every entry. It follows ios/Sorta/Addons/AddonEngine.swift.
 
-/** The files of one add-on, by package path. */
-class AddonFiles(val names: List<String>, val data: List<ByteArray>, val main: String) {
+/** The files of one add-on, by package path, and the command ids its manifest declares. */
+class AddonFiles(val names: List<String>, val data: List<ByteArray>, val main: String, val commands: List<String> = emptyList()) {
     /** The same files, with one replaced or added. */
     fun replacing(name: String, bytes: ByteArray): AddonFiles {
         val i = names.indexOf(name)
-        return if (i >= 0) AddonFiles(names, data.toMutableList().also { it[i] = bytes }, main)
-        else AddonFiles(names + name, data + bytes, main)
+        return if (i >= 0) AddonFiles(names, data.toMutableList().also { it[i] = bytes }, main, commands)
+        else AddonFiles(names + name, data + bytes, main, commands)
     }
 
     companion object {
         fun of(names: List<String>, data: List<ByteArray>): AddonFiles {
             var main = "main.js"
+            var commands = emptyList<String>()
             val i = names.indexOf("manifest.json")
-            if (i >= 0) AddonJson.parseOrNull(String(data[i], Charsets.UTF_8))?.get("main")?.string?.let { main = it }
-            return AddonFiles(names, data, main)
+            if (i >= 0) AddonJson.parseOrNull(String(data[i], Charsets.UTF_8))?.let { m ->
+                m["main"]?.string?.let { main = it }
+                commands = commandsOf(m)
+            }
+            return AddonFiles(names, data, main, commands)
         }
+
+        fun commandsOf(manifest: AddonJson): List<String> =
+            (manifest["contributes"]?.get("commands")?.array ?: emptyList()).mapNotNull { it["id"]?.string }
     }
 }
 
@@ -89,15 +96,28 @@ object AddonLimits {
 /** How one call went: its outcome, its running time in ms, and the code the add-on's load failed with, if it was loaded for this call and failed. */
 class AddonRun(val outcome: AddonOutcome, val ranMs: Double, val loadCode: String?, val loadMs: Double = 0.0, val callMs: Double = 0.0)
 
-/** One add-on's runtime and its thread. */
-class AddonRunner(val id: String, val files: AddonFiles, private val maker: AddonEngineMaker = AddonNative.maker) {
+/**
+ * One add-on's runtime and its thread. [source] gives the add-on's files: it is called on the add-on's
+ * own thread, once, the first time they are needed, so reading and checking an installed package never
+ * runs on the main thread, and a runner keeps what it read for as long as it lives. [stamp] names the
+ * version of the files it was made for (the package's SHA-256), so the pool can tell a runner made
+ * before an update.
+ */
+class AddonRunner(val id: String, val stamp: String, private val source: () -> AddonFiles?, private val maker: AddonEngineMaker = AddonNative.maker) {
+    constructor(id: String, files: AddonFiles, maker: AddonEngineMaker = AddonNative.maker) : this(id, "", { files }, maker)
+
     private val thread = AddonThread("Sorta add-on $id")
     private val lock = Any()
     private var engine: AddonEngine? = null   // made, used and freed on `thread` only
+    private var files: AddonFiles? = null     // read on `thread` only
+    private var read = false
     @Volatile private var current: AddonCall? = null
     private var busy = false
+    private var pending = 0
     private var lastUsed = System.currentTimeMillis()
     private var closed = false
+    /** A stop that came while a call was queued or running: that call ends "stopped", and its runtime is freed after it. */
+    private var stopPending = false
 
     /** When it last finished a call, or null while one runs. */
     val idleSince: Long? get() = synchronized(lock) { if (busy) null else lastUsed }
@@ -110,18 +130,39 @@ class AddonRunner(val id: String, val files: AddonFiles, private val maker: Addo
      * idea it may read).
      */
     fun call(kind: String, id: String = "", input: (AddonCall) -> String?, setup: () -> AddonSetup, before: () -> Unit = {},
+        now: () -> Long = System::currentTimeMillis, done: (AddonRun) -> Unit) = callWithFiles(kind, id, input, { _ -> setup() }, before, now, done)
+
+    /** As above, with [setup] given the add-on's files (the manifest's commands), which are read on the add-on's thread. */
+    fun callWithFiles(kind: String, id: String = "", input: (AddonCall) -> String?, setup: (AddonFiles) -> AddonSetup, before: () -> Unit = {},
         now: () -> Long = System::currentTimeMillis, done: (AddonRun) -> Unit) {
-        synchronized(lock) { busy = true }
+        // a runner closed between the pool handing it out and this call: its thread takes no more work
+        val gone = synchronized(lock) { if (closed) true else { busy = true; pending++; false } }
+        if (gone) return done(AddonRun(AddonOutcome(AddonCall.failure("stopped"), false, "stopped", emptyList(), emptyList(), emptyList()), 0.0, null))
         thread.run {
+            var made: AddonCall? = null
             val run = try {
                 before()
-                val call = AddonCall(setup())
+                // stopped while it waited its turn: it never starts
+                if (synchronized(lock) { stopPending }) {
+                    synchronized(lock) { ended(now()) }
+                    done(AddonRun(AddonOutcome(AddonCall.failure("stopped"), false, "stopped", emptyList(), emptyList(), emptyList()), 0.0, null))
+                    return@run
+                }
+                if (!read) { files = source(); read = true }
+                val f = files
+                if (f == null) {
+                    synchronized(lock) { ended(now()) }
+                    done(AddonRun(AddonOutcome(AddonCall.failure("addon.missing"), false, "addon.missing", emptyList(), emptyList(), emptyList()), 0.0, null))
+                    return@run
+                }
+                val call = AddonCall(setup(f))
+                made = call
                 current = call
                 var envelope: String
                 var ran = 0.0
                 var callMs = 0.0
                 val loadStart = System.nanoTime()
-                val loadCode = ensureLoaded()
+                val loadCode = ensureLoaded(f)
                 val loadMs = (System.nanoTime() - loadStart) / 1e6
                 val e = engine
                 if (loadCode != null) {
@@ -145,25 +186,43 @@ class AddonRunner(val id: String, val files: AddonFiles, private val maker: Addo
                     envelope = AddonCall.failure("engine.spent")
                 }
                 current = null
-                synchronized(lock) { busy = false; lastUsed = now() }
-                AddonRun(call.outcome(envelope), ran, loadCode, loadMs, callMs)
+                // a runtime that was told to stop stays stopped, so it goes with the call it stopped
+                val stopped = synchronized(lock) { stopPending.also { ended(now()) } }
+                if (stopped) release()
+                var outcome = call.outcome(envelope)
+                // a stopped call gives nothing to apply, even if the engine finished it before the stop reached it
+                if (stopped && kind != "load" && outcome.ok) outcome = call.outcome(AddonCall.failure("stopped"))
+                // what the call stored is kept only when it ended well
+                call.setup.storage.end(outcome.ok)
+                AddonRun(outcome, ran, loadCode, loadMs, callMs)
             } catch (t: Throwable) {
                 // the host's own fault, never the add-on's: the caller still hears, and nothing is applied
                 current = null
-                synchronized(lock) { busy = false; lastUsed = now() }
+                synchronized(lock) { ended(now()) }
+                made?.setup?.storage?.end(false)
+                release()
                 AddonRun(AddonOutcome(AddonCall.failure("engine.failed"), false, "engine.failed", emptyList(), emptyList(), emptyList()), 0.0, null)
             }
             done(run)
         }
     }
 
-    /** Stops the running call, from any thread: a revoke, the kill switch. */
-    fun stop() { synchronized(lock) { engine?.stop() } }
+    /** A call ended (under the lock): the runner is idle once none is queued behind it, and a stop was for the calls there were. */
+    private fun ended(at: Long) {
+        pending--
+        if (pending == 0) { busy = false; if (!closed) stopPending = false }
+        lastUsed = at
+    }
 
-    /** Frees the runtime and ends the thread. */
+    /**
+     * Stops the call that is queued or running, from any thread. With no call there is nothing to stop,
+     * and nothing is done: a stop left on an idle runtime would refuse every later call.
+     */
+    fun stop() { synchronized(lock) { if (busy) { stopPending = true; engine?.stop() } } }
+
+    /** Stops the calls queued or running (each ends "stopped"), frees the runtime and ends the thread. */
     fun close() {
-        synchronized(lock) { closed = true }
-        stop()
+        synchronized(lock) { if (closed) return; closed = true; if (busy) stopPending = true; engine?.stop() }
         thread.run { release() }
         thread.finish()
     }
@@ -186,11 +245,11 @@ class AddonRunner(val id: String, val files: AddonFiles, private val maker: Addo
     }
 
     /** Makes the runtime and loads the add-on; the code if it can't. */
-    private fun ensureLoaded(): String? {
+    private fun ensureLoaded(files: AddonFiles): String? {
         if (engine != null) return null
         val (made, code) = maker.make { name, args -> current?.handle(name, args) ?: "!api.unknown" }
         if (made == null) return code
-        val stopNow = synchronized(lock) { engine = made; closed }
+        val stopNow = synchronized(lock) { engine = made; closed || stopPending }
         if (stopNow) made.stop()
         val failed = made.load(files)
         if (failed != null) release()
@@ -203,7 +262,13 @@ object AddonNative {
     /** What the C host calls for each API call: the answer as UTF-8. */
     class Host(private val handle: (String, String) -> String) {
         @Suppress("unused") // called from sorta_addons_jni.c
-        fun ask(name: String, args: ByteArray): ByteArray = handle(name, String(args, Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
+        fun ask(name: ByteArray, args: ByteArray): ByteArray {
+            // a call's name is one of the API's own: lowercase ASCII letters and dots (the C host checks it first)
+            if (name.isEmpty() || name.size > 40 || name.any { it != '.'.code.toByte() && (it < 'a'.code.toByte() || it > 'z'.code.toByte()) }) {
+                return "!api.unknown".toByteArray(Charsets.US_ASCII)
+            }
+            return handle(String(name, Charsets.US_ASCII), String(args, Charsets.UTF_8)).toByteArray(Charsets.UTF_8)
+        }
     }
 
     /** Whether the library is in this build (a build made with -Psorta.addonsEngine=standin has none). */

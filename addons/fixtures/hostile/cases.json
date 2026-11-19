@@ -205,6 +205,54 @@
    "commands": [
     "run"
    ]
+  },
+  {
+   "name": "stacktrace",
+   "kind": "command",
+   "expect": "ok",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "name4",
+   "kind": "command",
+   "expect": "ok",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "😀"
+   ],
+   "command": "😀",
+   "input": {
+    "ideas": []
+   }
+  },
+  {
+   "name": "surrogate",
+   "kind": "command",
+   "expect": "api.args",
+   "limitMs": 500,
+   "grants": [
+    "commands"
+   ],
+   "commands": [
+    "run"
+   ],
+   "command": "run",
+   "input": {
+    "ideas": []
+   }
   }
  ]
 }

@@ -1,0 +1,15 @@
+{
+  "about": "A comment on one directory entry.",
+  "from": "ok-minimal",
+  "entries": [
+    {
+      "name": "notes.json",
+      "text": "{}",
+      "comment": "hidden"
+    }
+  ],
+  "expect": {
+    "verdict": "refused",
+    "reason": "zip.unreadable"
+  }
+}

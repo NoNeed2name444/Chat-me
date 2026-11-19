@@ -1,0 +1,89 @@
+# Builds the directory's index after each merge to main, in two jobs. The
+# build job can only read. It runs the same checks as check.yml on every
+# listed add-on, packs each one with kit/tools/pack.py, and uploads
+# index.json, revoked.json and dist/. The push job is the only one that can
+# write. It runs nothing from the add-ons or the kit: it downloads the built
+# files and pushes them to the index branch, which the app reads. Built
+# files never go to main. Both jobs use only the built-in token, and run on
+# push to main, never on a pull request.
+name: Publish
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: publish
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build the index
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          path: repo
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check every add-on and revoked.json
+        run: python3 -I repo/kit/tools/review.py all --repo repo
+      - name: Build the harness
+        run: make -C repo/kit/harness
+      - name: Run each command and card view in the harness
+        run: python3 -I repo/kit/tools/review.py harness --repo repo --harness repo/kit/harness/harness --ideas repo/kit/api/sample-ideas.json
+      - name: Build index.json and dist
+        run: python3 -I repo/kit/tools/review.py build --repo repo --out built
+      - name: Hand the built files to the push job
+        uses: actions/upload-artifact@v4
+        with:
+          name: index
+          path: built
+          if-no-files-found: error
+          retention-days: 1
+  push:
+    name: Push the index
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          path: repo
+      - name: Get the built files
+        uses: actions/download-artifact@v4
+        with:
+          name: index
+          path: built
+      - name: Push to the index branch
+        working-directory: repo
+        env:
+          GIT_AUTHOR_NAME: Sorta directory
+          GIT_AUTHOR_EMAIL: ""
+          GIT_COMMITTER_NAME: Sorta directory
+          GIT_COMMITTER_EMAIL: ""
+        run: |
+          # A commit made from the built files alone, with no checkout of the
+          # index branch: a separate git index file, the built folder as the
+          # work tree, and the last index commit as the parent.
+          out="$GITHUB_WORKSPACE/built"
+          git_dir="$PWD/.git"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/index-branch.idx"
+          rm -f "$GIT_INDEX_FILE"
+          (cd "$out" && git --git-dir="$git_dir" --work-tree=. add -- index.json revoked.json dist)
+          tree=$(git write-tree)
+          parent=()
+          if git ls-remote --exit-code --heads origin index > /dev/null; then
+            git fetch --quiet origin refs/heads/index
+            if [ "$(git rev-parse 'FETCH_HEAD^{tree}')" = "$tree" ]; then
+              echo "The index branch already holds this build."
+              exit 0
+            fi
+            parent=(-p FETCH_HEAD)
+          fi
+          commit=$(git commit-tree "${parent[@]}" -m "Index built from $GITHUB_SHA" "$tree")
+          git push origin "$commit:refs/heads/index"

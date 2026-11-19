@@ -1,0 +1,5 @@
+{
+  "about": "A README.md inside a folder; only the top level may hold one.",
+  "verdict": "refused",
+  "reason": "file.type"
+}

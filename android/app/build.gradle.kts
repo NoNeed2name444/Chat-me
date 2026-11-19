@@ -37,8 +37,9 @@ android {
     defaultConfig.manifestPlaceholders["sortaAddonNet"] = providers.gradleProperty("sorta.addonNet").orNull ?: "YES"
     defaultConfig.manifestPlaceholders["sortaAddonsIndexUrl"] = providers.gradleProperty("sorta.addonsIndexUrl").orNull ?: ""
     // the add-on fixtures and conformance cases, for the tests only: resources on the JVM, assets on the emulator
-    sourceSets["test"].resources.srcDirs("../../addons/fixtures", "../../addons/conformance")
-    sourceSets["androidTest"].assets.srcDirs("../../addons/fixtures", "../../addons/conformance")
+    // (and the kit, for its API snapshot, its sample ideas and its template's own tests)
+    sourceSets["test"].resources.srcDirs("../../addons/fixtures", "../../addons/conformance", "../../addons/kit")
+    sourceSets["androidTest"].assets.srcDirs("../../addons/fixtures", "../../addons/conformance", "../../addons/kit")
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 dependencies {

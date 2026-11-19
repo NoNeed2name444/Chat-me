@@ -29,15 +29,21 @@ class AddonCenterTest {
     private val posted = LinkedBlockingQueue<() -> Unit>()
     private val calls = AtomicInteger()
     private var pool: AddonPool? = null
+    private var maker: AddonStandInEngine.Companion.Maker? = null
+    /** Each thread that did the registry's file work, by what it did. */
+    private val fileWork = java.util.Collections.synchronizedList(ArrayList<Pair<String, Thread>>())
 
     @After fun close() { pool?.closeAll() }
 
     private fun center(grants: List<String>, permissions: List<String> = listOf("ideas.read", "ideas.write", "commands"), hosts: List<String> = emptyList(),
         load: AddonScriptRun.() -> Unit = {}, call: AddonScriptRun.() -> String): AddonCenter {
         val registry = AddonRegistry(AddonTestFiles.temporaryFolder())
+        registry.onFileWork = { what -> fileWork.add(what to Thread.currentThread()) }
         val bytes = AddonTestFiles.addon(AddonTestFiles.manifest(permissions = permissions, hosts = hosts))
         registry.install(AddonReview.make(bytes, "1.0.0"), bytes, grants)
-        val p = AddonPool(AddonStandInEngine.Companion.Maker(AddonScript(load) { calls.incrementAndGet(); call() }))
+        val m = AddonStandInEngine.Companion.Maker(AddonScript(load) { calls.incrementAndGet(); call() })
+        maker = m
+        val p = AddonPool(m)
         pool = p
         return AddonCenter({ book }, registry, p, AddonRoutesNetwork(AddonTestFiles.json("net/routes.json")), netOn = true, post = { posted.put(it) })
     }
@@ -68,6 +74,8 @@ class AddonCenterTest {
         val done = finish(c)
         assertEquals("""{"ok":true,"value":3}""", done.outcome.envelope)
         assertEquals("one save for the whole batch", 1, saves)
+        assertTrue("the batch was worked out on the add-on's thread, and the caller's thread only took it", done.prepared)
+        assertEquals(1, c.applyTimes.size)
         assertEquals(1, done.applied!!.added.size)
         assertTrue("seen" in book.note(id(101))!!.tags && book.isLinked(id(105), id(107)))
         assertEquals(id(903), book.note(done.applied!!.added[0])!!.folderId)
@@ -94,6 +102,7 @@ class AddonCenterTest {
             book.applyAddonBatch(listOf(AddonOp.Tag(id(105), listOf("mine"))))
             go.countDown()
         }
+        assertFalse("the book changed while the add-on ran, so the batch is applied to the book as it is now", done.prepared)
         assertFalse("the add-on read its snapshot", AddonJson.parse(seen[0])["tags"]!!.strings!!.contains("mine"))
         assertEquals("its write lands on the book as it is now", setOf("mine", "late"), book.note(id(105))!!.tags.toSet())
         assertTrue(done.outcome.ok)
@@ -120,6 +129,111 @@ class AddonCenterTest {
         // the add-on still runs, on a new runtime and without the grant
         val next = center(listOf("ideas.read", "commands")) { try { api("ideas.tag", s(id(101)), AddonJson.strings(listOf("x"))); "0" } catch (t: AddonScriptRun.Thrown) { "\"${t.code}\"" } }
         assertEquals("""{"ok":true,"value":"permission"}""", finish(next).outcome.envelope)
+    }
+
+    @Test fun aStopWithNoCallRunningDoesNotStick() {
+        val c = center(listOf("ideas.read", "ideas.write", "commands")) {
+            try { api("ideas.tag", s(id(101)), AddonJson.strings(listOf("x"))); "\"tagged\"" } catch (t: AddonScriptRun.Thrown) { "\"${t.code}\"" }
+        }
+        assertEquals("""{"ok":true,"value":"tagged"}""", finish(c).outcome.envelope)
+        assertEquals(1, c.pool.alive)
+        // a grant taken away while the add-on is idle: its runtime goes, and the next call is answered, without the grant
+        c.registry.revoke(addon, "ideas.write")
+        assertEquals("the idle runtime is closed", 0, c.pool.alive)
+        assertEquals("""{"ok":true,"value":"permission"}""", finish(c).outcome.envelope)
+        // off and on again
+        c.registry.setOn(addon, false)
+        assertEquals(0, c.pool.alive)
+        assertEquals("addon.off", finish(c).code)
+        c.registry.setOn(addon, true)
+        assertEquals("""{"ok":true,"value":"permission"}""", finish(c).outcome.envelope)
+        // the kill switch, off and on
+        c.registry.addonsOn = false
+        c.registry.addonsOn = true
+        assertEquals("""{"ok":true,"value":"permission"}""", finish(c).outcome.envelope)
+        // revoked by the directory, by its author
+        c.registry.applyRevoked(listOf(AddonRevoked(author = "https://github.com/example")))
+        assertEquals(0, c.pool.alive)
+        assertEquals("addon.off", finish(c).code)
+        assertEquals("each stop gave the next call a runtime of its own", 4, maker!!.made)
+        assertEquals(4, calls.get())
+    }
+
+    @Test fun anUpdateRunsTheNewFilesAtOnce() {
+        val c = center(listOf("commands")) { "null" }
+        assertTrue(finish(c).outcome.ok)
+        val newer = AddonTestFiles.addon(AddonTestFiles.manifest(version = "1.1.0"), files = mapOf("lib/new.js" to "// new in 1.1.0\n"))
+        c.registry.install(AddonReview.make(newer, "1.0.0"), newer, listOf("commands"))
+        assertEquals("the old runtime is closed with the update", 0, c.pool.alive)
+        assertTrue("no wait for the sweep, and no \"stopped\"", finish(c).outcome.ok)
+        val loaded = maker!!.loaded
+        assertEquals(2, loaded.size)
+        assertFalse("lib/new.js" in loaded[0].names)
+        assertTrue("lib/new.js" in loaded[1].names)
+        assertTrue(String(loaded[1].data[loaded[1].names.indexOf("manifest.json")]).contains("\"version\":\"1.1.0\""))
+    }
+
+    @Test fun aCallQueuedBehindAStoppedOneIsStoppedTooAndTheNextOneRuns() {
+        val running = CountDownLatch(1)
+        val c = center(listOf("commands")) {
+            running.countDown()
+            val end = System.nanoTime() + 10_000_000_000
+            while (!stopped && System.nanoTime() < end) Thread.sleep(1)
+            "null"
+        }
+        val codes = java.util.Collections.synchronizedList(ArrayList<String?>())
+        repeat(2) { c.run(addon, "command", command = "run", input = "null", now = now) { codes.add(it.code) } }
+        assertTrue(running.await(10, TimeUnit.SECONDS))
+        c.registry.revoke(addon, "ideas.read")
+        repeat(2) { posted.poll(10, TimeUnit.SECONDS)!!() }
+        assertEquals(listOf<String?>("stopped", "stopped"), codes)
+        assertEquals("the second never reached the engine", 1, calls.get())
+    }
+
+    @Test fun whatAStoppedCallStoredIsNotKept() {
+        val running = CountDownLatch(1)
+        var wait = true
+        val c = center(listOf("commands")) {
+            api("storage.set", s("k"), s(if (wait) "\"stopped\"" else "\"kept\""))
+            if (wait) {
+                running.countDown()
+                val end = System.nanoTime() + 10_000_000_000
+                while (!stopped && System.nanoTime() < end) Thread.sleep(1)
+            }
+            "null"
+        }
+        assertEquals("stopped", finish(c) { assertTrue(running.await(10, TimeUnit.SECONDS)); c.registry.revoke(addon, "ideas.read") }.code)
+        assertNull(c.registry.storage(addon).values["k"])
+        wait = false
+        assertTrue(finish(c).outcome.ok)
+        assertEquals("\"kept\"", c.registry.storage(addon).values["k"])
+    }
+
+    @Test fun thePackageTheStorageAndTheStateFileAreNeverReadOrWrittenOnTheCallersThread() {
+        // a package near the size limit, a full activity log, storage in use and a strike: all the registry's file work of a call
+        val c = center(listOf("commands", "net:api.example.com"), listOf("commands", "net"), listOf("api.example.com")) {
+            api("storage.set", s("k"), s("1"))
+            api("net.fetch", s("https://api.example.com/v1/items"), AddonJson.obj())
+            throw AddonScriptRun.Thrown("limit.time", "limit.time")
+        }
+        val big = AddonTestFiles.addon(AddonTestFiles.manifest(version = "1.1.0", permissions = listOf("commands", "net"), hosts = listOf("api.example.com")),
+            files = (0 until 7).associate { "lib/f$it.js" to "// ${"filler words ".repeat(5_000)}\n" })
+        assertTrue("near the 512 KB limit", big.size in 400_000..AddonPackageCheck.MAX_ZIPPED)
+        c.registry.install(AddonReview.make(big, "1.0.0"), big, listOf("commands", "net:api.example.com"))
+        repeat(12) { c.registry.log(addon, (0 until 20).map { AddonActivity("api.example.com", "/" + "p".repeat(300), 200, 1, 1) }) }
+        c.registry.flush()
+        fileWork.clear()
+        val start = System.nanoTime()
+        val done = finish(c) { assertTrue("run returned at once", (System.nanoTime() - start) / 1e6 < 1_000) }
+        assertEquals("limit.time", done.code)
+        c.registry.flush()
+        val me = Thread.currentThread()
+        assertEquals("all four kinds of file work happened", setOf("pack", "storage", "state", "marker"), fileWork.map { it.first }.toSet())
+        assertTrue("none of it on the caller's thread: " + fileWork.filter { it.second === me }.map { it.first }, fileWork.none { it.second === me })
+        assertTrue(fileWork.filter { it.first == "pack" || it.first == "storage" || it.first == "marker" }.all { it.second.name.startsWith("Sorta add-on ") })
+        assertEquals("the package is read and checked once for a runner, not for each call", 1, fileWork.count { it.first == "pack" })
+        assertEquals("limit.time", finish(c).code)
+        assertEquals(1, fileWork.count { it.first == "pack" })
     }
 
     @Test fun turningTheAddonOffWhileItRunsAppliesNothing() {

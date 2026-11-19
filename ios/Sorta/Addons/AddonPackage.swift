@@ -79,7 +79,7 @@ enum AddonPackageCheck {
         for (i, n) in names.enumerated() { files[n] = i }
         try manifestRules(manifest, files: files, data: data, texts: texts)
         let main = manifest["main"]?.string ?? ""
-        return AddonPackage(manifest: manifest, files: AddonFiles(names: names, data: data, main: main),
+        return AddonPackage(manifest: manifest, files: AddonFiles(names: names, data: data, main: main, commands: AddonFiles.commands(of: manifest)),
                             unpacked: data.reduce(0) { $0 + $1.count })
     }
 

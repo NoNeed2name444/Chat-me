@@ -1,0 +1,8 @@
+{
+  "about": "201 entries; the limit is 200.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "data/{n}.json", "text": "{}\n", "count": 198}
+  ],
+  "expect": {"verdict": "refused", "reason": "zip.entries"}
+}

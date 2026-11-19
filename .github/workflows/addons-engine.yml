@@ -1,10 +1,14 @@
 # Sorta's add-on engine on Linux (S07b): the vendored QuickJS-ng checked
 # against its upstream commit, the prelude header against prelude.js, and the
-# kit's harness built from the same C as the apps, then run on the
-# conformance cases (compared with addons/conformance/expected.txt, which the
-# iOS and Android tests compare with too), the hostile fixtures and the
-# permission table. Chat-me is public, so the standard runner costs nothing;
-# no secret is used. A second run of the same copy is a re-run of this one.
+# kit's harness built from the same C as the apps, then run on the kit's
+# template (its own tests/expect.json), the conformance cases (compared with
+# addons/conformance/expected.txt, which the iOS and Android tests compare
+# with too), the hostile fixtures and the permission table. Then the join with
+# the kit (S07a): the checker's fixtures as the archives the apps' tests read,
+# and the directory's check.yml, step by step, in the directory's own layout,
+# on the sample pull requests. Chat-me is public, so the standard runner costs
+# nothing; no secret is used. A second run of the same copy is a re-run of
+# this one.
 name: Add-on engine
 on:
   push:
@@ -28,7 +32,7 @@ jobs:
       - name: Build the harness
         working-directory: addons/kit/harness
         run: make -j2
-      - name: Conformance, hostile fixtures and the permission table
+      - name: The template's own tests, conformance, hostile fixtures and the permission table
         working-directory: addons/kit/harness
         run: |
           set -o pipefail
@@ -40,3 +44,13 @@ jobs:
             exit 1
           fi
           grep -c '^== ' build/conformance.txt
+      - name: The checker's fixtures are the archives the apps' tests read
+        run: python3 -I -B addons/conformance/archives.py --check
+      - name: The directory's check.yml in the directory's layout, on the sample pull requests
+        run: |
+          set -o pipefail
+          # kit/ and engine/ side by side, as the directory holds them: make -C trusted/kit/harness
+          # finds ../../engine there, and the harness step passes the good samples and fails the
+          # one whose command never ends
+          python3 -I -B addons/conformance/directory_join.py | tee "$RUNNER_TEMP/directory-join.txt"
+          tail -n 1 "$RUNNER_TEMP/directory-join.txt" >> "$GITHUB_STEP_SUMMARY"

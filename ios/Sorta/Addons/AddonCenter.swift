@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(os)
+import os
+#endif
 
 // MARK: - Add-ons (S07b): one call, from the main thread and back
 //
@@ -19,6 +22,9 @@ final class AddonCenter {
         var reshape: NoteStore.Reshape?
         var ranMs: Double
         var applyNanos: UInt64
+        /// Whether the main thread took the batch as the add-on's thread had
+        /// worked it out (the store had not changed meanwhile).
+        var prepared = false
         var code: String? { outcome.code }
     }
 
@@ -43,7 +49,9 @@ final class AddonCenter {
         self.pool = pool
         self.network = network
         self.netOn = netOn
-        registry.onStop = { [pool] id in pool.stop(id) }
+        // off, a grant taken away, an update, a removal, a revocation: the
+        // add-on's runtime goes, and the next call starts a fresh one
+        registry.onStop = { [pool] id in pool.close(id) }
     }
 
     /// Runs one call of an installed add-on: a command (`input`), a card or a
@@ -59,20 +67,22 @@ final class AddonCenter {
         }
         guard registry.canRun(id), let installed = registry.addon(id) else { return refuse("addon.off") }
         guard pool.withinBudget(id) else { return refuse("limit.minute") }
-        guard let package = registry.package(id) else { return refuse("addon.missing") }
-        guard let runner = pool.runner(id, files: package.files) else { return refuse("engine.busy") }
+        // the package is read and checked on the add-on's own thread, once for
+        // each runner (a call whose package is gone ends "addon.missing")
+        let registry = self.registry
+        let sha = installed.sha256
+        guard let runner = pool.runner(id, stamp: sha, source: { registry.package(id, sha256: sha)?.files }) else {
+            return refuse("engine.busy")
+        }
 
         // O(1): the arrays are copied on write, and the store never writes
         // them from another thread.
         let notes = store.notes
         let folders = store.folders
         let grants = installed.grants
-        let commands = (package.manifest["contributes"]?["commands"]?.array ?? []).compactMap { $0["id"]?.string }
         let settings = installed.settings
-        let storage = registry.storage(id)
         let network = self.network
         let netOn = self.netOn
-        let registry = self.registry
         let pool = self.pool
         let askPerson = installed.askEachTime ? self.ask : nil
         let nowMs = AddonStoreMap.ms(now)
@@ -80,34 +90,64 @@ final class AddonCenter {
         let isCard = kind == "card" || kind == "cards"
         runner.call(kind: kind, id: command,
                     input: { call in isCard ? call.cardInput(cards, batch: kind == "cards") : input },
-                    setup: AddonCenter.setup(notes: notes, folders: folders, grants: grants, commands: commands,
-                                             netOn: netOn, settings: settings, storage: storage, network: network,
-                                             ask: askPerson.map { a in { host in AddonCenter.wait(for: a, id, host) } },
-                                             now: nowMs),
+                    setupWith: { files in
+                        // the storage's first read of its file is here too, off the main thread
+                        AddonCenter.setup(notes: notes, folders: folders, grants: grants, commands: files.commands,
+                                          netOn: netOn, settings: settings, storage: registry.storage(id), network: network,
+                                          ask: askPerson.map { a in { host in AddonCenter.wait(for: a, id, host) } },
+                                          now: nowMs)
+                    },
                     before: { registry.beginCall(id) },
                     done: { run in
                         registry.endCall()
                         pool.record(id, ms: run.ranMs)
                         registry.strike(id, code: run.outcome.code)
                         registry.log(id, run.outcome.activity)
+                        // the batch is worked out here, on the add-on's thread, against the arrays the call was given
+                        var prepared: AddonApply.Prepared?
+                        if run.outcome.ok, !run.outcome.batch.isEmpty {
+                            prepared = AddonApply.prepare(run.outcome.batch, notes: notes, folders: folders, now: now)
+                        }
+                        let ready = prepared
                         DispatchQueue.main.async {
-                            MainActor.assumeIsolated { self.finish(id, run, now: now, done: done) }
+                            MainActor.assumeIsolated { self.finish(id, run, ready, now: now, done: done) }
                         }
                     })
     }
 
     /// The one hop back: a stopped, refused or failed call applies nothing,
     /// and nor does a call whose add-on was turned off while it ran.
-    private func finish(_ id: String, _ run: AddonRun, now: Date, done: (Finished) -> Void) {
+    private func finish(_ id: String, _ run: AddonRun, _ prepared: AddonApply.Prepared?, now: Date, done: (Finished) -> Void) {
         guard run.outcome.ok, registry.canRun(id) else {
             var o = run.outcome
             if o.ok { o = AddonOutcome(envelope: AddonRunner.failure("stopped"), ok: false, code: "stopped", batch: [],
                                        log: o.log, activity: o.activity) }
             return done(Finished(outcome: o, applied: nil, reshape: nil, ranMs: run.ranMs, applyNanos: 0))
         }
-        let r = store.applyAddonBatch(run.outcome.batch, now: now)
-        done(Finished(outcome: run.outcome, applied: r.applied, reshape: r.reshape, ranMs: run.ranMs, applyNanos: r.applyNanos))
+        let fits = prepared?.fits(store.notes, store.folders, now: now) ?? false
+        let r = store.applyAddonBatch(run.outcome.batch, now: now, prepared: prepared)
+        logApply(id, r.applyNanos, writes: run.outcome.batch.count, prepared: fits)
+        done(Finished(outcome: run.outcome, applied: r.applied, reshape: r.reshape, ranMs: run.ranMs, applyNanos: r.applyNanos,
+                      prepared: fits))
     }
+
+    /// Each apply's time on the main thread, to the log (category "addons")
+    /// and kept for the last 50.
+    private(set) var applyTimes: [UInt64] = []
+
+    private func logApply(_ id: String, _ nanos: UInt64, writes: Int, prepared: Bool) {
+        applyTimes.append(nanos)
+        if applyTimes.count > 50 { applyTimes.removeFirst() }
+        #if canImport(os)
+        let ms = Double(nanos) / 1e6
+        let how = prepared ? "worked out on the add-on's thread" : "worked out on the main thread"
+        AddonCenter.log.info("apply \(id, privacy: .public): \(ms, format: .fixed(precision: 3)) ms on the main thread, \(writes) writes, \(how, privacy: .public)")
+        #endif
+    }
+
+    #if canImport(os)
+    private static let log = Logger(subsystem: "com.cramdown.app", category: "addons")
+    #endif
 
     /// Worked out on the add-on's thread.
     nonisolated static func setup(notes: [Note], folders: [NoteFolder], grants: [String], commands: [String], netOn: Bool,

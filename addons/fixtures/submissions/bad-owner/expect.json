@@ -1,0 +1,7 @@
+{
+  "about": "Day count 2.0.0 from an author other than the one listed.",
+  "verdict": "fail",
+  "reasons": [
+    "review.owner"
+  ]
+}

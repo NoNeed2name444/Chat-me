@@ -1,0 +1,5 @@
+{
+  "about": "main names a file the add-on doesn't have.",
+  "verdict": "refused",
+  "reason": "main.missing"
+}

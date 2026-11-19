@@ -1,0 +1,7 @@
+{
+  "about": "sorta.ideas.tag becomes sorta.ideas.label, with the same parameters and result.",
+  "verdict": "fail",
+  "reasons": [
+    "rename"
+  ]
+}

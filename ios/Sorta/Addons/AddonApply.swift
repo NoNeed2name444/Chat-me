@@ -55,6 +55,38 @@ enum AddonApply {
         var added: [UUID]
     }
 
+    /// A batch worked out ahead, on the add-on's own thread, from the store's
+    /// arrays as they were when the call was dispatched. If the store still
+    /// holds those very arrays when the call comes back, the main thread
+    /// takes `result` as it is and does none of the work
+    /// (NoteStore.applyAddonBatch); if the person changed the store
+    /// meanwhile, the main thread applies the batch itself.
+    struct Prepared {
+        var notes: [Note]
+        var folders: [NoteFolder]
+        var now: Date
+        var result: Result
+
+        func fits(_ notes: [Note], _ folders: [NoteFolder], now: Date) -> Bool {
+            now == self.now && AddonApply.same(notes, self.notes) && AddonApply.same(folders, self.folders)
+        }
+    }
+
+    /// Whether two arrays are one: the same storage and the same count. While
+    /// `Prepared` holds its arrays, the store can't write to that storage in
+    /// place (it is shared, so a write copies it), so the same storage means
+    /// the same contents.
+    static func same<T>(_ a: [T], _ b: [T]) -> Bool {
+        guard a.count == b.count else { return false }
+        if a.isEmpty { return true }
+        return a.withUnsafeBufferPointer { x in b.withUnsafeBufferPointer { y in x.baseAddress == y.baseAddress } }
+    }
+
+    static func prepare(_ ops: [AddonOp], notes: [Note], folders: [NoteFolder], now: Date) -> Prepared {
+        Prepared(notes: notes, folders: folders, now: now,
+                 result: apply(ops, to: notes, folders: Set(folders.map(\.id)), now: now))
+    }
+
     /// Applies `ops` to `notes`. An idea or folder gone since the snapshot is
     /// skipped and listed; a note counts as changed, and gets `now` as its
     /// updatedAt, only if it ends up different. O(notes + ops).

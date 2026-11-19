@@ -27,22 +27,34 @@ class AddonDirectoryTest {
         bytes
     }
     private fun directory(appVersion: String = "1.0.0") = AddonDirectory(base, fetcher, registry, appVersion, clock = { clock })
-    private fun entry(d: AddonDirectory, id: String, version: String) = d.index().first { it.id == "io.github.example.$id" && it.version == version }
-    private fun install(d: AddonDirectory, id: String, version: String) {
-        val (review, bytes) = d.review(entry(d, id, version))
+    private fun entry(d: AddonDirectory, id: String, version: String, owner: String = "io.github.example.") = d.index().first { it.id == owner + id && it.version == version }
+    private fun install(d: AddonDirectory, id: String, version: String, owner: String = "io.github.example.") {
+        val (review, bytes) = d.review(entry(d, id, version, owner))
         registry.install(review, bytes, review.permissions.filter { it != "net" } + review.hosts.map { "net:$it" }, fromDirectory = true)
     }
 
     @Test fun aListedPackageIsCheckedAgainstTheIndexBeforeItIsOpened() {
         val d = directory()
-        assertEquals(8, d.index().size)
+        val listed = d.index()
+        assertEquals("each version of each add-on is one entry", 9, listed.size)
+        assertEquals(5, listed.map { it.id }.distinct().size)
+        // the add-on's name and its author's url come with each of its versions
+        val tagger = listed.filter { it.id == "io.github.example.tagger" }
+        assertEquals(listOf("1.0.0", "1.5.0", "2.0.0"), tagger.map { it.version })
+        assertTrue(tagger.all { it.name == "Tagger" && it.authorUrl == "https://github.com/example" })
+        assertEquals("https://github.com/sample", listed.first { it.id == "io.github.sample.notes" }.authorUrl)
         val (review, bytes) = d.review(entry(d, "wordcount", "1.0.0"))
         assertEquals(AddonSha256.hex(bytes), review.sha256)
         assertEquals("index.checksum", try { d.review(entry(d, "badsum", "1.0.0")); null } catch (r: AddonRefusal) { r.code })
         assertEquals("install.minSorta", try { d.review(entry(d, "tagger", "1.5.0")); null } catch (r: AddonRefusal) { r.code })
         assertEquals("install.api", try { d.review(entry(d, "tagger", "2.0.0")); null } catch (r: AddonRefusal) { r.code })
         assertEquals("index.none", try { AddonDirectory("", fetcher, registry, "1.0.0").index(); null } catch (r: AddonRefusal) { r.code })
-        assertEquals("index.json", try { AddonDirectory.parseIndex("{\"formatVersion\":2,\"addons\":[]}".toByteArray()); null } catch (r: AddonRefusal) { r.code })
+        fun refused(text: String) = try { AddonDirectory.parseIndex(text.toByteArray()); null } catch (r: AddonRefusal) { r.code }
+        assertEquals("index.json", refused("{\"format\":\"sorta-addons-index\",\"formatVersion\":2,\"addons\":[]}"))
+        assertEquals("index.json", refused("{\"formatVersion\":1,\"addons\":[]}"))
+        assertNull("an empty directory, and a field the app doesn't know", refused("{\"format\":\"sorta-addons-index\",\"formatVersion\":1,\"addons\":[],\"signatures\":{}}"))
+        // one entry for each version was the lane's own first guess at the format: it is not the directory's
+        assertEquals("index.json", refused("{\"format\":\"sorta-addons-index\",\"formatVersion\":1,\"addons\":[{\"id\":\"io.github.example.a\",\"version\":\"1.0.0\"}]}"))
     }
 
     @Test fun updatesAreOfferedBySectionSevensRules() {
@@ -81,20 +93,70 @@ class AddonDirectoryTest {
         assertEquals(1, d.dailyCheck()!!.size)
     }
 
+    @Test fun aFailedCheckIsTriedAgainAtTheNextChance() {
+        val d = directory()
+        install(d, "wordcount", "1.0.0")
+        var down = true
+        val flaky = AddonFetcher { url, limit -> if (down) throw AddonRefusal("net.failed") else fetcher.get(url, limit) }
+        val f = AddonDirectory(base, flaky, registry, "1.0.0", clock = { clock })
+        assertEquals("the check ran and got nothing", emptyList<AddonUpdateOffer>(), f.dailyCheck())
+        assertEquals("a failed check does not start the day", 0L, registry.lastDirectoryCheck)
+        down = false
+        assertEquals(1, f.dailyCheck()!!.size)
+        assertEquals(clock, registry.lastDirectoryCheck)
+        assertNull("once a day, from the check that worked", f.dailyCheck())
+    }
+
+    /**
+     * The fixture revoked.json has one entry of each kind: tagger 1.0.0 by version, linkcheck 1.2.0 by a
+     * version nobody here has, badsum whole, and the author of io.github.sample.notes.
+     */
     @Test fun aRevokedAddonIsTurnedOff() {
         val d = directory()
         install(d, "tagger", "1.0.0")
         install(d, "wordcount", "1.0.0")
+        install(d, "linkcheck", "1.0.0")
+        install(d, "notes", "1.0.0", owner = "io.github.sample.")
+        assertEquals("https://github.com/sample", registry.addon("io.github.sample.notes")!!.authorUrl)
         val stopped = ArrayList<String>()
         registry.onStop = { stopped.add(it) }
-        assertTrue(registry.canRun("io.github.example.tagger"))
+        assertTrue(registry.canRun("io.github.example.tagger") && registry.canRun("io.github.sample.notes"))
         d.dailyCheck()
         val tagger = registry.addon("io.github.example.tagger")!!
         assertTrue(tagger.revoked && !tagger.on)
         assertFalse(registry.canRun("io.github.example.tagger"))
-        assertTrue(registry.canRun("io.github.example.wordcount"))
-        assertEquals(listOf("io.github.example.tagger"), stopped)
-        assertEquals(listOf("io.github.example.tagger" to "1.0.0"), AddonDirectory.parseRevoked(AddonTestFiles.file("index/revoked.json").readBytes()))
+        assertFalse("its author is revoked", registry.canRun("io.github.sample.notes"))
+        assertTrue("another author's add-on", registry.canRun("io.github.example.wordcount"))
+        assertTrue("only version 1.2.0 of it is revoked, and 1.0.0 is installed", registry.canRun("io.github.example.linkcheck"))
+        assertEquals(listOf("io.github.example.tagger", "io.github.sample.notes"), stopped)
+        assertEquals(listOf(
+            AddonRevoked(id = "io.github.example.tagger", versions = listOf("1.0.0")),
+            AddonRevoked(id = "io.github.example.linkcheck", versions = listOf("1.2.0")),
+            AddonRevoked(id = "io.github.example.badsum"),
+            AddonRevoked(author = "https://github.com/sample"),
+        ), AddonDirectory.parseRevoked(AddonTestFiles.file("index/revoked.json").readBytes()))
+    }
+
+    @Test fun revokedEntriesCoverWhatTheDirectorySaysAndNoMore() {
+        fun parsed(entries: String) = AddonDirectory.parseRevoked("{\"format\":\"sorta-addons-revoked\",\"formatVersion\":1,\"revoked\":[$entries]}".toByteArray())
+        fun installedAt(version: String, author: String = "https://github.com/example") =
+            AddonInstalled("io.github.example.a", version, "", emptyList(), emptyList(), emptyList(), authorUrl = author)
+        val versions = parsed("{\"id\":\"io.github.example.a\",\"versions\":[\"1.0.0\",\"1.1.0\"],\"reason\":\"r\",\"date\":\"2026-11-01\"}")
+        assertTrue(versions[0].covers(installedAt("1.1.0")) && !versions[0].covers(installedAt("1.2.0")))
+        val whole = parsed("{\"id\":\"io.github.example.a\",\"reason\":\"r\",\"date\":\"2026-11-01\"}")
+        assertTrue(whole[0].covers(installedAt("9.9.9")))
+        val author = parsed("{\"author\":\"https://github.com/example\",\"reason\":\"r\",\"date\":\"2026-11-01\"}")
+        assertTrue(author[0].covers(installedAt("1.0.0")))
+        assertFalse("the url matches exactly, or not at all", author[0].covers(installedAt("1.0.0", "https://github.com/example2")))
+        assertFalse("an add-on kept from before the author was stored", author[0].covers(installedAt("1.0.0", "")))
+        // an entry the app can't read revokes nothing: it never widens to every version
+        assertTrue(parsed("{\"id\":\"io.github.example.a\",\"versions\":\"1.0.0\"}").isEmpty())
+        assertTrue(parsed("{\"id\":\"io.github.example.a\",\"versions\":[]}").isEmpty())
+        assertTrue(parsed("{\"id\":\"io.github.example.a\",\"versions\":[1]}").isEmpty())
+        assertTrue(parsed("{\"id\":\"io.github.example.a\",\"author\":\"https://github.com/example\"}").isEmpty())
+        assertTrue(parsed("{\"author\":\"http://github.com/example\"}").isEmpty())
+        assertTrue(parsed("{\"version\":\"1.0.0\"}").isEmpty())
+        assertEquals("index.json", try { AddonDirectory.parseRevoked("{\"revoked\":[]}".toByteArray()); null } catch (r: AddonRefusal) { r.code })
     }
 
     @Test fun requestsCarryNoCookiesNoIdsAndThePlainUserAgent() {

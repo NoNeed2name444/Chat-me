@@ -1,0 +1,10 @@
+{
+  "format": "sorta-addons-revoked",
+  "formatVersion": 1,
+  "revoked": [
+    {
+      "id": "io.github.example.daycount",
+      "reason": "It broke the rules."
+    }
+  ]
+}

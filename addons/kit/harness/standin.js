@@ -299,8 +299,15 @@
     let body = o.body === undefined || o.body === null ? '' : o.body;
     if (typeof body !== 'string') refuse('api.args');
     if (utf8(body) > LIMITS.net) refuse('net.size');
-    // ask each time: the request waits for the person's answer
-    if (call.ask && call.ask.shift() !== 'yes') refuse('net.declined');
+    // ask each time: the request waits for the person's answer, for each host it reaches (a redirect to
+    // another host is asked about before anything is sent there)
+    const asked = new Set();
+    const consent = (host) => {
+      if (!call.ask || asked.has(host)) return;
+      asked.add(host);
+      if (call.ask.shift() !== 'yes') refuse('net.declined');
+    };
+    consent(u.host);
     let spent = 0;
     for (let hop = 0; ; hop++) {
       const reply = call.network(method, u, headers, body);
@@ -316,6 +323,7 @@
         if (!next || next.scheme !== 'https' || !call.grants.includes('net:' + next.host)) refuse('net.redirect');
         if (reply.status === 303) { method = 'GET'; body = ''; }
         u = next;
+        consent(u.host);
         continue;
       }
       // nor is one passed back
@@ -524,6 +532,26 @@
       const ids = o.card === o.view && !store.ideas.some((i) => i.id === o.card)
         ? store.ideas.map((i) => i.id) : [o.card];
       return JSON.stringify(ids.map((id) => Object.assign({}, base, { card: id })));
+    },
+    // `harness expect`: an add-on's own tests/expect.json as cases, each with the result
+    // line it must give, with every permission the manifest asks for granted
+    expectCases(text) {
+      const o = JSON.parse(text);
+      const m = o.manifest;
+      const grants = (m.permissions || []).filter((p) => !p.startsWith('net')).concat((m.hosts || []).map((h) => 'net:' + h));
+      const commands = ((m.contributes || {}).commands || []).map((c) => c.id);
+      const want = (reply) => 'result ' + canon({ ok: true, value: reply });
+      const base = (c) => ({ grants, commands, settings: c.settings || {} });
+      const out = [];
+      for (const c of o.expect.commands || []) {
+        out.push({ name: `command ${c.command} ${canon(c.chosen || [])} ${canon(c.settings || {})}`, want: want(c.reply),
+          case: Object.assign(base(c), { kind: 'command', command: c.command, input: { ideas: c.chosen || [] } }) });
+      }
+      for (const c of o.expect.cards || []) {
+        out.push({ name: `card ${c.idea} ${canon(c.settings || {})}`, want: want(c.reply),
+          case: Object.assign(base(c), { kind: 'card', card: c.idea }) });
+      }
+      return JSON.stringify(out);
     },
   };
 })()

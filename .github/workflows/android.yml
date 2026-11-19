@@ -63,7 +63,7 @@ jobs:
       - name: The add-on tests that ran (S07b)
         if: ${{ always() }}
         run: |
-          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect AddonBatchTest=4 --expect AddonCallTest=12 --expect AddonCenterTest=10 --expect AddonDirectoryTest=5 --expect AddonJsonTest=6 --expect AddonPackageTest=7 --expect AddonPermissionsTest=2 --expect AddonRegistryTest=9 > addon-tests.md
+          python3 tools/junit_summary.py android/app/build/test-results/testDebugUnitTest --expect AddonBatchTest=6 --expect AddonCallTest=13 --expect AddonCenterTest=15 --expect AddonDirectoryTest=7 --expect AddonJoinTest=4 --expect AddonJsonTest=6 --expect AddonPackageTest=7 --expect AddonPermissionsTest=2 --expect AddonRegistryTest=11 > addon-tests.md
           grep -E '^\| Addon|^\*\*|^::' addon-tests.md | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The add-on engine is in the APK for both kinds of device (S07b A1)
         run: |
@@ -200,11 +200,16 @@ jobs:
           # fixtures and the batch budget, through libsorta_addons.so; no renders
           addon_tests=0
           if [ "$device" = phone ]; then
+            # the first apply after start has an instrumentation of its own: a new process, where nothing has run
+            adb shell am instrument -w -r -e class com.cramdown.sorta.addons.AddonColdApplyTest \
+              com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-addons-cold.txt
+            grep -qF 'OK (1 test)' test-results/instrumentation-addons-cold.txt
             addon_tests=$(cat app/src/androidTest/java/com/cramdown/sorta/addons/*.kt | grep -c '@Test')
+            addon_tests=$((addon_tests - 1))
             echo "expecting OK ($addon_tests tests) of the add-on engine" | tee test-results/expected-addons.txt
             [ "$addon_tests" -gt 0 ]
             started=$SECONDS
-            adb shell am instrument -w -r -e package com.cramdown.sorta.addons \
+            adb shell am instrument -w -r -e package com.cramdown.sorta.addons -e notClass com.cramdown.sorta.addons.AddonColdApplyTest \
               com.cramdown.sorta.test/androidx.test.runner.AndroidJUnitRunner | tee test-results/instrumentation-addons.txt
             echo "the add-on engine's tests took $((SECONDS - started)) seconds" | tee test-results/time-addons.txt
             adb logcat -d -s SortaAddons:I | tee test-results/addons-timing.txt

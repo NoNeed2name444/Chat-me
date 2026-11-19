@@ -18,6 +18,8 @@ struct AddonInstalled: Equatable {
     var paused = false
     var revoked = false
     var fromDirectory = false
+    /// The manifest's author url: revoked.json can name an author (addons/spec/directory.md).
+    var authorUrl = ""
     /// net: hold each request until the person answers (section 4).
     var askEachTime = false
     /// When each strike happened, in ms.
@@ -26,7 +28,7 @@ struct AddonInstalled: Equatable {
 
     var json: AddonJSON {
         .object([
-            ("askEachTime", .bool(askEachTime)), ("fromDirectory", .bool(fromDirectory)),
+            ("askEachTime", .bool(askEachTime)), ("authorUrl", .string(authorUrl)), ("fromDirectory", .bool(fromDirectory)),
             ("grants", AddonJSON.strings(grants)), ("hosts", AddonJSON.strings(hosts)), ("id", .string(id)),
             ("on", .bool(on)), ("paused", .bool(paused)), ("permissions", AddonJSON.strings(permissions)),
             ("revoked", .bool(revoked)), ("settings", .string(settings)), ("sha256", .string(sha256)),
@@ -51,6 +53,7 @@ struct AddonInstalled: Equatable {
         paused = j["paused"]?.bool ?? false
         revoked = j["revoked"]?.bool ?? false
         fromDirectory = j["fromDirectory"]?.bool ?? false
+        authorUrl = j["authorUrl"]?.string ?? ""
         askEachTime = j["askEachTime"]?.bool ?? false
         strikes = (j["strikes"]?.array ?? []).compactMap { $0.number.map { Int64($0) } }
         settings = j["settings"]?.string ?? "{}"
@@ -67,18 +70,30 @@ final class AddonRegistry {
     static let strikeWindowMs: Int64 = 24 * 3_600_000
     static let strikesToPause = 3
     static let activityDays: Int64 = 30
+    /// The newest requests kept for each add-on, and the longest path kept (the add-on chooses its paths).
+    static let activityMax = 200
+    static let activityPathMax = 200
 
     let folder: URL
     private let clock: () -> Int64
-    private let lock = NSLock()
+    private let lock = NSCondition()
+    private var dirty = false
+    private var writing = false
+    private let writer = DispatchQueue(label: "Sorta add-ons state", qos: .utility)
     private var items: [String: AddonInstalled] = [:]
     private var allOn = true
     private var lastCheck: Int64 = 0
     private var logs: [String: [AddonLogged]] = [:]
     private var stores: [String: AddonStorage] = [:]
-    /// Called when a grant is taken away or an add-on is turned off: the pool
-    /// stops its running call.
+    /// Called when a grant is taken away, or an add-on is turned off, updated,
+    /// removed or revoked: the pool closes its runtime.
     var onStop: (String) -> Void = { _ in }
+    /// Called on the thread that is about to read or write one of the
+    /// registry's files, with which: "pack", "storage", "state" or "marker"
+    /// (the tests check none is the main thread).
+    var onFileWork: (String) -> Void = { _ in }
+
+    deinit { writeState() }
 
     init(folder: URL, clock: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.folder = folder
@@ -144,6 +159,7 @@ final class AddonRegistry {
         var a = AddonInstalled(id: p.id, version: p.version, sha256: review.sha256, permissions: p.permissions,
                                hosts: p.hosts, grants: grants)
         a.fromDirectory = fromDirectory
+        a.authorUrl = p.manifest["author"]?["url"]?.string ?? ""
         try bytes.write(to: packageURL(p.id), options: .atomic)
         lock.lock()
         if let old = items[p.id] {
@@ -171,9 +187,14 @@ final class AddonRegistry {
         try? FileManager.default.removeItem(at: storageURL(id))
     }
 
-    /// The installed package, checked again as it is read.
-    func package(_ id: String) -> AddonPackage? {
-        guard let a = addon(id), let d = try? Data(contentsOf: packageURL(id)), AddonSHA256.hex(d) == a.sha256,
+    /// The installed package, checked again as it is read: a disk read, a
+    /// SHA-256 and the whole package check, so never on the main thread
+    /// (AddonCenter reads it on the add-on's own thread). `sha256` is the
+    /// version the caller means; nil means the installed one.
+    func package(_ id: String, sha256: String? = nil) -> AddonPackage? {
+        guard let a = addon(id), sha256 == nil || sha256 == a.sha256 else { return nil }
+        onFileWork("pack")
+        guard let d = try? Data(contentsOf: packageURL(id)), AddonSHA256.hex(d) == a.sha256,
               case let .success(p) = AddonPackageCheck.archive(d) else { return nil }
         return p
     }
@@ -230,23 +251,21 @@ final class AddonRegistry {
         lock.unlock()
     }
 
-    /// revoked.json: matching add-ons are turned off everywhere ("*" or no
-    /// version means every version).
-    func applyRevoked(_ list: [(id: String, version: String?)]) {
+    /// revoked.json: each covered add-on is turned off, by id (every version,
+    /// or the listed ones) or by its author's url.
+    func applyRevoked(_ list: [AddonRevoked]) {
         var stopped: [String] = []
         lock.lock()
-        for r in list {
-            guard var a = items[r.id] else { continue }
-            if r.version == nil || r.version == "*" || r.version == a.version {
-                a.revoked = true
-                a.on = false
-                items[r.id] = a
-                stopped.append(r.id)
-            }
+        for a in items.values where !a.revoked && list.contains(where: { $0.covers(a) }) {
+            var off = a
+            off.revoked = true
+            off.on = false
+            items[a.id] = off
+            stopped.append(a.id)
         }
-        saveLocked()
+        if !stopped.isEmpty { saveLocked() }
         lock.unlock()
-        stopped.forEach(onStop)
+        stopped.sorted().forEach(onStop)
     }
 
     // MARK: strikes (section 6)
@@ -274,6 +293,7 @@ final class AddonRegistry {
 
     /// Written before each call into the engine.
     func beginCall(_ id: String) {
+        onFileWork("marker")
         try? Data(id.utf8).write(to: markerURL, options: .atomic)
     }
 
@@ -293,6 +313,8 @@ final class AddonRegistry {
         items[id]?.paused = true
         saveLocked()
         lock.unlock()
+        // the marker goes only once what it said is on disk
+        flush()
         endCall()
         return id
     }
@@ -304,7 +326,12 @@ final class AddonRegistry {
         let now = clock()
         lock.lock()
         let keep = now - AddonRegistry.activityDays * 86_400_000
-        logs[id] = (logs[id] ?? []).filter { $0.at >= keep } + activity.map { AddonLogged(at: now, activity: $0) }
+        let added = activity.suffix(AddonRegistry.activityMax).map { a -> AddonLogged in
+            var a = a
+            if a.path.count > AddonRegistry.activityPathMax { a.path = String(a.path.prefix(AddonRegistry.activityPathMax)) }
+            return AddonLogged(at: now, activity: a)
+        }
+        logs[id] = Array(((logs[id] ?? []).filter { $0.at >= keep } + added).suffix(AddonRegistry.activityMax))
         saveLocked()
         lock.unlock()
     }
@@ -316,10 +343,14 @@ final class AddonRegistry {
         return (logs[id] ?? []).filter { $0.at >= keep }
     }
 
+    /// The add-on's storage. Its file is read the first time, with the lock
+    /// free: call it off the main thread.
     func storage(_ id: String) -> AddonStorage {
         lock.lock()
-        defer { lock.unlock() }
-        if let s = stores[id] { return s }
+        let had = stores[id]
+        lock.unlock()
+        if let had { return had }
+        onFileWork("storage")
         var values: [String: String] = [:]
         if let d = try? Data(contentsOf: storageURL(id)), case let .object(pairs)? = try? AddonJSON.parse(data: d) {
             for (k, v) in pairs { values[k] = v.string }
@@ -329,6 +360,9 @@ final class AddonRegistry {
             let json = AddonJSON.object(all.sorted { AddonText.less($0.key, $1.key) }.map { ($0.key, .string($0.value)) })
             try? Data(json.canonical.utf8).write(to: url, options: .atomic)
         }
+        lock.lock()
+        defer { lock.unlock() }
+        if let first = stores[id] { return first }
         stores[id] = s
         return s
     }
@@ -342,9 +376,10 @@ final class AddonRegistry {
         for a in j["addons"]?.array ?? [] { if let i = AddonInstalled(a) { items[i.id] = i } }
         if case let .object(pairs)? = j["activity"] {
             for (id, list) in pairs {
-                logs[id] = (list.array ?? []).map { e in
+                logs[id] = (list.array ?? []).suffix(AddonRegistry.activityMax).map { e in
                     AddonLogged(at: Int64(e["at"]?.number ?? 0),
-                                activity: AddonActivity(host: e["host"]?.string ?? "", path: e["path"]?.string ?? "",
+                                activity: AddonActivity(host: e["host"]?.string ?? "",
+                                                        path: String((e["path"]?.string ?? "").prefix(AddonRegistry.activityPathMax)),
                                                         status: e["status"]?.integer ?? 0, bytes: e["bytes"]?.integer ?? 0,
                                                         ms: e["ms"]?.integer ?? 0))
                 }
@@ -352,7 +387,27 @@ final class AddonRegistry {
         }
     }
 
+    /// Marks the state changed (under the lock). A queue of the registry's
+    /// own writes it: the state is copied under the lock, and turned to text
+    /// and written with the lock free, so no caller of the registry (the
+    /// main thread's canRun among them) ever waits on a file.
     private func saveLocked() {
+        let wasDirty = dirty
+        dirty = true
+        if !wasDirty { writer.async { [weak self] in self?.writeState() } }
+    }
+
+    private func writeState() {
+        lock.lock()
+        guard dirty else {
+            lock.unlock()
+            return
+        }
+        dirty = false
+        writing = true
+        let items = self.items, logs = self.logs, allOn = self.allOn, lastCheck = self.lastCheck
+        lock.unlock()
+        onFileWork("state")
         let activity = AddonJSON.object(logs.keys.sorted().map { id in
             (id, AddonJSON.array((logs[id] ?? []).map { l in
                 .object([("at", .number(Double(l.at))), ("bytes", .number(Double(l.activity.bytes))),
@@ -365,6 +420,18 @@ final class AddonRegistry {
             ("addonsOn", .bool(allOn)), ("lastCheck", .number(Double(lastCheck))),
         ])
         try? Data(j.canonical.utf8).write(to: stateURL, options: .atomic)
+        lock.lock()
+        writing = false
+        lock.broadcast()
+        lock.unlock()
+    }
+
+    /// Waits until every change so far is in the file (the tests, and the
+    /// start after a crash).
+    func flush() {
+        lock.lock()
+        while dirty || writing { lock.wait() }
+        lock.unlock()
     }
 }
 
@@ -382,12 +449,24 @@ final class AddonPool {
 
     var alive: Int { lock.lock(); defer { lock.unlock() }; return runners.count }
 
-    /// The add-on's runner, made if need be. With 3 alive, the one used
-    /// longest ago that is idle is freed first; nil if all 3 are busy.
     func runner(_ id: String, files: AddonFiles, now: Date = Date()) -> AddonRunner? {
+        runner(id, stamp: "", source: { files }, now: now)
+    }
+
+    /// The add-on's runner, made if need be. `stamp` names the installed
+    /// files (their SHA-256): a runner made for other files is closed and a
+    /// new one made, so an update never runs the old code. `source` reads the
+    /// files, on the add-on's own thread. With 3 alive, the one used longest
+    /// ago that is idle is freed first; nil if all 3 are busy.
+    func runner(_ id: String, stamp: String, source: @escaping () -> AddonFiles?, now: Date = Date()) -> AddonRunner? {
         lock.lock()
         defer { lock.unlock() }
-        if let r = runners[id] { used[id] = now; return r }
+        if let r = runners[id] {
+            if r.stamp == stamp { used[id] = now; return r }
+            r.close()
+            runners[id] = nil
+            used[id] = nil
+        }
         if runners.count >= AddonPool.maxAlive {
             let idle = runners.filter { $0.value.idleSince != nil }.min { (used[$0.key] ?? .distantPast) < (used[$1.key] ?? .distantPast) }
             guard let (oldId, old) = idle else { return nil }
@@ -395,7 +474,7 @@ final class AddonPool {
             runners[oldId] = nil
             used[oldId] = nil
         }
-        let r = AddonRunner(id: id, files: files)
+        let r = AddonRunner(id: id, stamp: stamp, source: source)
         runners[id] = r
         used[id] = now
         return r
@@ -409,14 +488,8 @@ final class AddonPool {
         lock.unlock()
     }
 
-    /// Stops the add-on's running call (a revoke, off, the kill switch).
-    func stop(_ id: String) {
-        lock.lock()
-        let r = runners[id]
-        lock.unlock()
-        r?.stop()
-    }
-
+    /// Stops the add-on's calls and frees its runtime (a revoke, off, an
+    /// update, the kill switch): its next call gets a new one.
     func close(_ id: String) {
         lock.lock()
         let r = runners.removeValue(forKey: id)

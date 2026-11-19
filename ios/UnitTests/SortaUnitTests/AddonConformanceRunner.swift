@@ -39,6 +39,17 @@ struct AddonConformance {
         addon = AddonFiles.folder(dir.appendingPathComponent(doc["addon"]?.string ?? "addon"))
     }
 
+    /// For cases a test makes itself, on another add-on and other ideas (the kit's template).
+    init(dir: URL, addon: URL, store: AddonJSON) {
+        self.dir = dir
+        cases = []
+        self.store = store
+        routes = .object([])
+        now = AddonText.parseISO("2026-11-01T09:00:00.000Z") ?? 0
+        self.addon = AddonFiles.folder(addon)
+        perFolder = false
+    }
+
     var count: Int { cases.count }
 
     /// The output of cases `range`, each block as the harness prints it.

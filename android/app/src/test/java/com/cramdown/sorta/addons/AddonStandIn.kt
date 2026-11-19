@@ -32,7 +32,8 @@ class AddonScriptRun(private val host: (String, String) -> String, private val s
 /** [load] is the add-on's top level; [call] answers a command, card view or settings change with its value as JSON text. */
 class AddonScript(val load: AddonScriptRun.() -> Unit = {}, val call: AddonScriptRun.() -> String = { "null" })
 
-class AddonStandInEngine(private val host: (String, String) -> String, private val script: AddonScript) : AddonEngine {
+class AddonStandInEngine(private val host: (String, String) -> String, private val script: AddonScript,
+    private val loaded: (AddonFiles) -> Unit = {}) : AddonEngine {
     @Volatile private var stopping = false
     @Volatile private var running = false
     private var used = false
@@ -56,6 +57,7 @@ class AddonStandInEngine(private val host: (String, String) -> String, private v
     }
 
     override fun load(files: AddonFiles): String? {
+        loaded(files)
         val out = guarded(AddonScriptRun(host, { stopping }, "load", "", "")) { script.load(this); "null" }
         return AddonJson.parse(out)["code"]?.string
     }
@@ -71,9 +73,11 @@ class AddonStandInEngine(private val host: (String, String) -> String, private v
         /** A maker for one script, and how many runtimes it made. */
         class Maker(private val script: AddonScript) : AddonEngineMaker {
             @Volatile var made = 0
+            /** The files each runtime was loaded with, in order. */
+            val loaded: MutableList<AddonFiles> = java.util.Collections.synchronizedList(ArrayList())
             override fun make(host: (String, String) -> String): Pair<AddonEngine?, String> {
                 made++
-                return AddonStandInEngine(host, script) to ""
+                return AddonStandInEngine(host, script) { loaded.add(it) } to ""
             }
         }
     }

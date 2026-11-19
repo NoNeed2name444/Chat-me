@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 // prints them (addons/kit/harness/harness.c), so the text can be compared byte for byte with
 // expected.txt. The store each case writes to is an IdeaBook. iOS: AddonConformanceRunner.swift.
 
-/** The test APK's assets: addons/fixtures and addons/conformance, side by side at the root (app/build.gradle.kts). */
+/** The test APK's assets: what is in addons/fixtures, addons/conformance and addons/kit, side by side at the root (app/build.gradle.kts). */
 object AddonAssets {
     private val assets get() = InstrumentationRegistry.getInstrumentation().context.assets
 
@@ -76,13 +76,16 @@ class AddonBookCases(snapshot: AddonSnapshot, private val now: Long) {
     }
 }
 
-/** [dir] is "" for the conformance cases (cases.json at the assets' root) or "hostile". */
-class AddonCases(private val dir: String) {
-    private val doc = AddonAssets.json(if (dir.isEmpty()) "cases.json" else "$dir/cases.json")
+/**
+ * [dir] is "" for the conformance cases (cases.json at the assets' root) or "hostile". [doc] and [storePath]
+ * are given for cases made in the test itself, on another add-on and other ideas.
+ */
+class AddonCases(private val dir: String, private val doc: AddonJson = AddonAssets.json(if (dir.isEmpty()) "cases.json" else "$dir/cases.json"),
+    storePath: String = "store.json") {
     /** The hostile fixtures' cases.json: each case is the folder of its name. */
     private val perFolder = doc["fixtures"] != null
     val cases: List<AddonJson> = doc["cases"]?.array ?: doc["fixtures"]?.array ?: emptyList()
-    private val store = AddonAssets.json("store.json")
+    private val store = AddonAssets.json(storePath)
     private val routes = AddonAssets.json("net/routes.json")
     private val now = AddonText.parseIso(doc["now"]?.string ?: "2026-11-01T09:00:00.000Z") ?: 0
     private val addon = if (perFolder) null else AddonAssets.folder(doc["addon"]?.string ?: "addon")

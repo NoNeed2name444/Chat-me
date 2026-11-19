@@ -1,0 +1,5 @@
+{
+  "about": "An author url that isn't https.",
+  "verdict": "refused",
+  "reason": "author"
+}

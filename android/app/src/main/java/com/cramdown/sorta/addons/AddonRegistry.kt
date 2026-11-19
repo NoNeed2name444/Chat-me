@@ -13,6 +13,8 @@ data class AddonInstalled(
     val id: String, val version: String, val sha256: String, val permissions: List<String>, val hosts: List<String>,
     val grants: List<String>, val on: Boolean = true, val paused: Boolean = false, val revoked: Boolean = false,
     val fromDirectory: Boolean = false,
+    /** The manifest's author url: revoked.json can name an author (addons/spec/directory.md). */
+    val authorUrl: String = "",
     /** net: hold each request until the person answers (section 4). */
     val askEachTime: Boolean = false,
     /** When each strike happened, in ms. */
@@ -20,7 +22,7 @@ data class AddonInstalled(
     val settings: String = "{}",
 ) {
     val json: AddonJson get() = AddonJson.obj(
-        "askEachTime" to AddonJson.Bool(askEachTime), "fromDirectory" to AddonJson.Bool(fromDirectory),
+        "askEachTime" to AddonJson.Bool(askEachTime), "authorUrl" to AddonJson.str(authorUrl), "fromDirectory" to AddonJson.Bool(fromDirectory),
         "grants" to AddonJson.strings(grants), "hosts" to AddonJson.strings(hosts), "id" to AddonJson.str(id),
         "on" to AddonJson.Bool(on), "paused" to AddonJson.Bool(paused), "permissions" to AddonJson.strings(permissions),
         "revoked" to AddonJson.Bool(revoked), "settings" to AddonJson.str(settings), "sha256" to AddonJson.str(sha256),
@@ -33,7 +35,7 @@ data class AddonInstalled(
             return AddonInstalled(id, version, j["sha256"]?.string ?: "", j["permissions"]?.strings ?: emptyList(),
                 j["hosts"]?.strings ?: emptyList(), j["grants"]?.strings ?: emptyList(), j["on"]?.bool ?: true,
                 j["paused"]?.bool ?: false, j["revoked"]?.bool ?: false, j["fromDirectory"]?.bool ?: false,
-                j["askEachTime"]?.bool ?: false, (j["strikes"]?.array ?: emptyList()).mapNotNull { it.number?.toLong() },
+                j["authorUrl"]?.string ?: "", j["askEachTime"]?.bool ?: false, (j["strikes"]?.array ?: emptyList()).mapNotNull { it.number?.toLong() },
                 j["settings"]?.string ?: "{}")
         }
     }
@@ -47,16 +49,24 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
         const val STRIKE_WINDOW_MS = 24 * 3_600_000L
         const val STRIKES_TO_PAUSE = 3
         const val ACTIVITY_DAYS = 30L
+        /** The newest requests kept for each add-on, and the longest path kept (the add-on chooses its paths). */
+        const val ACTIVITY_MAX = 200
+        const val ACTIVITY_PATH_MAX = 200
     }
 
-    private val lock = Any()
+    private val lock = Object()
+    private var dirty = false
+    private var writing = false
+    private var writer: Thread? = null
     private val items = HashMap<String, AddonInstalled>()
     private var allOn = true
     private var lastCheck = 0L
     private val logs = HashMap<String, List<AddonLogged>>()
     private val stores = HashMap<String, AddonStorage>()
-    /** Called when a grant is taken away or an add-on is turned off: the pool stops its running call. */
+    /** Called when a grant is taken away, or an add-on is turned off, updated, removed or revoked: the pool closes its runtime. */
     @Volatile var onStop: (String) -> Unit = {}
+    /** Called on the thread that is about to read or write one of the registry's files, with which: "pack", "storage", "state" or "marker" (the tests check none is the main thread). */
+    @Volatile var onFileWork: (String) -> Unit = {}
 
     private val stateFile get() = File(folder, "addons.json")
     private val markerFile get() = File(folder, "running.marker")
@@ -111,7 +121,8 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
     fun install(review: AddonReview, bytes: ByteArray, grants: List<String>, fromDirectory: Boolean = false): AddonInstalled {
         if (!grants.all(review::allows)) throw AddonRefusal("permissions")
         val p = review.pack
-        var a = AddonInstalled(p.id, p.version, review.sha256, p.permissions, p.hosts, grants, fromDirectory = fromDirectory)
+        var a = AddonInstalled(p.id, p.version, review.sha256, p.permissions, p.hosts, grants, fromDirectory = fromDirectory,
+            authorUrl = p.manifest["author"]?.get("url")?.string ?: "")
         write(packageFile(p.id), bytes)
         synchronized(lock) {
             items[p.id]?.let { old ->
@@ -136,9 +147,15 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
         storageFile(id).delete()
     }
 
-    /** The installed package, checked again as it is read. */
-    fun pack(id: String): AddonPackage? {
+    /**
+     * The installed package, checked again as it is read: a disk read, a SHA-256 and the whole package check,
+     * so never on the main thread (AddonCenter reads it on the add-on's own thread). [sha256] is the version
+     * the caller means; null means the installed one.
+     */
+    fun pack(id: String, sha256: String? = null): AddonPackage? {
         val a = addon(id) ?: return null
+        if (sha256 != null && sha256 != a.sha256) return null
+        onFileWork("pack")
         val d = try { packageFile(id).readBytes() } catch (e: java.io.IOException) { return null }
         if (AddonSha256.hex(d) != a.sha256) return null
         return try { AddonPackageCheck.archive(d) } catch (r: AddonRefusal) { null }
@@ -178,20 +195,18 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
 
     fun setSettings(id: String, canonical: String) = change(id) { it.copy(settings = canonical) }
 
-    /** revoked.json: matching add-ons are turned off everywhere ("*" or no version means every version). */
-    fun applyRevoked(list: List<Pair<String, String?>>) {
+    /** revoked.json: each covered add-on is turned off, by id (every version, or the listed ones) or by its author's url. */
+    fun applyRevoked(list: List<AddonRevoked>) {
         val stopped = ArrayList<String>()
         synchronized(lock) {
-            for ((id, version) in list) {
-                val a = items[id] ?: continue
-                if (version == null || version == "*" || version == a.version) {
-                    items[id] = a.copy(revoked = true, on = false)
-                    stopped.add(id)
-                }
+            for (a in items.values.toList()) {
+                if (a.revoked || list.none { it.covers(a) }) continue
+                items[a.id] = a.copy(revoked = true, on = false)
+                stopped.add(a.id)
             }
-            saveLocked()
+            if (stopped.isNotEmpty()) saveLocked()
         }
-        stopped.forEach(onStop)
+        stopped.sorted().forEach(onStop)
     }
 
     // strikes (section 6)
@@ -213,7 +228,7 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
     // safe start (section 6)
 
     /** Written before each call into the engine. */
-    fun beginCall(id: String) = write(markerFile, id.toByteArray(Charsets.UTF_8))
+    fun beginCall(id: String) { onFileWork("marker"); write(markerFile, id.toByteArray(Charsets.UTF_8)) }
 
     /** Cleared after it. */
     fun endCall() { markerFile.delete() }
@@ -226,6 +241,8 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
             items[id]?.let { items[id] = it.copy(paused = true) }
             saveLocked()
         }
+        // the marker goes only once what it said is on disk
+        flush()
         endCall()
         return id
     }
@@ -237,7 +254,10 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
         val now = clock()
         synchronized(lock) {
             val keep = now - ACTIVITY_DAYS * 86_400_000
-            logs[id] = (logs[id] ?: emptyList()).filter { it.at >= keep } + activity.map { AddonLogged(now, it) }
+            val added = activity.takeLast(ACTIVITY_MAX).map {
+                AddonLogged(now, if (it.path.length > ACTIVITY_PATH_MAX) it.copy(path = it.path.take(ACTIVITY_PATH_MAX)) else it)
+            }
+            logs[id] = ((logs[id] ?: emptyList()).filter { it.at >= keep } + added).takeLast(ACTIVITY_MAX)
             saveLocked()
         }
     }
@@ -247,17 +267,18 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
         return synchronized(lock) { (logs[id] ?: emptyList()).filter { it.at >= keep } }
     }
 
-    fun storage(id: String): AddonStorage = synchronized(lock) {
-        stores[id]?.let { return@synchronized it }
+    /** The add-on's storage. Its file is read the first time, with the lock free: call it off the main thread. */
+    fun storage(id: String): AddonStorage {
+        synchronized(lock) { stores[id] }?.let { return it }
         val values = HashMap<String, String>()
         val file = storageFile(id)
+        onFileWork("storage")
         val read = try { AddonJson.parseOrNull(file.readText(Charsets.UTF_8)) } catch (e: java.io.IOException) { null }
         (read as? AddonJson.Obj)?.pairs?.forEach { (k, v) -> v.string?.let { values[k] = it } }
         val s = AddonStorage(values) { all ->
             write(file, AddonJson.Obj(all.map { it.key to AddonJson.str(it.value) }).canonical.toByteArray(Charsets.UTF_8))
         }
-        stores[id] = s
-        s
+        return synchronized(lock) { stores.getOrPut(id) { s } }
     }
 
     // the file
@@ -268,23 +289,51 @@ class AddonRegistry(val folder: File, private val clock: () -> Long = System::cu
         lastCheck = j["lastCheck"]?.number?.toLong() ?: 0
         for (a in j["addons"]?.array ?: emptyList()) AddonInstalled.read(a)?.let { items[it.id] = it }
         (j["activity"] as? AddonJson.Obj)?.pairs?.forEach { (id, list) ->
-            logs[id] = (list.array ?: emptyList()).map { e ->
-                AddonLogged(e["at"]?.number?.toLong() ?: 0, AddonActivity(e["host"]?.string ?: "", e["path"]?.string ?: "",
+            logs[id] = (list.array ?: emptyList()).takeLast(ACTIVITY_MAX).map { e ->
+                AddonLogged(e["at"]?.number?.toLong() ?: 0, AddonActivity(e["host"]?.string ?: "", (e["path"]?.string ?: "").take(ACTIVITY_PATH_MAX),
                     (e["status"]?.integer ?: 0).toInt(), (e["bytes"]?.integer ?: 0).toInt(), (e["ms"]?.integer ?: 0).toInt()))
             }
         }
     }
 
+    /**
+     * Marks the state changed (under the lock). A thread of the registry's own writes it: it copies the state
+     * under the lock, and turns it to text and writes the file with the lock free, so no caller of the
+     * registry (the main thread's canRun among them) ever waits on a file.
+     */
     private fun saveLocked() {
-        val activity = AddonJson.Obj(logs.keys.sorted().map { id ->
-            id to AddonJson.Arr((logs[id] ?: emptyList()).map { l ->
-                AddonJson.obj("at" to AddonJson.num(l.at), "bytes" to AddonJson.num(l.activity.bytes), "host" to AddonJson.str(l.activity.host),
-                    "ms" to AddonJson.num(l.activity.ms), "path" to AddonJson.str(l.activity.path), "status" to AddonJson.num(l.activity.status))
+        dirty = true
+        if (writer == null) writer = Thread(::writeLoop, "Sorta add-ons state").also { it.isDaemon = true; it.start() }
+        lock.notifyAll()
+    }
+
+    private fun writeLoop() {
+        while (true) {
+            val snapshot = synchronized(lock) {
+                while (!dirty) lock.wait()
+                dirty = false
+                writing = true
+                Snapshot(HashMap(items), HashMap(logs), allOn, lastCheck)
+            }
+            try { onFileWork("state"); write(stateFile, snapshot.text.toByteArray(Charsets.UTF_8)) } catch (t: Throwable) { /* the next change writes again */ }
+            synchronized(lock) { writing = false; lock.notifyAll() }
+        }
+    }
+
+    /** Waits until every change so far is in the file (the tests, and the start after a crash). */
+    fun flush() = synchronized(lock) { while (dirty || writing) lock.wait() }
+
+    private class Snapshot(val items: Map<String, AddonInstalled>, val logs: Map<String, List<AddonLogged>>, val allOn: Boolean, val lastCheck: Long) {
+        val text: String get() {
+            val activity = AddonJson.Obj(logs.keys.sorted().map { id ->
+                id to AddonJson.Arr((logs[id] ?: emptyList()).map { l ->
+                    AddonJson.obj("at" to AddonJson.num(l.at), "bytes" to AddonJson.num(l.activity.bytes), "host" to AddonJson.str(l.activity.host),
+                        "ms" to AddonJson.num(l.activity.ms), "path" to AddonJson.str(l.activity.path), "status" to AddonJson.num(l.activity.status))
+                })
             })
-        })
-        val j = AddonJson.obj("activity" to activity, "addons" to AddonJson.Arr(items.keys.sorted().mapNotNull { items[it]?.json }),
-            "addonsOn" to AddonJson.Bool(allOn), "lastCheck" to AddonJson.num(lastCheck))
-        write(stateFile, j.canonical.toByteArray(Charsets.UTF_8))
+            return AddonJson.obj("activity" to activity, "addons" to AddonJson.Arr(items.keys.sorted().mapNotNull { items[it]?.json }),
+                "addonsOn" to AddonJson.Bool(allOn), "lastCheck" to AddonJson.num(lastCheck)).canonical
+        }
     }
 }
 
@@ -303,16 +352,28 @@ class AddonPool(private val maker: AddonEngineMaker = AddonNative.maker) {
 
     val alive: Int get() = synchronized(lock) { runners.size }
 
-    /** The add-on's runner, made if need be. With 3 alive, the one used longest ago that is idle is freed first; null if all 3 are busy. */
-    fun runner(id: String, files: AddonFiles, now: Long = System.currentTimeMillis()): AddonRunner? = synchronized(lock) {
-        runners[id]?.let { used[id] = now; return@synchronized it }
+    fun runner(id: String, files: AddonFiles, now: Long = System.currentTimeMillis()): AddonRunner? = runner(id, "", { files }, now)
+
+    /**
+     * The add-on's runner, made if need be. [stamp] names the installed files (their SHA-256): a runner made
+     * for other files is closed and a new one made, so an update never runs the old code. [source] reads the
+     * files, on the add-on's own thread. With 3 alive, the one used longest ago that is idle is freed first;
+     * null if all 3 are busy.
+     */
+    fun runner(id: String, stamp: String, source: () -> AddonFiles?, now: Long = System.currentTimeMillis()): AddonRunner? = synchronized(lock) {
+        runners[id]?.let {
+            if (it.stamp == stamp) { used[id] = now; return@synchronized it }
+            it.close()
+            runners.remove(id)
+            used.remove(id)
+        }
         if (runners.size >= MAX_ALIVE) {
             val idle = runners.filter { it.value.idleSince != null }.minByOrNull { used[it.key] ?: Long.MIN_VALUE } ?: return@synchronized null
             idle.value.close()
             runners.remove(idle.key)
             used.remove(idle.key)
         }
-        val r = AddonRunner(id, files, maker)
+        val r = AddonRunner(id, stamp, source, maker)
         runners[id] = r
         used[id] = now
         r
@@ -324,9 +385,7 @@ class AddonPool(private val maker: AddonEngineMaker = AddonNative.maker) {
         for ((id, r) in old) { r.close(); runners.remove(id); used.remove(id) }
     }
 
-    /** Stops the add-on's running call (a revoke, off, the kill switch). */
-    fun stop(id: String) { synchronized(lock) { runners[id] }?.stop() }
-
+    /** Stops the add-on's calls and frees its runtime (a revoke, off, an update, the kill switch): its next call gets a new one. */
     fun close(id: String) { synchronized(lock) { used.remove(id); runners.remove(id) }?.close() }
 
     fun closeAll() {

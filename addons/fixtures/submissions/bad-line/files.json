@@ -1,0 +1,11 @@
+{
+  "addons/io.github.example.tidy-titles/1.0.0/main.js": [
+    "// Tidy titles: trims spaces from the titles of the chosen ideas.\nsorta.commands.on(\"tidy\", async (event) => {\n  let tidied = 0;\n  for (const id of event.ideas) {\n    const idea = await sorta.ideas.get(id);\n    if (idea !== null && idea.title !== idea.title.trim()) {\n      await sorta.ideas.tag(id, [\"tidied\"]);\n      tidied += 1;\n    }\n  }\n  return { message: tidied === 1 ? \"Tagged 1 idea\" : `Tagged ${tidied} ideas` };\n});\n",
+    "const words = [",
+    {
+      "text": "\"word\", ",
+      "times": 73
+    },
+    "\"end\"];\n"
+  ]
+}

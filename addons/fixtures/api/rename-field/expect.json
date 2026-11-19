@@ -1,0 +1,7 @@
+{
+  "about": "Idea.title becomes Idea.name.",
+  "verdict": "fail",
+  "reasons": [
+    "rename"
+  ]
+}

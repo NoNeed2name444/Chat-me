@@ -12,16 +12,33 @@ import Foundation
 
 /// An add-on's own small storage: key to the JSON text it stored.
 final class AddonStorage {
+    /// What the add-on sees: what is kept, with this call's own changes.
     private(set) var values: [String: String]
+    private var kept: [String: String]
+    private var changed = false
     private let saved: ([String: String]) -> Void
 
     init(_ values: [String: String] = [:], saved: @escaping ([String: String]) -> Void = { _ in }) {
         self.values = values
+        self.kept = values
         self.saved = saved
     }
 
-    func set(_ key: String, _ text: String) { values[key] = text; saved(values) }
-    func remove(_ key: String) { values[key] = nil; saved(values) }
+    func set(_ key: String, _ text: String) { values[key] = text; changed = true }
+    func remove(_ key: String) { values[key] = nil; changed = true }
+
+    /// The call ended: its changes are kept and saved if it ended well, and
+    /// dropped if it was stopped, refused or failed.
+    func end(ok: Bool) {
+        guard changed else { return }
+        changed = false
+        if ok {
+            kept = values
+            saved(kept)
+        } else {
+            values = kept
+        }
+    }
 }
 
 /// How a call ended, for the app: its result, and the writes to apply when
@@ -314,8 +331,14 @@ final class AddonCall {
             body = s
         }
         if body.utf8.count > AddonCall.netLimit { throw Refusal(code: "net.size") }
-        // ask each time: this thread waits for the person's answer
-        if let ask = setup.consent, !ask(url.host) { throw Refusal(code: "net.declined") }
+        // ask each time: this thread waits for the person's answer, for each
+        // host the request reaches (a redirect to another host is asked about
+        // before anything is sent there)
+        var asked = Set<String>()
+        func consent(_ host: String) throws {
+            if let ask = setup.consent, asked.insert(host).inserted, !ask(host) { throw Refusal(code: "net.declined") }
+        }
+        try consent(url.host)
         guard let network = setup.network else { throw Refusal(code: "net.failed") }
         var spent = 0
         var hop = 0
@@ -339,6 +362,7 @@ final class AddonCall {
                 }
                 if reply.status == 303 { method = "GET"; body = "" }
                 url = next
+                try consent(url.host)
                 hop += 1
                 continue
             }

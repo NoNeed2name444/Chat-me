@@ -18,7 +18,9 @@ import java.util.concurrent.TimeUnit
 // follows ios/Sorta/Addons/AddonCenter.swift.
 
 /** [applied] is set when the batch was applied (null for a refusal or a failed call); [reshaped] is the Undo step, when the batch changed something. */
-class AddonFinished(val outcome: AddonOutcome, val applied: AddonApplied?, val reshaped: Reshaped?, val ranMs: Double, val applyNanos: Long) {
+class AddonFinished(val outcome: AddonOutcome, val applied: AddonApplied?, val reshaped: Reshaped?, val ranMs: Double, val applyNanos: Long,
+    /** Whether the main thread took the batch as the add-on's thread had worked it out (the book had not changed meanwhile). */
+    val prepared: Boolean = false) {
     val code: String? get() = outcome.code
 }
 
@@ -51,7 +53,8 @@ class AddonCenter(
     @Volatile var ask: (addon: String, host: String, answer: (Boolean) -> Unit) -> Unit = { _, _, answer -> answer(false) }
 
     init {
-        registry.onStop = { id -> pool.stop(id) }
+        // off, a grant taken away, an update, a removal, a revocation: the add-on's runtime goes, and the next call starts a fresh one
+        registry.onStop = { id -> pool.close(id) }
     }
 
     /**
@@ -66,21 +69,20 @@ class AddonCenter(
         val installed = registry.addon(id)
         if (!registry.canRun(id) || installed == null) return refuse("addon.off")
         if (!pool.withinBudget(id)) return refuse("limit.minute")
-        val pack = registry.pack(id) ?: return refuse("addon.missing")
-        val runner = pool.runner(id, pack.files) ?: return refuse("engine.busy")
+        // the package is read and checked on the add-on's own thread, once for each runner (a call whose package is gone ends "addon.missing")
+        val runner = pool.runner(id, installed.sha256, { registry.pack(id, installed.sha256)?.files }) ?: return refuse("engine.busy")
 
         // the lists are the book's own: it replaces them, and never changes one in place
         val b = book()
         val notes = b.notes
         val folders = b.folders
-        val commands = (pack.manifest["contributes"]?.get("commands")?.array ?: emptyList()).mapNotNull { it["id"]?.string }
-        val storage = registry.storage(id)
         val asking = if (installed.askEachTime) ask else null
         val isCard = kind == "card" || kind == "cards"
-        runner.call(kind, command,
+        runner.callWithFiles(kind, command,
             input = { call -> if (isCard) call.cardInput(cards, kind == "cards") else input },
-            setup = {
-                AddonSetup(AddonStoreMap.snapshot(notes, folders), installed.grants, commands, netOn, installed.settings, storage,
+            setup = { files: AddonFiles ->
+                // the storage's first read of its file is here too, off the main thread
+                AddonSetup(AddonStoreMap.snapshot(notes, folders), installed.grants, files.commands, netOn, installed.settings, registry.storage(id),
                     if (netOn) network else null, asking?.let { a -> { host: String -> wait(a, id, host) } }, now,
                     place = AddonStoreMap::place)
             },
@@ -90,19 +92,38 @@ class AddonCenter(
                 pool.record(id, run.ranMs)
                 registry.strike(id, run.outcome.code)
                 registry.log(id, run.outcome.activity)
-                post { finish(id, run, now, done) }
+                // the batch is worked out here, on the add-on's thread, against the lists the call was given
+                val prepared = if (run.outcome.ok && run.outcome.batch.isNotEmpty()) AddonApply.prepare(run.outcome.batch, notes, folders, now) else null
+                post { finish(id, run, prepared, now, done) }
             })
     }
 
     /** The one hop back: a stopped, refused or failed call applies nothing, and nor does a call whose add-on was turned off while it ran. */
-    private fun finish(id: String, run: AddonRun, now: Long, done: (AddonFinished) -> Unit) {
+    private fun finish(id: String, run: AddonRun, prepared: AddonApply.Prepared?, now: Long, done: (AddonFinished) -> Unit) {
         if (!run.outcome.ok || !registry.canRun(id)) {
             val o = if (run.outcome.ok) AddonOutcome(AddonCall.failure("stopped"), false, "stopped", emptyList(), run.outcome.log, run.outcome.activity)
             else run.outcome
             return done(AddonFinished(o, null, null, run.ranMs, 0))
         }
-        val (applied, reshaped, nanos) = book().applyAddonBatch(run.outcome.batch, now)
-        done(AddonFinished(run.outcome, applied, reshaped, run.ranMs, nanos))
+        val b = book()
+        val fits = prepared != null && prepared.fits(b.notes, b.folders, now)
+        val (applied, reshaped, nanos) = b.applyAddonBatch(run.outcome.batch, now, prepared)
+        logApply(id, nanos, run.outcome.batch.size, fits)
+        done(AddonFinished(run.outcome, applied, reshaped, run.ranMs, nanos, fits))
+    }
+
+    /** Each apply's time on the main thread, to the log (tag SortaAddons) and kept for the last 50. */
+    val applyTimes = java.util.ArrayDeque<Long>()
+
+    private fun logApply(id: String, nanos: Long, writes: Int, prepared: Boolean) {
+        applyTimes.addLast(nanos)
+        if (applyTimes.size > 50) applyTimes.removeFirst()
+        // android.util.Log is not there in the JVM tests
+        try {
+            android.util.Log.i("SortaAddons", "apply $id: %.3f ms on the main thread, %d writes, %s".format(nanos / 1e6, writes,
+                if (prepared) "worked out on the add-on's thread" else "worked out on the main thread"))
+        } catch (e: RuntimeException) {
+        }
     }
 
     /** The add-on's thread holds the request until the person answers. The call's own 10 s wall limit: no answer by then is a no. */

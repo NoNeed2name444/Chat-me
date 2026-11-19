@@ -195,6 +195,10 @@ targets:
       - path: ../addons/conformance
         type: folder
         buildPhase: resources
+      # the kit: its API snapshot, its sample ideas and its template's own tests
+      - path: ../addons/kit
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: Sorta
     settings:

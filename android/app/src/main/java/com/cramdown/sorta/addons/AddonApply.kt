@@ -36,13 +36,44 @@ object AddonApply {
     class Result(val notes: List<Note>, val applied: AddonApplied, val before: List<KeptNote>, val added: List<String>)
 
     /**
+     * A batch worked out ahead, on the add-on's own thread, from the book's lists as they were when the call
+     * was dispatched. If the book still holds those very lists when the call comes back, the main thread
+     * takes [result] as it is and does none of the work (IdeaBook.applyAddonBatch); if the person changed
+     * the book meanwhile, the main thread applies the batch itself.
+     */
+    class Prepared(val notes: List<Note>, val folders: List<NoteFolder>, val time: Long, val result: Result) {
+        /** The book never changes a list in place, so the same list is the same book. */
+        fun fits(notes: List<Note>, folders: List<NoteFolder>, time: Long): Boolean =
+            this.notes === notes && this.folders === folders && this.time == time
+    }
+
+    fun prepare(ops: List<AddonOp>, notes: List<Note>, folders: List<NoteFolder>, now: Long): Prepared =
+        Prepared(notes, folders, now, apply(ops, notes, folders.mapTo(HashSet()) { it.id }, now))
+
+    /**
      * Applies [ops] to [notes]. An idea or folder gone since the snapshot is skipped and listed; a note counts
-     * as changed, and gets [now] as its updatedAt, only if it ends up different. O(notes + ops).
+     * as changed, and gets [now] as its updatedAt, only if it ends up different. Only the ideas the batch
+     * names are looked up, so only they are indexed, and the list is copied only if the batch writes to it:
+     * one pass over the notes to find them, then O(ops).
      */
     fun apply(ops: List<AddonOp>, notes: List<Note>, folders: Set<String>, now: Long): Result {
-        val list = notes.toMutableList()
-        val index = HashMap<String, Int>(list.size * 2)
-        list.forEachIndexed { i, n -> index[n.id] = i }
+        val wanted = HashSet<String>(ops.size * 4)
+        for (op in ops) {
+            when (op) {
+                is AddonOp.Capture -> {}
+                is AddonOp.Link -> { wanted.add(op.a); wanted.add(op.b) }
+                is AddonOp.Unlink -> { wanted.add(op.a); wanted.add(op.b) }
+                is AddonOp.Tag -> wanted.add(op.id)
+                is AddonOp.Untag -> wanted.add(op.id)
+                is AddonOp.File -> wanted.add(op.id)
+            }
+        }
+        val index = HashMap<String, Int>((wanted.size + ops.size) * 2)
+        if (wanted.isNotEmpty()) for (i in notes.indices) { val id = notes[i].id; if (id in wanted) index[id] = i }
+        // the book's list as it is, until the first write
+        var list: List<Note> = notes
+        var own: ArrayList<Note>? = null
+        fun write(): ArrayList<Note> = own ?: ArrayList<Note>(notes.size + ops.size).also { it.addAll(notes); own = it; list = it }
         val before = LinkedHashMap<String, KeptNote>()
         val added = ArrayList<String>()
         val addedSet = HashSet<String>()
@@ -55,7 +86,7 @@ object AddonApply {
             when (op) {
                 is AddonOp.Capture -> {
                     index[op.id] = list.size
-                    list.add(Note(id = op.id, title = op.title, body = op.body, boardX = op.x, boardY = op.y, createdAt = now, updatedAt = now))
+                    write().add(Note(id = op.id, title = op.title, body = op.body, boardX = op.x, boardY = op.y, createdAt = now, updatedAt = now))
                     added.add(op.id)
                     addedSet.add(op.id)
                 }
@@ -70,10 +101,10 @@ object AddonApply {
                         continue
                     }
                     if (op is AddonOp.Link) {
-                        if (b !in list[i].links && a !in list[j].links) { touch(i); list[i] = list[i].copy(links = list[i].links + b) }
+                        if (b !in list[i].links && a !in list[j].links) { touch(i); write()[i] = list[i].copy(links = list[i].links + b) }
                     } else {
-                        if (b in list[i].links) { touch(i); list[i] = list[i].copy(links = list[i].links.filterNot { it == b }) }
-                        if (a in list[j].links) { touch(j); list[j] = list[j].copy(links = list[j].links.filterNot { it == a }) }
+                        if (b in list[i].links) { touch(i); write()[i] = list[i].copy(links = list[i].links.filterNot { it == b }) }
+                        if (a in list[j].links) { touch(j); write()[j] = list[j].copy(links = list[j].links.filterNot { it == a }) }
                     }
                 }
                 is AddonOp.Tag -> {
@@ -81,25 +112,25 @@ object AddonApply {
                     if (i == null) { skipped.add(op.id); continue }
                     val more = ArrayList<String>()
                     for (t in op.tags) if (t !in list[i].tags && t !in more) more.add(t)
-                    if (more.isNotEmpty()) { touch(i); list[i] = list[i].copy(tags = list[i].tags + more) }
+                    if (more.isNotEmpty()) { touch(i); write()[i] = list[i].copy(tags = list[i].tags + more) }
                 }
                 is AddonOp.Untag -> {
                     val i = index[op.id]
                     if (i == null) { skipped.add(op.id); continue }
-                    if (list[i].tags.any { it in op.tags }) { touch(i); list[i] = list[i].copy(tags = list[i].tags.filterNot { it in op.tags }) }
+                    if (list[i].tags.any { it in op.tags }) { touch(i); write()[i] = list[i].copy(tags = list[i].tags.filterNot { it in op.tags }) }
                 }
                 is AddonOp.File -> {
                     val i = index[op.id]
                     if (i == null) { skipped.add(op.id); continue }
                     if (op.folder != null && op.folder !in folders) { skipped.add(op.folder); continue }
-                    if (list[i].folderId != op.folder) { touch(i); list[i] = list[i].copy(folderId = op.folder) }
+                    if (list[i].folderId != op.folder) { touch(i); write()[i] = list[i].copy(folderId = op.folder) }
                 }
             }
         }
         val changed = ArrayList<KeptNote>()
         for (kept in before.values) {
             if (list[kept.index] != kept.note) {
-                list[kept.index] = list[kept.index].copy(updatedAt = now)
+                write()[kept.index] = list[kept.index].copy(updatedAt = now)
                 changed.add(kept)
             }
         }

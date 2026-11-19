@@ -1,0 +1,7 @@
+{
+  "about": "A bad manifest: a comma missing, so it isn't valid JSON.",
+  "verdict": "fail",
+  "reasons": [
+    "manifest.json"
+  ]
+}

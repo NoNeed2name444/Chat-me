@@ -1,0 +1,5 @@
+{
+  "about": "An IP address instead of a host name.",
+  "verdict": "refused",
+  "reason": "hosts"
+}

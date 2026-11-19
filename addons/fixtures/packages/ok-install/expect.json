@@ -1,0 +1,8 @@
+{
+  "about": "minSorta equal to the app's version, at install.",
+  "verdict": "ok",
+  "app": {
+    "sorta": "1.2.0",
+    "api": 1
+  }
+}

@@ -65,6 +65,40 @@ log assign TypeError 'ideas' is read-only
 log console TypeError 'log' is read-only
 result {"ok":true,"value":null}
 applied {"added":[],"changed":[],"skipped":[]}
+== engine.stack
+load ok
+log loaded
+log types ["undefined","undefined",10]
+log assign TypeError 'prepareStackTrace' is read-only
+log define TypeError property is not configurable
+log limit TypeError 'stackTraceLimit' is read-only
+log capture TypeError not a function
+log stack "string"
+log sites []
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== text.astral
+load ok
+log loaded
+log has false
+log search 0
+result {"ok":true,"value":{"message":"😀 􏿿"}}
+applied {"added":[],"changed":[],"skipped":[]}
+== text.surrogate.argument
+load ok
+log loaded
+log has ArgumentError api.args
+log search ArgumentError api.args
+log tag ArgumentError api.args
+log escaped 0
+log log ArgumentError api.args
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== text.surrogate.result
+load ok
+log loaded
+result {"code":"result.shape","message":"result.shape","ok":false}
+applied none
 == result.null
 load ok
 log loaded
@@ -687,6 +721,19 @@ log loaded
 log first 200
 log second NetError net.declined
 activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+result {"ok":true,"value":null}
+applied {"added":[],"changed":[],"skipped":[]}
+== net.ask.redirect
+load ok
+log loaded
+log other host, declined NetError net.declined
+log same host 200
+log other host, allowed 200
+activity {"bytes":0,"host":"api.example.com","path":"/v1/moved","status":301}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/old","status":302}
+activity {"bytes":15,"host":"api.example.com","path":"/v1/items","status":200}
+activity {"bytes":0,"host":"api.example.com","path":"/v1/moved","status":301}
+activity {"bytes":12,"host":"cdn.example.com","path":"/v1/items","status":200}
 result {"ok":true,"value":null}
 applied {"added":[],"changed":[],"skipped":[]}
 == card.one

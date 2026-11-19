@@ -243,6 +243,70 @@
    }
   },
   {
+   "name": "engine.stack",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "engine.stack",
+    "ideas": []
+   }
+  },
+  {
+   "name": "text.astral",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "text.astral",
+    "ideas": []
+   }
+  },
+  {
+   "name": "text.surrogate.argument",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "text.surrogate.argument",
+    "ideas": []
+   }
+  },
+  {
+   "name": "text.surrogate.result",
+   "grants": [
+    "ideas.read",
+    "ideas.write",
+    "commands",
+    "cards"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "text.surrogate.result",
+    "ideas": []
+   }
+  },
+  {
    "name": "result.null",
    "grants": [
     "ideas.read",
@@ -1053,6 +1117,28 @@
    "ask": [
     "yes",
     "no"
+   ]
+  },
+  {
+   "name": "net.ask.redirect",
+   "grants": [
+    "commands",
+    "net:api.example.com",
+    "net:cdn.example.com"
+   ],
+   "commands": [
+    "case"
+   ],
+   "input": {
+    "case": "net.ask.redirect",
+    "ideas": []
+   },
+   "ask": [
+    "yes",
+    "no",
+    "yes",
+    "yes",
+    "yes"
    ]
   },
   {

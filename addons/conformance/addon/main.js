@@ -34,6 +34,32 @@ const cases = {
     await attempt('ctor', () => (async function () {}).constructor('return 1')());
   },
   async 'engine.eval.thrown'() { return eval('2'); },
+  // the engine's stack-trace hooks are closed: no call site, so no function of Sorta's own
+  async 'engine.stack'() {
+    const sites = [];
+    const hook = (error, list) => { for (const s of list) sites.push(typeof s.getFunction()); return ''; };
+    show('types', [typeof Error.prepareStackTrace, typeof Error.captureStackTrace, Error.stackTraceLimit]);
+    await attempt('assign', () => { Error.prepareStackTrace = hook; return 'set'; });
+    await attempt('define', () => { Object.defineProperty(Error, 'prepareStackTrace', { value: hook }); return 'set'; });
+    await attempt('limit', () => { Error.stackTraceLimit = 1000; return 'set'; });
+    await attempt('capture', () => Error.captureStackTrace({}));
+    try { await sorta.ideas.get(7); } catch (e) { show('stack', typeof e.stack); }
+    show('sites', sites);
+  },
+  async 'text.astral'() {
+    show('has', sorta.has('\u{1F600}'));
+    await attempt('search', async () => (await sorta.ideas.search('\u{1F600}\u{10FFFF}')).length);
+    return { message: '\u{1F600} \u{10FFFF}' };
+  },
+  // half of a surrogate pair is not text: refused going in, and coming out
+  async 'text.surrogate.argument'() {
+    await attempt('has', () => sorta.has('\ud83d'));
+    await attempt('search', () => sorta.ideas.search('a\udc00b'));
+    await attempt('tag', () => sorta.ideas.tag(id(101), ['\ud800']));
+    await attempt('escaped', async () => (await sorta.ideas.search('\\ud83d')).length);
+    await attempt('log', () => console.log('\ud83d'));
+  },
+  async 'text.surrogate.result'() { return { message: 'half \ud83d' }; },
   async 'engine.strict'() {
     await attempt('assign', () => { sorta.ideas = null; return 'kept'; });
     await attempt('console', () => { console.log = null; return 'kept'; });
@@ -244,6 +270,12 @@ const cases = {
     show('has', [sorta.has('net'), sorta.has('net:api.example.com'), sorta.has('net.fetch')]);
     await attempt('fetch', () => sorta.net.fetch('https://api.example.com/v1/items'));
     await attempt('http', () => sorta.net.fetch('http://api.example.com/v1/items'));
+  },
+  // ask each time, for each host a request reaches: the redirect to cdn.example.com is asked about too
+  async 'net.ask.redirect'() {
+    await attempt('other host, declined', async () => (await sorta.net.fetch('https://api.example.com/v1/moved')).status);
+    await attempt('same host', async () => (await sorta.net.fetch('https://api.example.com/v1/old')).status);
+    await attempt('other host, allowed', async () => (await sorta.net.fetch('https://api.example.com/v1/moved')).status);
   },
   async 'net.ask'() {
     await attempt('first', async () => (await sorta.net.fetch('https://api.example.com/v1/items')).status);

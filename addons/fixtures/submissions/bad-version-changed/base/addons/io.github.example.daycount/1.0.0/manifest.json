@@ -1,0 +1,27 @@
+{
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "id": "io.github.example.daycount",
+  "name": "Day count",
+  "version": "1.0.0",
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "license": "MIT",
+  "minSorta": "1.0.0",
+  "api": 1,
+  "main": "main.js",
+  "permissions": [
+    "ideas.read",
+    "commands"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "oldest",
+        "title": "Find the oldest idea"
+      }
+    ]
+  }
+}

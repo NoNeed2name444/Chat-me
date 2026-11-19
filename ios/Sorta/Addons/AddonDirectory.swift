@@ -18,6 +18,23 @@ struct AddonIndexEntry: Equatable {
     var minSorta: String
     var api: Int
     var file: String
+    /// The add-on's name and its author's url (index.json nests each add-on's versions; addons/spec/directory.md).
+    var name = ""
+    var authorUrl = ""
+}
+
+/// One entry of revoked.json: an add-on by `id` (every version, or only
+/// `versions`), or every add-on of the author whose url is `author`.
+struct AddonRevoked: Equatable {
+    var id: String? = nil
+    var versions: [String]? = nil
+    var author: String? = nil
+
+    func covers(_ a: AddonInstalled) -> Bool {
+        if let id { return id == a.id && (versions == nil || versions!.contains(a.version)) }
+        if let author { return !a.authorUrl.isEmpty && a.authorUrl == author }
+        return false
+    }
 }
 
 /// A newer listed version of an installed add-on.
@@ -58,26 +75,53 @@ final class AddonDirectory {
 
     // MARK: reading the index
 
+    /// Every listed version, add-on by add-on in the file's order. A field
+    /// the app doesn't know is passed over.
     static func parseIndex(_ data: Data) throws -> [AddonIndexEntry] {
-        guard let j = try? AddonJSON.parse(data: data), j["formatVersion"]?.integer == 1, let list = j["addons"]?.array else {
+        guard let j = try? AddonJSON.parse(data: data), j["format"]?.string == "sorta-addons-index",
+              j["formatVersion"]?.integer == 1, let list = j["addons"]?.array else {
             throw AddonRefusal(code: "index.json")
         }
-        return try list.map { e in
-            guard let id = e["id"]?.string, let version = e["version"]?.string, let sha = e["sha256"]?.string,
-                  sha.utf8.count == 64, let size = e["size"]?.integer, let file = e["file"]?.string,
-                  AddonPackageCheck.validId(id), AddonPackageCheck.semver(version) != nil,
-                  file == "dist/\(id)-\(version).sortaaddon" else { throw AddonRefusal(code: "index.json") }
-            return AddonIndexEntry(id: id, version: version, sha256: sha.lowercased(), size: size,
-                                   permissions: e["permissions"]?.strings ?? [], hosts: e["hosts"]?.strings ?? [],
-                                   minSorta: e["minSorta"]?.string ?? "0.0.0", api: e["api"]?.integer ?? 1, file: file)
+        var out: [AddonIndexEntry] = []
+        for a in list {
+            guard let id = a["id"]?.string, let versions = a["versions"]?.array, AddonPackageCheck.validId(id) else {
+                throw AddonRefusal(code: "index.json")
+            }
+            let name = a["name"]?.string ?? ""
+            let author = a["author"]?["url"]?.string ?? ""
+            for e in versions {
+                guard let version = e["version"]?.string, let sha = e["sha256"]?.string,
+                      sha.utf8.count == 64, let size = e["size"]?.integer, let file = e["file"]?.string,
+                      AddonPackageCheck.semver(version) != nil,
+                      file == "dist/\(id)-\(version).sortaaddon" else { throw AddonRefusal(code: "index.json") }
+                out.append(AddonIndexEntry(id: id, version: version, sha256: sha.lowercased(), size: size,
+                                           permissions: e["permissions"]?.strings ?? [], hosts: e["hosts"]?.strings ?? [],
+                                           minSorta: e["minSorta"]?.string ?? "0.0.0", api: e["api"]?.integer ?? 1, file: file,
+                                           name: name, authorUrl: author))
+            }
         }
+        return out
     }
 
-    static func parseRevoked(_ data: Data) throws -> [(id: String, version: String?)] {
-        guard let j = try? AddonJSON.parse(data: data), let list = j["revoked"]?.array else {
+    /// revoked.json's entries. One that is neither an id nor an https
+    /// author, or whose versions are not a non-empty list of texts, is passed
+    /// over: a broken entry never widens to "every version".
+    static func parseRevoked(_ data: Data) throws -> [AddonRevoked] {
+        guard let j = try? AddonJSON.parse(data: data), j["format"]?.string == "sorta-addons-revoked",
+              j["formatVersion"]?.integer == 1, let list = j["revoked"]?.array else {
             throw AddonRefusal(code: "index.json")
         }
-        return list.compactMap { e in e["id"]?.string.map { ($0, e["version"]?.string) } }
+        return list.compactMap { e in
+            let id = e["id"]?.string, author = e["author"]?.string, versions = e["versions"]
+            if let id, author == nil {
+                guard let versions else { return AddonRevoked(id: id) }
+                let listed = (versions.array ?? []).map(\.string)
+                if listed.isEmpty || listed.contains(where: { $0 == nil }) { return nil }
+                return AddonRevoked(id: id, versions: listed.compactMap { $0 })
+            }
+            if id == nil, let author, versions == nil, author.hasPrefix("https://") { return AddonRevoked(author: author) }
+            return nil
+        }
     }
 
     func index() -> Result<[AddonIndexEntry], AddonRefusal> {
@@ -145,12 +189,13 @@ final class AddonDirectory {
         guard !base.isEmpty, registry.hasDirectoryAddon, now - registry.lastDirectoryCheck >= AddonDirectory.dayMs else {
             return nil
         }
-        registry.lastDirectoryCheck = now
-        if case let .success(d) = fetcher.get(base + "revoked.json", limit: AddonDirectory.maxIndex),
-           let list = try? AddonDirectory.parseRevoked(d) {
-            registry.applyRevoked(list)
-        }
+        // the day starts only when both files came and were read: a failed
+        // check is tried again at the next chance
+        guard case let .success(d) = fetcher.get(base + "revoked.json", limit: AddonDirectory.maxIndex),
+              let list = try? AddonDirectory.parseRevoked(d) else { return [] }
+        registry.applyRevoked(list)
         guard case let .success(entries) = index() else { return [] }
+        registry.lastDirectoryCheck = now
         return offers(entries)
     }
 }

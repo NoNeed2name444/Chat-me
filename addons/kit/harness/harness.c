@@ -574,7 +574,9 @@ static int hostile(const char *dir)
         char *lines = run_case(fixture, c, &ms);
         char *code = result_code(lines);
         int in_time = ms <= atof(limit) + 50;
-        int applied_none = strstr(lines, "applied none") != NULL;
+        /* nothing applied: a failed call applies none, and one that ends well here asked for no change */
+        int applied_none = strstr(lines, "applied none") != NULL ||
+                           (!strcmp(expect, "ok") && strstr(lines, "applied {\"added\":[],\"changed\":[],\"skipped\":[]}") != NULL);
         int pass = !strcmp(code, expect) && in_time && applied_none;
         printf("%s %s %s %.1f ms (limit %s ms + 50)%s\n", pass ? "PASS" : "FAIL", name, code, ms, limit,
                applied_none ? "" : " (applied)");
@@ -708,6 +710,59 @@ static int run(int argc, char **argv)
     return rc;
 }
 
+/* `expect`: the add-on's own tests/expect.json, case by case: each command and card must give the reply
+ * the file says, on the ideas given, under the app's limits. The apps' engine tests run the same file. */
+static int expect(int argc, char **argv)
+{
+    const char *dir = argv[2], *ideas = opt(argc, argv, "--ideas");
+    if (!ideas)
+        die("usage", "harness expect <dir> --ideas <file>");
+    char *store = store_text(ideas);
+    const char *argv3[3] = { store, "", "2026-11-01T09:00:00.000Z" };
+    free(sv("setup", 3, argv3, NULL, NULL));
+    char *manifest_path = join_path(dir, "manifest.json"), *expect_path = join_path(dir, "tests/expect.json");
+    char *manifest = store_text(manifest_path), *wanted = store_text(expect_path);
+    size_t cap = strlen(manifest) + strlen(wanted) + 64;
+    char *both = malloc(cap);
+    snprintf(both, cap, "{\"expect\":%s,\"manifest\":%s}", wanted, manifest);
+    char *all = sv1("expectCases", both);
+    int failed = 0, count = 0;
+    for (int i = 0;; i++) {
+        char *one = json_item(all, i, 0);
+        if (!one)
+            break;
+        char *name = json_field(one, "name"), *want = json_field(one, "want"), *c = json_field(one, "case");
+        char *lines = run_case(dir, c, NULL);
+        const char *got = strstr(lines, "result ");
+        size_t n = got ? strcspn(got, "\n") : 0;
+        int pass = got && n == strlen(want) && !strncmp(got, want, n);
+        printf("%s %s\n", pass ? "ok  " : "FAIL", name);
+        if (!pass) {
+            printf("  wanted: %s\n  got:\n%s\n", want, lines);
+            failed++;
+        }
+        count++;
+        free(lines);
+        free(c);
+        free(want);
+        free(name);
+        free(one);
+    }
+    if (!count) {
+        fprintf(stderr, "harness: tests/expect.json has no case\n");
+        failed = 1;
+    }
+    fprintf(stderr, "expect: %d cases, %d failed\n", count, failed);
+    free(all);
+    free(both);
+    free(wanted);
+    free(manifest);
+    free(expect_path);
+    free(manifest_path);
+    free(store);
+    return failed ? 1 : 0;
+}
+
 /* ---- threads: the add-on's own, and the main thread's heartbeat ---- */
 
 typedef struct {
@@ -732,6 +787,8 @@ static void *worker(void *arg)
         w->rc = permissions(w->argv[2]);
     else if (!strcmp(mode, "run"))
         w->rc = run(w->argc, w->argv);
+    else if (!strcmp(mode, "expect"))
+        w->rc = expect(w->argc, w->argv);
     else
         die("unknown mode", mode);
     standin_close();
@@ -758,7 +815,7 @@ int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IOFBF, 1 << 16);
     if (argc < 3)
-        die("usage", "harness (run|conformance|hostile|permissions) <path> ...");
+        die("usage", "harness (run|expect|conformance|hostile|permissions) <path> ...");
     work w = { argc, argv, 0, 0, 0 };
     atomic_init(&w.done, 0);
     double baseline = beat(NULL, 200000000);

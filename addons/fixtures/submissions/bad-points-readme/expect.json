@@ -1,0 +1,7 @@
+{
+  "about": "Points and a leaderboard in the README.",
+  "verdict": "fail",
+  "reasons": [
+    "review.points"
+  ]
+}

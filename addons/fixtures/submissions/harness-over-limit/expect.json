@@ -1,0 +1,6 @@
+{
+  "about": "A new add-on that passes every written check, and whose command never ends. The harness step stops it at the app's limit and fails the pull request.",
+  "verdict": "pass",
+  "reasons": [],
+  "harness": "limit.time"
+}

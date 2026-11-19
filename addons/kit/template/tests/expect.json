@@ -1,0 +1,28 @@
+{
+  "about": "What Word count must give on the kit sample ideas (api/sample-ideas.json in the kit), with every permission it asks for granted. The harness runs each case, and so do the engine tests on iOS and Android.",
+  "ideas": "api/sample-ideas.json",
+  "commands": [
+    {"command": "count", "chosen": [], "settings": {"titles": false}, "reply": {"message": "65 words in 8 ideas"}},
+    {"command": "count", "chosen": ["idea-01", "idea-03", "idea-gone"], "settings": {"titles": false}, "reply": {"message": "38 words in 2 ideas"}},
+    {"command": "count", "chosen": [], "settings": {"titles": true}, "reply": {"message": "88 words in 8 ideas"}},
+    {"command": "count", "chosen": ["idea-01", "idea-03", "idea-gone"], "settings": {"titles": true}, "reply": {"message": "45 words in 2 ideas"}}
+  ],
+  "cards": [
+    {"idea": "idea-01", "settings": {"titles": false}, "reply": {"lines": ["13 words"]}},
+    {"idea": "idea-02", "settings": {"titles": false}, "reply": {"lines": ["7 words"]}},
+    {"idea": "idea-03", "settings": {"titles": false}, "reply": {"lines": ["25 words"]}},
+    {"idea": "idea-04", "settings": {"titles": false}, "reply": {"lines": ["11 words"]}},
+    {"idea": "idea-05", "settings": {"titles": false}, "reply": {"lines": ["3 words"]}},
+    {"idea": "idea-06", "settings": {"titles": false}, "reply": {"lines": ["0 words"]}},
+    {"idea": "idea-07", "settings": {"titles": false}, "reply": {"lines": ["5 words"]}},
+    {"idea": "idea-08", "settings": {"titles": false}, "reply": {"lines": ["1 word"]}},
+    {"idea": "idea-01", "settings": {"titles": true}, "reply": {"lines": ["17 words"]}},
+    {"idea": "idea-02", "settings": {"titles": true}, "reply": {"lines": ["9 words"]}},
+    {"idea": "idea-03", "settings": {"titles": true}, "reply": {"lines": ["28 words"]}},
+    {"idea": "idea-04", "settings": {"titles": true}, "reply": {"lines": ["16 words"]}},
+    {"idea": "idea-05", "settings": {"titles": true}, "reply": {"lines": ["5 words"]}},
+    {"idea": "idea-06", "settings": {"titles": true}, "reply": {"lines": ["5 words"]}},
+    {"idea": "idea-07", "settings": {"titles": true}, "reply": {"lines": ["5 words"]}},
+    {"idea": "idea-08", "settings": {"titles": true}, "reply": {"lines": ["3 words"]}}
+  ]
+}

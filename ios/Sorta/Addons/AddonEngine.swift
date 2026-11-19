@@ -9,11 +9,16 @@ import SortaAddonsC
 // code, so a runtime never hops threads. The C host (addons/engine/host)
 // checks it is on its own thread, not the main thread, at every entry.
 
-/// The files of one add-on, by package path.
+/// The files of one add-on, by package path, and the command ids its manifest declares.
 struct AddonFiles {
     var names: [String]
     var data: [Data]
     var main: String
+    var commands: [String] = []
+
+    static func commands(of manifest: AddonJSON) -> [String] {
+        (manifest["contributes"]?["commands"]?.array ?? []).compactMap { $0["id"]?.string }
+    }
 
     /// A package folder, two levels deep at most (the kit's and the tests').
     static func folder(_ url: URL) -> AddonFiles {
@@ -35,9 +40,12 @@ struct AddonFiles {
         }
         walk(url, "", 1)
         var main = "main.js"
-        if let i = names.firstIndex(of: "manifest.json"), let m = try? AddonJSON.parse(data: data[i]),
-           let given = m["main"]?.string { main = given }
-        return AddonFiles(names: names, data: data, main: main)
+        var commands: [String] = []
+        if let i = names.firstIndex(of: "manifest.json"), let m = try? AddonJSON.parse(data: data[i]) {
+            if let given = m["main"]?.string { main = given }
+            commands = AddonFiles.commands(of: m)
+        }
+        return AddonFiles(names: names, data: data, main: main, commands: commands)
     }
 
     /// The same files, with one replaced or added.
@@ -137,22 +145,39 @@ struct AddonRun {
     var callMs: Double = 0
 }
 
-/// One add-on's runtime and its thread.
+/// One add-on's runtime and its thread. `source` gives the add-on's files: it
+/// is called on the add-on's own thread, once, the first time they are
+/// needed, so reading and checking an installed package never runs on the
+/// main thread, and a runner keeps what it read for as long as it lives.
+/// `stamp` names the version of the files it was made for (the package's
+/// SHA-256), so the pool can tell a runner made before an update.
 final class AddonRunner {
     let id: String
-    let files: AddonFiles
+    let stamp: String
+    private let source: () -> AddonFiles?
+    private var files: AddonFiles?            // read on `thread` only
+    private var read = false
     private let thread: AddonThread
     private let box = AddonHostBox()
     private let lock = NSLock()
     private var runtime: OpaquePointer?   // made, used and freed on `thread` only
     private var busy = false
+    private var pending = 0
     private var lastUsed = Date()
     private var closed = false
+    /// A stop that came while a call was queued or running: that call ends
+    /// "stopped", and its runtime is freed after it.
+    private var stopPending = false
 
-    init(id: String, files: AddonFiles) {
+    init(id: String, stamp: String, source: @escaping () -> AddonFiles?) {
         self.id = id
-        self.files = files
+        self.stamp = stamp
+        self.source = source
         thread = AddonThread(name: "Sorta add-on " + id)
+    }
+
+    convenience init(id: String, files: AddonFiles) {
+        self.init(id: id, stamp: "", source: { files })
     }
 
     deinit { thread.finish() }
@@ -169,7 +194,7 @@ final class AddonRunner {
     /// `setup` is worked out on the add-on's thread (the snapshot is mapped there).
     func call(kind: String, id commandID: String = "", input: String, setup: @autoclosure @escaping () -> AddonCall.Setup,
               before: @escaping () -> Void = {}, done: @escaping (AddonRun) -> Void) {
-        call(kind: kind, id: commandID, input: { _ in input }, setup: setup(), before: before, done: done)
+        call(kind: kind, id: commandID, input: { _ in input }, setupWith: { _ in setup() }, before: before, done: done)
     }
 
     /// `input` is worked out on the add-on's thread from the call's view; nil
@@ -178,17 +203,63 @@ final class AddonRunner {
     func call(kind: String, id commandID: String = "", input makeInput: @escaping (AddonCall) -> String?,
               setup: @autoclosure @escaping () -> AddonCall.Setup,
               before: @escaping () -> Void = {}, done: @escaping (AddonRun) -> Void) {
+        call(kind: kind, id: commandID, input: makeInput, setupWith: { _ in setup() }, before: before, done: done)
+    }
+
+    private static func ended(_ code: String) -> AddonRun {
+        AddonRun(outcome: AddonOutcome(envelope: failure(code), ok: false, code: code, batch: [], log: [], activity: []),
+                 ranMs: 0, loadCode: nil)
+    }
+
+    /// A call ended (under the lock): the runner is idle once none is queued
+    /// behind it, and a stop was for the calls there were.
+    private func endedLocked() {
+        pending -= 1
+        if pending == 0 {
+            busy = false
+            if !closed { stopPending = false }
+        }
+        lastUsed = Date()
+    }
+
+    /// As above, with `setupWith` given the add-on's files (the manifest's
+    /// commands), which are read on the add-on's thread.
+    func call(kind: String, id commandID: String = "", input makeInput: @escaping (AddonCall) -> String?,
+              setupWith: @escaping (AddonFiles) -> AddonCall.Setup,
+              before: @escaping () -> Void = {}, done: @escaping (AddonRun) -> Void) {
         lock.lock()
-        busy = true
+        // a runner closed between the pool handing it out and this call: its thread takes no more work
+        let gone = closed
+        if !gone {
+            busy = true
+            pending += 1
+        }
         lock.unlock()
+        if gone { return done(AddonRunner.ended("stopped")) }
         thread.run { [self] in
             before()
-            let call = AddonCall(setup())
+            // stopped while it waited its turn: it never starts
+            lock.lock()
+            let stoppedEarly = stopPending
+            if stoppedEarly { endedLocked() }
+            lock.unlock()
+            if stoppedEarly { return done(AddonRunner.ended("stopped")) }
+            if !read {
+                files = source()
+                read = true
+            }
+            guard let files else {
+                lock.lock()
+                endedLocked()
+                lock.unlock()
+                return done(AddonRunner.ended("addon.missing"))
+            }
+            let call = AddonCall(setupWith(files))
             box.call = call
             var envelope: String
             var ran = 0.0, callMs = 0.0
             let loadStart = DispatchTime.now().uptimeNanoseconds
-            let loadCode = ensureLoaded()
+            let loadCode = ensureLoaded(files)
             let loadMs = Double(DispatchTime.now().uptimeNanoseconds - loadStart) / 1e6
             if let loadCode {
                 envelope = AddonRunner.failure(loadCode)
@@ -221,26 +292,44 @@ final class AddonRunner {
             }
             box.call = nil
             lock.lock()
-            busy = false
-            lastUsed = Date()
+            let stopped = stopPending
+            endedLocked()
             lock.unlock()
-            done(AddonRun(outcome: call.outcome(envelope), ranMs: ran, loadCode: loadCode, loadMs: loadMs, callMs: callMs))
+            // a runtime that was told to stop stays stopped, so it goes with the call it stopped
+            if stopped { release() }
+            var outcome = call.outcome(envelope)
+            // a stopped call gives nothing to apply, even if the engine finished it before the stop reached it
+            if stopped, kind != "load", outcome.ok { outcome = call.outcome(AddonRunner.failure("stopped")) }
+            // what the call stored is kept only when it ended well
+            call.setup.storage.end(ok: outcome.ok)
+            done(AddonRun(outcome: outcome, ranMs: ran, loadCode: loadCode, loadMs: loadMs, callMs: callMs))
         }
     }
 
-    /// Stops the running call, from any thread: a revoke, the kill switch.
+    /// Stops the call that is queued or running, from any thread. With no
+    /// call there is nothing to stop, and nothing is done: a stop left on an
+    /// idle runtime would refuse every later call.
     func stop() {
         lock.lock()
-        if let rt = runtime { sa_stop(rt) }
+        if busy {
+            stopPending = true
+            if let rt = runtime { sa_stop(rt) }
+        }
         lock.unlock()
     }
 
-    /// Frees the runtime and ends the thread.
+    /// Stops the calls queued or running (each ends "stopped"), frees the
+    /// runtime and ends the thread.
     func close() {
         lock.lock()
+        if closed {
+            lock.unlock()
+            return
+        }
         closed = true
+        if busy { stopPending = true }
+        if let rt = runtime { sa_stop(rt) }
         lock.unlock()
-        stop()
         thread.run { [self] in release() }
         thread.finish()
     }
@@ -273,7 +362,7 @@ final class AddonRunner {
     }
 
     /// Makes the runtime and loads the add-on; the code if it can't.
-    private func ensureLoaded() -> String? {
+    private func ensureLoaded(_ files: AddonFiles) -> String? {
         if runtime != nil { return nil }
         var code = [CChar](repeating: 0, count: 64)
         guard let rt = sa_new(addonHostFunction, Unmanaged.passUnretained(box).toOpaque(), &code, 64) else {
@@ -281,7 +370,7 @@ final class AddonRunner {
         }
         lock.lock()
         runtime = rt
-        let stopNow = closed
+        let stopNow = closed || stopPending
         lock.unlock()
         if stopNow { sa_stop(rt) }
         let names = files.names.map { strdup($0) }

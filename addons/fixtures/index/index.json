@@ -1,152 +1,193 @@
 {
+  "format": "sorta-addons-index",
   "formatVersion": 1,
+  "builtFrom": "0000000000000000000000000000000000000000",
   "addons": [
     {
       "id": "io.github.example.badsum",
-      "version": "1.0.0",
       "name": "Bad sum",
-      "author": "Example",
-      "sha256": "75a5d64923e13f33f1eccf3d842323de093d21486f5fa87bf9086ed5e0651fc4",
-      "size": 863,
-      "permissions": [
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.badsum-1.0.0.sortaaddon"
+      "author": {
+        "name": "Example",
+        "url": "https://github.com/example"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "file": "dist/io.github.example.badsum-1.0.0.sortaaddon",
+          "sha256": "75a5d64923e13f33f1eccf3d842323de093d21486f5fa87bf9086ed5e0651fc4",
+          "size": 863,
+          "permissions": [
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        }
+      ]
     },
     {
       "id": "io.github.example.linkcheck",
-      "version": "1.0.0",
       "name": "Link check",
-      "author": "Example",
-      "sha256": "25818be6b4b39df2466da4dba0ac99ae596547ae1521b8468a01e31e9aa476c1",
-      "size": 923,
-      "permissions": [
-        "ideas.read",
-        "commands",
-        "net"
-      ],
-      "hosts": [
-        "api.example.com"
-      ],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.linkcheck-1.0.0.sortaaddon"
+      "author": {
+        "name": "Example",
+        "url": "https://github.com/example"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "file": "dist/io.github.example.linkcheck-1.0.0.sortaaddon",
+          "sha256": "25818be6b4b39df2466da4dba0ac99ae596547ae1521b8468a01e31e9aa476c1",
+          "size": 923,
+          "permissions": [
+            "ideas.read",
+            "commands",
+            "net"
+          ],
+          "hosts": [
+            "api.example.com"
+          ],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        },
+        {
+          "version": "1.2.0",
+          "file": "dist/io.github.example.linkcheck-1.2.0.sortaaddon",
+          "sha256": "bd6623a96ebc4214dba3e511937abb39192fc84825e3418228648e24cf035954",
+          "size": 965,
+          "permissions": [
+            "ideas.read",
+            "ideas.write",
+            "commands",
+            "net"
+          ],
+          "hosts": [
+            "api.example.com",
+            "cdn.example.com"
+          ],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        }
+      ]
     },
     {
-      "id": "io.github.example.linkcheck",
-      "version": "1.2.0",
-      "name": "Link check",
-      "author": "Example",
-      "sha256": "bd6623a96ebc4214dba3e511937abb39192fc84825e3418228648e24cf035954",
-      "size": 965,
-      "permissions": [
-        "ideas.read",
-        "ideas.write",
-        "commands",
-        "net"
-      ],
-      "hosts": [
-        "api.example.com",
-        "cdn.example.com"
-      ],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.linkcheck-1.2.0.sortaaddon"
-    },
-    {
-      "id": "io.github.example.tagger",
-      "version": "1.0.0",
-      "name": "Tagger",
-      "author": "Example",
-      "sha256": "b4c7c57a3ad344fb62a1abb30074f2138f04152c84a6d10bd1d3159d86eb0d35",
-      "size": 899,
-      "permissions": [
-        "ideas.read",
-        "ideas.write",
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.tagger-1.0.0.sortaaddon"
-    },
-    {
-      "id": "io.github.example.tagger",
-      "version": "1.5.0",
-      "name": "Tagger",
-      "author": "Example",
-      "sha256": "6b933ee415496e5539e7c2f8cfd39136d77af73c0436fbad4074a8d80d0fd48a",
-      "size": 900,
-      "permissions": [
-        "ideas.read",
-        "ideas.write",
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "99.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.tagger-1.5.0.sortaaddon"
+      "id": "io.github.sample.notes",
+      "name": "Sample notes",
+      "author": {
+        "name": "Sample",
+        "url": "https://github.com/sample"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "file": "dist/io.github.sample.notes-1.0.0.sortaaddon",
+          "sha256": "d3b03acc7dade7d53d2e89eccedc4e2dd5e9bf9c17e87a233a976c4f3c81865c",
+          "size": 882,
+          "permissions": [
+            "ideas.read",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        }
+      ]
     },
     {
       "id": "io.github.example.tagger",
-      "version": "2.0.0",
       "name": "Tagger",
-      "author": "Example",
-      "sha256": "dad81c9dc7d702ff2e77720efdca97b70aaa5603bbfa7bb699d1c2963805ddd2",
-      "size": 899,
-      "permissions": [
-        "ideas.read",
-        "ideas.write",
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "1.0.0",
-      "api": 2,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.tagger-2.0.0.sortaaddon"
+      "author": {
+        "name": "Example",
+        "url": "https://github.com/example"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "file": "dist/io.github.example.tagger-1.0.0.sortaaddon",
+          "sha256": "b4c7c57a3ad344fb62a1abb30074f2138f04152c84a6d10bd1d3159d86eb0d35",
+          "size": 899,
+          "permissions": [
+            "ideas.read",
+            "ideas.write",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        },
+        {
+          "version": "1.5.0",
+          "file": "dist/io.github.example.tagger-1.5.0.sortaaddon",
+          "sha256": "6b933ee415496e5539e7c2f8cfd39136d77af73c0436fbad4074a8d80d0fd48a",
+          "size": 900,
+          "permissions": [
+            "ideas.read",
+            "ideas.write",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "99.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        },
+        {
+          "version": "2.0.0",
+          "file": "dist/io.github.example.tagger-2.0.0.sortaaddon",
+          "sha256": "dad81c9dc7d702ff2e77720efdca97b70aaa5603bbfa7bb699d1c2963805ddd2",
+          "size": 899,
+          "permissions": [
+            "ideas.read",
+            "ideas.write",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 2,
+          "commit": "0000000000000000000000000000000000000000"
+        }
+      ]
     },
     {
       "id": "io.github.example.wordcount",
-      "version": "1.0.0",
       "name": "Word count",
-      "author": "Example",
-      "sha256": "5cd1257c183a1615c91500a50f31546d625feaa89a0cd2febbb1f6c595ac54cb",
-      "size": 887,
-      "permissions": [
-        "ideas.read",
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.wordcount-1.0.0.sortaaddon"
-    },
-    {
-      "id": "io.github.example.wordcount",
-      "version": "1.1.0",
-      "name": "Word count",
-      "author": "Example",
-      "sha256": "2fef22c666463a9edbe912a482c0108210806a05a88c6fc123671029a706a05b",
-      "size": 887,
-      "permissions": [
-        "ideas.read",
-        "commands"
-      ],
-      "hosts": [],
-      "minSorta": "1.0.0",
-      "api": 1,
-      "commit": "0000000000000000000000000000000000000000",
-      "file": "dist/io.github.example.wordcount-1.1.0.sortaaddon"
+      "author": {
+        "name": "Example",
+        "url": "https://github.com/example"
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "file": "dist/io.github.example.wordcount-1.0.0.sortaaddon",
+          "sha256": "5cd1257c183a1615c91500a50f31546d625feaa89a0cd2febbb1f6c595ac54cb",
+          "size": 887,
+          "permissions": [
+            "ideas.read",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        },
+        {
+          "version": "1.1.0",
+          "file": "dist/io.github.example.wordcount-1.1.0.sortaaddon",
+          "sha256": "2fef22c666463a9edbe912a482c0108210806a05a88c6fc123671029a706a05b",
+          "size": 887,
+          "permissions": [
+            "ideas.read",
+            "commands"
+          ],
+          "hosts": [],
+          "minSorta": "1.0.0",
+          "api": 1,
+          "commit": "0000000000000000000000000000000000000000"
+        }
+      ]
     }
-  ],
-  "signatures": null
+  ]
 }

@@ -74,7 +74,7 @@ object AddonPackageCheck {
         val files = HashMap<String, Int>()
         names.forEachIndexed { i, n -> files[n] = i }
         manifestRules(manifest, files, data, texts)
-        return AddonPackage(manifest, AddonFiles(names, data, manifest["main"]?.string ?: ""), data.sumOf { it.size })
+        return AddonPackage(manifest, AddonFiles(names, data, manifest["main"]?.string ?: "", AddonFiles.commandsOf(manifest)), data.sumOf { it.size })
     }
 
     fun allowedFile(name: String): Boolean {

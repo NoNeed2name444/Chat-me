@@ -1,0 +1,48 @@
+{
+  "format": "sorta-addon",
+  "formatVersion": 1,
+  "id": "io.github.example.fixture",
+  "name": "Fixture",
+  "version": "1.0.0",
+  "author": {
+    "name": "Example",
+    "url": "https://github.com/example"
+  },
+  "license": "MIT",
+  "minSorta": "1.0.0",
+  "api": 1,
+  "main": "main.js",
+  "permissions": [
+    "ideas.read",
+    "commands"
+  ],
+  "hosts": [],
+  "contributes": {
+    "commands": [
+      {
+        "id": "c1",
+        "title": "Command 1"
+      },
+      {
+        "id": "c2",
+        "title": "Command 2"
+      },
+      {
+        "id": "c3",
+        "title": "Command 3"
+      },
+      {
+        "id": "c4",
+        "title": "Command 4"
+      },
+      {
+        "id": "c5",
+        "title": "Command 5"
+      },
+      {
+        "id": "c6",
+        "title": "Command 6"
+      }
+    ]
+  }
+}

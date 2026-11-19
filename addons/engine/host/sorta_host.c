@@ -331,20 +331,42 @@ static int valid_text(const unsigned char *s, size_t len)
     return 1;
 }
 
+/* A call's name is one of the API's own: lowercase ASCII letters and dots, at
+ * most 40. Nothing else reaches the app's side, whatever script hands in. */
+static int valid_name(const char *s)
+{
+    size_t n = 0;
+    for (; s[n]; n++) {
+        if (n >= 40 || !((s[n] >= 'a' && s[n] <= 'z') || s[n] == '.'))
+            return 0;
+    }
+    return n > 0;
+}
+
 static JSValue host_call(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     sa_runtime *rt = JS_GetContextOpaque(ctx);
     (void)this_val;
-    if (argc < 2)
+    if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsString(argv[1]))
         return JS_NewString(ctx, "!api.args");
     const char *name = JS_ToCString(ctx, argv[0]);
     if (!name)
         return JS_EXCEPTION;
+    if (!valid_name(name)) {
+        JS_FreeCString(ctx, name);
+        return JS_NewString(ctx, "!api.unknown");
+    }
     size_t len = 0;
     const char *args = JS_ToCStringLen(ctx, &len, argv[1]);
     if (!args) {
         JS_FreeCString(ctx, name);
         return JS_EXCEPTION;
+    }
+    /* the arguments are JSON text the prelude wrote; anything else is refused here */
+    if (len <= SA_JSON_LIMIT && !valid_text((const unsigned char *)args, len)) {
+        JS_FreeCString(ctx, args);
+        JS_FreeCString(ctx, name);
+        return JS_NewString(ctx, "!api.args");
     }
     sa_reply reply = { 0 };
     int64_t before = now_ns();
@@ -689,9 +711,13 @@ static char *one_call(sa_runtime *rt, const char *kind, const char *id, const ch
             size_t len;
             const char *text = JS_ToCStringLen(ctx, &len, s);
             if (text) {
-                /* the prelude's ok() answers "!limit.json" for a result it stopped writing */
-                out = (len > SA_JSON_LIMIT || text[0] == '!') ? failure("limit.json", out_len)
-                                                              : copy_out(text, len, out_len);
+                /* the prelude's ok() answers "!limit.json" for a result it stopped writing, and
+                 * "!result.shape" for one that holds half a surrogate pair */
+                if (!strcmp(text, "!result.shape"))
+                    out = failure("result.shape", out_len);
+                else
+                    out = (len > SA_JSON_LIMIT || text[0] == '!') ? failure("limit.json", out_len)
+                                                                  : copy_out(text, len, out_len);
                 JS_FreeCString(ctx, text);
             }
             JS_FreeValue(ctx, s);

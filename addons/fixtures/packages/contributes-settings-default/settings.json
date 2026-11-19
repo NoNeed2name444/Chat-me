@@ -1,0 +1,10 @@
+{
+  "settings": [
+    {
+      "key": "titles",
+      "type": "toggle",
+      "title": "Count words in titles",
+      "default": "no"
+    }
+  ]
+}

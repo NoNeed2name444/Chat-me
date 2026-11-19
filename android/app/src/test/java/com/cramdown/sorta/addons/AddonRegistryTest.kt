@@ -14,7 +14,12 @@ class AddonRegistryTest {
     private var clock = 1_000_000L
     private val id = "io.github.example.tests"
     private val bytes = AddonTestFiles.addon(AddonTestFiles.manifest(permissions = listOf("ideas.read", "ideas.write", "commands", "net"), hosts = listOf("api.example.com")))
-    private fun registry() = AddonRegistry(folder, clock = { clock })
+    private val opened = ArrayList<AddonRegistry>()
+    /** A registry on the folder, once the ones before it have written what they hold (their saves run on a thread of their own). */
+    private fun registry(): AddonRegistry {
+        opened.forEach { it.flush() }
+        return AddonRegistry(folder, clock = { clock }).also { opened.add(it) }
+    }
     private fun installed(r: AddonRegistry = registry(), grants: List<String> = listOf("ideas.read", "commands")) =
         r.also { it.install(AddonReview.make(bytes, "1.0.0"), bytes, grants) }
 
@@ -102,13 +107,34 @@ class AddonRegistryTest {
         assertEquals(2, registry().activity(id).size)
         clock += 2 * 86_400_000L
         assertEquals(listOf("/v1/old"), registry().activity(id).map { it.activity.path })
+        r.flush()
         val kept = File(folder, "addons.json").readText()
         assertTrue(kept.contains("\"host\":\"api.example.com\"") && !kept.contains("?"))
+    }
+
+    @Test fun theActivityLogIsCappedAndSoIsEachPath() {
+        val r = installed()
+        // the add-on chooses its paths, and how many requests it makes
+        repeat(30) { n -> r.log(id, (0 until 20).map { AddonActivity("api.example.com", "/" + "p".repeat(5_000) + (n * 20 + it), 200, 1, 1) }) }
+        r.log(id, listOf(AddonActivity("api.example.com", "/last", 200, 1, 1)))
+        val kept = registry().activity(id)
+        assertEquals(AddonRegistry.ACTIVITY_MAX, kept.size)
+        assertEquals("the newest are the ones kept", "/last", kept.last().activity.path)
+        assertTrue(kept.all { it.activity.path.length <= AddonRegistry.ACTIVITY_PATH_MAX })
+        assertTrue("the file stays small", File(folder, "addons.json").length() < 80_000)
     }
 
     @Test fun storageIsKeptPerAddon() {
         val r = installed()
         r.storage(id).set("k", "[1,2]")
+        assertTrue("nothing is saved until the call ends", registry().storage(id).values.isEmpty())
+        r.storage(id).end(true)
+        // a call that is stopped, refused or fails keeps none of what it stored
+        r.storage(id).set("k", "[3]")
+        r.storage(id).set("other", "1")
+        assertEquals("[3]", r.storage(id).values["k"])
+        r.storage(id).end(false)
+        assertEquals(mapOf("k" to "[1,2]"), r.storage(id).values)
         assertEquals("[1,2]", registry().storage(id).values["k"])
         assertTrue(registry().storage("io.github.example.other").values.isEmpty())
         r.remove(id)
@@ -125,6 +151,17 @@ class AddonRegistryTest {
         assertEquals(3, pool.alive)
         pool.sweep(System.currentTimeMillis() + 31_000)
         assertEquals("idle 30 s: freed", 0, pool.alive)
+    }
+
+    @Test fun aRunnerMadeForOtherFilesIsReplaced() {
+        val pool = AddonPool(AddonStandInEngine.Companion.Maker(AddonScript()))
+        val files = AddonFiles(listOf("main.js"), listOf(ByteArray(0)), "main.js")
+        val first = pool.runner("a", "one", { files })
+        assertTrue("the same files: the same runner", first === pool.runner("a", "one", { files }))
+        val second = pool.runner("a", "two", { files })
+        assertTrue(second !== first && second!!.stamp == "two")
+        assertEquals(1, pool.alive)
+        pool.closeAll()
     }
 
     @Test fun anAddonRunsAtMostThreeSecondsAMinute() {

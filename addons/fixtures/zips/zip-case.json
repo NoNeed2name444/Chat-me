@@ -1,0 +1,8 @@
+{
+  "about": "main.js and Main.js.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "Main.js", "text": "sorta.commands.on(\"count\", async () => ({ message: \"Counted\" }));\n"}
+  ],
+  "expect": {"verdict": "refused", "reason": "zip.case"}
+}

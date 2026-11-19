@@ -37,7 +37,7 @@ class AddonHostileTest {
             val ms = if (kind == "load") r.loadMs else r.callMs
             assertEquals(name, c["expect"]?.string, code)
             assertTrue("$name stopped within its limit plus 50 ms: $ms ms", ms <= limit + 50)
-            assertTrue("$name applied nothing", ran.text.contains("applied none") || kind == "load")
+            assertTrue("$name applied nothing", ran.text.contains("applied none") || kind == "load" || (code == "ok" && ran.text.contains(NO_CHANGE)))
             assertTrue("$name: main-thread gap ${heart.largestGapMs} ms, baseline $baseline ms", heart.largestGapMs <= baseline + 50)
             Log.i("SortaAddons", "hostile %s %s %.1f ms, beat %.1f ms (baseline %.1f ms)".format(name, code, ms, heart.largestGapMs, baseline))
         }
@@ -50,6 +50,9 @@ class AddonHostileTest {
     @Test fun loopMemoryRecursionNestingHuge() = run(groups[0])
     @Test fun floodEvalWritesCaptures() = run(groups[1])
     @Test fun revokeRegexCardTopLevel() = run(groups[2])
+    /** Repair 1: the engine's stack-trace hooks give no function of Sorta's own, and text outside the first 65,536
+     *  characters, or half a surrogate pair, breaks nothing (the call's name crosses JNI as bytes). */
+    @Test fun stackTraceAndOddNames() = run(groups[3])
 
     // threads
 
@@ -89,6 +92,8 @@ class AddonHostileTest {
 
     private companion object {
         val groups = listOf(listOf("loop", "memory", "recursion", "json", "huge"), listOf("flood", "eval", "writes", "captures"),
-            listOf("revoke", "regex", "card", "toplevel"))
+            listOf("revoke", "regex", "card", "toplevel"), listOf("stacktrace", "name4", "surrogate"))
+        /** What a call that ended well and asked for no change applied. */
+        const val NO_CHANGE = "applied {\"added\":[],\"changed\":[],\"skipped\":[]}"
     }
 }

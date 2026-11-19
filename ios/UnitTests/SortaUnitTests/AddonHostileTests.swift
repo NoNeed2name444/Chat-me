@@ -22,7 +22,8 @@ final class AddonHostileTests: XCTestCase {
             let ms = kind == "load" ? r.loadMs : r.callMs
             XCTAssertEqual(code, c["expect"]?.string, name)
             XCTAssertLessThanOrEqual(ms, limit + 50, "\(name) stopped within its limit plus 50 ms")
-            XCTAssertTrue(text.contains("applied none") || kind == "load", "\(name) applied nothing")
+            XCTAssertTrue(text.contains("applied none") || kind == "load" || (code == "ok" && text.contains(AddonHostileTests.noChange)),
+                          "\(name) applied nothing")
             XCTAssertLessThanOrEqual(heart.largestGapMs, baseline + 50,
                                      "\(name): main-thread gap \(heart.largestGapMs) ms, baseline \(baseline) ms")
             print("hostile \(name) \(code) \(String(format: "%.1f", ms)) ms, beat \(String(format: "%.1f", heart.largestGapMs)) ms (baseline \(String(format: "%.1f", baseline)) ms)")
@@ -37,11 +38,17 @@ final class AddonHostileTests: XCTestCase {
 
     static let groups = [["loop", "memory", "recursion", "json", "huge"],
                          ["flood", "eval", "writes", "captures"],
-                         ["revoke", "regex", "card", "toplevel"]]
+                         ["revoke", "regex", "card", "toplevel"],
+                         ["stacktrace", "name4", "surrogate"]]
+    /// What a call that ended well and asked for no change applied.
+    static let noChange = "applied {\"added\":[],\"changed\":[],\"skipped\":[]}"
 
     func testLoopMemoryRecursionNestingHuge() throws { try run(AddonHostileTests.groups[0]) }
     func testFloodEvalWritesCaptures() throws { try run(AddonHostileTests.groups[1]) }
     func testRevokeRegexCardTopLevel() throws { try run(AddonHostileTests.groups[2]) }
+    /// Repair 1: the engine's stack-trace hooks give no function of Sorta's own, and text outside the
+    /// first 65,536 characters, or half a surrogate pair, breaks nothing.
+    func testStackTraceAndOddNames() throws { try run(AddonHostileTests.groups[3]) }
 
     // MARK: threads
 

@@ -1,0 +1,8 @@
+{
+  "about": "A .json file with a NUL byte.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "data.json", "hex": "7b2261223a2000227d0a"}
+  ],
+  "expect": {"verdict": "refused", "reason": "file.text"}
+}

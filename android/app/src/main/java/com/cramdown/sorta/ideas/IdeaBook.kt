@@ -438,11 +438,14 @@ class IdeaBook(
     /**
      * An add-on call's writes (addons/AddonApply), applied in one change: the book saves once, and the
      * Reshaped is the one Undo step (null when nothing changed). The Long is the apply's own time in
-     * nanoseconds, the save left out. iOS NoteStore.applyAddonBatch.
+     * nanoseconds, the save left out. [prepared] is the same batch worked out on the add-on's thread: it is
+     * taken as it is when the book still holds the lists it was worked out from. iOS NoteStore.applyAddonBatch.
      */
-    fun applyAddonBatch(ops: List<com.cramdown.sorta.addons.AddonOp>, time: Long = now()): Triple<com.cramdown.sorta.addons.AddonApplied, Reshaped?, Long> {
+    fun applyAddonBatch(ops: List<com.cramdown.sorta.addons.AddonOp>, time: Long = now(),
+        prepared: com.cramdown.sorta.addons.AddonApply.Prepared? = null): Triple<com.cramdown.sorta.addons.AddonApplied, Reshaped?, Long> {
         val start = System.nanoTime()
-        val out = com.cramdown.sorta.addons.AddonApply.apply(ops, notes, folders.mapTo(HashSet()) { it.id }, time)
+        val out = if (prepared != null && prepared.fits(notes, folders, time)) prepared.result
+        else com.cramdown.sorta.addons.AddonApply.apply(ops, notes, folders.mapTo(HashSet()) { it.id }, time)
         val first = out.added.firstOrNull() ?: out.before.firstOrNull()?.note?.id ?: return Triple(out.applied, null, System.nanoTime() - start)
         notes = out.notes
         val took = System.nanoTime() - start

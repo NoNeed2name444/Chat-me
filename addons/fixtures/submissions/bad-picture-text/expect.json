@@ -1,0 +1,7 @@
+{
+  "about": "Pictures written into text: an SVG in the README and a data: address in a .json file.",
+  "verdict": "fail",
+  "reasons": [
+    "review.picture"
+  ]
+}

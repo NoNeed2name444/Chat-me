@@ -1,0 +1,10 @@
+{
+  "about": "An archive comment after the end record.",
+  "from": "ok-minimal",
+  "entries": [],
+  "comment": "hidden",
+  "expect": {
+    "verdict": "refused",
+    "reason": "zip.unreadable"
+  }
+}

@@ -32,7 +32,7 @@ import tempfile
 from pathlib import Path
 
 SORTA = Path(__file__).resolve().parent.parent
-TAKEN = ("ios/", "android/", "tools/")
+TAKEN = ("ios/", "android/", "tools/", "addons/")
 LEFT_OUT = ("tools/private/",)
 WORKFLOWS = "ci/public/"
 ART = ("work/", "design/")

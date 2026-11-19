@@ -1,0 +1,8 @@
+{
+  "about": "A .json file that holds a PNG's first bytes.",
+  "from": "ok-minimal",
+  "entries": [
+    {"name": "data.json", "hex": "89504e470d0a1a0a0000000d49484452"}
+  ],
+  "expect": {"verdict": "refused", "reason": "file.text"}
+}

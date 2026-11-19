@@ -141,10 +141,18 @@ extension NoteStore {
     /// An add-on call's writes (AddonApply), applied in one change: the store
     /// saves once, and the Reshape is the one Undo step (nil when nothing
     /// changed). `applyNanos` is the apply's own time, the save left out.
-    func applyAddonBatch(_ ops: [AddonOp], now: Date = Date())
+    /// `prepared` is the same batch worked out on the add-on's thread: it is
+    /// taken as it is when the store still holds the arrays it was worked
+    /// out from.
+    func applyAddonBatch(_ ops: [AddonOp], now: Date = Date(), prepared: AddonApply.Prepared? = nil)
         -> (applied: AddonApplied, reshape: Reshape?, applyNanos: UInt64) {
         let start = DispatchTime.now().uptimeNanoseconds
-        let out = AddonApply.apply(ops, to: notes, folders: Set(folders.map(\.id)), now: now)
+        let out: AddonApply.Result
+        if let prepared, prepared.fits(notes, folders, now: now) {
+            out = prepared.result
+        } else {
+            out = AddonApply.apply(ops, to: notes, folders: Set(folders.map(\.id)), now: now)
+        }
         guard let first = out.added.first ?? out.before.first?.note.id else {
             return (out.applied, nil, DispatchTime.now().uptimeNanoseconds - start)
         }

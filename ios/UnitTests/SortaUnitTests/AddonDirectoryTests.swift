@@ -51,12 +51,12 @@ final class AddonDirectoryTests: XCTestCase {
                            clock: { [unowned self] in self.clock })
         }
 
-        func entry(_ id: String, _ version: String) throws -> AddonIndexEntry {
-            try XCTUnwrap(try directory().index().get().first { $0.id == "io.github.example." + id && $0.version == version })
+        func entry(_ id: String, _ version: String, owner: String = "io.github.example.") throws -> AddonIndexEntry {
+            try XCTUnwrap(try directory().index().get().first { $0.id == owner + id && $0.version == version })
         }
 
-        func install(_ id: String, _ version: String) throws {
-            let (review, bytes) = try directory().review(try entry(id, version)).get()
+        func install(_ id: String, _ version: String, owner: String = "io.github.example.") throws {
+            let (review, bytes) = try directory().review(try entry(id, version, owner: owner)).get()
             _ = try registry.install(review, bytes: bytes, grants: review.permissions.filter { $0 != "net" } + review.hosts.map { "net:" + $0 },
                                      fromDirectory: true)
         }
@@ -72,7 +72,14 @@ final class AddonDirectoryTests: XCTestCase {
     func testAListedPackageIsCheckedAgainstTheIndexBeforeItIsOpened() throws {
         let r = try Rig()
         let d = r.directory()
-        XCTAssertEqual(try d.index().get().count, 8)
+        let listed = try d.index().get()
+        XCTAssertEqual(listed.count, 9, "each version of each add-on is one entry")
+        XCTAssertEqual(Set(listed.map(\.id)).count, 5)
+        // the add-on's name and its author's url come with each of its versions
+        let tagger = listed.filter { $0.id == "io.github.example.tagger" }
+        XCTAssertEqual(tagger.map(\.version), ["1.0.0", "1.5.0", "2.0.0"])
+        XCTAssertTrue(tagger.allSatisfy { $0.name == "Tagger" && $0.authorUrl == "https://github.com/example" })
+        XCTAssertEqual(listed.first { $0.id == "io.github.sample.notes" }?.authorUrl, "https://github.com/sample")
         let (review, bytes) = try d.review(try r.entry("wordcount", "1.0.0")).get()
         XCTAssertEqual(review.sha256, AddonSHA256.hex(bytes))
         XCTAssertEqual(code(d.review(try r.entry("badsum", "1.0.0"))), "index.checksum")
@@ -80,7 +87,13 @@ final class AddonDirectoryTests: XCTestCase {
         XCTAssertEqual(code(d.review(try r.entry("tagger", "2.0.0"))), "install.api")
         let none = AddonDirectory(base: "", fetcher: r.fetcher, registry: r.registry, appVersion: "1.0.0")
         XCTAssertEqual(code(none.index()), "index.none")
-        XCTAssertThrowsError(try AddonDirectory.parseIndex(Data(#"{"formatVersion":2,"addons":[]}"#.utf8)))
+        XCTAssertThrowsError(try AddonDirectory.parseIndex(Data(#"{"format":"sorta-addons-index","formatVersion":2,"addons":[]}"#.utf8)))
+        XCTAssertThrowsError(try AddonDirectory.parseIndex(Data(#"{"formatVersion":1,"addons":[]}"#.utf8)))
+        XCTAssertEqual(try AddonDirectory.parseIndex(Data(#"{"format":"sorta-addons-index","formatVersion":1,"addons":[],"signatures":{}}"#.utf8)), [],
+                       "an empty directory, and a field the app doesn't know")
+        // one entry for each version was the lane's own first guess at the format: it is not the directory's
+        XCTAssertThrowsError(try AddonDirectory.parseIndex(Data(
+            #"{"format":"sorta-addons-index","formatVersion":1,"addons":[{"id":"io.github.example.a","version":"1.0.0"}]}"#.utf8)))
     }
 
     func testUpdatesAreOfferedBySectionSevensRules() throws {
@@ -119,20 +132,83 @@ final class AddonDirectoryTests: XCTestCase {
         XCTAssertEqual(d.dailyCheck()?.count, 1)
     }
 
+    func testAFailedCheckIsTriedAgainAtTheNextChance() throws {
+        final class Flaky: AddonFetcher {
+            var down = true
+            let real: AddonFetcher
+            init(_ real: AddonFetcher) { self.real = real }
+            func get(_ url: String, limit: Int) -> Result<Data, AddonFetchError> {
+                down ? .failure(AddonFetchError(code: "net.failed")) : real.get(url, limit: limit)
+            }
+        }
+        let r = try Rig()
+        try r.install("wordcount", "1.0.0")
+        let flaky = Flaky(r.fetcher)
+        let d = AddonDirectory(base: AddonDirectoryTests.base, fetcher: flaky, registry: r.registry, appVersion: "1.0.0",
+                               clock: { r.clock })
+        XCTAssertEqual(d.dailyCheck(), [], "the check ran and got nothing")
+        XCTAssertEqual(r.registry.lastDirectoryCheck, 0, "a failed check does not start the day")
+        flaky.down = false
+        XCTAssertEqual(d.dailyCheck()?.count, 1)
+        XCTAssertEqual(r.registry.lastDirectoryCheck, r.clock)
+        XCTAssertNil(d.dailyCheck(), "once a day, from the check that worked")
+    }
+
+    /// The fixture revoked.json has one entry of each kind: tagger 1.0.0 by
+    /// version, linkcheck 1.2.0 by a version nobody here has, badsum whole,
+    /// and the author of io.github.sample.notes.
     func testARevokedAddonIsTurnedOff() throws {
         let r = try Rig()
         let d = r.directory()
         try r.install("tagger", "1.0.0")
         try r.install("wordcount", "1.0.0")
+        try r.install("linkcheck", "1.0.0")
+        try r.install("notes", "1.0.0", owner: "io.github.sample.")
+        XCTAssertEqual(r.registry.addon("io.github.sample.notes")?.authorUrl, "https://github.com/sample")
         var stopped: [String] = []
         r.registry.onStop = { stopped.append($0) }
-        XCTAssertTrue(r.registry.canRun("io.github.example.tagger"))
+        XCTAssertTrue(r.registry.canRun("io.github.example.tagger") && r.registry.canRun("io.github.sample.notes"))
         _ = d.dailyCheck()
         let tagger = try XCTUnwrap(r.registry.addon("io.github.example.tagger"))
         XCTAssertTrue(tagger.revoked && !tagger.on)
         XCTAssertFalse(r.registry.canRun("io.github.example.tagger"))
-        XCTAssertTrue(r.registry.canRun("io.github.example.wordcount"))
-        XCTAssertEqual(stopped, ["io.github.example.tagger"])
+        XCTAssertFalse(r.registry.canRun("io.github.sample.notes"), "its author is revoked")
+        XCTAssertTrue(r.registry.canRun("io.github.example.wordcount"), "another author's add-on")
+        XCTAssertTrue(r.registry.canRun("io.github.example.linkcheck"), "only version 1.2.0 of it is revoked, and 1.0.0 is installed")
+        XCTAssertEqual(stopped, ["io.github.example.tagger", "io.github.sample.notes"])
+        XCTAssertEqual(try AddonDirectory.parseRevoked(Data(contentsOf: try AddonTestFiles.fixtures("index/revoked.json"))), [
+            AddonRevoked(id: "io.github.example.tagger", versions: ["1.0.0"]),
+            AddonRevoked(id: "io.github.example.linkcheck", versions: ["1.2.0"]),
+            AddonRevoked(id: "io.github.example.badsum"),
+            AddonRevoked(author: "https://github.com/sample"),
+        ])
+    }
+
+    func testRevokedEntriesCoverWhatTheDirectorySaysAndNoMore() throws {
+        func parsed(_ entries: String) throws -> [AddonRevoked] {
+            try AddonDirectory.parseRevoked(Data(#"{"format":"sorta-addons-revoked","formatVersion":1,"revoked":["#.utf8) + Data(entries.utf8) + Data("]}".utf8))
+        }
+        func installed(_ version: String, _ author: String = "https://github.com/example") -> AddonInstalled {
+            var a = AddonInstalled(id: "io.github.example.a", version: version, sha256: "", permissions: [], hosts: [], grants: [])
+            a.authorUrl = author
+            return a
+        }
+        let versions = try parsed(#"{"id":"io.github.example.a","versions":["1.0.0","1.1.0"],"reason":"r","date":"2026-11-01"}"#)
+        XCTAssertTrue(versions[0].covers(installed("1.1.0")) && !versions[0].covers(installed("1.2.0")))
+        let whole = try parsed(#"{"id":"io.github.example.a","reason":"r","date":"2026-11-01"}"#)
+        XCTAssertTrue(whole[0].covers(installed("9.9.9")))
+        let author = try parsed(#"{"author":"https://github.com/example","reason":"r","date":"2026-11-01"}"#)
+        XCTAssertTrue(author[0].covers(installed("1.0.0")))
+        XCTAssertFalse(author[0].covers(installed("1.0.0", "https://github.com/example2")), "the url matches exactly, or not at all")
+        XCTAssertFalse(author[0].covers(installed("1.0.0", "")), "an add-on kept from before the author was stored")
+        // an entry the app can't read revokes nothing: it never widens to every version
+        for broken in [#"{"id":"io.github.example.a","versions":"1.0.0"}"#, #"{"id":"io.github.example.a","versions":[]}"#,
+                       #"{"id":"io.github.example.a","versions":[1]}"#,
+                       #"{"id":"io.github.example.a","author":"https://github.com/example"}"#,
+                       #"{"author":"http://github.com/example"}"#, #"{"version":"1.0.0"}"#] {
+            XCTAssertEqual(try parsed(broken), [], broken)
+        }
+        XCTAssertThrowsError(try AddonDirectory.parseRevoked(Data(#"{"revoked":[]}"#.utf8)))
     }
 
     // MARK: the package checker

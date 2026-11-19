@@ -138,6 +138,23 @@ class AddonCallTest {
         assertEquals("nothing is sent before the answer", 1, network.sent.size)
     }
 
+    @Test fun askEachTimeAsksForEveryHostARequestReaches() {
+        val asked = ArrayList<String>()
+        val answers = ArrayList(listOf(true, false, true, true, true))
+        val network = AddonRoutesNetwork(routes)
+        val c = call(net, network = network, consent = { host -> asked.add(host); answers.removeAt(0) })
+        // /v1/moved redirects to cdn.example.com: the person is asked about that host too, before anything is sent there
+        assertEquals("!net.declined", c.ask("net.fetch", s("https://api.example.com/v1/moved"), o()))
+        assertEquals(listOf("api.example.com", "cdn.example.com"), asked)
+        assertEquals("only the first host was sent to", listOf("https://api.example.com/v1/moved"), network.sent.map { it.url })
+        // a redirect on the same host is one question
+        assertTrue(c.ask("net.fetch", s("https://api.example.com/v1/old"), o()).startsWith("{"))
+        assertEquals(3, asked.size)
+        // and each request asks again
+        assertTrue(c.ask("net.fetch", s("https://api.example.com/v1/moved"), o()).startsWith("{"))
+        assertEquals(listOf("api.example.com", "cdn.example.com", "api.example.com", "api.example.com", "cdn.example.com"), asked)
+    }
+
     @Test fun withNetOffInTheBuildThereIsNoNet() {
         val network = AddonRoutesNetwork(routes)
         val c = call(net, netOn = false, network = network)
@@ -158,7 +175,14 @@ class AddonCallTest {
         assertEquals("""{"n":1}""", c.ask("storage.get", s("k")))
         assertEquals("!limit.storage", c.ask("storage.set", s("big"), s("x".repeat(AddonCall.STORAGE_LIMIT))))
         assertEquals("!api.args", c.ask("storage.set", s(""), s("1")))
+        assertEquals("", c.ask("storage.set", s("kept"), s("2")))
         assertEquals("", c.ask("storage.remove", s("k")))
-        assertEquals(listOf(1, 0), saved)
+        assertTrue("nothing is saved while the call runs", saved.isEmpty())
+        storage.end(true)
+        assertEquals("one save, when the call ended well", listOf(1), saved)
+        assertEquals("", c.ask("storage.set", s("late"), s("3")))
+        storage.end(false)
+        assertEquals("a call that did not end well saves nothing", listOf(1), saved)
+        assertEquals("", c.ask("storage.get", s("late")))
     }
 }

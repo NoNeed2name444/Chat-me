@@ -12,10 +12,20 @@ import java.util.UUID
 
 /** An add-on's own small storage: key to the JSON text it stored. */
 class AddonStorage(values: Map<String, String> = emptyMap(), private val saved: (Map<String, String>) -> Unit = {}) {
-    private val map = HashMap(values)
+    private var kept = HashMap(values)
+    private var map = HashMap(values)
+    private var changed = false
+    /** What the add-on sees: what is kept, with this call's own changes. */
     val values: Map<String, String> get() = map
-    fun set(key: String, text: String) { map[key] = text; saved(map) }
-    fun remove(key: String) { map.remove(key); saved(map) }
+    fun set(key: String, text: String) { map[key] = text; changed = true }
+    fun remove(key: String) { map.remove(key); changed = true }
+
+    /** The call ended: its changes are kept and saved if it ended well, and dropped if it was stopped, refused or failed. */
+    fun end(ok: Boolean) {
+        if (!changed) return
+        changed = false
+        if (ok) { kept = HashMap(map); saved(kept) } else map = HashMap(kept)
+    }
 }
 
 /** How a call ended, for the app: its result, and the writes to apply when it succeeded. */
@@ -306,8 +316,11 @@ class AddonCall(val setup: AddonSetup) {
         var body = ""
         o["body"]?.let { b -> if (!b.isNull) body = b.string ?: refuse("api.args") }
         if (AddonText.utf8Count(body) > NET_LIMIT) refuse("net.size")
-        // ask each time: this thread waits for the person's answer
-        setup.consent?.let { ask -> if (!ask(url.host)) refuse("net.declined") }
+        // ask each time: this thread waits for the person's answer, for each host the request reaches (a
+        // redirect to another host is asked about before anything is sent there)
+        val asked = HashSet<String>()
+        fun consent(host: String) { setup.consent?.let { ask -> if (asked.add(host) && !ask(host)) refuse("net.declined") } }
+        consent(url.host)
         val network = setup.network ?: refuse("net.failed")
         var spent = 0
         var hop = 0
@@ -328,6 +341,7 @@ class AddonCall(val setup: AddonSetup) {
                 if (next == null || next.scheme != "https" || "net:" + next.host !in setup.grants) refuse("net.redirect")
                 if (reply.status == 303) { method = "GET"; body = "" }
                 url = next
+                consent(url.host)
                 hop++
                 continue
             }

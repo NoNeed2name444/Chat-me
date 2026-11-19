@@ -2,6 +2,7 @@
 # ../../engine, the same files the iOS and Android apps build.
 #
 #   make            builds build/harness
+#   make expect     the template's own tests/expect.json, on the kit's sample ideas
 #   make check      conformance, hostile fixtures and the permission table
 #                   (from a Sorta checkout, which has addons/conformance)
 
@@ -42,7 +43,10 @@ build/harness: build/harness.o build/sorta_host.o $(QJS_OBJ)
 CONF := ../../conformance
 FIX  := ../../fixtures
 
-check: build/harness harness
+expect: build/harness harness
+	./build/harness expect ../template --ideas ../api/sample-ideas.json
+
+check: build/harness harness expect
 	./build/harness conformance $(CONF) > build/conformance.txt
 	diff -u $(CONF)/expected.txt build/conformance.txt
 	./build/harness hostile $(FIX)/hostile
@@ -51,4 +55,4 @@ check: build/harness harness
 clean:
 	rm -rf build harness
 
-.PHONY: all check clean
+.PHONY: all check expect clean

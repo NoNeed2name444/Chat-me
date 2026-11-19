@@ -72,6 +72,39 @@ class AddonBatchTest {
         assertTrue(b.applyAddonBatch(emptyList()).second == null)
     }
 
+    @Test fun aBatchWorkedOutAheadIsTakenOnlyWhileTheBookIsAsItWas() {
+        val direct = book()
+        val expected = direct.applyAddonBatch(ops, now)
+        // worked out from the book's own lists, as the add-on's thread does: the book takes it as it is
+        val b = book()
+        val prepared = AddonApply.prepare(ops, b.notes, b.folders, now)
+        assertTrue(prepared.fits(b.notes, b.folders, now))
+        val before = b.notes
+        val (applied, reshaped, _) = b.applyAddonBatch(ops, now, prepared)
+        assertEquals(expected.first, applied)
+        assertEquals(direct.notes, b.notes)
+        assertTrue("the very list that was worked out", b.notes === prepared.result.notes)
+        b.undo(reshaped!!)
+        assertEquals(before, b.notes)
+        // the person changed the book while the add-on ran: what was worked out is stale, and the book applies the batch itself
+        val c = book()
+        val stale = AddonApply.prepare(ops, c.notes, c.folders, now)
+        c.applyAddonBatch(listOf(AddonOp.Tag(id(105), listOf("mine"))), now)
+        assertTrue(!stale.fits(c.notes, c.folders, now))
+        c.applyAddonBatch(ops, now, stale)
+        assertTrue("the person's change is kept", "mine" in c.note(id(105))!!.tags)
+        assertTrue("and the batch is applied", "new" in c.note(id(101))!!.tags && c.note(id(7001)) != null)
+        assertTrue("another time is another batch", !AddonApply.prepare(ops, c.notes, c.folders, now).fits(c.notes, c.folders, now + 1))
+    }
+
+    @Test fun aBatchThatWritesNothingCopiesNothing() {
+        val b = book()
+        val notes = b.notes
+        val out = AddonApply.apply(listOf(AddonOp.Tag(id(101), b.note(id(101))!!.tags), AddonOp.Tag(id(999), listOf("x"))), notes, emptySet(), now)
+        assertTrue(out.notes === notes)
+        assertEquals(listOf(id(999)), out.applied.skipped)
+    }
+
     @Test fun aLinkIsKeptOnceWhicheverWayItPoints() {
         val b = book()
         b.applyAddonBatch(listOf(AddonOp.Link(id(105), id(107))))

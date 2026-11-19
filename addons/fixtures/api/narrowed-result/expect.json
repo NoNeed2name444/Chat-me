@@ -1,0 +1,7 @@
+{
+  "about": "sorta.ideas.get no longer returns a Promise.",
+  "verdict": "fail",
+  "reasons": [
+    "narrowed"
+  ]
+}

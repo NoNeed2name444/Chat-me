@@ -21,7 +21,7 @@ typedef struct {
     sa_runtime *rt;
     JNIEnv *env;     /* the entry in progress, on the runtime's own thread */
     jobject host;    /* a global reference to the AddonNative.Host */
-    jmethodID ask;   /* byte[] ask(String name, byte[] args) */
+    jmethodID ask;   /* byte[] ask(byte[] name, byte[] args) */
 } bridge;
 
 static void host_call(void *opaque, sa_reply *reply, const char *name, const char *args, size_t len)
@@ -32,13 +32,22 @@ static void host_call(void *opaque, sa_reply *reply, const char *name, const cha
         sa_reply_error(reply, "api.unknown");
         return;
     }
-    jstring jname = (*env)->NewStringUTF(env, name);
+    /* the name crosses as bytes like every other text: NewStringUTF takes modified UTF-8 only, and
+     * must never be given text an add-on had a hand in. The host has already checked it (lowercase
+     * ASCII letters and dots), and Kotlin checks it again. */
+    size_t name_len = strlen(name);
+    jbyteArray jname = (*env)->NewByteArray(env, (jsize)name_len);
     jbyteArray jargs = (*env)->NewByteArray(env, (jsize)len);
     if (!jname || !jargs) {
         (*env)->ExceptionClear(env);
+        if (jname)
+            (*env)->DeleteLocalRef(env, jname);
+        if (jargs)
+            (*env)->DeleteLocalRef(env, jargs);
         sa_reply_error(reply, "limit.memory");
         return;
     }
+    (*env)->SetByteArrayRegion(env, jname, 0, (jsize)name_len, (const jbyte *)name);
     (*env)->SetByteArrayRegion(env, jargs, 0, (jsize)len, (const jbyte *)args);
     jbyteArray out = (*env)->CallObjectMethod(env, b->host, b->ask, jname, jargs);
     (*env)->DeleteLocalRef(env, jname);
@@ -96,7 +105,7 @@ EXPORT jlong JNICALL NAME(make)(JNIEnv *env, jclass cls, jobject host, jbyteArra
         return 0;
     if (host) {
         jclass hc = (*env)->GetObjectClass(env, host);
-        b->ask = (*env)->GetMethodID(env, hc, "ask", "(Ljava/lang/String;[B)[B");
+        b->ask = (*env)->GetMethodID(env, hc, "ask", "([B[B)[B");
         b->host = (*env)->NewGlobalRef(env, host);
     }
     b->env = env;

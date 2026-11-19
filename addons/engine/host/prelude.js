@@ -2,8 +2,10 @@
 // add-on code runs. It is compiled like add-on code (no eval where it runs)
 // and evaluates to one function, which the host calls with its native `call`
 // and which returns the host's own entry points. Neither `call` nor those
-// entry points is reachable from add-on code. Every builtin used after setup
-// is taken here, before an add-on could change it.
+// entry points is reachable from add-on code: the engine's one way to hand a
+// running function to script, Error.prepareStackTrace with its call sites, is
+// closed below before any add-on code runs. Every builtin used after setup is
+// taken here, before an add-on could change it.
 //
 // embed_prelude.py writes this file into sorta_prelude.h; CI checks the two
 // agree.
@@ -31,6 +33,15 @@
   const startsWith = String.prototype.startsWith;
   const apply = Reflect.apply;
   const global = globalThis;
+
+  // Error.prepareStackTrace is an accessor that sets the engine's hook, and the hook gets CallSite
+  // objects whose getFunction() gives each frame's function, this file's among them. With the accessor
+  // replaced by a fixed, empty property the hook can never be set, so no CallSite is ever made.
+  // captureStackTrace goes too, and the limit is fixed. Assigning to any of them throws (add-ons are
+  // modules, so strict).
+  define(Error, 'prepareStackTrace', { value: undefined, writable: false, enumerable: false, configurable: false });
+  define(Error, 'captureStackTrace', { value: undefined, writable: false, enumerable: false, configurable: false });
+  define(Error, 'stackTraceLimit', { value: 10, writable: false, enumerable: false, configurable: false });
 
   const NAMES = freeze({
     'permission': 'PermissionError',
@@ -70,8 +81,28 @@
     return new SortaError(apply(slice, reply, [1, space]), apply(slice, reply, [space + 1]));
   }
 
+  // JSON.stringify writes half of a surrogate pair on its own as the escape \udXXX, and a whole pair
+  // as it is. Such a half can't be kept as text on every platform, so no call carries one in or out.
+  function lone(json) {
+    let at = 0;
+    for (;;) {
+      const i = apply(indexOf, json, ['\\ud', at]);
+      if (i < 0) return false;
+      // an escape starts at a backslash that an even number of backslashes come before
+      let k = i;
+      while (k > 0 && apply(charCodeAt, json, [k - 1]) === 92) k--;
+      if ((i - k) % 2 === 0) {
+        const c = apply(charCodeAt, json, [i + 3]);
+        if (c === 56 || c === 57 || (c >= 97 && c <= 102)) return true; // d800 to dfff
+      }
+      at = i + 1;
+    }
+  }
+
   function now(name, args) {
-    const reply = call(name, stringify(args));
+    const sent = stringify(args);
+    if (lone(sent)) throw new SortaError('api.args');
+    const reply = call(name, sent);
     if (apply(charCodeAt, reply, [0]) === 33) {
       const e = refused(name, reply);
       if (e.code === 'permission' && NEEDS[name] !== undefined) {
@@ -234,10 +265,13 @@
     return '{' + apply(join, out, [',']) + '}';
   }
 
-  // the envelope, or "!limit.json" for the host to turn into the failure
+  // the envelope, or "!limit.json" or "!result.shape" for the host to turn into the failure
   function ok(v) {
     room = 1048576;
-    try { return '{"ok":true,"value":' + canon(v) + '}'; } catch (e) { if (e === LIMIT) return '!limit.json'; throw e; }
+    let out;
+    try { out = '{"ok":true,"value":' + canon(v) + '}'; } catch (e) { if (e === LIMIT) return '!limit.json'; throw e; }
+    if (lone(out)) return '!result.shape';
+    return out;
   }
 
   function failed(reason) {
