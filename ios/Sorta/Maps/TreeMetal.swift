@@ -18,10 +18,10 @@ import UIKit
 /// the view asks for (only while something moves).
 @MainActor
 final class TreeMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
-    static let hidden: UInt8 = 1
-    static let chosen: UInt8 = 2
-    static let linked: UInt8 = 3
-    static let faded: UInt8 = 4
+    static let hidden = TreeState.hidden
+    static let chosen = TreeState.chosen
+    static let linked = TreeState.linked
+    static let faded = TreeState.faded
     static let light = SIMD3<Float>(-0.42, 0.82, 0.39)
 
     private let device: MTLDevice

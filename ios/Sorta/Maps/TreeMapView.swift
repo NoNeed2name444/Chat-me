@@ -499,17 +499,18 @@ struct TreePart: Identifiable {
         guard let nodes else { return }
         let n = nodes.size
         if states.count != n { states = [UInt8](repeating: 0, count: n) }
-        for i in 0..<n { states[i] = (hidden?[i] ?? false) ? TreeMetalRenderer.hidden : 0 }
+        // the links of the chosen first, marked in the states, then each node's state from them (TreeState)
+        for i in 0..<n { states[i] = TreeState.none }
         if linksOf > 0 {
             for k in 0..<links.size {
                 let a = links.a[k], b = links.b[k]
-                if a == linksOf, b < n, states[b] == 0 { states[b] = TreeMetalRenderer.linked }
-                if b == linksOf, a < n, states[a] == 0 { states[a] = TreeMetalRenderer.linked }
+                if a == linksOf, b < n { states[b] = TreeState.linked }
+                if b == linksOf, a < n { states[a] = TreeState.linked }
             }
         }
-        if chosen >= 0, chosen < n { states[chosen] = TreeMetalRenderer.chosen }
-        if focus > 0, focus < n {
-            for i in 0..<n where states[i] == 0 && !nodes.within(focus, i) { states[i] = TreeMetalRenderer.faded }
+        for i in 0..<n {
+            states[i] = TreeState.of(nodes, i, hidden: hidden?[i] ?? false, chosen: chosen,
+                                     linked: states[i] == TreeState.linked, focus: focus)
         }
         stateVersion &+= 1
     }
@@ -667,9 +668,6 @@ struct TreeMapView: View {
         return out
     }
 
-    /// What the chrome covers inside the map: Back's row at the top, the tools' row at the foot.
-    private static let topChrome: CGFloat = WardControlSize.target + 2 * WardSpace.gutter
-    private static let footChrome: CGFloat = WardControlSize.target + WardSpace.gutter
 
     var body: some View {
         _ = TreeFirstRun.reset
@@ -689,7 +687,10 @@ struct TreeMapView: View {
                 .accessibilityLabel(IdeasWords.treeMapSpoken(nodes.titles[max(0, focus)]))
                 .accessibilityIdentifier("tree-map")
                 .onGeometryChange(for: CGSize.self) { $0.size } action: {
-                    host.resize($0, top: Self.topChrome, bottom: Self.footChrome)
+                    // the map already sits between the strip and the foot; Back and the round tools are
+                    // kept clear as boxes (chromeBoxes), not as whole rows, so the first view has
+                    // Back's empty row too, as Android's
+                    host.resize($0, top: 0, bottom: 0)
                 }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { mapFrame = $0 }
             TreeNamesLayer(host: host)

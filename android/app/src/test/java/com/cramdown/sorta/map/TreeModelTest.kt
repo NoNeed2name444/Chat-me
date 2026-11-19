@@ -58,4 +58,27 @@ class TreeModelTest {
         assertEquals(((trunk shr 16) and 255) / 255f, m.branches[8], 1e-6f)
         assertEquals(((c.sky shr 8) and 255) / 255f, m.sky[1], 1e-6f)
     }
+
+    // the lead's review of the third pass: flown in, the part and all under it draw in full colour and
+    // only the rest fades; a chosen idea or a hidden one keeps its own state
+    @Test fun flownInThePartsInstancesDrawInFullColourAndOnlyTheRestFades() {
+        val nodes = wide(30, 400)
+        val m = TreeModel(nodes, TreeLayout3D(nodes), TreeColors(false), GraphicsTier.HIGH)
+        val focus = (0 until nodes.childCount[0]).map { nodes.child(0, it) }.first { nodes.folder[it] && nodes.childCount[it] > 2 }
+        val chosen = (1 until nodes.size).first { !nodes.folder[it] && nodes.within(focus, it) }
+        val gone = (1 until nodes.size).first { !nodes.folder[it] && nodes.within(focus, it) && it != chosen }
+        fun state(i: Int) = TreeState.of(nodes, i, i == gone, chosen, false, focus)
+        val drawn = (0 until m.branchCount).map { m.branches[it * TreeModel.BRANCH_FLOATS + 11].toInt() } +
+            (0 until m.leafCount).map { m.leaves[it * TreeModel.LEAF_FLOATS + 10].toInt() }
+        val inside = drawn.filter { nodes.within(focus, it) }
+        assertTrue("the part has instances (${inside.size})", inside.size > 10)
+        for (i in inside) {
+            val want = when (i) { gone -> TreeState.HIDDEN; chosen -> TreeState.CHOSEN; else -> TreeState.NONE }
+            assertEquals("node $i under the part", want, state(i))
+        }
+        assertEquals(TreeState.NONE, state(focus))
+        for (i in drawn.filter { !nodes.within(focus, it) }) assertEquals("node $i outside the part", TreeState.FADED, state(i))
+        // the whole tree fades nothing
+        assertTrue(drawn.all { TreeState.of(nodes, it, false, -1, false, 0) == TreeState.NONE })
+    }
 }

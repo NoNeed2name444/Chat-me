@@ -238,6 +238,27 @@ struct TreeScreenNode: Equatable {
     var tip: SIMD2<Float>? = nil
 }
 
+/// Each node's state byte for the renderer (TreeMetal's state buffer):
+/// hidden by the filter, chosen, lit as a link of the chosen, faded toward
+/// the page (outside the part flown in to), or none, the first that holds.
+/// A flown-in part and all under it are never faded: they draw in full
+/// colour. Android's TreeState is the same.
+enum TreeState {
+    static let none: UInt8 = 0
+    static let hidden: UInt8 = 1
+    static let chosen: UInt8 = 2
+    static let linked: UInt8 = 3
+    static let faded: UInt8 = 4
+
+    static func of(_ nodes: NestNodes, _ i: Int, hidden gone: Bool, chosen: Int, linked: Bool, focus: Int) -> UInt8 {
+        if gone { return hidden }
+        if i == chosen { return Self.chosen }
+        if linked { return Self.linked }
+        if focus > 0, focus < nodes.size, !nodes.within(focus, i) { return faded }
+        return none
+    }
+}
+
 /// The Tree's camera moves (S11): the first view, a fly-in and how near and
 /// far the camera may go, all as GraphPerfCamera poses.
 enum TreeCamera3D {

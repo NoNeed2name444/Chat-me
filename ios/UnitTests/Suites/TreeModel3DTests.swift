@@ -343,5 +343,28 @@ for (m, tree) in [(light, "concept"), (storeModel, "store")] {
     check("\(tree): the trunk's big branches at least 3 points across", big.allSatisfy { across($0) >= 3 }, "\(big.map(across))")
 }
 
+// the lead's review of the third pass: flown in to Cardiology, its instances draw in full colour and
+// only the rest fades; a chosen idea or a hidden one keeps its own state (Android's TreeModelTest)
+do {
+    let nodes = light.nodes
+    let chosen = (1..<nodes.size).first { !nodes.folder[$0] && nodes.within(cardiology, $0) } ?? -1
+    let gone = (1..<nodes.size).first { !nodes.folder[$0] && nodes.within(cardiology, $0) && $0 != chosen } ?? -1
+    func state(_ i: Int) -> UInt8 { TreeState.of(nodes, i, hidden: i == gone, chosen: chosen, linked: false, focus: cardiology) }
+    var drawn: [Int] = []
+    for k in 0..<light.branchCount { drawn.append(Int(light.branches[k * TreeModel3D.branchFloats + 11])) }
+    for k in 0..<light.leafCount { drawn.append(Int(light.leaves[k * TreeModel3D.leafFloats + 10])) }
+    let inside = drawn.filter { nodes.within(cardiology, $0) }
+    check("flown in: Cardiology has instances (\(inside.count))", inside.count > 10 && chosen > 0 && gone > 0)
+    let full = inside.allSatisfy { i in
+        let want: UInt8 = i == gone ? TreeState.hidden : (i == chosen ? TreeState.chosen : TreeState.none)
+        return state(i) == want
+    }
+    check("flown in: every instance under Cardiology draws in full colour", full && state(cardiology) == TreeState.none)
+    check("flown in: every instance outside Cardiology fades",
+          drawn.filter { !nodes.within(cardiology, $0) }.allSatisfy { state($0) == TreeState.faded })
+    check("the whole tree fades nothing",
+          drawn.allSatisfy { TreeState.of(nodes, $0, hidden: false, chosen: -1, linked: false, focus: 0) == TreeState.none })
+}
+
 print(failures.isEmpty ? "ALL PASS" : "\(failures.count) FAILED")
 exit(failures.isEmpty ? 0 : 1)

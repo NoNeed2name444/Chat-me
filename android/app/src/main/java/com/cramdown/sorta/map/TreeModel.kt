@@ -122,6 +122,28 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
 }
 
 /**
+ * Each node's state byte for the renderer (TreeGl's texture): hidden by the filter, chosen, lit as a
+ * link of the chosen, faded toward the page (outside the part flown in to), or none, the first that
+ * holds. A flown-in part and all under it are never faded: they draw in full colour. iOS's TreeState
+ * is the same.
+ */
+object TreeState {
+    const val NONE = 0
+    const val HIDDEN = 1
+    const val CHOSEN = 2
+    const val LINKED = 3
+    const val FADED = 4
+
+    fun of(nodes: NestNodes, i: Int, hidden: Boolean, chosen: Int, linked: Boolean, focus: Int): Int = when {
+        hidden -> HIDDEN
+        i == chosen -> CHOSEN
+        linked -> LINKED
+        focus in 1 until nodes.size && !nodes.within(focus, i) -> FADED
+        else -> NONE
+    }
+}
+
+/**
  * The Tree's first view, fitted close (S11, the lead's review of 18 Nov): MapFirstView.framing bounds
  * each point on its own, which left the tree a third of the room; [refine] then projects every point
  * through the pose and scales and moves it until their box, [margin] round each, fills [fill] of the

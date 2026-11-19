@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.TreeState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -124,13 +125,10 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         val nodes = model.nodes
         state.clear()
         for (i in 0 until WIDTH * rows) {
-            val v = when {
-                i >= n -> 0
-                f != null && !f.reachable(i) -> { h++; HIDDEN }
-                i == chosen -> CHOSEN
-                lit != null && i in lit -> LINKED
-                fo in 1 until n && !nodes.within(fo, i) -> FADED
-                else -> 0
+            val v = if (i >= n) TreeState.NONE else {
+                val gone = f != null && !f.reachable(i)
+                if (gone) h++
+                TreeState.of(nodes, i, gone, chosen, lit != null && i in lit, fo)
             }
             state.put(v.toByte())
         }
@@ -204,10 +202,10 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
     companion object {
         /** The state texture's width: a texel a node, a row of 1024. */
         const val WIDTH = 1024
-        const val HIDDEN = 1
-        const val CHOSEN = 2
-        const val LINKED = 3
-        const val FADED = 4
+        const val HIDDEN = TreeState.HIDDEN
+        const val CHOSEN = TreeState.CHOSEN
+        const val LINKED = TreeState.LINKED
+        const val FADED = TreeState.FADED
         private val UNIFORMS = arrayOf("uView", "uProj", "uPixel", "uLight", "uSky", "uFog", "uAccent", "uState", "uCrown")
         private const val U_COUNT = 9
 
