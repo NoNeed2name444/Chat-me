@@ -46,6 +46,14 @@ final class AddonCenterTests: XCTestCase {
                                     .init(name: "main.js", data: Data(main.utf8))] + more)
     }
 
+    /// A number written on one queue and read on another.
+    private final class Stamp: @unchecked Sendable {
+        private let lock = NSLock()
+        private var number: Double?
+        func set(_ v: Double) { lock.lock(); number = v; lock.unlock() }
+        var value: Double? { lock.lock(); defer { lock.unlock() }; return number }
+    }
+
     private struct Rig {
         let store: NoteStore
         let registry: AddonRegistry
@@ -146,15 +154,26 @@ final class AddonCenterTests: XCTestCase {
 
     func testACallQueuedBehindAStoppedOneIsStoppedTooAndTheNextOneRuns() throws {
         let r = try rig()
-        var codes: [String?] = []
-        for _ in 0..<2 {
-            r.center.run(AddonCenterTests.addonId, kind: "command", command: "spin", input: "{\"ideas\":[]}") { codes.append($0.code) }
-        }
+        // the first call to make an engine in a process takes the longest, and the revoke may land while it is made, while
+        // the add-on loads or while it spins: each way, both calls end "stopped". The revoke comes from another queue, so
+        // that a busy main thread can't make it late, and the test says when it came, to tell a late revoke from a lost one.
         let started = Date()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { r.registry.revoke(AddonCenterTests.addonId, "net:api.example.com") }
+        let revoked = AddonCenterTests.Stamp()
+        var codes: [String?] = [], ends: [Double] = []
+        for _ in 0..<2 {
+            r.center.run(AddonCenterTests.addonId, kind: "command", command: "spin", input: "{\"ideas\":[]}") {
+                codes.append($0.code)
+                ends.append(Date().timeIntervalSince(started))
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            r.registry.revoke(AddonCenterTests.addonId, "net:api.example.com")
+            revoked.set(Date().timeIntervalSince(started))
+        }
         AddonHeartbeat.spin(until: { codes.count == 2 }, seconds: 12)
-        XCTAssertEqual(codes, ["stopped", "stopped"])
-        XCTAssertLessThan(Date().timeIntervalSince(started), 0.45, "neither ran to its 500 ms limit")
+        let how = "the revoke came at \(revoked.value.map { String($0) } ?? "never") s, the calls ended at \(ends) s"
+        XCTAssertEqual(codes, ["stopped", "stopped"], how)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.45, "neither ran to its 500 ms limit: " + how)
         XCTAssertTrue(try XCTUnwrap(run(r, "go")).outcome.ok)
     }
 
