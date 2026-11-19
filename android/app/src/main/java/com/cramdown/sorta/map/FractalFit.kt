@@ -49,10 +49,12 @@ object FractalFit {
     /**
      * The pose from [yaw] and [pitch] with a [fovY] field that shows every one of [nodes] with its mark,
      * as large as fits in the room [insets] leave in a [width] x [height] view less [margin] pixels each
-     * side, centred in that room. The pose orbits the middle of what it frames.
+     * side, centred in that room. The pose orbits the middle of what it frames. [marks] is a node's mark
+     * (map units) as a frame draws it, in place of its own: a big hub's dot drawn at its most size, a
+     * speck's at its least.
      */
     fun fit(layout: FractalLayout3D, nodes: IntArray, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float,
-            insets: MapInsets, margin: Float): MapPose {
+            insets: MapInsets, margin: Float, marks: Map<Int, Double> = emptyMap()): MapPose {
         val lens = OrbitCamera(yaw = yaw, pitch = pitch, fovY = fovY)
         val r = lens.right(); val u = lens.up(); val b = lens.forward() * -1f
         val f = lens.focalPixels(height).toDouble()
@@ -71,7 +73,7 @@ object FractalFit {
             x[q] = px * r.x + py * r.y + pz * r.z
             y[q] = px * u.x + py * u.y + pz * u.z
             z[q] = px * b.x + py * b.y + pz * b.z
-            k[q] = mark(layout, i)
+            k[q] = marks[i] ?: mark(layout, i)
             zLow = min(zLow, z[q]); zHigh = max(zHigh, z[q]); nearest = max(nearest, z[q] + k[q])
         }
         if (count == 0) return MapPose(Vec3.ZERO, 1f, yaw, pitch)
@@ -124,11 +126,81 @@ object FractalFit {
     fun margin(width: Float, height: Float, insets: MapInsets): Float =
         MARGIN * max(min(width - insets.left - insets.right, height - insets.top - insets.bottom), 0f)
 
-    /** The first view: All ideas' cluster [WHOLE_LEVELS] deep, from [yaw] and [pitch]. */
-    fun whole(model: FractalModel, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float, insets: MapInsets): MapPose =
-        fit(model.layout, nodes(model.tree, 0, WHOLE_LEVELS, model.budget), yaw, pitch, fovY, width, height, insets, margin(width, height, insets))
+    /**
+     * What a fit of [nodes] ([first]) draws, framed: [sight]'s frame at that pose (its focus and filter as
+     * set), in a view with [density] pixels a dp, then the pose fit once more to [nodes] and every dot drawn
+     * there, each with its glow as drawn. A deeper level's dot or a hub's glow at its least size then stays
+     * in the room, not at the view's edge (the review of S12's stills), and what is drawn is centred there,
+     * not what a nearer pose drew. A pose that draws other dots than the last (one turned into view as the
+     * camera stood back, a level closed as it shrank), or a glow grown, is framed again, at most [PASSES]
+     * times in all. iOS's FractalFit.drawn is the same.
+     */
+    fun drawn(model: FractalModel, sight: FractalSight, nodes: IntArray, first: MapPose, fovY: Float, width: Float, height: Float,
+              insets: MapInsets, margin: Float, density: Float): MapPose {
+        val shown = sight.shown
+        val framed = nodes.filter { shown == null || (it < shown.size && shown[it]) }
+        var last: Map<Int, Double> = emptyMap()
+        var pose = first
+        for (pass in 0 until PASSES) {
+            val cam = OrbitCamera(target = pose.target, distance = pose.distance, yaw = pose.yaw, pitch = pose.pitch, fovY = fovY)
+            val f = cam.focalPixels(height)
+            sight.step(viewProj(model, cam, width / height), f, width, height, density)
+            val marks = HashMap<Int, Double>(sight.count * 2)
+            for (k in 0 until sight.count) {
+                // the glow's reach on screen, back in the map's units at the dot's depth
+                marks[sight.node[k]] = (sight.radius[k] * (1f + FractalSight.GLOW_REACH * sight.hub[k])).toDouble() * sight.depth[k] / f
+            }
+            // the same dots as the pose was fit to, none grown past rounding: it frames what it draws
+            if (pass > 0 && marks.keys == last.keys && marks.all { (i, v) -> v <= (last[i] ?: 0.0) * (1 + GROWN) }) break
+            val all = LinkedHashSet<Int>(framed.size + marks.size)
+            all.addAll(framed)
+            all.addAll(marks.keys.sorted())
+            if (all.isEmpty()) break
+            last = marks
+            pose = fit(model.layout, all.toIntArray(), first.yaw, first.pitch, fovY, width, height, insets, margin, marks)
+        }
+        return pose
+    }
 
-    /** A fly-in to [hub]: its cluster [IN_LEVELS] deep, from the camera's own [yaw] and [pitch]. */
-    fun flyIn(model: FractalModel, hub: Int, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float, insets: MapInsets): MapPose =
-        fit(model.layout, nodes(model.tree, hub, IN_LEVELS, model.budget), yaw, pitch, fovY, width, height, insets, margin(width, height, insets))
+    /** How much a glow may grow from the pose it was fit at (a share of it) and still count as framed. */
+    const val GROWN = 0.002
+
+    /** The most times [drawn] frames a pose again. */
+    const val PASSES = 5
+
+    /** The camera's projection times view, with near and far hugging the whole map's ball, as FractalGl draws it. */
+    fun viewProj(model: FractalModel, cam: OrbitCamera, aspect: Float): FloatArray {
+        val l = model.layout
+        val eye = cam.eye()
+        val dx = eye.x - l.centre[0].toFloat(); val dy = eye.y - l.centre[1].toFloat(); val dz = eye.z - l.centre[2].toFloat()
+        val toCentre = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        val reach = l.reach[0].toFloat()
+        val near = max(max(toCentre - reach * 1.15f, max(toCentre, 1e-3f) * 1e-4f), 1e-5f)
+        val far = max(toCentre + reach * 1.15f, near * 2f)
+        return Mat4.multiply(Mat4.perspective(cam.fovY, aspect, near, far), cam.view())
+    }
+
+    /**
+     * The first view: All ideas' cluster [WHOLE_LEVELS] deep, from [yaw] and [pitch]; with [sight] (its
+     * focus 0), framed again to what it draws there ([drawn]).
+     */
+    fun whole(model: FractalModel, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float, insets: MapInsets,
+              sight: FractalSight? = null, density: Float = 1f): MapPose {
+        val nodes = nodes(model.tree, 0, WHOLE_LEVELS, model.budget)
+        val margin = margin(width, height, insets)
+        val first = fit(model.layout, nodes, yaw, pitch, fovY, width, height, insets, margin)
+        return if (sight == null) first else drawn(model, sight, nodes, first, fovY, width, height, insets, margin, density)
+    }
+
+    /**
+     * A fly-in to [hub]: its cluster [IN_LEVELS] deep, from the camera's own [yaw] and [pitch]; with [sight]
+     * (its focus [hub]), framed again to what it draws there ([drawn]).
+     */
+    fun flyIn(model: FractalModel, hub: Int, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float, insets: MapInsets,
+              sight: FractalSight? = null, density: Float = 1f): MapPose {
+        val nodes = nodes(model.tree, hub, IN_LEVELS, model.budget)
+        val margin = margin(width, height, insets)
+        val first = fit(model.layout, nodes, yaw, pitch, fovY, width, height, insets, margin)
+        return if (sight == null) first else drawn(model, sight, nodes, first, fovY, width, height, insets, margin, density)
+    }
 }

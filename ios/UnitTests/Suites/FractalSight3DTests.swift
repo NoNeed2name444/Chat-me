@@ -60,31 +60,46 @@ let windows = [Window(name: "phone", width: 390, height: 844, top: 100, bottom: 
 let style = TreeNames3D.Style()
 let rad: (Float) -> Float = { $0 * Float.pi / 180 }
 
-func camera(_ m: FractalModel, _ w: Window, yaw: Float, into: Int) -> GraphPerfCamera {
+/// The map's own poses: the first view and a fly-in framed to what they draw (FractalFit.drawn), as FractalHost frames them.
+func camera(_ m: FractalModel, _ w: Window, yaw: Float, into: Int, clear: [CGRect] = []) -> GraphPerfCamera {
     let insets: (top: Float, left: Float, bottom: Float, right: Float) = (w.top, 0, w.bottom, 0)
-    var c = FractalCamera3D.whole(m, width: w.width, height: w.height, insets: insets)
+    let fitting = FractalSight(m)
+    var c = FractalCamera3D.whole(m, width: w.width, height: w.height, insets: insets, sight: fitting)
     c.orbit(yaw: yaw, pitch: 0)
-    if into > 0 { c = FractalCamera3D.flyIn(m, into, from: c, width: w.width, height: w.height, insets: insets) }
+    if into > 0 {
+        fitting.focus = into
+        c = FractalCamera3D.flyIn(m, into, from: c, width: w.width, height: w.height,
+                                  insets: TreeCamera3D.around(insets, clear: clear, height: w.height), sight: fitting)
+    }
     return c
 }
 
-func frame(_ m: FractalModel, _ s: FractalSight, _ w: Window, yaw: Float, into: Int) {
-    let c = camera(m, w, yaw: yaw, into: into)
+func frame(_ m: FractalModel, _ s: FractalSight, _ w: Window, yaw: Float, into: Int, clear: [CGRect] = []) {
+    let c = camera(m, w, yaw: yaw, into: into, clear: clear)
     s.focus = max(into, 0)
     s.step(FractalCamera3D.viewProj(m, c, width: w.width, height: w.height), focal: c.focal(viewHeight: w.height),
            width: w.width, height: w.height)
 }
 
-func names(_ m: FractalModel, _ w: Window, yaw: Float, into: Int, held: [Int: Int] = [:]) -> ([FractalScreenNode], [TreePlacedName]) {
+func names(_ m: FractalModel, _ w: Window, yaw: Float, into: Int, held: [Int: Int] = [:],
+           clear: [CGRect] = []) -> ([FractalScreenNode], [TreePlacedName]) {
     let s = FractalSight(m)
-    frame(m, s, w, yaw: yaw, into: into)
+    frame(m, s, w, yaw: yaw, into: into, clear: clear)
     let screen = FractalCamera3D.screen(s)
     let measure: (Int, Bool, Float) -> (width: Float, height: Float) = { i, bold, size in
         (Float(TreeNames3D.label(m.tree.titles[i]).count) * size * (bold ? 0.6 : 0.56), size * 1.3)
     }
     let placed = FractalNames3D.layout(screen, m.tree, style: style, measure: measure, width: w.width, height: w.height,
-                                       top: w.top, bottom: w.bottom, held: held, focus: max(into, 0))
+                                       top: w.top, bottom: w.bottom, held: held, focus: max(into, 0), clear: clear)
     return (screen, placed)
+}
+
+/// Back's place under the top chrome (flown in) and the round tools' column, Filter over Recentre, over the foot, as FractalMapView keeps them.
+func chrome(_ w: Window, back: Bool) -> [CGRect] {
+    let g: CGFloat = 16, t: CGFloat = 44
+    let width = CGFloat(w.width), foot = CGFloat(w.height - w.bottom)
+    let tools = CGRect(x: width - t - 2 * g, y: foot - 2 * t - 3 * g, width: t + 2 * g, height: 2 * t + 3 * g)
+    return back ? [CGRect(x: g, y: CGFloat(w.top) + g, width: t, height: t), tools] : [tools]
 }
 
 // the budget
@@ -101,24 +116,49 @@ for (name, m) in models {
             let (screen, placed) = names(m, w, yaw: yaw, into: into)
             let label = "\(name) \(w.name) \(what)"
             check("\(label): dots on screen (\(screen.count))", screen.count > 20)
-            check("\(label): names placed (\(placed.count))", placed.count >= w.least)
+            check("\(label): names placed (\(placed.count))", placed.count >= w.least, placed.map { tree.titles[$0.index] }.joined(separator: ", "))
             check("\(label): no two names overlap", !TreeNames3D.overlaps(placed))
             check("\(label): no name covers a named dot or a bigger one", !FractalNames3D.coversADot(placed, screen))
             check("\(label): every name inside the view and off the chrome", placed.allSatisfy { p in
                 p.left >= style.edge - 0.01 && p.right <= w.width - style.edge + 0.01 && p.top >= w.top - 0.01 && p.bottom <= w.height - w.bottom + 0.01 })
             check("\(label): every name has its dot", placed.allSatisfy { p in screen.contains { $0.index == p.index && $0.crisp } })
+            // the review of S12's stills: a far row's name stood nearer another dot than its own, and read as that one's
+            let near = FractalNames3D.nearest(placed, screen, tree, leastLeaf: style.leastLeaf)
+            check("\(label): every name's nearest dot is its own", near == placed.map(\.index),
+                  zip(placed, near).filter { $0.0.index != $0.1 }.map { "\(tree.titles[$0.0.index]) by \($0.1 >= 0 ? tree.titles[$0.1] : "none")" }.joined(separator: ", "))
+            // a tap on a name lands on its part, before any dot under it
+            check("\(label): a tap on a name lands on its part", placed.allSatisfy { p in
+                FractalNames3D.hit(screen, placed, x: p.x, y: p.y, least: 44) == p.index })
+            // VoiceOver reaches every hub drawn in the focus, named or not, each a touch target each way at least
+            let targets = FractalNames3D.targets(screen, placed, tree, focus: max(into, 0), least: 44)
+            let hubsDrawn = Set(screen.filter { FractalNames3D.hub(tree, $0.index) && (into <= 0 || tree.holds(into, $0.index)) }.map(\.index))
+            check("\(label): VoiceOver reaches every hub drawn in the focus (\(hubsDrawn.count))",
+                  hubsDrawn.isSubset(of: Set(targets.map(\.index))) && Set(placed.map(\.index)).isSubset(of: Set(targets.map(\.index))))
+            check("\(label): every VoiceOver element a touch target", targets.allSatisfy { $0.width >= 44 && $0.height >= 44 })
         }
-        // each pose tries the last pose's spots first, as the map does: a name held from the first view gives way to a hub turned under it
-        var held: [Int: Int] = [:]
+        // the chrome's boxes: no name under Back or the round tools, at the whole view and flown in
+        for (what, into) in [("whole", -1), ("Cardiology", cardiology)] {
+            let boxes = chrome(w, back: into > 0)
+            let (_, placed) = names(m, w, yaw: 0, into: into, clear: boxes)
+            let under = placed.filter { p in boxes.contains { CGRect(x: CGFloat(p.left), y: CGFloat(p.top), width: CGFloat(p.width), height: CGFloat(p.height)).intersects($0) } }
+            check("\(name) \(w.name) \(what): no name under Back or the tools", under.isEmpty, under.map { tree.titles[$0.index] }.joined(separator: ", "))
+        }
+        // each pose names by itself, as the map does (no spot held from the last pose, so stills repeat). At 120
+        // degrees Cardiology's cluster stands in front of All ideas, and its name, nearer Cardiology's dots than
+        // its own wherever it could go, is left out rather than read as theirs (review item 9 of S12 repair 1)
         for (what, deg, want) in [("whole", Float(0), ["All ideas", "Examples", "Cardiology"]),
-                                  ("orbited 40", Float(40), ["All ideas", "Cardiology"]), ("orbited 120", Float(120), ["All ideas"])] {
-            let (screen, placed) = names(m, w, yaw: rad(deg), into: -1, held: held)
+                                  ("orbited 40", Float(40), ["All ideas", "Cardiology"]), ("orbited 120", Float(120), [String]())] {
+            let (screen, placed) = names(m, w, yaw: rad(deg), into: -1)
             let got = placed.map { tree.titles[$0.index] }
             let label = "\(name) \(w.name) turned to \(what)"
             check("\(label): \(want) named", want.allSatisfy { got.contains($0) }, "\(got)")
             check("\(label): no two names overlap", !TreeNames3D.overlaps(placed))
             check("\(label): no name covers a named dot or a bigger one", !FractalNames3D.coversADot(placed, screen))
-            held = Dictionary(placed.map { ($0.index, $0.spot) }, uniquingKeysWith: { a, _ in a })
+            check("\(label): every name's nearest dot is its own",
+                  FractalNames3D.nearest(placed, screen, tree, leastLeaf: style.leastLeaf) == placed.map(\.index))
+            // the same pose names the same, whatever was named before it
+            let again = names(m, w, yaw: rad(deg), into: -1).1
+            check("\(label): the same pose names the same", again == placed)
         }
         let whole = names(m, w, yaw: 0, into: -1).1.map { tree.titles[$0.index] }
         check("\(name) \(w.name): All ideas, Examples and Cardiology named at the first view",
@@ -230,6 +270,76 @@ for w in windows {
         check("\(label): centred", abs((lo.x + hi.x) / 2 - (left + right) / 2) <= 2 && abs((lo.y + hi.y) / 2 - (top + bottom) / 2) <= 2)
     }
 }
+// what is framed is what is drawn (FractalFit.drawn; the review of S12's stills: a third level's dots reached the
+// phone's edge flown in, and the iPad's left dots its divider): on both trees of tools/fractal_fixture3d.json, after
+// the first view and a fly-in to each top hub, from 0 and 120 degrees, every dot the frame draws, with its glow as
+// drawn, is inside the room the chrome leaves less the margin. As Android's FractalFitTest.
+let fixture3dURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("tools/fractal_fixture3d.json")
+let fixture3d = (try? JSONSerialization.jsonObject(with: Data(contentsOf: fixture3dURL))) as? [String: Any] ?? [:]
+let fixtureTrees: [(String, FractalTree)] = (fixture3d["trees"] as? [[String: Any]] ?? []).map { t in
+    let parent = (t["parent"] as? [Any] ?? []).map(num)
+    var kids = [Int](repeating: 0, count: parent.count)
+    for i in 1..<max(parent.count, 1) { kids[parent[i]] += 1 }
+    let kind: [UInt8] = parent.indices.map { $0 == 0 ? FractalTree.hub : (kids[$0] > 0 ? FractalTree.folder : FractalTree.idea) }
+    return (t["name"] as? String ?? "?", FractalTree(parent: parent, kind: kind, ids: [String](repeating: "", count: parent.count),
+                                                    titles: parent.indices.map { "Part \($0)" }, region: [Int](repeating: -1, count: parent.count)))
+}
+check("fit drawn: the 3D fixture's two trees read", fixtureTrees.count == 2)
+for (name, tree) in fixtureTrees {
+    let m = FractalModel(tree, FractalLayout3D(tree))
+    let fitting = FractalSight(m), seen = FractalSight(m)
+    let hubs = (1..<tree.count).filter { tree.parent[$0] == 0 && tree.childCount[$0] > 0 }
+    for w in windows {
+        let insets: (top: Float, left: Float, bottom: Float, right: Float) = (w.top, 0, w.bottom, 0)
+        let margin = FractalFit.margin(width: w.width, height: w.height, insets: insets)
+        let left = margin, right = w.width - margin, top = w.top + margin, bottom = w.height - w.bottom - margin
+        var poses: [(String, Int, GraphPerfCamera)] = []
+        fitting.focus = 0
+        let whole = FractalCamera3D.whole(m, width: w.width, height: w.height, insets: insets, sight: fitting)
+        poses.append(("whole", 0, whole))
+        for deg in [Float(0), Float(120)] {
+            var from = whole
+            from.orbit(yaw: rad(deg), pitch: 0)
+            for hub in hubs {
+                fitting.focus = hub
+                poses.append(("flown in to \(hub) at \(Int(deg))", hub,
+                              FractalCamera3D.flyIn(m, hub, from: from, width: w.width, height: w.height, insets: insets, sight: fitting)))
+            }
+        }
+        var bad: [String] = [], off: [String] = []
+        // what FractalMapRenderTests asks of the app: the drawn box in the room's middle, within 3% of it or 4 points
+        let slackX = max(4, (right - left) * 0.03), slackY = max(4, (bottom - top) * 0.03)
+        for (what, focus, c) in poses {
+            seen.focus = focus
+            seen.step(FractalCamera3D.viewProj(m, c, width: w.width, height: w.height), focal: c.focal(viewHeight: w.height),
+                      width: w.width, height: w.height)
+            let e: Float = 1.5
+            var lo = SIMD2<Float>(.infinity, .infinity), hi = -lo
+            for k in 0..<seen.count {
+                let g = seen.radius[k] * (1 + FractalSight.glowReach * seen.hub[k])
+                let x = seen.x[k], y = seen.y[k]
+                lo = pointwiseMin(lo, SIMD2(x - g, y - g)); hi = pointwiseMax(hi, SIMD2(x + g, y + g))
+                if !(x - g >= left - e && x + g <= right + e && y - g >= top - e && y + g <= bottom + e) {
+                    bad.append("\(what): node \(seen.node[k]) at (\(x), \(y)) glow \(g)")
+                }
+            }
+            let mid = (lo + hi) / 2
+            if abs(mid.x - (left + right) / 2) > slackX || abs(mid.y - (top + bottom) / 2) > slackY {
+                off.append("\(what): box \(lo) to \(hi)")
+            }
+        }
+        check("fit drawn \(name) \(w.name): every drawn dot and glow inside [\(left), \(top), \(right), \(bottom)] (\(poses.count) poses)",
+              bad.isEmpty, bad.prefix(3).joined(separator: "; "))
+        check("fit drawn \(name) \(w.name): what is drawn centred in the room (\(poses.count) poses)",
+              off.isEmpty, off.prefix(3).joined(separator: "; "))
+    }
+}
+
+// VoiceOver reads a hub as a folder but All ideas as its name, as TalkBack (FractalNames.spokenAsFolder)
+check("All ideas is read as its name, Cardiology as a folder, an idea as itself",
+      !FractalNames3D.spokenAsFolder(fitTree, 0) && FractalNames3D.spokenAsFolder(fitTree, fitCardiology)
+      && !FractalNames3D.spokenAsFolder(fitTree, (1..<fitTree.count).first { fitTree.childCount[$0] == 0 && fitTree.kind[$0] == FractalTree.idea } ?? 0))
+
 let fitNodes = FractalFit.nodes(fitTree, fitCardiology, levels: 2)
 check("fit: Cardiology's cluster two levels deep, level by level, within the budget",
       fitNodes.first == fitCardiology && fitNodes.allSatisfy { fitTree.holds(fitCardiology, $0) && fitTree.depth[$0] - fitTree.depth[fitCardiology] <= 2 }

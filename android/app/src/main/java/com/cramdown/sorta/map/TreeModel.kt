@@ -6,15 +6,19 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
-// The 3D Tree's draw lists (S11): every branch an instance of one tapered cylinder and every leaf an
-// instance of one flattened ball, so the whole tree is two instanced draws, worked out once per tree
-// and mode, never per frame. The Graphics tier sets the meshes' detail and how many instances are
-// kept; [TreeLayout3D.order] is breadth first, so a cap drops the finest twigs and leaves first.
+// The 3D Tree's draw lists (S11): every branch an instance of one curved, tapering tube and every
+// leaf an instance of one leaf blade, so the whole tree is two instanced draws, worked out once per
+// tree and mode, never per frame. The Graphics tier sets the meshes' detail and how many instances
+// are kept; [TreeLayout3D.order] is breadth first, so a cap drops the finest twigs and leaves first.
+// The owner's review of 19 Nov ("the tree doesn't look realistic neither the leaves"): the bark is a
+// brown leaning a fifth to its folder's colour, a leaf a living green leaning nearly half to it, each
+// leaf a little lighter or darker and turned about its stem, seeded by its node so every run agrees.
 
 /**
- * [nodes] grown by [layout], coloured by [colors] (the bark and leaf ramps' full step), for [tier].
- * [branches] holds [branchCount] instances of [BRANCH_FLOATS] (base xyz, tip xyz, base and tip radius,
- * rgb, node), [leaves] [leafCount] of [LEAF_FLOATS] (centre xyz, axis xyz, radius, rgb, node).
+ * [nodes] grown by [layout], coloured by [colors] (TreeColors.wood3d and leaf3d), for [tier].
+ * [branches] holds [branchCount] instances of [BRANCH_FLOATS] (base xyz, tip xyz, the curve's control
+ * point xyz, base and tip radius, rgb, node), [leaves] [leafCount] of [LEAF_FLOATS] (centre xyz, axis
+ * xyz, radius, roll about the axis, rgb, node).
  */
 class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: TreeColors, val tier: GraphicsTier) {
     val branches: FloatArray
@@ -23,11 +27,16 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
     val leafCount: Int
     /** Whether the tier's cap left any branch or leaf out. */
     val capped: Boolean
+    /** The tube's sides round and rings along, and the leaf blade's rows, for the tier. */
     val segments: Int = if (tier == GraphicsTier.HIGH) 12 else 7
+    val rings: Int = if (tier == GraphicsTier.HIGH) 6 else 4
+    val bladeRows: Int = if (tier == GraphicsTier.HIGH) 7 else 5
     val sky: FloatArray = rgb(colors.sky)
     val accent: FloatArray = rgb(colors.accent)
     /** The smallest leaf's radius, or a twig's length where there is none: how close the camera may come. */
     val smallest: Float
+    /** What a view pads round each framed point ([TreeFit.points] holds every leaf's tip): a blade's half width. */
+    val margin: Float get() = smallest * BLADE_WIDE.toFloat()
 
     init {
         val n = nodes.size
@@ -46,12 +55,14 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
             if (b < keptBranches) {
                 val o = b * BRANCH_FLOATS
                 for (a in 0..2) {
-                    branches[o + a] = layout.base[3 * i + a].toFloat()
-                    branches[o + 3 + a] = (layout.base[3 * i + a] + layout.dir[3 * i + a] * layout.length[i]).toFloat()
+                    val base = layout.base[3 * i + a]; val run = layout.dir[3 * i + a] * layout.length[i]
+                    branches[o + a] = base.toFloat()
+                    branches[o + 3 + a] = (base + run).toFloat()
+                    branches[o + 6 + a] = (base + run / 2 + layout.bend[3 * i + a]).toFloat()
                 }
-                branches[o + 6] = layout.r0[i].toFloat(); branches[o + 7] = layout.r1[i].toFloat()
-                put(branches, o + 8, colors.barkRamp[g][8])
-                branches[o + 11] = i.toFloat()
+                branches[o + 9] = layout.r0[i].toFloat(); branches[o + 10] = layout.r1[i].toFloat()
+                put(branches, o + 11, colors.wood3d[g])
+                branches[o + 14] = i.toFloat()
                 b++
             }
             if (layout.leaf[i] > 0) {
@@ -60,8 +71,14 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
                     val o = l * LEAF_FLOATS
                     for (a in 0..2) { leaves[o + a] = layout.anchor[3 * i + a].toFloat(); leaves[o + 3 + a] = layout.dir[3 * i + a].toFloat() }
                     leaves[o + 6] = layout.leaf[i].toFloat()
-                    put(leaves, o + 7, colors.leafRamp[g][8])
-                    leaves[o + 10] = i.toFloat()
+                    leaves[o + 7] = ((2 * hash(i, 1) - 1) * ROLL).toFloat()
+                    // a little lighter or darker, and some a touch toward yellow-green
+                    val tone = TreeColors.mix(colors.leaf3d[g], YELLOW, hash(i, 2) * YELLOW_MOST)
+                    val light = 1 - LIGHT_VAR / 2 + LIGHT_VAR * hash(i, 3)
+                    leaves[o + 8] = (((tone shr 16) and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+                    leaves[o + 9] = (((tone shr 8) and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+                    leaves[o + 10] = ((tone and 255) / 255.0 * light).coerceAtMost(1.0).toFloat()
+                    leaves[o + 11] = i.toFloat()
                     l++
                 }
             }
@@ -71,12 +88,29 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
         smallest = (if (least.isFinite()) least else layout.length.minOrNull() ?: 0.1).toFloat().coerceAtLeast(1e-4f)
     }
 
+    /** Triangles a frame draws: every branch's tube and every leaf's blade, in two instanced draws. */
+    val triangles: Int get() = branchCount * segments * (rings + 1) * 2 + leafCount * (bladeRows - 1) * 4
+
     companion object {
-        const val BRANCH_FLOATS = 12
-        const val LEAF_FLOATS = 11
+        const val BRANCH_FLOATS = 15
+        const val LEAF_FLOATS = 12
         /** Instances kept of each kind: the High tier draws every one a vault this size has, Smooth fewer. */
         const val HIGH_CAP = 30_000
         const val SMOOTH_CAP = 8_000
+        /** A leaf turned about its stem at most this far either way (radians). */
+        const val ROLL = 0.7
+        /** A leaf lighter or darker by at most half this, and at most this far toward [YELLOW]. */
+        const val LIGHT_VAR = 0.2
+        const val YELLOW_MOST = 0.15
+        const val YELLOW = 0xB9C24A
+        /** How far a trunk's base flares out and over what share of it; a branch's collar likewise. */
+        const val FLARE = 0.55f
+        const val FLARE_SPAN = 0.18f
+        const val COLLAR = 0.18f
+        const val COLLAR_SPAN = 0.12f
+        /** The tube's closing ring's mark (past 1 along), and how far past the tip, by its radius, it closes. */
+        const val CAP = 2f
+        const val CAP_REACH = 0.9f
 
         fun rgb(c: Int): FloatArray = floatArrayOf(((c shr 16) and 255) / 255f, ((c shr 8) and 255) / 255f, (c and 255) / 255f)
 
@@ -84,40 +118,106 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
             out[at] = ((c shr 16) and 255) / 255f; out[at + 1] = ((c shr 8) and 255) / 255f; out[at + 2] = (c and 255) / 255f
         }
 
-        /** A tube's [segments] round (cos, sin, along 0 or 1 per vertex), and its triangles. */
-        fun tube(segments: Int): Pair<FloatArray, ShortArray> {
-            val v = FloatArray((segments + 1) * 2 * 3)
-            for (s in 0..segments) for (h in 0..1) {
+        /** Node [i]'s seeded number in 0 until 1 for [salt], in 32-bit integer steps, so iOS's is the same. */
+        fun hash(i: Int, salt: Int): Double {
+            var x = (i.toLong() * 2654435761L + salt.toLong() * 374761393L) and 0xffffffffL
+            x = ((x xor (x ushr 15)) * 2246822519L) and 0xffffffffL
+            x = x xor (x ushr 13)
+            return x.toDouble() / 4294967296.0
+        }
+
+        /** How far along a branch ring [k] of [rings] sits: closer together near the base, where the trunk flares. */
+        fun ringAt(k: Int, rings: Int): Float = Math.pow(k.toDouble() / rings, 1.4).toFloat()
+
+        /**
+         * A tube's [segments] round by [rings] along (cos, sin, along 0 to 1 per vertex), then one more
+         * ring at [CAP] along that closes its tip (the shader draws it as a point just past the tip, so
+         * no branch ends in an open cut), and its triangles.
+         */
+        fun tube(segments: Int, rings: Int): Pair<FloatArray, ShortArray> {
+            val v = FloatArray((segments + 1) * (rings + 2) * 3)
+            for (r in 0..rings + 1) for (s in 0..segments) {
                 val a = 2 * Math.PI * s / segments
-                val o = (s * 2 + h) * 3
-                v[o] = cos(a).toFloat(); v[o + 1] = sin(a).toFloat(); v[o + 2] = h.toFloat()
+                val o = (r * (segments + 1) + s) * 3
+                v[o] = cos(a).toFloat(); v[o + 1] = sin(a).toFloat(); v[o + 2] = if (r > rings) CAP else ringAt(r, rings)
             }
-            val idx = ShortArray(segments * 6)
-            for (s in 0 until segments) {
-                val a = (s * 2).toShort(); val b = (s * 2 + 1).toShort(); val c = (s * 2 + 2).toShort(); val d = (s * 2 + 3).toShort()
-                val o = s * 6
-                idx[o] = a; idx[o + 1] = c; idx[o + 2] = b; idx[o + 3] = b; idx[o + 4] = c; idx[o + 5] = d
+            val idx = ShortArray(segments * (rings + 1) * 6)
+            var k = 0
+            for (r in 0..rings) for (s in 0 until segments) {
+                val a = r * (segments + 1) + s; val c = a + segments + 1
+                idx[k++] = a.toShort(); idx[k++] = (a + 1).toShort(); idx[k++] = c.toShort()
+                idx[k++] = c.toShort(); idx[k++] = (a + 1).toShort(); idx[k++] = (c + 1).toShort()
             }
             return v to idx
         }
 
-        /** A unit ball, [rings] from pole to pole and [segments] round (x, y, z per vertex, y the leaf's axis), and its triangles. */
-        fun ball(rings: Int, segments: Int): Pair<FloatArray, ShortArray> {
-            val v = FloatArray((rings + 1) * (segments + 1) * 3)
-            for (r in 0..rings) for (s in 0..segments) {
-                val t = Math.PI * r / rings; val p = 2 * Math.PI * s / segments
-                val o = (r * (segments + 1) + s) * 3
-                v[o] = (sin(t) * cos(p)).toFloat(); v[o + 1] = cos(t).toFloat(); v[o + 2] = (sin(t) * sin(p)).toFloat()
+        /** A leaf blade's half width at [y] from its stem (0) to its tip (1): a pointed oval, widest below its middle. */
+        fun bladeWidth(y: Double): Double = BLADE_WIDE * Math.pow(sin(Math.PI * y), 0.75) * (1.15 - 0.4 * y)
+        const val BLADE_WIDE = 0.44
+        /** How far its edges rise off the midrib (by its width), and its tip curls down (by its length). */
+        const val FOLD = 0.3
+        const val CURL = 0.3
+
+        /**
+         * A leaf blade, [rows] from stem to tip by three across (edge, midrib, edge): each vertex its place
+         * (x across, y along from −1 at the stem to 1 at the tip, z off the blade's face) and its normal,
+         * six floats; folded along its midrib and curled down to its tip. Its triangles.
+         */
+        fun blade(rows: Int): Pair<FloatArray, ShortArray> {
+            val v = FloatArray(rows * 3 * 6)
+            for (r in 0 until rows) for (c in 0..2) {
+                val y = r.toDouble() / (rows - 1); val w = bladeWidth(y); val side = (c - 1).toDouble()
+                val o = (r * 3 + c) * 6
+                v[o] = (side * w).toFloat(); v[o + 1] = (2 * y - 1).toFloat()
+                v[o + 2] = (FOLD * kotlin.math.abs(side) * w - CURL * y * y).toFloat()
             }
-            val idx = ShortArray(rings * segments * 6)
+            val idx = ShortArray((rows - 1) * 2 * 6)
             var k = 0
-            for (r in 0 until rings) for (s in 0 until segments) {
-                val a = r * (segments + 1) + s; val b = a + segments + 1
-                idx[k++] = a.toShort(); idx[k++] = b.toShort(); idx[k++] = (a + 1).toShort()
-                idx[k++] = (a + 1).toShort(); idx[k++] = b.toShort(); idx[k++] = (b + 1).toShort()
+            for (r in 0 until rows - 1) for (c in 0..1) {
+                val a = r * 3 + c; val d = a + 3
+                idx[k++] = a.toShort(); idx[k++] = (a + 1).toShort(); idx[k++] = d.toShort()
+                idx[k++] = d.toShort(); idx[k++] = (a + 1).toShort(); idx[k++] = (d + 1).toShort()
+            }
+            // each vertex's normal: its triangles' faces, by area, turned to the blade's face (+z)
+            val nrm = DoubleArray(rows * 3 * 3)
+            for (t in 0 until idx.size / 3) {
+                val p = IntArray(3) { idx[3 * t + it].toInt() }
+                val e1 = DoubleArray(3) { (v[p[1] * 6 + it] - v[p[0] * 6 + it]).toDouble() }
+                val e2 = DoubleArray(3) { (v[p[2] * 6 + it] - v[p[0] * 6 + it]).toDouble() }
+                var fx = e1[1] * e2[2] - e1[2] * e2[1]; var fy = e1[2] * e2[0] - e1[0] * e2[2]; var fz = e1[0] * e2[1] - e1[1] * e2[0]
+                if (fz < 0) { fx = -fx; fy = -fy; fz = -fz }
+                for (q in p) { nrm[3 * q] += fx; nrm[3 * q + 1] += fy; nrm[3 * q + 2] += fz }
+            }
+            for (q in 0 until rows * 3) {
+                val m = Math.sqrt(nrm[3 * q] * nrm[3 * q] + nrm[3 * q + 1] * nrm[3 * q + 1] + nrm[3 * q + 2] * nrm[3 * q + 2])
+                val o = q * 6
+                if (m < 1e-12) { v[o + 5] = 1f; continue }
+                for (a in 0..2) v[o + 3 + a] = (nrm[3 * q + a] / m).toFloat()
             }
             return v to idx
         }
+    }
+}
+
+/**
+ * Each node's state byte for the renderer (TreeGl's texture): hidden by the filter, chosen, lit as a
+ * link of the chosen, faded toward the page (outside the part flown in to), or none, the first that
+ * holds. A flown-in part and all under it are never faded: they draw in full colour. iOS's TreeState
+ * is the same.
+ */
+object TreeState {
+    const val NONE = 0
+    const val HIDDEN = 1
+    const val CHOSEN = 2
+    const val LINKED = 3
+    const val FADED = 4
+
+    fun of(nodes: NestNodes, i: Int, hidden: Boolean, chosen: Int, linked: Boolean, focus: Int): Int = when {
+        hidden -> HIDDEN
+        i == chosen -> CHOSEN
+        linked -> LINKED
+        focus in 1 until nodes.size && !nodes.within(focus, i) -> FADED
+        else -> NONE
     }
 }
 
@@ -175,15 +275,21 @@ object TreeFit {
         return MapPose(target, d, pose.yaw, pose.pitch, pose.roll)
     }
 
-    /** Every branch end and body of part [index]'s subtree in [layout], what a view of it frames. */
+    /** Every branch's ends and middle (on its curve), every body and every leaf's tip of part [index]'s subtree in [layout], what a view of it frames. */
     fun points(layout: TreeLayout3D, index: Int): List<Vec3> {
         val nodes = layout.nodes
-        val out = ArrayList<Vec3>((nodes.tout[index] - nodes.tin[index]) * 3)
+        val out = ArrayList<Vec3>((nodes.tout[index] - nodes.tin[index]) * 4)
+        val at = DoubleArray(3)
         for (q in nodes.tin[index] until nodes.tout[index]) {
             val i = nodes.order[q]
-            for (t in doubleArrayOf(0.0, layout.length[i])) out.add(Vec3((layout.base[3 * i] + layout.dir[3 * i] * t).toFloat(),
-                (layout.base[3 * i + 1] + layout.dir[3 * i + 1] * t).toFloat(), (layout.base[3 * i + 2] + layout.dir[3 * i + 2] * t).toFloat()))
+            for (t in doubleArrayOf(0.0, 0.5, 1.0)) {
+                layout.curveAt(i, t, at)
+                out.add(Vec3(at[0].toFloat(), at[1].toFloat(), at[2].toFloat()))
+            }
             out.add(Vec3(layout.anchor[3 * i].toFloat(), layout.anchor[3 * i + 1].toFloat(), layout.anchor[3 * i + 2].toFloat()))
+            val lr = layout.leaf[i]
+            if (lr > 0) out.add(Vec3((layout.anchor[3 * i] + layout.dir[3 * i] * lr).toFloat(), (layout.anchor[3 * i + 1] + layout.dir[3 * i + 1] * lr).toFloat(),
+                (layout.anchor[3 * i + 2] + layout.dir[3 * i + 2] * lr).toFloat()))
         }
         return out
     }
@@ -196,9 +302,9 @@ object TreeFit {
     fun flyIn(model: TreeModel, index: Int, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float,
               insets: MapInsets, fill: Float): MapPose? {
         val points = points(model.layout, index)
-        val first = MapFirstView.framing(points, model.smallest, width, height, insets, fill, yaw, pitch,
+        val first = MapFirstView.framing(points, model.margin, width, height, insets, fill, yaw, pitch,
             Math.toDegrees(fovY.toDouble()).toFloat()) ?: return null
-        return refine(points, model.smallest, first, width, height, insets, fill, fovY)
+        return refine(points, model.margin, first, width, height, insets, fill, fovY)
     }
 
     /** The points' box on screen from [eye] (left, right, bottom, top, in pixels from the view's middle, y up); null if one is behind the eye. */

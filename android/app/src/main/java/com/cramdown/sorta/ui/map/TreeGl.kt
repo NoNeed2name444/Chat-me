@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.util.Log
 import com.cramdown.sorta.map.MapFilterView
 import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.TreeState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -11,10 +12,12 @@ import java.nio.ShortBuffer
 import kotlin.math.max
 
 /**
- * Draws the 3D Tree (S11) with OpenGL ES 3.0: every branch an instance of one tapered tube and every
- * leaf an instance of one flattened ball (TreeModel), lit by one light from the upper left and fading
- * into the page's own colour with depth, by day and by night; what is deep in the crown is shaded
- * darker, so its depth reads. Two instanced draws a frame, from buffers made once; a frame only sets
+ * Draws the 3D Tree (S11) with OpenGL ES 3.0: every branch an instance of one curved tube, tapering,
+ * the trunk flaring at its foot, and every leaf an instance of one folded, curled leaf blade
+ * (TreeModel), lit by a key light from the upper left, a soft sky-and-ground ambient and a little rim,
+ * both faces of a leaf lit, the light glowing through one seen from behind; fading into the page's
+ * own colour with depth, by day and by night; what is deep in the crown is shaded darker, so its
+ * depth reads. Two instanced draws a frame, from buffers made once; a frame only sets
  * uniforms. Which nodes are hidden (the filter) and chosen is one byte a node in a small texture,
  * written only when either changes. A twig is never drawn thinner than [TreeWeight.TWIG_DP] across
  * nor a leaf shorter than [TreeWeight.LEAF_DP], at [density] pixels a dp. Runs on the GL thread only.
@@ -72,11 +75,11 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
             return
         }
         for ((p, out) in listOf(tubeProgram to tube, leafProgram to leaf)) for (k in 0 until U_COUNT) out[k] = GLES30.glGetUniformLocation(p, UNIFORMS[k])
-        val (tv, ti) = TreeModel.tube(model.segments)
-        val (bv, bi) = TreeModel.ball(if (model.segments > 8) 8 else 5, model.segments)
+        val (tv, ti) = TreeModel.tube(model.segments, model.rings)
+        val (bv, bi) = TreeModel.blade(model.bladeRows)
         tubeIndices = ti.size; leafIndices = bi.size
-        tubeVao = vao(tv, ti, model.branches, TreeModel.BRANCH_FLOATS, intArrayOf(3, 3, 2, 3, 1))
-        leafVao = vao(bv, bi, model.leaves, TreeModel.LEAF_FLOATS, intArrayOf(3, 3, 1, 3, 1))
+        tubeVao = vao(tv, ti, 3, model.branches, TreeModel.BRANCH_FLOATS, intArrayOf(3, 3, 3, 2, 3, 1))
+        leafVao = vao(bv, bi, 6, model.leaves, TreeModel.LEAF_FLOATS, intArrayOf(3, 3, 1, 1, 3, 1))
         val ids = IntArray(1)
         GLES30.glGenTextures(1, ids, 0); stateTexture = ids[0]
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, stateTexture)
@@ -87,8 +90,11 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         stale = true
     }
 
-    /** One mesh's vertices and triangles, and the instances drawn with it, each attribute [sizes] floats. */
-    private fun vao(mesh: FloatArray, indices: ShortArray, instances: FloatArray, stride: Int, sizes: IntArray): Int {
+    /**
+     * One mesh's vertices ([vertex] floats each: a place, then a normal when 6) and triangles, and the
+     * instances drawn with it, each attribute [sizes] floats; the instances' attributes follow the mesh's.
+     */
+    private fun vao(mesh: FloatArray, indices: ShortArray, vertex: Int, instances: FloatArray, stride: Int, sizes: IntArray): Int {
         val ids = IntArray(3)
         GLES30.glGenVertexArrays(1, ids, 0)
         val vao = ids[0]
@@ -96,15 +102,18 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         GLES30.glGenBuffers(3, ids, 0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, mesh.size * 4, floats(mesh), GLES30.GL_STATIC_DRAW)
-        GLES30.glEnableVertexAttribArray(0)
-        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        val first = vertex / 3
+        for (k in 0 until first) {
+            GLES30.glEnableVertexAttribArray(k)
+            GLES30.glVertexAttribPointer(k, 3, GLES30.GL_FLOAT, false, vertex * 4, k * 12)
+        }
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[1])
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, max(instances.size, 1) * 4, floats(instances), GLES30.GL_STATIC_DRAW)
         var offset = 0
         for ((k, size) in sizes.withIndex()) {
-            GLES30.glEnableVertexAttribArray(k + 1)
-            GLES30.glVertexAttribPointer(k + 1, size, GLES30.GL_FLOAT, false, stride * 4, offset * 4)
-            GLES30.glVertexAttribDivisor(k + 1, 1)
+            GLES30.glEnableVertexAttribArray(first + k)
+            GLES30.glVertexAttribPointer(first + k, size, GLES30.GL_FLOAT, false, stride * 4, offset * 4)
+            GLES30.glVertexAttribDivisor(first + k, 1)
             offset += size
         }
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[2])
@@ -124,13 +133,10 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
         val nodes = model.nodes
         state.clear()
         for (i in 0 until WIDTH * rows) {
-            val v = when {
-                i >= n -> 0
-                f != null && !f.reachable(i) -> { h++; HIDDEN }
-                i == chosen -> CHOSEN
-                lit != null && i in lit -> LINKED
-                fo in 1 until n && !nodes.within(fo, i) -> FADED
-                else -> 0
+            val v = if (i >= n) TreeState.NONE else {
+                val gone = f != null && !f.reachable(i)
+                if (gone) h++
+                TreeState.of(nodes, i, gone, chosen, lit != null && i in lit, fo)
             }
             state.put(v.toByte())
         }
@@ -204,10 +210,10 @@ class TreeGl(private val model: TreeModel, private val contrast: Boolean, privat
     companion object {
         /** The state texture's width: a texel a node, a row of 1024. */
         const val WIDTH = 1024
-        const val HIDDEN = 1
-        const val CHOSEN = 2
-        const val LINKED = 3
-        const val FADED = 4
+        const val HIDDEN = TreeState.HIDDEN
+        const val CHOSEN = TreeState.CHOSEN
+        const val LINKED = TreeState.LINKED
+        const val FADED = TreeState.FADED
         private val UNIFORMS = arrayOf("uView", "uProj", "uPixel", "uLight", "uSky", "uFog", "uAccent", "uState", "uCrown")
         private const val U_COUNT = 9
 
@@ -219,91 +225,137 @@ precision highp float;
 uniform mat4 uView;
 uniform mat4 uProj;
 uniform vec3 uPixel;
+uniform vec3 uLight;
 uniform float uCrown;
 uniform highp sampler2D uState;
 out vec3 vNormal;
+out vec3 vEye;
+out vec3 vKey;
+out vec3 vUp;
 out vec3 vColor;
 out float vDepth;
 out float vState;
 out float vShade;
+out float vLeaf;
 float stateOf(float node) {
     int i = int(node + 0.5);
     return texelFetch(uState, ivec2(i % 1024, i / 1024), 0).r * 255.0;
 }
-void finish(vec3 p, vec3 n, vec3 color, float state) {
+// the light and the normal in the eye's space, where the rim and both faces are worked out
+void finish(vec3 p, vec3 n, vec3 color, float state, float leaf) {
     vec4 eye = uView * vec4(p, 1.0);
-    vDepth = -eye.z; vNormal = n; vColor = color; vState = state;
+    mat3 turn = mat3(uView);
+    vDepth = -eye.z; vEye = eye.xyz; vNormal = turn * n; vKey = turn * uLight; vUp = turn * vec3(0.0, 1.0, 0.0);
+    vColor = color; vState = state; vLeaf = leaf;
     // deep in the crown, near the trunk's line, is darker: the crown's depth reads
-    vShade = 0.7 + 0.3 * clamp(length(p.xz) / max(uCrown, 1e-4), 0.0, 1.0);
+    vShade = 0.76 + 0.24 * clamp(length(p.xz) / max(uCrown, 1e-4), 0.0, 1.0);
     // a hidden node folds to one point outside the view: nothing is drawn
     gl_Position = (state > 0.5 && state < 1.5) ? vec4(2.0, 2.0, 2.0, 1.0) : uProj * eye;
 }
 """
 
-        /** A branch: the unit tube's ring (cos, sin, along) set round the base-to-tip axis, tapering. */
-        const val TUBE_VS = HEAD + """
+        /**
+         * A branch: the unit tube's ring (cos, sin, along) set round its curve from base through the
+         * control point to tip, square to the curve there, tapering; the trunk flares at its foot and
+         * every branch thickens a little where it leaves its parent (its collar).
+         */
+        val TUBE_VS = HEAD + """
 layout(location = 0) in vec3 aRing;
 layout(location = 1) in vec3 aBase;
 layout(location = 2) in vec3 aTip;
-layout(location = 3) in vec2 aRadius;
-layout(location = 4) in vec3 aColor;
-layout(location = 5) in float aNode;
+layout(location = 3) in vec3 aCtrl;
+layout(location = 4) in vec2 aRadius;
+layout(location = 5) in vec3 aColor;
+layout(location = 6) in float aNode;
 void main() {
-    vec3 axis = aTip - aBase;
-    float len = max(length(axis), 1e-6);
-    vec3 d = axis / len;
-    vec3 helper = abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 u = normalize(cross(helper, d));
+    // the closing ring (past 1 along) is one point just past the tip
+    float cap = step(1.5, aRing.z);
+    float t = min(aRing.z, 1.0), s = 1.0 - t;
+    vec3 c = s * s * aBase + 2.0 * s * t * aCtrl + t * t * aTip;
+    vec3 d = 2.0 * s * (aCtrl - aBase) + 2.0 * t * (aTip - aCtrl);
+    d = d / max(length(d), 1e-9);
+    // one across for the whole branch, from its chord, turned square to the curve at each ring
+    vec3 chord = aTip - aBase;
+    chord = chord / max(length(chord), 1e-9);
+    vec3 helper = abs(chord.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 a = normalize(cross(helper, chord));
+    vec3 u = normalize(a - d * dot(a, d));
     vec3 v = cross(d, u);
-    vec3 n = u * aRing.x + v * aRing.y;
-    vec3 c = aBase + axis * aRing.z;
+    vec3 side = u * aRing.x + v * aRing.y;
     float depth = max(-(uView * vec4(c, 1.0)).z, 1e-4);
-    float r = max(mix(aRadius.x, aRadius.y, aRing.z), uPixel.x * depth);
-    // past the tip by its radius, so a child's joint and a leaf's stalk close
-    finish(c + n * r + d * (aRing.z * r), n, aColor, stateOf(aNode));
+    float swell = aNode < 0.5 ? """ + "${TreeModel.FLARE}" + """ * pow(max(0.0, 1.0 - t / """ + "${TreeModel.FLARE_SPAN}" + """), 2.0)
+        : """ + "${TreeModel.COLLAR}" + """ * pow(max(0.0, 1.0 - t / """ + "${TreeModel.COLLAR_SPAN}" + """), 2.0);
+    float r = max(mix(aRadius.x, aRadius.y, t) * (1.0 + swell), uPixel.x * depth);
+    // the tip closed by a short cone past it, so no branch ends in an open cut and a leaf's stalk joins
+    vec3 n = normalize(mix(side, d, cap * 0.7));
+    finish(c + side * r * (1.0 - cap) + d * (cap * """ + "${TreeModel.CAP_REACH}" + """ * r), n, aColor, stateOf(aNode), 0.0);
 }
 """
 
-        /** A leaf: the unit ball, long along its twig, narrower across and flat, round its centre. */
+        /**
+         * A leaf: the blade (its place and normal) from its stem's tip out along its axis, its face
+         * turned up toward the sky, then rolled about its axis by its own turn.
+         */
         const val LEAF_VS = HEAD + """
-layout(location = 0) in vec3 aBall;
-layout(location = 1) in vec3 aCentre;
-layout(location = 2) in vec3 aAxis;
-layout(location = 3) in float aRadius;
-layout(location = 4) in vec3 aColor;
-layout(location = 5) in float aNode;
+layout(location = 0) in vec3 aPlace;
+layout(location = 1) in vec3 aFace;
+layout(location = 2) in vec3 aCentre;
+layout(location = 3) in vec3 aAxis;
+layout(location = 4) in float aRadius;
+layout(location = 5) in float aRoll;
+layout(location = 6) in vec3 aColor;
+layout(location = 7) in float aNode;
 void main() {
     vec3 d = normalize(aAxis);
-    vec3 helper = abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 u = normalize(cross(helper, d));
-    vec3 v = cross(d, u);
+    vec3 helper = abs(d.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 across = normalize(cross(d, helper));
+    vec3 up = cross(across, d);
+    float cr = cos(aRoll), sr = sin(aRoll);
+    vec3 x = across * cr + up * sr;
+    vec3 z = up * cr - across * sr;
     float depth = max(-(uView * vec4(aCentre, 1.0)).z, 1e-4);
     // never under the floor, nor over the ceiling: flown in, a leaf stays a leaf, not a wall
     float r = min(max(aRadius, uPixel.y * depth), uPixel.z * depth);
-    vec3 shape = vec3(0.62, 1.0, 0.34);
-    vec3 p = aCentre + (u * aBall.x * shape.x + d * aBall.y * shape.y + v * aBall.z * shape.z) * r;
-    vec3 n = normalize(u * aBall.x / shape.x + d * aBall.y / shape.y + v * aBall.z / shape.z);
-    finish(p, n, aColor, stateOf(aNode));
+    vec3 p = aCentre + (x * aPlace.x + d * aPlace.y + z * aPlace.z) * r;
+    vec3 n = normalize(x * aFace.x + d * aFace.y + z * aFace.z);
+    finish(p, n, aColor, stateOf(aNode), 1.0);
 }
 """
 
-        /** Lambert from one light, both faces, a chosen node toward the accent, a faded one (outside the part flown in to) toward the page, then the page's colour with depth. */
+        /**
+         * A key light (Lambert), a soft ambient brighter from the sky than the ground, and a little rim
+         * where a surface turns away; the face toward the eye lit, so a leaf seen from below is lit too,
+         * and the key glowing through it then; a faint waxy gloss on a leaf. Then a chosen node toward
+         * the accent, a faded one (outside the part flown in to) toward the page, and the page's colour
+         * with depth.
+         */
         const val LIT_FS = """#version 300 es
 precision mediump float;
-uniform vec3 uLight;
 uniform vec3 uSky;
 uniform vec3 uFog;
 uniform vec3 uAccent;
 in vec3 vNormal;
+in vec3 vEye;
+in vec3 vKey;
+in vec3 vUp;
 in vec3 vColor;
 in float vDepth;
 in float vState;
 in float vShade;
+in float vLeaf;
 out vec4 outColor;
 void main() {
     vec3 n = normalize(vNormal);
-    float lambert = abs(dot(n, normalize(uLight)));
-    vec3 c = vColor * (0.46 + 0.64 * lambert) * vShade;
+    vec3 e = normalize(-vEye);
+    vec3 l = normalize(vKey);
+    float facing = dot(n, e);
+    if (facing < 0.0) { n = -n; facing = -facing; }
+    float key = max(dot(n, l), 0.0);
+    float through = vLeaf * max(dot(-n, l), 0.0) * 0.45;
+    float ambient = mix(0.34, 0.56, 0.5 + 0.5 * dot(n, normalize(vUp)));
+    float rim = pow(1.0 - facing, 3.0) * 0.22;
+    float gloss = vLeaf * pow(max(dot(n, normalize(l + e)), 0.0), 28.0) * 0.12;
+    vec3 c = vColor * (ambient + 0.72 * key + through) * vShade + vec3(rim + gloss);
     if (vState > 3.5) c = mix(c, uSky, 0.72);
     else if (vState > 2.5) c = mix(c, uAccent, 0.4);
     else if (vState > 1.5) c = mix(c, uAccent, 0.7);

@@ -134,6 +134,7 @@ import com.cramdown.sorta.map.TreeFit
 import com.cramdown.sorta.map.TreeModel
 import com.cramdown.sorta.map.FractalFit
 import com.cramdown.sorta.map.FractalModel
+import com.cramdown.sorta.map.FractalSight
 import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
 import com.cramdown.sorta.ui.ward.WardToken
@@ -542,7 +543,7 @@ data class MapFlyTo(val id: String, val serial: Int)
             minDistance = scene.closest; maxDistance = max(tree.radius[0], 1f) * 80
         }
     }
-    val home = remember(scene) { HomeView(camera, HomeView.framer(scene)) }
+    val home = remember(scene) { HomeView(camera, HomeView.framer(scene, context.resources.displayMetrics.density)) }
     val density = LocalDensity.current
     val insets = with(density) { MapInsets(top = top.toPx(), bottom = hidden.toPx()) }
     // what the first view and a fly-in fit to: half a touch target more under the top glass, so a
@@ -833,17 +834,16 @@ data class MapFlyTo(val id: String, val serial: Int)
         }
     }
     // S12, the Fractal's names: by the Tree's rules (FractalNames), clear of every other name and of
-    // every dot that may be named, white on a halo of the sky; one TalkBack element a name
+    // every dot that may be named, white on a halo of the sky; one TalkBack element a name. They come from
+    // the pose alone, never from what was named before, so the same pose names the same (as iOS's)
     val fractalModel = scene.fractalModel
     val fractalType = remember(context, density) { if (fractalModel == null) null else FractalType(context, density.density) }
     val fractalNames: List<PlacedName> = if (fractalModel == null || fractalType == null) emptyList() else {
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
         remember(screenNodes, viewSize, insets, cover, keepClear) {
             FractalNames.layout(screenNodes, fractalModel.tree, fractalType.hubs, fractalType.ideas, fractalType.style, w, h,
-                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0),
-                clear = MapClear.boxes(keepClear)).also { placed ->
-                named.clear(); for (p in placed) named[p.index] = p.spot
-            }
+                top = insets.top, bottom = TreeNames.floor(insets, cover), focus = renderer.flown.coerceAtLeast(0),
+                clear = MapClear.boxes(keepClear))
         }
     }
     // a body a test can put a finger on: the biggest crisp one clear of the chrome and the card, in
@@ -903,6 +903,8 @@ data class MapFlyTo(val id: String, val serial: Int)
         val latestHold by rememberUpdatedState(onHold)
         val latestReshape by rememberUpdatedState(reshape)
         val latestChosen by rememberUpdatedState(chosenName)
+        // the Fractal's names, which a tap lands on before any dot, as iOS's (FractalNames3D.hit)
+        val latestFractalNames by rememberUpdatedState(fractalNames)
         // the last still lift: when, where and on what, for a double tap
         val lastLift = remember(scene) { LastLift() }
         // the map's touches (S05g), on the drawn map and, where GL can't draw it, on its note: there no body
@@ -917,7 +919,8 @@ data class MapFlyTo(val id: String, val serial: Int)
                 var menu = false
                 var liftedAt = down.uptimeMillis
                 val reach = MapNameShow.PICK_DP.dp.toPx()
-                val hit = MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
+                val hit = (if (scene.fractalModel != null) FractalNames.nameAt(latestFractalNames, down.position.x, down.position.y) else null)
+                    ?: MapNameShow.pick(screenNodes.map(::nameBody), down.position.x, down.position.y, reach)?.index
                 val menuMillis = kotlin.math.ceil(MapTouchRules.HOLD_FOR_MENU * holdScale * 1000).toLong()
                 // hold to move (S05g2): in Space and the Neurons a finger still on a body to the pick-up
                 // time picks it up (held, Graph3DView.swift:2553-2610); not in Performance
@@ -1276,7 +1279,10 @@ data class MapFlyTo(val id: String, val serial: Int)
         // TalkBack (S11): each Tree name is an element at least a touch target big; activating it does what a tap does
         if (treeModel != null && onTap != null) TreeNameTargets(treeNames, treeModel.nodes) { latestTreeTap(it) }
         // TalkBack (S12): each Fractal name likewise
-        if (fractalModel != null && onTap != null) FractalNameTargets(fractalNames, fractalModel.tree) { latestTreeTap(it) }
+        if (fractalModel != null && onTap != null) {
+            FractalNameTargets(FractalNames.targets(screenNodes, fractalNames, fractalModel.tree, renderer.flown.coerceAtLeast(0),
+                WardControlSize.target.toFloat() * density.density), fractalModel.tree) { latestTreeTap(it) }
+        }
         if (showReadout) Readout(readout, Modifier.align(Alignment.TopStart).padding(10.dp))
         if (showControls) Row(Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color(0xFF1D3047), RoundedCornerShape(24.dp))) {
             IconButton(onClick = { loop.touched(); synchronized(camera) { camera.zoom(1 / 1.25f) } }) { Icon(Icons.Rounded.Remove, "Zoom out", tint = Color.White) }
@@ -1384,9 +1390,9 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
         /**
          * [scene]'s first view (S05j item 3): Space's and Neurons' tilted fit on the plan's envelope
          * (Space under one single style: every body, at the plain fit), Performance's framing on its
-         * bodies or its ball.
+         * bodies or its ball. The Fractal frames what it draws, at [density] pixels a dp (FractalFit.drawn).
          */
-        fun framer(scene: MapScene): (Float, Float, MapInsets) -> MapPose {
+        fun framer(scene: MapScene, density: Float = 1f): (Float, Float, MapInsets) -> MapPose {
             val tree = scene.tree
             fun bodies(): List<Vec3> = List(tree.nodeCount) { i ->
                 Vec3(tree.positions[3 * i], tree.positions[3 * i + 1], tree.positions[3 * i + 2])
@@ -1398,14 +1404,10 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                     first
                 }
                 MapTheme.TREE -> {
-                    // every body and every branch's ends, framed from the first view's yaw and pitch
+                    // every body and every branch's ends and middle, framed from the first view's yaw and pitch
                     val l = scene.treeModel?.layout
-                    val points = if (l == null) bodies() else List(l.nodes.size * 2) { k ->
-                        val i = k / 2; val t = if (k % 2 == 0) 0.0 else l.length[i]
-                        Vec3((l.base[3 * i] + l.dir[3 * i] * t).toFloat(), (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(),
-                            (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat())
-                    } + bodies()
-                    val margin = scene.treeModel?.smallest ?: scene.nodeRadius
+                    val points = if (l == null) bodies() else TreeFit.points(l, 0)
+                    val margin = scene.treeModel?.margin ?: scene.nodeRadius
                     // from where the crown stands widest, near three quarters round (TreeFit.widestYaw)
                     val yaw = TreeFit.widestYaw(points, TREE_YAW)
                     // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
@@ -1420,9 +1422,13 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                 MapTheme.FRACTAL -> {
                     // All ideas, its parts and theirs, from the first view's yaw and pitch, as large as fits
                     // in the room the chrome and the card leave, centred there (FractalFit)
+                    // and framed again to what the frame there draws, glows and all (FractalFit.drawn), by a
+                    // sight of its own: the renderer's is the GL thread's
                     val m = scene.fractalModel
+                    val sight = m?.let { FractalSight(it) }
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
-                        if (m != null) FractalFit.whole(m, 0f, FRACTAL_PITCH, MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), w, h, insets)
+                        if (m != null) FractalFit.whole(m, 0f, FRACTAL_PITCH, MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), w, h, insets,
+                            sight, density)
                         else MapFirstView.framing(Vec3.ZERO, 1.2f, w, h, insets, yaw = 0f, pitch = FRACTAL_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
                     }
                     first

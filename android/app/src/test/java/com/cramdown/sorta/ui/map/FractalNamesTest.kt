@@ -18,8 +18,10 @@ import org.junit.Test
 // S12, the 3D Fractal's names: no two drawn name boxes ever intersect, halo and all, and no name covers
 // a named dot or a dot as big as its own, on a phone, a tablet and an open foldable, at the first view, orbited 40 and
 // 120 degrees, and flown in to Cardiology; All ideas, Examples and Cardiology are named at the first
-// view, and Cardiology's own parts once flown in. The camera and the projection are the map's own
-// (fractalScene's first view, OrbitCamera, FractalSight, FractalNames.screen, the renderer's path).
+// view, and Cardiology's own parts once flown in; each name's nearest dot is its own, a tap on a name
+// lands on its part, and TalkBack reaches every hub drawn in the focus. The camera and the projection are
+// the map's own (fractalScene's first view and the renderer's fly-in, both framed to what they draw,
+// OrbitCamera, FractalSight, FractalNames.screen, the renderer's path).
 class FractalNamesTest {
     private val fx by lazy { FractalFixture.read() }
     /** The concept's sample as the fixture holds it. */
@@ -70,18 +72,20 @@ class FractalNamesTest {
     private val cardiology get() = sample.titles.indexOf("Cardiology")
 
     /** The dots on screen and the names at [w]'s first view turned by [yaw], or flown in to [into]'s cluster. */
-    private fun names(w: Window, yaw: Float, into: Int = -1, held: Map<Int, Int> = emptyMap(),
+    private fun names(w: Window, yaw: Float, into: Int = -1,
                       chrome: List<androidx.compose.ui.geometry.Rect> = emptyList()): Pair<List<ScreenNode>, List<PlacedName>> {
         val scene = fractalScene(model)
         val camera = firstCamera(MapTheme.FRACTAL, Vec3.ZERO)
         val insets = MapInsets(top = w.top, bottom = w.bottom)
-        HomeView.framer(scene)(w.width.toFloat(), w.height.toFloat(), insets).applyTo(camera)
+        HomeView.framer(scene, w.density)(w.width.toFloat(), w.height.toFloat(), insets).applyTo(camera)
         camera.orbit(yaw, 0f)
         if (into >= 0) {
-            // as the renderer's fly-in frames a hub (GlMapRenderer.flyToHub)
+            // as the renderer's fly-in frames a hub (GlMapRenderer.flyToHub), with a sight of its own on the hub
             // in the room the chrome's boxes leave, as Map3DView's fly-in (MapClear.around)
             val room = MapClear.around(insets, chrome, w.height.toFloat())
-            val pose = FractalFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY, w.width.toFloat(), w.height.toFloat(), room)
+            val fitting = FractalSight(model).also { it.focus = into }
+            val pose = FractalFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY, w.width.toFloat(), w.height.toFloat(), room,
+                fitting, w.density)
             camera.target = pose.target; camera.distance = pose.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
@@ -91,7 +95,7 @@ class FractalNamesTest {
         sight.step(viewProj, focal, w.width.toFloat(), w.height.toFloat(), w.density)
         val screen = FractalNames.screen(sight, focal)
         val placed = FractalNames.layout(screen, sample, Metrics(0.6f), Metrics(0.56f), style(w.density), w.width.toFloat(), w.height.toFloat(),
-            w.top, w.bottom, held = held, focus = into.coerceAtLeast(0), clear = MapClear.boxes(chrome))
+            w.top, w.bottom, focus = into.coerceAtLeast(0), clear = MapClear.boxes(chrome))
         return screen to placed
     }
 
@@ -133,19 +137,65 @@ class FractalNamesTest {
         }
     }
 
+    // the review of S12's stills: a far row's name stood nearer another dot than its own, and read as that one's
+    @Test fun everyNamesNearestDotIsItsOwn() = eachTree {
+        for (w in windows) for ((what, yaw, into) in poses()) {
+            val (screen, placed) = names(w, yaw, into)
+            val near = FractalNames.nearest(placed, screen, sample, style(w.density).leastLeaf)
+            for ((p, n) in placed.zip(near)) assertEquals("${w.name} $what: ${p.label} by ${if (n >= 0) sample.titles[n] else "none"}", p.index, n)
+        }
+    }
+
+    // the review: a tap on a long hub name went Back, as only dots were hit
+    @Test fun aTapOnANameLandsOnItsPart() = eachTree {
+        for (w in windows) for ((what, yaw, into) in poses()) {
+            val (_, placed) = names(w, yaw, into)
+            for (p in placed) {
+                assertEquals("${w.name} $what: ${p.label} at its middle", p.index, FractalNames.nameAt(placed, p.box.x, p.box.y))
+                assertEquals("${w.name} $what: ${p.label} at its end", p.index, FractalNames.nameAt(placed, p.box.x + p.box.width / 2 - 1f, p.box.y))
+            }
+        }
+    }
+
+    // the review: a hub with no name shown could not be reached by TalkBack
+    @Test fun talkBackReachesEveryHubDrawnInTheFocus() = eachTree {
+        for (w in windows) for ((what, yaw, into) in poses()) {
+            val (screen, placed) = names(w, yaw, into)
+            val least = 48f * w.density
+            val targets = FractalNames.targets(screen, placed, sample, into.coerceAtLeast(0), least)
+            val hubs = screen.filter { FractalNames.hub(sample, it.index) && (into <= 0 || sample.holds(into, it.index)) }.map { it.index }.toSet()
+            val reached = targets.map { it.index }.toSet()
+            assertTrue("${w.name} $what: every drawn hub reached (${hubs - reached})", reached.containsAll(hubs))
+            assertTrue("${w.name} $what: every name reached", reached.containsAll(placed.map { it.index }))
+            assertEquals("${w.name} $what: each part once", targets.size, reached.size)
+            for (t in targets) assertTrue("${w.name} $what: ${sample.titles[t.index]} is a touch target", t.width >= least && t.height >= least)
+        }
+    }
+
+    // the review: TalkBack said "All ideas, folder" where VoiceOver said "All ideas"
+    @Test fun allIdeasIsReadAsItsNameAndEveryOtherHubAsAFolder() = eachTree {
+        assertFalse(FractalNames.spokenAsFolder(sample, 0))
+        assertTrue(FractalNames.spokenAsFolder(sample, cardiology))
+        val idea = (1 until sample.count).first { !FractalNames.hub(sample, it) }
+        assertFalse(FractalNames.spokenAsFolder(sample, idea))
+    }
+
     @Test fun turningKeepsTheBigHubsNamed() = eachTree {
-        // each pose places its names trying the last pose's spots first, as the map does: a name held
-        // from the first view must give way to a hub turned under it
+        // the names come from the pose alone, as the map places them: none held from the last pose. At 120 degrees
+        // Cardiology's parts stand round All ideas' dot, so a name of it there would read as theirs, and none is
+        // drawn (the review of S12's stills, item 9: the orbit120 still named All ideas beside Cardiology's dots)
         for (w in windows) {
-            var held = emptyMap<Int, Int>()
             for ((what, deg, want) in listOf(Triple("whole", 0f, listOf("All ideas", "Examples", "Cardiology")),
-                    Triple("orbited 40", 40f, listOf("All ideas", "Cardiology")), Triple("orbited 120", 120f, listOf("All ideas")))) {
-                val (screen, placed) = names(w, rad(deg), held = held)
+                    Triple("orbited 40", 40f, listOf("All ideas", "Cardiology")), Triple("orbited 120", 120f, listOf<String>()))) {
+                val (screen, placed) = names(w, rad(deg))
                 val labels = placed.map { it.label }.toSet()
                 for (name in want) assertTrue("${w.name} $what: $name named, got $labels", name in labels)
                 assertFalse("${w.name} $what: two names overlap", TreeNames.overlaps(placed))
                 assertFalse("${w.name} $what: a name covers a named dot or a bigger one", FractalNames.coversADot(placed, screen))
-                held = placed.associate { it.index to it.spot }
+                assertEquals("${w.name} $what: each name's nearest dot is its own", placed.map { it.index },
+                    FractalNames.nearest(placed, screen, sample, style(w.density).leastLeaf))
+                // the same pose again names the same, in the same spots
+                assertEquals("${w.name} $what: the same pose names the same", placed, names(w, rad(deg)).second)
             }
         }
     }
@@ -197,6 +247,9 @@ class FractalNamesTest {
         assertFalse(TreeNames.overlaps(placed))
         assertFalse(FractalNames.coversADot(placed, pile))
     }
+
+    private fun poses() = listOf(Triple("whole", 0f, -1), Triple("orbited 40", rad(40f), -1), Triple("orbited 120", rad(120f), -1),
+        Triple("Cardiology", 0f, cardiology), Triple("Cardiology orbited 40", rad(40f), cardiology))
 
     private fun rad(d: Float) = (d * Math.PI / 180).toFloat()
 

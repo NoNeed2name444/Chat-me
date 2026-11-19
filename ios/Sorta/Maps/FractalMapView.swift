@@ -25,8 +25,8 @@ enum FractalFirstRun {
 
 /// The store as the Fractal's tree, its links and what the filter leaves out.
 enum FractalBook {
-    /// What the middle hub is called: the map's own word for every idea.
-    static let hub = "All ideas"
+    /// What the middle hub is called: the map's own word for every idea, from the string catalog.
+    static var hub: String { IdeasWords.fractalHub }
 
     /// Top folders oldest first, each folder's folders then its ideas (FractalTree.of), as Android's fractalTree.
     static func tree(_ folders: [NoteFolder], _ notes: [Note]) -> FractalTree {
@@ -116,6 +116,9 @@ struct FractalPart: Identifiable {
     @ObservationIgnored private(set) var sight: FractalSight?
     @ObservationIgnored private(set) var sink: TreeCGSink?
     @ObservationIgnored private(set) var generation = 0
+    /// Bumped only when the tree itself is made again (the ideas or the folders changed), not for a filter:
+    /// the view goes back to the whole map then, and only then (as Android's focus, kept by tree).
+    @ObservationIgnored private(set) var grown = 0
     @ObservationIgnored private(set) var index: [String: Int] = [:]
     @ObservationIgnored private var layout: FractalLayout3D?
     @ObservationIgnored private var linkEnds: [Int] = []
@@ -143,8 +146,12 @@ struct FractalPart: Identifiable {
 
     @ObservationIgnored private(set) var screen: [FractalScreenNode] = []
     @ObservationIgnored private(set) var names: [TreePlacedName] = []
-    @ObservationIgnored private var held: [Int: Int] = [:]
-    private let style = TreeNames3D.Style()
+    /// The chrome's boxes over the map (Back, the round tools), in its points: no name goes under one, and a fly-in is framed clear of them.
+    @ObservationIgnored private(set) var clear: [CGRect] = []
+    /// The room the last framing fit the map to (points from each edge), for the probe.
+    @ObservationIgnored private(set) var room: (top: Float, left: Float, bottom: Float, right: Float) = (0, 0, 0, 0)
+    /// The names' sizes and halo, one for the placer and the ink.
+    let style = TreeNames3D.Style()
     @ObservationIgnored private var pending = false
     @ObservationIgnored private var wantsHome = false
     /// The renderer's view, set once it is made; nil where Metal can't draw, and then every move lands at once.
@@ -171,12 +178,12 @@ struct FractalPart: Identifiable {
             builtFolders = notes.folders
             grown = true
             generation += 1
+            self.grown += 1
             // the last pose's dots and names are the old tree's: none until the new one is placed, so the
             // names layer never asks the new sink for a name past its end (run 44449703457: Let go on an
             // iPad beside the Fractal stopped the app)
             screen = []
             names = []
-            held = [:]
             chosen = -1
             linksOf = -1
         }
@@ -256,6 +263,12 @@ struct FractalPart: Identifiable {
         if grew && home { frameHome() } else { changed() }
     }
 
+    func setClear(_ to: [CGRect]) {
+        if to == clear { return }
+        clear = to
+        changed()
+    }
+
     /// The first visit's card's cover, from the view's foot, 0 once it is put
     /// away. When it comes or grows a camera still at its first view frames above it.
     func setCover(_ to: CGFloat) {
@@ -270,7 +283,9 @@ struct FractalPart: Identifiable {
     private func frameHome() {
         guard let model, sized else { return }
         fly = nil
-        camera = FractalCamera3D.whole(model, width: width, height: height, insets: framedWhole)
+        resight()
+        room = framedWhole
+        camera = FractalCamera3D.whole(model, width: width, height: height, insets: room, sight: sight)
         changed()
     }
 
@@ -280,8 +295,8 @@ struct FractalPart: Identifiable {
         metal?.setNeedsDisplay()
     }
 
-    /// The frame for the pose now (FractalSight), then the names: last
-    /// frame's spots tried first so a name does not hop.
+    /// The frame for the pose now (FractalSight), then the names, by the pose alone: the same pose names
+    /// the same parts in the same spots, whatever came before it.
     func place() {
         guard let model, let sight, let sink, sized else { return }
         resight()
@@ -291,9 +306,8 @@ struct FractalPart: Identifiable {
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
         names = FractalNames3D.layout(screen, model.tree, style: style,
                                       measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
-                                      width: width, height: height, top: focusNow > 0 ? top : 0, bottom: floor, held: held, focus: focusNow)
-        held.removeAll(keepingCapacity: true)
-        for p in names { held[p.index] = p.spot }
+                                      width: width, height: height, top: focusNow > 0 ? top : 0, bottom: floor, focus: focusNow,
+                                      clear: clear)
         named &+= 1
     }
 
@@ -325,13 +339,18 @@ struct FractalPart: Identifiable {
     func go(_ i: Int) {
         guard let model, sized else { return }
         focus = max(0, i)
+        // the sight's focus is the new one, so the fit frames what the fly lands on (FractalFit.drawn)
+        resight()
         let to: GraphPerfCamera
         if i <= 0 {
             home = true
-            to = FractalCamera3D.whole(model, width: width, height: height, insets: framedWhole)
+            room = framedWhole
+            to = FractalCamera3D.whole(model, width: width, height: height, insets: room, sight: sight)
         } else {
             home = false
-            to = FractalCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: framed)
+            // the part between the chrome's boxes too: under Back, over the round tools
+            room = TreeCamera3D.around(framed, clear: clear, height: height)
+            to = FractalCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: room, sight: sight)
         }
         if reduced || metal == nil {
             fly = nil
@@ -384,24 +403,34 @@ struct FractalPart: Identifiable {
         FractalNames3D.hit(screen, names, x: Float(point.x), y: Float(point.y), least: Float(WardControlSize.target))
     }
 
-    /// The names placed, for VoiceOver: each a touch target each way at least.
+    /// What VoiceOver reads: each name placed, and each hub drawn in the focus that has none, each a
+    /// touch target each way at least (FractalNames3D.targets).
     func parts() -> [FractalPart] {
         guard let tree else { return [] }
-        let t = CGFloat(WardControlSize.target)
-        return names.map { p in
-            let w = max(t, CGFloat(p.width)), h = max(t, CGFloat(p.height))
-            return FractalPart(node: p.index, id: p.index == 0 ? "hub" : tree.ids[p.index], name: tree.titles[p.index],
-                               hub: p.index == 0 || tree.childCount[p.index] > 0 || tree.kind[p.index] != FractalTree.idea,
-                               frame: CGRect(x: CGFloat(p.x) - w / 2, y: CGFloat(p.y) - h / 2, width: w, height: h))
+        return FractalNames3D.targets(screen, names, tree, focus: focusNow, least: Float(WardControlSize.target)).map { t in
+            FractalPart(node: t.index, id: t.index == 0 ? "hub" : tree.ids[t.index], name: tree.titles[t.index],
+                        hub: FractalNames3D.hub(tree, t.index),
+                        frame: CGRect(x: CGFloat(t.x - t.width / 2), y: CGFloat(t.y - t.height / 2), width: CGFloat(t.width), height: CGFloat(t.height)))
         }
     }
 
     /// UI tests only (`-SortaFractalProbe`): the view's size, the camera's
-    /// turn, the hub in focus, the card's top, the dots drawn, then each name
-    /// and its box (left, top, right, bottom, points in the map), a line each.
+    /// turn, the hub in focus, the card's top, the dots drawn and their box
+    /// with their glows (left, top, right, bottom), the room the last framing
+    /// fit them to (top, left, bottom, right from the edges), then each name and
+    /// its box (left, top, right, bottom, points in the map), a line each.
     func probe() -> String {
         guard let tree else { return "" }
+        var lo = SIMD2<Float>(.infinity, .infinity), hi = SIMD2<Float>(-.infinity, -.infinity)
+        if let sight {
+            for k in 0..<sight.count {
+                let g = sight.radius[k] * (1 + FractalSight.glowReach * sight.hub[k])
+                lo = simd_min(lo, SIMD2(sight.x[k] - g, sight.y[k] - g)); hi = simd_max(hi, SIMD2(sight.x[k] + g, sight.y[k] + g))
+            }
+        }
+        if lo.x > hi.x { lo = .zero; hi = .zero }
         var out = "\(Int(size.width)) \(Int(size.height)) \(camera.yaw) \(focus) \(height - cover) \(sight?.count ?? 0)"
+        out += " \(lo.x) \(lo.y) \(hi.x) \(hi.y) \(room.top) \(room.left) \(room.bottom) \(room.right)"
         for p in names {
             out += "\n\(tree.titles[p.index])\t\(p.left) \(p.top) \(p.right) \(p.bottom)"
         }
@@ -414,6 +443,15 @@ struct FractalPart: Identifiable {
     }
 }
 
+/// One Fractal name in white over a halo of the sky `style.halo` points round
+/// its words. The sink strokes the halo as a path, so the width is the halo's
+/// as drawn on screen, at any size.
+enum FractalNameInk {
+    static func draw(_ p: TreePlacedName, sink: TreeCGSink, style: TreeNames3D.Style) {
+        sink.text(p.index, p.x, p.y, p.size, p.bold, 2, FractalTones.ink, FractalTones.sky, 2 * style.halo)
+    }
+}
+
 /// The names, drawn where the placer put them, each in white over a halo of
 /// the sky: one Core Text line a name, made once with the tree (TreeCGSink).
 private struct FractalNamesLayer: View {
@@ -421,17 +459,14 @@ private struct FractalNamesLayer: View {
 
     var body: some View {
         let named = host.named
-        let names = host.names, sink = host.sink, count = host.tree?.count ?? 0
+        let names = host.names, sink = host.sink, count = host.tree?.count ?? 0, style = host.style
         Canvas { context, _ in
             _ = named
             guard let sink else { return }
             context.withCGContext { cg in
                 sink.cg = cg
                 for p in names where p.index < count {
-                    // the sink strokes a name's halo at its 100-point line's scale, so the width is given at that
-                    // scale: a halo 2.5 points round the words, not 19, which hid the dots and lines round a name
-                    // (run 44449703457's stills)
-                    sink.text(p.index, p.x, p.y, p.size, p.bold, 2, FractalTones.ink, FractalTones.sky, 2 * TreeNames3D.Style().halo * p.size / 100)
+                    FractalNameInk.draw(p, sink: sink, style: style)
                 }
                 sink.cg = nil
             }
@@ -455,7 +490,7 @@ private struct FractalParts: View {
                     .offset(x: part.frame.minX, y: part.frame.minY)
                     .allowsHitTesting(false)
                     .accessibilityElement()
-                    .accessibilityLabel(part.hub && part.node > 0 ? IdeasWords.fractalFolderSpoken(part.name) : part.name)
+                    .accessibilityLabel(part.node > 0 && part.hub ? IdeasWords.fractalFolderSpoken(part.name) : part.name)
                     .accessibilityHint(part.hub ? IdeasWords.fractalZoomHint : IdeasWords.fractalIdeaHint)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityIdentifier("fractal-part-" + part.id)
@@ -505,6 +540,22 @@ struct FractalMapView: View {
     @State private var lastMagnification: CGFloat = 1
     /// The first visit's card's height, 0 while it is not shown.
     @State private var cardHeight: CGFloat = 0
+    /// The map's, Back's and each round tool's frames on screen, for the chrome's boxes over the map.
+    @State private var mapFrame: CGRect = .zero
+    @State private var backFrame: CGRect = .null
+    @State private var filterFrame: CGRect = .null
+    @State private var recentreFrame: CGRect = .null
+
+    /// The chrome's boxes over the map, in its own points (FractalHost.setClear), as the Tree's: Back while
+    /// flown in, and the round tools' column, Filter over Recentre.
+    private var chromeBoxes: [CGRect] {
+        let origin = mapFrame.origin
+        var out: [CGRect] = []
+        if host.focus > 0, !backFrame.isNull { out.append(backFrame.offsetBy(dx: -origin.x, dy: -origin.y)) }
+        let tools = filterFrame.union(recentreFrame)
+        if !tools.isNull { out.append(tools.offsetBy(dx: -origin.x, dy: -origin.y)) }
+        return out
+    }
 
     /// What the chrome covers inside the map: Back's row at the top, the tools' row at the foot.
     private static let topChrome: CGFloat = WardControlSize.target + 2 * WardSpace.gutter
@@ -514,6 +565,7 @@ struct FractalMapView: View {
         _ = FractalFirstRun.reset
         let tree = host.prepare(notes, filter: filter, lens: lens, tier: GraphQuality.current.tier)
         let generation = host.generation
+        let grown = host.grown
         let focus = min(max(host.focus, 0), max(tree.count - 1, 0))
         return ZStack {
             FractalMetalView(host: host)
@@ -529,6 +581,7 @@ struct FractalMapView: View {
                 .onGeometryChange(for: CGSize.self) { $0.size } action: {
                     host.resize($0, top: Self.topChrome, bottom: Self.footChrome)
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { mapFrame = $0 }
             FractalNamesLayer(host: host)
             FractalParts(host: host, activate: activate)
             if FractalProbe.on {
@@ -542,6 +595,7 @@ struct FractalMapView: View {
                 IdeaToolButton(symbol: "chevron.backward",
                                label: IdeasWords.fractalBackSpoken(tree.titles[tree.parent[focus]])) { back() }
                     .accessibilityIdentifier("fractal-back")
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { backFrame = $0 }
                     .padding(WardSpace.gutter)
             }
         }
@@ -554,14 +608,17 @@ struct FractalMapView: View {
         .onAppear { host.reduced = reduceMotion }
         .onChange(of: reduceMotion) { _, now in host.reduced = now }
         .onChange(of: coverNow) { _, now in host.setCover(now) }
+        .onChange(of: chromeBoxes) { _, now in host.setClear(now) }
         .onChange(of: generation) { _, _ in
-            // a new tree starts whole: what was chosen is chosen again if it is still there
+            // a new tree or filter: what was chosen is chosen again if it is still there
             let i = chosen.flatMap { host.index[$0.uuidString] } ?? -1
             if i <= 0 { chosen = nil; linksShown = false }
             host.choose(max(-1, i))
             host.showLinks(of: linksShown && i > 0 ? i : -1)
-            host.focus = 0
         }
+        // a new tree starts whole; a filter or a lens changed while flown in keeps the hub and Back, as
+        // Android's focus is kept by tree (IdeasFractal)
+        .onChange(of: grown) { _, _ in host.focus = 0 }
         .sheet(item: $movingNote) { item in
             FolderChooser(current: notes.note(item.id)?.folderId,
                           choose: { filing.file(item.id, in: $0, notes: notes) },
@@ -611,7 +668,12 @@ struct FractalMapView: View {
     /// away or, with none, goes back.
     private func activate(_ i: Int) {
         guard let tree = host.tree else { return }
-        if !seen { seen = true }
+        if !seen {
+            seen = true
+            // the card is put away now, before any fly-in, so the fly frames the room it leaves, not the
+            // room it had (the card's cover reaches the host only after this, by onChange)
+            host.setCover(0)
+        }
         if i < 0 || i >= tree.count {
             if chosen != nil { pick(-1) } else { back() }
             return
@@ -629,8 +691,9 @@ struct FractalMapView: View {
     private func back() {
         guard let tree = host.tree else { return }
         pick(-1)
-        let focus = host.focus
-        if focus > 0 { host.go(tree.parent[focus]) }
+        // the hub flown in to, in the tree as it is: one past its end is the whole map
+        let focus = host.focus < tree.count ? host.focus : 0
+        if focus > 0 { host.go(tree.parent[focus]) } else if host.focus != 0 { host.go(0) }
     }
 
     private func recentre() {
@@ -739,7 +802,9 @@ struct FractalMapView: View {
         .foregroundStyle(IdeaToolFace.ink(active: filter != .all))
         .ideaToolRelief(active: filter != .all)
         .accessibilityLabel("Filter")
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { filterFrame = $0 }
 
         IdeaToolButton(symbol: "smallcircle.filled.circle", label: "Recentre") { recentre() }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { recentreFrame = $0 }
     }
 }

@@ -79,34 +79,77 @@ enum TreeBook {
 /// Draws a nest's names (and, for the flat TreeScene, its shapes) into a Core
 /// Graphics context, in points, with nothing made per frame: each name's two
 /// lines (upright and bold) are made once, at 100 points, and scaled to the
-/// size asked for.
+/// size asked for; so is its cut form (`shorts`), after the whole names, where
+/// it differs.
 final class TreeCGSink: NestSink {
     var cg: CGContext?
     private var lines: [[CTLine]]
+    /// Each line's glyphs as one outline, for the halo (`outline`).
+    private var halos: [[CGPath]]
     private(set) var widths: [[Float]]
     private let ascent: [CGFloat], descent: [CGFloat]
+    /// How many names there are: a cut name's line is this far after its whole one's.
+    private let count: Int
 
-    init(titles: [String]) {
+    init(titles: [String], shorts: [String]? = nil) {
         let fonts: [CTFont] = [Self.font(700), Self.font(800)]
         var lines: [[CTLine]] = [[], []]
         var widths: [[Float]] = [[], []]
+        var halos: [[CGPath]] = [[], []]
+        count = titles.count
+        let cut = shorts ?? titles
         for b in 0..<2 {
-            lines[b].reserveCapacity(titles.count)
-            widths[b].reserveCapacity(titles.count)
-            for title in titles {
+            lines[b].reserveCapacity(2 * titles.count)
+            halos[b].reserveCapacity(2 * titles.count)
+            widths[b].reserveCapacity(2 * titles.count)
+            for (k, title) in (titles + cut).enumerated() {
+                // a cut name the same as its whole one shares its line
+                if k >= titles.count, k - titles.count < titles.count, title == titles[k - titles.count] {
+                    let j = k - titles.count
+                    lines[b].append(lines[b][j]); halos[b].append(halos[b][j]); widths[b].append(widths[b][j])
+                    continue
+                }
                 let attributes: [NSAttributedString.Key: Any] = [
                     NSAttributedString.Key(kCTFontAttributeName as String): fonts[b],
                     NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
                 ]
                 let line = CTLineCreateWithAttributedString(NSAttributedString(string: title, attributes: attributes))
                 lines[b].append(line)
+                halos[b].append(Self.outline(line))
                 widths[b].append(Float(CTLineGetTypographicBounds(line, nil, nil, nil)))
             }
         }
         self.lines = lines
+        self.halos = halos
         self.widths = widths
         ascent = fonts.map { CTFontGetAscent($0) }
         descent = fonts.map { CTFontGetDescent($0) }
+    }
+
+    /// A line's glyphs as one path at 100 points, in text space (y up). The
+    /// halo strokes this path: a path's stroke scales with the context, so the
+    /// halo stays as wide as asked at any size. Text drawn in stroke mode kept
+    /// its 100-point width instead, and its halo, several times too wide,
+    /// blanked the tree round every name.
+    private static func outline(_ line: CTLine) -> CGPath {
+        let path = CGMutablePath()
+        let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+        for run in runs {
+            let count = CTRunGetGlyphCount(run)
+            if count == 0 { continue }
+            let attributes = CTRunGetAttributes(run) as NSDictionary
+            guard let value = attributes[kCTFontAttributeName as String] else { continue }
+            let font = value as! CTFont
+            var glyphs = [CGGlyph](repeating: 0, count: count)
+            var positions = [CGPoint](repeating: .zero, count: count)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: count), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
+            for k in 0..<count {
+                guard let glyph = CTFontCreatePathForGlyph(font, glyphs[k], nil) else { continue }
+                path.addPath(glyph, transform: CGAffineTransform(translationX: positions[k].x, y: positions[k].y))
+            }
+        }
+        return path
     }
 
     /// Nunito at 100 points and `wght`, falling to Baloo Bhaijaan 2 where it has no glyphs, as WardFont does.
@@ -121,10 +164,13 @@ final class TreeCGSink: NestSink {
         return UIFont(descriptor: UIFontDescriptor(fontAttributes: attributes), size: 100) as CTFont
     }
 
-    /// Node `node`'s words' width and height at `size` points, bold for a branch.
-    func box(_ node: Int, bold: Bool, size: Float) -> (width: Float, height: Float) {
+    /// The line node `node`'s name is drawn with, whole or cut (`short`): what `text` takes.
+    func line(_ node: Int, short: Bool) -> Int { short ? count + node : node }
+
+    /// Node `node`'s words' width and height at `size` points, whole or cut (`short`), bold for a branch.
+    func box(_ node: Int, short: Bool = false, bold: Bool, size: Float) -> (width: Float, height: Float) {
         let b = bold ? 1 : 0
-        return (widths[b][node] * size / 100, Float(ascent[b] + descent[b]) * size / 100)
+        return (widths[b][line(node, short: short)] * size / 100, Float(ascent[b] + descent[b]) * size / 100)
     }
 
     func moveTo(_ x: Float, _ y: Float) { cg?.move(to: CGPoint(x: CGFloat(x), y: CGFloat(y))) }
@@ -163,13 +209,17 @@ final class TreeCGSink: NestSink {
         cg.saveGState()
         cg.translateBy(x: CGFloat(x), y: CGFloat(y))
         cg.scaleBy(x: s, y: s)
-        cg.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        // the halo: the glyphs' outline stroked where the line is drawn below, upright
+        cg.saveGState()
+        cg.translateBy(x: dx, y: base)
+        cg.scaleBy(x: 1, y: -1)
+        cg.addPath(halos[b][node])
         cg.setLineJoin(.round)
         cg.setLineWidth(CGFloat(haloWidth) / s)
         cg.setStrokeColor(red: Self.r(halo), green: Self.g(halo), blue: Self.b(halo), alpha: 1)
-        cg.setTextDrawingMode(.stroke)
-        cg.textPosition = CGPoint(x: dx, y: base)
-        CTLineDraw(line, cg)
+        cg.strokePath()
+        cg.restoreGState()
+        cg.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         cg.setFillColor(red: Self.r(ink), green: Self.g(ink), blue: Self.b(ink), alpha: 1)
         cg.setTextDrawingMode(.fill)
         cg.textPosition = CGPoint(x: dx, y: base)
@@ -258,7 +308,8 @@ struct TreePart: Identifiable {
             self.nodes = nodes
             layout = TreeLayout3D(nodes)
             links = TreeBook.links(notes.allEdges(), nodes)
-            sink = TreeCGSink(titles: nodes.titles.map(TreeNames3D.label))
+            sink = TreeCGSink(titles: nodes.titles.map { TreeNames3D.label($0) },
+                              shorts: nodes.titles.map { TreeNames3D.label($0, cut: TreeNames3D.shortCut) })
             builtNotes = notes.notes
             builtFolders = notes.folders
             grown = true
@@ -358,7 +409,7 @@ struct TreePart: Identifiable {
         screen = TreeCamera3D.project(model, camera, width: width, height: height, hidden: hidden)
         let floor = TreeNames3D.floor(bottom: bottom, cover: cover)
         let cap = TreeNames3D.flownCap(width: width, height: height - top - floor)
-        names = TreeNames3D.layout(screen, nodes, style: style, measure: { i, bold, size in sink.box(i, bold: bold, size: size) },
+        names = TreeNames3D.layout(screen, nodes, style: style, measure: { i, short, bold, size in sink.box(i, short: short, bold: bold, size: size) },
                                    width: width, height: height, top: top, bottom: floor, held: held, focus: focus,
                                    clear: clear, cap: cap)
         held.removeAll(keepingCapacity: true)
@@ -463,17 +514,18 @@ struct TreePart: Identifiable {
         guard let nodes else { return }
         let n = nodes.size
         if states.count != n { states = [UInt8](repeating: 0, count: n) }
-        for i in 0..<n { states[i] = (hidden?[i] ?? false) ? TreeMetalRenderer.hidden : 0 }
+        // the links of the chosen first, marked in the states, then each node's state from them (TreeState)
+        for i in 0..<n { states[i] = TreeState.none }
         if linksOf > 0 {
             for k in 0..<links.size {
                 let a = links.a[k], b = links.b[k]
-                if a == linksOf, b < n, states[b] == 0 { states[b] = TreeMetalRenderer.linked }
-                if b == linksOf, a < n, states[a] == 0 { states[a] = TreeMetalRenderer.linked }
+                if a == linksOf, b < n { states[b] = TreeState.linked }
+                if b == linksOf, a < n { states[a] = TreeState.linked }
             }
         }
-        if chosen >= 0, chosen < n { states[chosen] = TreeMetalRenderer.chosen }
-        if focus > 0, focus < n {
-            for i in 0..<n where states[i] == 0 && !nodes.within(focus, i) { states[i] = TreeMetalRenderer.faded }
+        for i in 0..<n {
+            states[i] = TreeState.of(nodes, i, hidden: hidden?[i] ?? false, chosen: chosen,
+                                     linked: states[i] == TreeState.linked, focus: focus)
         }
         stateVersion &+= 1
     }
@@ -540,7 +592,7 @@ private struct TreeNamesLayer: View {
                 cg.strokePath()
                 sink.cg = cg
                 for p in names {
-                    sink.text(p.index, p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)
+                    sink.text(sink.line(p.index, short: p.short), p.x, p.y, p.size, p.bold, 2, ink, halo, 2 * TreeNames3D.Style().halo)
                 }
                 sink.cg = nil
             }
@@ -631,9 +683,6 @@ struct TreeMapView: View {
         return out
     }
 
-    /// What the chrome covers inside the map: Back's row at the top, the tools' row at the foot.
-    private static let topChrome: CGFloat = WardControlSize.target + 2 * WardSpace.gutter
-    private static let footChrome: CGFloat = WardControlSize.target + WardSpace.gutter
 
     var body: some View {
         _ = TreeFirstRun.reset
@@ -653,7 +702,10 @@ struct TreeMapView: View {
                 .accessibilityLabel(IdeasWords.treeMapSpoken(nodes.titles[max(0, focus)]))
                 .accessibilityIdentifier("tree-map")
                 .onGeometryChange(for: CGSize.self) { $0.size } action: {
-                    host.resize($0, top: Self.topChrome, bottom: Self.footChrome)
+                    // the map already sits between the strip and the foot; Back and the round tools are
+                    // kept clear as boxes (chromeBoxes), not as whole rows, so the first view has
+                    // Back's empty row too, as Android's
+                    host.resize($0, top: 0, bottom: 0)
                 }
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { mapFrame = $0 }
             TreeNamesLayer(host: host)

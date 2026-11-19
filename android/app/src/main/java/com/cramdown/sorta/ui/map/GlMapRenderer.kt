@@ -61,6 +61,7 @@ import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.TreeModel
 import com.cramdown.sorta.map.FractalFit
 import com.cramdown.sorta.map.FractalModel
+import com.cramdown.sorta.map.FractalSight
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.MapPose
 import com.cramdown.sorta.map.PerfForce
@@ -690,6 +691,8 @@ class GlMapRenderer(
     private var treeFilterSent: MapFilterView? = null
     /** S12: the Fractal's draw ([drawFractal]), and the pose and filter its dots were last handed on at. */
     private val fractalGl: FractalGl? = if (theme == MapTheme.FRACTAL && fractalModel != null) FractalGl(fractalModel) else null
+    /** The Fractal's sight for framing a fly-in (FractalFit.drawn), stepped only where a fly-in is asked. */
+    private val fractalFitSight: FractalSight? by lazy { if (fractalGl != null && fractalModel != null) FractalSight(fractalModel) else null }
     private val fractalPose = FloatArray(6) { Float.NaN }
     private var fractalFilterSent: MapFilterView? = null
     private var fractalHidden = 0
@@ -1203,9 +1206,12 @@ class GlMapRenderer(
      */
     private fun flyToHub(m: FractalModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         if (!canFlyTo(index)) return false
+        // a sight of its own frames what the fly-in will draw (FractalFit.drawn): the GL thread's is never stepped from here
+        val sight = fractalFitSight?.also { it.focus = index.coerceAtLeast(0); it.shown = appliedFilter?.shown; it.chosen = -1; it.linksOf = -1 }
         synchronized(camera) {
-            // the cluster as large as fits in the room the chrome leaves, centred there (FractalFit)
-            val pose = FractalFit.flyIn(m, index, camera.yaw, camera.pitch, camera.fovY, viewWidth, viewHeight, insets)
+            // the cluster as large as fits in the room the chrome leaves, centred there, and framed again to
+            // what is drawn there, its deeper dots and glows too (FractalFit)
+            val pose = FractalFit.flyIn(m, index, camera.yaw, camera.pitch, camera.fovY, viewWidth, viewHeight, insets, sight, max(density, 0.1f))
             flight = CameraFlight(camera.target, camera.distance, MapFit(pose.distance, pose.target), MapFly.seconds(lively))
         }
         flown = index

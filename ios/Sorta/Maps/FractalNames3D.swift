@@ -23,21 +23,27 @@ nonisolated enum FractalCamera3D {
     static let seconds: Double = 0.8
 
     /// All ideas, its parts and theirs, from the first view's yaw and pitch, as large as fits in the
-    /// room the chrome and the card leave, centred there (FractalFit).
+    /// room the chrome and the card leave, centred there (FractalFit). With `sight` (its focus 0), framed
+    /// again to what it draws there (FractalFit.drawn).
     static func whole(_ m: FractalModel, width: Float, height: Float,
-                      insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
+                      insets: (top: Float, left: Float, bottom: Float, right: Float), sight: FractalSight? = nil) -> GraphPerfCamera {
         var c = GraphPerfCamera()
         c.yaw = 0; c.pitch = pitch
         if m.tree.count == 0 { return c.framing(centre: .zero, radius: 1.2, width: width, height: height, insets: insets, fill: 0.9) }
-        return FractalFit.fit(m.layout, FractalFit.nodes(m.tree, 0, levels: FractalFit.wholeLevels, most: m.budget), from: c,
-                              width: width, height: height, insets: insets)
+        let nodes = FractalFit.nodes(m.tree, 0, levels: FractalFit.wholeLevels, most: m.budget)
+        c = FractalFit.fit(m.layout, nodes, from: c, width: width, height: height, insets: insets)
+        guard let sight else { return c }
+        return FractalFit.drawn(m, sight, nodes, at: c, width: width, height: height, insets: insets)
     }
 
-    /// Hub `index`'s cluster from where the camera looks now, as large as fits in the room the chrome leaves, centred there.
+    /// Hub `index`'s cluster from where the camera looks now, as large as fits in the room the chrome leaves, centred
+    /// there. With `sight` (its focus `index`), framed again to what it draws there (FractalFit.drawn).
     static func flyIn(_ m: FractalModel, _ index: Int, from camera: GraphPerfCamera, width: Float, height: Float,
-                      insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
-        FractalFit.fit(m.layout, FractalFit.nodes(m.tree, index, levels: FractalFit.inLevels, most: m.budget), from: camera,
-                       width: width, height: height, insets: insets)
+                      insets: (top: Float, left: Float, bottom: Float, right: Float), sight: FractalSight? = nil) -> GraphPerfCamera {
+        let nodes = FractalFit.nodes(m.tree, index, levels: FractalFit.inLevels, most: m.budget)
+        let c = FractalFit.fit(m.layout, nodes, from: camera, width: width, height: height, insets: insets)
+        guard let sight else { return c }
+        return FractalFit.drawn(m, sight, nodes, at: c, width: width, height: height, insets: insets)
     }
 
     static func centre(_ m: FractalModel, _ i: Int) -> SIMD3<Float> {
@@ -117,10 +123,51 @@ nonisolated enum FractalFit {
         margin * max(min(width - insets.left - insets.right, height - insets.top - insets.bottom), 0)
     }
 
+    /// The most times `drawn` frames a pose again.
+    static let passes = 5
+
+    /// What a fit of `nodes` to `camera` draws, framed: the sight's frame at that pose (its focus and filter as set),
+    /// then the pose fit once more to `nodes` and every dot drawn there, each with its glow as drawn. A deeper
+    /// level's dot or a hub's glow at its least size then stays in the room, not at the view's edge (the review of
+    /// S12's stills), and what is drawn is centred there, not what a nearer pose drew. A pose that draws other dots
+    /// than the last (one turned into view as the camera stood back, a level closed as it shrank), or a glow
+    /// grown, is framed again, at most `passes` times in all. Android's FractalFit.drawn is the same.
+    static func drawn(_ m: FractalModel, _ sight: FractalSight, _ nodes: [Int], at camera: GraphPerfCamera, width: Float, height: Float,
+                      insets: (top: Float, left: Float, bottom: Float, right: Float), margin given: Float? = nil) -> GraphPerfCamera {
+        let shown = sight.shown
+        let framed = nodes.filter { shown == nil || ($0 < shown!.count && shown![$0]) }
+        var last: [Int: Double] = [:]
+        var pose = camera
+        for pass in 0..<passes {
+            let f = pose.focal(viewHeight: height)
+            sight.step(FractalCamera3D.viewProj(m, pose, width: width, height: height), focal: f, width: width, height: height)
+            var marks: [Int: Double] = [:]
+            for k in 0..<sight.count {
+                // the glow's reach on screen, back in the map's units at the dot's depth
+                marks[sight.node[k]] = Double(sight.radius[k] * (1 + FractalSight.glowReach * sight.hub[k])) * Double(sight.depth[k]) / Double(f)
+            }
+            // the same dots as the pose was fit to, none grown past rounding: it frames what it draws
+            if pass > 0 && Set(marks.keys) == Set(last.keys) && marks.allSatisfy({ $0.value <= (last[$0.key] ?? 0) * (1 + grown) }) { break }
+            var all = framed
+            var seen = Set(framed)
+            for i in marks.keys.sorted() where seen.insert(i).inserted { all.append(i) }
+            if all.isEmpty { break }
+            last = marks
+            pose = fit(m.layout, all, from: camera, width: width, height: height, insets: insets, margin: given, marks: marks)
+        }
+        return pose
+    }
+
+    /// How much a glow may grow from the pose it was fit at (a share of it) and still count as framed.
+    static let grown = 0.002
+
     /// `camera` moved to show every one of `nodes` with its mark from its own yaw and pitch, as large as fits in the
-    /// room `insets` leave less the margin, centred in that room; it orbits the middle of what it frames.
+    /// room `insets` leave less the margin, centred in that room; it orbits the middle of what it frames. `marks`
+    /// is a node's mark (map units) as a frame draws it, in place of its own: a big hub's dot drawn at its most
+    /// size, a speck's at its least.
     static func fit(_ layout: FractalLayout3D, _ nodes: [Int], from camera: GraphPerfCamera, width: Float, height: Float,
-                    insets: (top: Float, left: Float, bottom: Float, right: Float), margin given: Float? = nil) -> GraphPerfCamera {
+                    insets: (top: Float, left: Float, bottom: Float, right: Float), margin given: Float? = nil,
+                    marks: [Int: Double] = [:]) -> GraphPerfCamera {
         var out = camera
         let r = SIMD3<Double>(camera.right), u = SIMD3<Double>(camera.up), b = SIMD3<Double>(-camera.forward)
         let f = Double(camera.focal(viewHeight: height))
@@ -136,7 +183,7 @@ nonisolated enum FractalFit {
         for q in 0..<count {
             let i = nodes[q]
             let p = SIMD3<Double>(layout.pos[3 * i], layout.pos[3 * i + 1], layout.pos[3 * i + 2])
-            x[q] = (p * r).sum(); y[q] = (p * u).sum(); z[q] = (p * b).sum(); k[q] = mark(layout, i)
+            x[q] = (p * r).sum(); y[q] = (p * u).sum(); z[q] = (p * b).sum(); k[q] = marks[i] ?? mark(layout, i)
             zLow = min(zLow, z[q]); zHigh = max(zHigh, z[q]); nearest = max(nearest, z[q] + k[q])
         }
         // for an eye at depth e along b, the eye's across and up that keep each mark in the room:
@@ -186,10 +233,14 @@ nonisolated enum FractalFit {
 /// in to first, then hubs, then the heavier, then the bigger on screen. Each
 /// takes the first of its spots (under, above, after and before its dot,
 /// then for a hub a row further under and above) that is clear of every name
-/// placed, inside the view and off the chrome, and covers no named dot and no
-/// dot drawn as big as its own. A name with no clear spot is not drawn, so no
-/// two names ever overlap at any angle or zoom. Only a dot bright and big
-/// enough (FractalSight.nameable) has a name. Android's FractalNames is the same.
+/// placed, inside the view and off the chrome's boxes, covers no named dot and no
+/// dot drawn as big as its own, and has no other dot nearer it than its own, so
+/// a name is never read as a neighbour's. Where one placed name alone is in the
+/// way, it may step to another of its clear spots first. A name with no such spot
+/// is not drawn, so no two names ever overlap at any angle or zoom. Only a dot bright and big
+/// enough (FractalSight.nameable) has a name. The names come from the pose
+/// alone, never from what was named before, so the same pose names the same.
+/// Android's FractalNames is the same.
 nonisolated enum FractalNames3D {
     /// Dots this close in radius (points) count as the same size.
     static let same: Float = 0.5
@@ -215,22 +266,33 @@ nonisolated enum FractalNames3D {
 
     /// The names to draw for `screen` in a view `width` by `height` whose top
     /// `top` and bottom `bottom` points the chrome covers. `measure` gives a
-    /// node's words' width and height at a size, bold for a hub. `held` is
-    /// last time's spot by node, tried first so a name does not hop.
+    /// node's words' width and height at a size, bold for a hub. `held` is a
+    /// spot by node to try first (the map passes none, so names follow the
+    /// pose alone). `clear` are the chrome's boxes over the view (Back, the
+    /// round tools), which no name goes under.
     static func layout(_ screen: [FractalScreenNode], _ tree: FractalTree, style: TreeNames3D.Style,
                        measure: (_ node: Int, _ bold: Bool, _ size: Float) -> (width: Float, height: Float),
                        width: Float, height: Float, top: Float, bottom: Float,
-                       held: [Int: Int] = [:], focus: Int = 0) -> [TreePlacedName] {
+                       held: [Int: Int] = [:], focus: Int = 0, clear: [CGRect] = []) -> [TreePlacedName] {
         var out: [TreePlacedName] = []
         out.reserveCapacity(TreeNames3D.most)
+        // the chrome's boxes, taken before any name
+        let blocked: [TreePlacedName] = clear.map { r in
+            TreePlacedName(index: -1, size: 0, bold: false, x: Float(r.midX), y: Float(r.midY), width: Float(r.width), height: Float(r.height), spot: -1)
+        }
         let ordered = order(screen, tree, focus: focus)
         var dots = Grid(ordered, count: tree.count) { hub(tree, $0) }
+        // the dots a name could be read as naming (marked)
+        let near = Grid(screen.filter { marked(tree, $0, leastLeaf: style.leastLeaf) }, count: tree.count) { hub(tree, $0) }
+        // each placed name's dot and spots, so one in a later name's way can step aside
+        var options: [(node: FractalScreenNode, spots: [(Float, Float)?])] = []
         for node in ordered.prefix(TreeNames3D.budget) {
             if out.count >= TreeNames3D.most { break }
             let i = node.index
             let isHub = hub(tree, i)
             // a dot a name already covers is not named: its name would stand off a hidden dot
-            if out.contains(where: { covers($0.x, $0.y, $0.width, $0.height, node.x, node.y, node.pixels / 2, style.gapY) }) { continue }
+            if out.contains(where: { covers($0.x, $0.y, $0.width, $0.height, node.x, node.y, node.pixels / 2, style.gapY) })
+                || blocked.contains(where: { covers($0.x, $0.y, $0.width, $0.height, node.x, node.y, node.pixels / 2, style.gapY) }) { continue }
             if !isHub && node.pixels < style.leastLeaf { continue }
             if TreeNames3D.label(tree.titles[i]).isEmpty { continue }
             let size = isHub ? style.bough : style.leaf
@@ -256,13 +318,43 @@ nonisolated enum FractalNames3D {
             var chosen = -1
             for k in tried {
                 guard let s = spots[k] else { continue }
-                if out.allSatisfy({ apart(s, w, h, $0, style) }) && !dots.covered(s.0, s.1, w, h, gap: style.gapY, own: node.pixels / 2) {
+                if out.allSatisfy({ apart(s, w, h, $0, style) }) && blocked.allSatisfy({ apart(s, w, h, $0, style) })
+                    && !dots.covered(s.0, s.1, w, h, gap: style.gapY, own: node.pixels / 2, not: i)
+                    && !near.nearer(s.0, s.1, w, h, than: node, part: { ownPart(tree, i, $0) }) {
                     if chosen < 0 { chosen = k }
                     if !dots.coversHub(s.0, s.1, w, h, gap: style.gapY, own: i) { chosen = k; break }
                 }
             }
+            // no spot is clear: where one name alone is in the way, that name may step to another of its clear
+            // spots (one that hides no hub, if its own hid none), so the first name's choice does not cost the next one
+            if chosen < 0 {
+                for k in tried {
+                    guard let s = spots[k], blocked.allSatisfy({ apart(s, w, h, $0, style) }),
+                          !dots.covered(s.0, s.1, w, h, gap: style.gapY, own: node.pixels / 2, not: i),
+                          !near.nearer(s.0, s.1, w, h, than: node, part: { ownPart(tree, i, $0) }) else { continue }
+                    let hits = out.indices.filter { !apart(s, w, h, out[$0], style) }
+                    guard hits.count == 1 else { continue }
+                    let j = hits[0], o = out[j], other = options[j]
+                    let hid = dots.coversHub(o.x, o.y, o.width, o.height, gap: style.gapY, own: o.index)
+                    let mine = TreePlacedName(index: i, size: size, bold: isHub, x: s.0, y: s.1, width: w, height: h, spot: k)
+                    for q in other.spots.indices where q != o.spot {
+                        guard let t = other.spots[q], apart(t, o.width, o.height, mine, style),
+                              out.indices.allSatisfy({ $0 == j || apart(t, o.width, o.height, out[$0], style) }),
+                              blocked.allSatisfy({ apart(t, o.width, o.height, $0, style) }),
+                              !covers(t.0, t.1, o.width, o.height, node.x, node.y, node.pixels / 2, style.gapY),
+                              !dots.covered(t.0, t.1, o.width, o.height, gap: style.gapY, own: other.node.pixels / 2, not: o.index),
+                              !near.nearer(t.0, t.1, o.width, o.height, than: other.node, part: { ownPart(tree, o.index, $0) }),
+                              hid || !dots.coversHub(t.0, t.1, o.width, o.height, gap: style.gapY, own: o.index) else { continue }
+                        out[j] = TreePlacedName(index: o.index, size: o.size, bold: o.bold, x: t.0, y: t.1, width: o.width, height: o.height, spot: q)
+                        chosen = k
+                        break
+                    }
+                    if chosen >= 0 { break }
+                }
+            }
             if chosen >= 0, let s = spots[chosen] {
                 out.append(TreePlacedName(index: i, size: size, bold: isHub, x: s.0, y: s.1, width: w, height: h, spot: chosen))
+                options.append((node, spots))
                 dots.named[i] = true
             }
         }
@@ -296,15 +388,30 @@ nonisolated enum FractalNames3D {
         private static func at(_ v: Float) -> Int { Int((v / FractalNames3D.cell).rounded(.down)) }
         private static func key(_ cx: Int, _ cy: Int) -> Int64 { Int64(cx) << 32 ^ (Int64(cy) & 0xFFFF_FFFF) }
 
-        /// Whether the box comes within `gap` of a named dot or one at least `own` in radius.
-        func covered(_ x: Float, _ y: Float, _ w: Float, _ h: Float, gap: Float, own: Float) -> Bool {
+        /// Whether the box comes within `gap` of a named dot or one at least `own` in radius, but for the named
+        /// node's own (`not`): a spot stands just `gap` off its own dot, and rounding there must not reject it.
+        func covered(_ x: Float, _ y: Float, _ w: Float, _ h: Float, gap: Float, own: Float, not: Int) -> Bool {
             let grow = most + gap
             for cx in Self.at(x - w / 2 - grow)...Self.at(x + w / 2 + grow) {
                 for cy in Self.at(y - h / 2 - grow)...Self.at(y + h / 2 + grow) {
                     guard let list = cells[Self.key(cx, cy)] else { continue }
-                    for d in list where (named[d.i] || d.r >= own - FractalNames3D.same) && FractalNames3D.covers(x, y, w, h, d.x, d.y, d.r, gap) {
+                    for d in list where d.i != not && (named[d.i] || d.r >= own - FractalNames3D.same)
+                        && FractalNames3D.covers(x, y, w, h, d.x, d.y, d.r, gap) {
                         return true
                     }
+                }
+            }
+            return false
+        }
+
+        /// Whether a dot other than `own`'s comes nearer the box, edge to edge, than `own`'s does; one `part` says is its own does not count.
+        func nearer(_ x: Float, _ y: Float, _ w: Float, _ h: Float, than own: FractalScreenNode, part: (Int) -> Bool) -> Bool {
+            let mine = FractalNames3D.apartFrom(x, y, w, h, own.x, own.y, own.pixels / 2)
+            let grow = max(mine, 0) + most
+            for cx in Self.at(x - w / 2 - grow)...Self.at(x + w / 2 + grow) {
+                for cy in Self.at(y - h / 2 - grow)...Self.at(y + h / 2 + grow) {
+                    guard let list = cells[Self.key(cx, cy)] else { continue }
+                    for d in list where d.i != own.index && !part(d.i) && FractalNames3D.apartFrom(x, y, w, h, d.x, d.y, d.r) < mine { return true }
                 }
             }
             return false
@@ -324,6 +431,59 @@ nonisolated enum FractalNames3D {
             return false
         }
     }
+
+    /// How far the disc at `dx`, `dy` of radius `r` is from the box centred at `x`, `y`, edge to edge (below 0 inside it).
+    static func apartFrom(_ x: Float, _ y: Float, _ w: Float, _ h: Float, _ dx: Float, _ dy: Float, _ r: Float) -> Float {
+        let ex = max(abs(dx - x) - w / 2, 0), ey = max(abs(dy - y) - h / 2, 0)
+        return (ex * ex + ey * ey).squareRoot() - r
+    }
+
+    /// The dot nearest each of `names`, edge to edge, among `screen`'s `marked` ones, but
+    /// for the named hub's own parts (`ownPart`): each name's own, by node (-1 where none is drawn). What the
+    /// rule above keeps true; the tests read it.
+    static func nearest(_ names: [TreePlacedName], _ screen: [FractalScreenNode], _ tree: FractalTree, leastLeaf: Float) -> [Int] {
+        names.map { p in
+            var best = -1, bestAt = Float.infinity
+            for s in screen where marked(tree, s, leastLeaf: leastLeaf)
+                && !(s.index != p.index && ownPart(tree, p.index, s.index)) {
+                let at = apartFrom(p.x, p.y, p.width, p.height, s.x, s.y, s.pixels / 2)
+                if at < bestAt || (at == bestAt && s.index == p.index) { bestAt = at; best = s.index }
+            }
+            return best
+        }
+    }
+
+    /// Whether a drawn dot is one a name could be read as naming: a hub's, of any size, or an idea's big and
+    /// bright enough for a name of its own (`leastLeaf` across and crisp). A speck is not.
+    static func marked(_ tree: FractalTree, _ s: FractalScreenNode, leastLeaf: Float) -> Bool {
+        s.index >= 0 && s.index < tree.count && (hub(tree, s.index) || (s.crisp && s.pixels >= leastLeaf))
+    }
+
+    /// Whether dot `d` is part of `i`'s own cluster, so a name of `i` beside it still reads as `i`'s: a hub's
+    /// name among its own parts is its cluster's. All ideas holds everything, so for it only its ideas are:
+    /// its name beside a folder's hub would read as that folder's.
+    static func ownPart(_ tree: FractalTree, _ i: Int, _ d: Int) -> Bool { tree.holds(i, d) && (i != 0 || tree.kind[d] == FractalTree.idea) }
+
+    /// What VoiceOver reads (TalkBack's FractalNames.targets is the same): each name, over its words, then
+    /// each hub drawn in `focus` with no name, over its dot, each at least `least` each way. A hub turned
+    /// too small or too crowded for a name is still reached.
+    static func targets(_ screen: [FractalScreenNode], _ names: [TreePlacedName], _ tree: FractalTree, focus: Int,
+                        least: Float) -> [(index: Int, x: Float, y: Float, width: Float, height: Float)] {
+        var out: [(index: Int, x: Float, y: Float, width: Float, height: Float)] = []
+        var done = Set<Int>()
+        for p in names where p.index >= 0 && p.index < tree.count && done.insert(p.index).inserted {
+            out.append((p.index, p.x, p.y, max(least, p.width), max(least, p.height)))
+        }
+        let inFocus: (Int) -> Bool = { i in focus <= 0 || focus >= tree.count || tree.holds(focus, i) }
+        for s in screen where s.index >= 0 && s.index < tree.count && hub(tree, s.index) && inFocus(s.index) && done.insert(s.index).inserted {
+            let side = max(least, s.pixels)
+            out.append((s.index, s.x, s.y, side, side))
+        }
+        return out
+    }
+
+    /// Whether a part is read as a folder ("Cardiology, folder"): every hub but All ideas, which is read as its name.
+    static func spokenAsFolder(_ tree: FractalTree, _ i: Int) -> Bool { i > 0 && hub(tree, i) }
 
     private static func inView(_ s: (Float, Float), w: Float, h: Float, width: Float, height: Float,
                                top: Float, bottom: Float, edge: Float, slides: Bool) -> (Float, Float)? {

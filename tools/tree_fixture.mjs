@@ -115,23 +115,57 @@ function layout(T) {
   return L;
 }
 
-// The Tree in 3D (S11, the owner's 3D decision of 18 Nov): the same weights, lengths, fans and drop as
-// above, grown round the trunk instead of across the page. The trunk goes up the y axis; each branch's
-// children leave it spread round it by the golden angle from a seeded start, the heaviest nearly
-// straight on and the lighter ones further out and lower down, lifted a little toward the sky. A
-// branch tapers to TAPER of its base radius, and a child is never thicker than 0.85 of where it
-// joins. A leaf is an ellipsoid past its twig's tip. Its own draw (a second rng on the same seed), so
-// the flat numbers above stay as they were. Android's TreeLayout3D and iOS's TreeLayout3D.swift.
-const GOLDEN = Math.PI * (3 - Math.sqrt(5)), LIFT = 0.45, TAPER = 0.6, JOIN = 0.85, ANCHOR = 0.6;
-// the crown's own shape (the lead's review of 18 Nov: a pole with twigs, now a crown about as wide as
-// it is tall): the trunk's branches leave it RISE0 to RISE1 off upright (heaviest the most upright), a
-// deeper branch SPLAY0 to SPLAY1 off its parent's line, then lifted (LIFT) so a limb curves up; lengths
-// RATIO1 (the trunk's, not shortened by rank) and RATIO2 (deeper) of the parent's, the trunk's branches
-// along its top DROP1; thicker (ROOT_WID, WID) and bigger leaves (LEAF3) than the flat tree's
-const RISE0 = 35 * Math.PI / 180, RISE1 = 55 * Math.PI / 180, SPLAY0 = 15 * Math.PI / 180, SPLAY1 = 45 * Math.PI / 180;
-const RATIO1 = 0.9, RATIO2 = 0.75, DROP1 = 0.3, ROOT_WID = 0.15, WID = 0.1, LEAF3 = 0.8;
-// a leaf's largest radius (LEAF_MOST, beside the trunk's length): a long limb's leaf no bigger than a twig's
-const LEAF_MOST = 0.07;
+// The Tree in 3D, grown as a tree (S11, the owner's review of the third pass, 19 Nov: "the tree doesn't
+// look realistic neither the leaves . also it's too cramped"). The trunk goes up the y axis, 1 long.
+// - Thickness follows the pipe model (Shinozaki 1964, Leonardo's rule): a branch's area is the sum
+//   of the leaves it carries, r0 = ROOT_R * sqrt(leaves / all leaves), never over JOIN of where it
+//   joins; it tapers to its biggest child's (at most TIP of its base).
+// - Length follows its share of the tree: LEN1 * (leaves / all leaves)^LEN_POW, never over RATIO of its
+//   parent's nor under TWIG leaves.
+// - Children leave their parent's line round it by the golden angle from a seeded start (3D
+//   phyllotaxis, Vogel 1979), the heaviest the most upright: the trunk's branches RISE0 to RISE1 off
+//   upright along its top DROP1, a deeper branch SPLAY0 to SPLAY1 off its parent's line along its
+//   last P.drop, then lifted (LIFT); a child carrying most of its parent leans less (by LEAD of its
+//   share squared), so the tree keeps a leader, as most trees do. A deeper branch's branches start
+//   SPREAD further down a child after the first (at most DROP_MOST); the first child, and an only
+//   child, leaves near its parent's tip. Two sibling branches are never nearer than GAP: a branch too
+//   near one placed before it turns on round its parent, a TURN at a time; a branch after the first
+//   leans at least 1.5 GAP off its parent's line.
+// - An idea is a short stem (STEM of its leaf) at its parent's end (its last SPRAY), SPRAY0 to
+//   SPRAY1 off the parent's line, its leaf past the stem's tip: a parent's ideas make one spray.
+//   A leaf is LEAF_K / sqrt(all leaves) long each side, at most LEAF_MOST, varied by LEAF_VAR.
+// - A branch bends: its middle is pulled down and out (BEND of its length), so it leaves its parent
+//   flatter and turns up toward its tip, and swayed level to one side (up to SWAY), seeded. Its line is a
+//   quadratic curve from base to tip through base + dir * len / 2 + bend; a child joins on the curve
+//   and leaves it from the curve's own direction there.
+// A body (the name's and the tap's place) is ANCHOR along a branch, a leaf's centre for an idea.
+// Its own draw (a second rng on the same seed), so the flat numbers above stay as they were.
+// Android's TreeLayout3D and iOS's TreeLayout3D.swift are the same line for line.
+const GOLDEN = Math.PI * (3 - Math.sqrt(5)), DEG = Math.PI / 180;
+const ROOT_R = 0.075, TIP = 0.85, JOIN = 0.95, LEN1 = 0.95, LEN_POW = 0.45, RATIO = 0.8;
+const RISE0 = 40 * DEG, RISE1 = 70 * DEG, SPLAY0 = 30 * DEG, SPLAY1 = 60 * DEG, SPRAY0 = 40 * DEG, SPRAY1 = 75 * DEG;
+const LEAD = 0.6, LIFT = 0.2, DROP1 = 0.3, SPREAD = 0.03, DROP_MOST = 0.75, SPRAY = 0.35, GAP = 18 * DEG, TURN = 10 * DEG, TURNS = 36;
+const BEND = 0.12, SWAY = 0.08, STEM = 0.6, TWIG = 8, LEAF_K = 0.75, LEAF_MOST = 0.09, LEAF_VAR = 0.3, ANCHOR = 0.6;
+
+// the point t along node i's curve, into out at o
+function curveAt(E, i, t, out, o) {
+  const u = 1 - t, len = E.len[i];
+  for (let a = 0; a < 3; a++) {
+    const b = E.base[3 * i + a], d = E.dir[3 * i + a];
+    const c = b + d * len / 2 + E.bend[3 * i + a], e = b + d * len;
+    out[o + a] = u * u * b + 2 * u * t * c + t * t * e;
+  }
+}
+// the curve's direction at t (unit), into out
+function tangentAt(E, i, t, out) {
+  const len = E.len[i];
+  for (let a = 0; a < 3; a++) {
+    const b = E.base[3 * i + a], d = E.dir[3 * i + a];
+    const c = b + d * len / 2 + E.bend[3 * i + a], e = b + d * len;
+    out[a] = 2 * (1 - t) * (c - b) + 2 * t * (e - c);
+  }
+  const m = Math.hypot(out[0], out[1], out[2]); for (let a = 0; a < 3; a++) out[a] /= m;
+}
 
 function layout3d(T) {
   const N = T.parent.length, PAR = T.parent;
@@ -143,58 +177,92 @@ function layout3d(T) {
   for (let i = N - 1; i >= 0; i--) { if (!CC[i]) WT[i] = 1; if (i > 0) WT[PAR[i]] += WT[i]; }
   for (let i = 0; i < N; i++) WP[i] = Math.pow(WT[i], 0.7);
   const F = (n) => new Float64Array(n);
-  const E = {base: F(3 * N), dir: F(3 * N), len: F(N), r0: F(N), r1: F(N), anchor: F(3 * N), leaf: F(N), sc: F(3 * N), sr: F(N)};
+  const E = {base: F(3 * N), dir: F(3 * N), len: F(N), r0: F(N), r1: F(N), bend: F(3 * N), anchor: F(3 * N), leaf: F(N), sc: F(3 * N), sr: F(N)};
   const rnd = rng(P.seed);
-  const place = function (i, b, D, U, len, S, rmax) {
+  const pipe = (i) => ROOT_R * Math.sqrt(WT[i] / WT[0]);
+  const leafSize = Math.min(LEAF_MOST, LEAF_K / Math.sqrt(WT[0]));
+  const place = function (i, b, D, U, len, rmax, scale) {
     for (let a = 0; a < 3; a++) { E.base[3 * i + a] = b[a]; E.dir[3 * i + a] = D[a]; }
     E.len[i] = len;
-    const r0 = Math.min(len * (i === 0 ? ROOT_WID : WID) / 2, rmax);
-    E.r0[i] = r0; E.r1[i] = r0 * TAPER;
+    const r0 = Math.min(pipe(i) * scale, rmax), n = CC[i], k0 = r0 / pipe(i);
+    E.r0[i] = r0;
     const V = [D[1] * U[2] - D[2] * U[1], D[2] * U[0] - D[0] * U[2], D[0] * U[1] - D[1] * U[0]];
-    const phi0 = rnd() * TAU;
-    const n = CC[i];
+    const phi0 = rnd() * 2 * Math.PI;
     if (!n && i > 0) {
-      const lr = Math.min(len * LEAF3 * 0.5, LEAF_MOST); E.leaf[i] = lr;
+      E.r1[i] = r0 * TIP;
+      const lr = Math.min(leafSize * (1 - LEAF_VAR / 2 + LEAF_VAR * rnd()), LEAF_MOST); E.leaf[i] = lr;
       for (let a = 0; a < 3; a++) E.anchor[3 * i + a] = b[a] + D[a] * (len + lr);
       return;
     }
-    for (let a = 0; a < 3; a++) E.anchor[3 * i + a] = b[a] + D[a] * len * ANCHOR;
-    if (!n) return;
+    // the bend: down and out from the line's middle (none for an upright line), then a sway to one side
+    const pu = [-D[0] * D[1], 1 - D[1] * D[1], -D[2] * D[1]], pm = Math.hypot(pu[0], pu[1], pu[2]);
+    const sway = (2 * rnd() - 1) * SWAY * len;
+    // the sway level, square to the line (its across where the line is upright)
+    const side = pm > 1e-6 ? [-D[2] / pm, 0, D[0] / pm] : V;
+    for (let a = 0; a < 3; a++) E.bend[3 * i + a] = (pm > 1e-6 ? -pu[a] / pm * BEND * len : 0) + side[a] * sway;
+    curveAt(E, i, ANCHOR, E.anchor, 3 * i);
+    if (!n) { E.r1[i] = r0 * TIP; return; }
     const kids = [];
     for (let k = 0; k < n; k++) kids.push(CL[CS[i] + k]);
     kids.sort((p, q) => WP[q] - WP[p]);
-    let tot = 0, wmax = 0;
-    for (let k = 0; k < n; k++) { tot += WP[kids[k]]; if (WP[kids[k]] > wmax) wmax = WP[kids[k]]; }
+    let most = 0;
+    for (let k = 0; k < n; k++) most = Math.max(most, pipe(kids[k]));
+    E.r1[i] = Math.min(most * k0, r0 * TIP);
+    const trunk = i === 0, placed = [], at = [0, 0, 0], tg = [0, 0, 0];
     for (let q = 0; q < n; q++) {
-      const c = kids[q];
-      const rel = n === 1 ? 0.45 : q === 0 ? 0.1 : 0.45 + 0.55 * q / (n - 1);
-      const s = n === 1 ? 0.5 : q / (n - 1), trunk = i === 0;
-      const phi = phi0 + q * GOLDEN, th = trunk ? RISE0 + (RISE1 - RISE0) * s : SPLAY0 + (SPLAY1 - SPLAY0) * s;
-      const ct = Math.cos(th), st = Math.sin(th), cp = Math.cos(phi), sp = Math.sin(phi);
-      const d = [0, 0, 0];
-      for (let a = 0; a < 3; a++) d[a] = D[a] * ct + (U[a] * cp + V[a] * sp) * st;
-      if (!trunk) d[1] += LIFT;
-      const dm = Math.hypot(d[0], d[1], d[2]); for (let a = 0; a < 3; a++) d[a] /= dm;
-      const drop = trunk ? DROP1 : P.drop;
+      const c = kids[q], idea = CC[c] === 0;
+      const rel = n === 1 ? 0.1 : q === 0 ? 0.1 : 0.45 + 0.55 * q / (n - 1);
+      const s = n === 1 ? 0.5 : q / (n - 1);
+      const drop = trunk ? DROP1 : idea ? SPRAY : Math.min(P.drop + SPREAD * (n - 1), DROP_MOST);
       const t = clamp(1 - drop * Math.pow(rel, 0.85) + (rnd() - 0.5) * 0.05, 1 - drop, 1);
-      const at = [b[0] + D[0] * len * t, b[1] + D[1] * len * t, b[2] + D[2] * len * t];
-      const cl = len * (trunk ? RATIO1 : RATIO2) * (0.5 + 0.5 * Math.sqrt(WP[c] / wmax)) * (trunk ? 1 : 1 - P.shorten * rel);
-      const cS = clamp(2 * S * WP[c] / tot * 0.9 + 0.3, P.fanMin, P.fanMax);
-      let ud = U[0] * d[0] + U[1] * d[1] + U[2] * d[2];
-      let u = [U[0] - d[0] * ud, U[1] - d[1] * ud, U[2] - d[2] * ud];
-      let um = Math.hypot(u[0], u[1], u[2]);
-      if (um < 1e-6) { ud = V[0] * d[0] + V[1] * d[1] + V[2] * d[2]; u = [V[0] - d[0] * ud, V[1] - d[1] * ud, V[2] - d[2] * ud]; um = Math.hypot(u[0], u[1], u[2]); }
+      curveAt(E, i, t, at, 0);
+      tangentAt(E, i, t, tg);
+      // the parent's frame at t: its across turned square to the curve there
+      let ud = U[0] * tg[0] + U[1] * tg[1] + U[2] * tg[2];
+      let ut = [U[0] - tg[0] * ud, U[1] - tg[1] * ud, U[2] - tg[2] * ud], um = Math.hypot(ut[0], ut[1], ut[2]);
+      for (let a = 0; a < 3; a++) ut[a] /= um;
+      const vt = [tg[1] * ut[2] - tg[2] * ut[1], tg[2] * ut[0] - tg[0] * ut[2], tg[0] * ut[1] - tg[1] * ut[0]];
+      const lean = (trunk ? RISE0 + (RISE1 - RISE0) * s : SPLAY0 + (SPLAY1 - SPLAY0) * s) * (1 - LEAD * (WT[c] / WT[i]) * (WT[c] / WT[i]));
+      // a branch after the first leans at least 1.5 GAP off its parent's line, so turning round can clear the first
+      const th = idea ? SPRAY0 + (SPRAY1 - SPRAY0) * s : q > 0 ? Math.max(lean, 1.5 * GAP) : lean;
+      const ct = Math.cos(th), st = Math.sin(th), d = [0, 0, 0];
+      const aim = (f) => {
+        const cp = Math.cos(f), sp = Math.sin(f);
+        for (let a = 0; a < 3; a++) d[a] = tg[a] * ct + (ut[a] * cp + vt[a] * sp) * st;
+        if (!trunk) d[1] += LIFT;
+        const dm = Math.hypot(d[0], d[1], d[2]); for (let a = 0; a < 3; a++) d[a] /= dm;
+      };
+      let phi = phi0 + q * GOLDEN;
+      if (!idea) {
+        // turned on round the parent until clear of every sibling branch, else the turn that came nearest
+        let best = phi, bestNear = -1;
+        for (let k = 0; k < TURNS; k++) {
+          const f = phi + k * TURN; aim(f);
+          let near = Math.PI;
+          for (const p of placed) near = Math.min(near, Math.acos(clamp(p[0] * d[0] + p[1] * d[1] + p[2] * d[2], -1, 1)));
+          if (near > bestNear) { bestNear = near; best = f; }
+          if (near >= GAP) break;
+        }
+        phi = best;
+      }
+      aim(phi);
+      if (!idea) placed.push([d[0], d[1], d[2]]);
+      const cl = idea ? leafSize * STEM : Math.max(Math.min(LEN1 * Math.pow(WT[c] / WT[0], LEN_POW), len * RATIO), leafSize * TWIG);
+      ud = ut[0] * d[0] + ut[1] * d[1] + ut[2] * d[2];
+      let u = [ut[0] - d[0] * ud, ut[1] - d[1] * ud, ut[2] - d[2] * ud];
+      um = Math.hypot(u[0], u[1], u[2]);
+      if (um < 1e-6) { ud = vt[0] * d[0] + vt[1] * d[1] + vt[2] * d[2]; u = [vt[0] - d[0] * ud, vt[1] - d[1] * ud, vt[2] - d[2] * ud]; um = Math.hypot(u[0], u[1], u[2]); }
       for (let a = 0; a < 3; a++) u[a] /= um;
-      place(c, at, d, u, cl, cS, r0 * (1 - (1 - TAPER) * t) * JOIN);
+      place(c, [at[0], at[1], at[2]], d, u, cl, (r0 + (E.r1[i] - r0) * t) * JOIN, k0);
     }
   };
-  place(0, [0, 0, 0], [0, 1, 0], [1, 0, 0], 1, P.rootFan, Infinity);
-  // each subtree's box (its branches round their radius, its leaves round theirs), as a ball: what a fly-in frames
+  place(0, [0, 0, 0], [0, 1, 0], [1, 0, 0], 1, Infinity, 1);
+  // each subtree's box (its branches' curves round their radius, its leaves round theirs), as a ball: what a fly-in frames
   const lo = F(3 * N), hi = F(3 * N);
   for (let i = 0; i < N; i++) {
     for (let a = 0; a < 3; a++) {
-      const b0 = E.base[3 * i + a], b1 = b0 + E.dir[3 * i + a] * E.len[i], r = E.r0[i];
-      lo[3 * i + a] = Math.min(b0, b1) - r; hi[3 * i + a] = Math.max(b0, b1) + r;
+      const b0 = E.base[3 * i + a], b1 = b0 + E.dir[3 * i + a] * E.len[i], bc = (b0 + b1) / 2 + E.bend[3 * i + a], r = E.r0[i];
+      lo[3 * i + a] = Math.min(b0, b1, bc) - r; hi[3 * i + a] = Math.max(b0, b1, bc) + r;
       if (E.leaf[i] > 0) { const c = E.anchor[3 * i + a]; lo[3 * i + a] = Math.min(lo[3 * i + a], c - E.leaf[i]); hi[3 * i + a] = Math.max(hi[3 * i + a], c + E.leaf[i]); }
     }
   }
@@ -369,7 +437,7 @@ const trees = [['sample', SAMPLE], ['deep', DEEP], ['small', SMALL], ['one', ONE
   return {name, parent: T.parent, title: T.title, folder: T.folder,
     expect: {bx: arr(L.bx), by: arr(L.by), ang: arr(L.ang), len: arr(L.len), wid: arr(L.wid), px: arr(L.px), py: arr(L.py),
       nx: arr(L.nx), ny: arr(L.ny), bcx: arr(L.bcx), bcy: arr(L.bcy), brad: arr(L.brad), u0: arr(L.u0), u1: arr(L.u1), v0: arr(L.v0), v1: arr(L.v1)},
-    expect3d: {base: arr(E.base), dir: arr(E.dir), len: arr(E.len), r0: arr(E.r0), r1: arr(E.r1), anchor: arr(E.anchor), leaf: arr(E.leaf),
+    expect3d: {base: arr(E.base), dir: arr(E.dir), len: arr(E.len), r0: arr(E.r0), r1: arr(E.r1), bend: arr(E.bend), anchor: arr(E.anchor), leaf: arr(E.leaf),
       sc: arr(E.sc), sr: arr(E.sr)}};
 });
 process.stdout.write(JSON.stringify({version: 1, k: K, trees}) + '\n');

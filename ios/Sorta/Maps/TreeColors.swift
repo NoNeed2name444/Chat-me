@@ -14,6 +14,13 @@ struct TreeColors {
     /// `NestNodes.groups` groups by 9 steps: bark and leaves, from the dimmest (0) to full (8).
     let barkRamp: [[Int]]
     let leafRamp: [[Int]]
+    /// The 3D tree's (S11, the owner's review of 19 Nov: a believable tree):
+    /// its bark a neutral brown, each folder's leaning `woodTint` to its
+    /// colour, and its leaves a living green leaning `leafTint`.
+    let wood: Int, foliage: Int
+    let wood3d: [Int]
+    let leaf3d: [Int]
+    static let woodTint = 0.2, leafTint = 0.45
 
     /// How bright the parts outside the one in view stay.
     static let dim = 0.18
@@ -39,6 +46,12 @@ struct TreeColors {
         func ramp(_ c: Int) -> [Int] { (0..<9).map { s in Self.mix(sky, c, Self.dim + (1 - Self.dim) * Double(s) / 8.0) } }
         barkRamp = barks.map(ramp)
         leafRamp = tones.map(ramp)
+        let wood = dark ? 0xB39880 : 0x6E5443, foliage = dark ? 0x8FC26C : 0x4D7A35
+        self.wood = wood; self.foliage = foliage
+        wood3d = (0..<NestNodes.groups).map { g -> Int in
+            g == NestNodes.trunk ? wood : (g == NestNodes.loose ? Self.mix(wood, Self.grey, Self.woodTint) : Self.mix(wood, tones[g], Self.woodTint))
+        }
+        leaf3d = (0..<NestNodes.groups).map { g in g == NestNodes.trunk ? foliage : Self.mix(foliage, tones[g], Self.leafTint) }
     }
 
     /// `a` toward `b` by `t`, each channel rounded half up, as the concept's toHex(Math.round).

@@ -23,8 +23,6 @@ import com.cramdown.sorta.map.FractalTree
 import com.cramdown.sorta.map.GraphicsTier
 import com.cramdown.sorta.map.MapGraph
 import com.cramdown.sorta.map.Octree
-import com.cramdown.sorta.ui.ward.WardControlSize
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 /** The Fractal's tags (S12): the map, its Back, its first-visit card and each name's TalkBack element. */
@@ -93,27 +91,26 @@ internal class FractalType(context: Context, density: Float) {
 }
 
 /**
- * TalkBack's elements for the Fractal's names (S12): one a name, over its words and at least a touch
- * target (48 dp) each way, read as the name ("…, folder" for a hub) with what activating it does. They
- * take no touches, so a finger still reaches the map under them.
+ * TalkBack's elements for the Fractal (S12; [FractalNames.targets]): one a name, over its words, and one
+ * for each hub drawn in the focus with no name, over its dot, each at least a touch target (48 dp) each
+ * way, read as the name ("…, folder" for a hub but All ideas, as VoiceOver reads them) with what
+ * activating it does. They take no touches, so a finger still reaches the map under them.
  */
-@Composable internal fun FractalNameTargets(names: List<PlacedName>, tree: FractalTree, activate: (Int) -> Unit) {
+@Composable internal fun FractalNameTargets(targets: List<FractalNames.Target>, tree: FractalTree, activate: (Int) -> Unit) {
     val density = LocalDensity.current.density
     val folderWord = stringResource(R.string.fractal_folder_spoken, "%s")
     val zoomHint = stringResource(R.string.fractal_zoom_hint)
     val ideaHint = stringResource(R.string.fractal_idea_hint)
-    val target = WardControlSize.target.toFloat() * density
-    for (name in names) {
-        val i = name.index
-        val w = max(target, name.box.width); val h = max(target, name.box.height)
-        val idea = i > 0 && tree.childCount[i] == 0 && tree.kind[i] == FractalTree.IDEA
+    for (t in targets) {
+        val i = t.index
+        val hub = FractalNames.hub(tree, i)
         val words = tree.titles[i]
-        Box(Modifier.offset { IntOffset((name.box.x - w / 2).roundToInt(), (name.box.y - h / 2).roundToInt()) }
-            .size(androidx.compose.ui.unit.Dp(w / density), androidx.compose.ui.unit.Dp(h / density))
-            .testTag(FractalTags.part(tree.ids[i]))
+        Box(Modifier.offset { IntOffset((t.x - t.width / 2).roundToInt(), (t.y - t.height / 2).roundToInt()) }
+            .size(androidx.compose.ui.unit.Dp(t.width / density), androidx.compose.ui.unit.Dp(t.height / density))
+            .testTag(FractalTags.part(if (i == 0) "hub" else tree.ids[i]))
             .semantics {
-                contentDescription = if (idea) words else folderWord.replace("%s", words)
-                onClick(if (idea) ideaHint else zoomHint) { activate(i); true }
+                contentDescription = if (FractalNames.spokenAsFolder(tree, i)) folderWord.replace("%s", words) else words
+                onClick(if (hub) zoomHint else ideaHint) { activate(i); true }
             })
     }
 }

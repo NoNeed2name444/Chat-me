@@ -126,6 +126,46 @@ class TreeNamesTest {
         }
     }
 
+    // the owner's review of 19 Nov ("the text overlaps a lot"): every 30 degrees round, the whole tree and
+    // flown in to each top folder, on a phone, a tablet and an open foldable, no name box (its halo
+    // included) meets another, nor leaves the view or goes under the chrome; and few names lie over
+    // another branch's leaves. iOS's suite treemodel3d sweeps the same.
+    @Test fun noNameMeetsAnotherAtAnyAngleOnAnyDevice() = eachTree {
+        val tops = (0 until sample.childCount[0]).map { sample.child(0, it) }.filter { sample.childCount[it] > 0 }
+        assertTrue("top folders (${tops.size})", tops.size >= 4)
+        var views = 0; var named = 0; var overLeaves = 0
+        for (w in listOf(windows[0], windows[2], windows[3])) for (k in 0 until 12) for (into in listOf(-1) + tops) {
+            val (screen, placed) = names(w, rad(30f * k), into)
+            val what = "${w.name} at ${30 * k} degrees, ${if (into < 0) "whole" else sample.titles[into]}"
+            views++; named += placed.size
+            assertTrue("$what: names placed", placed.isNotEmpty())
+            for (a in placed.indices) for (b in a + 1 until placed.size) {
+                val p = placed[a].box; val q = placed[b].box
+                assertFalse("$what: ${placed[a].label} meets ${placed[b].label}",
+                    kotlin.math.abs(p.x - q.x) * 2 < p.width + q.width && kotlin.math.abs(p.y - q.y) * 2 < p.height + q.height)
+            }
+            val clear = MapClear.boxes(chrome(w, into > 0))
+            val d = w.density
+            for (p in placed) {
+                val b = p.box
+                // the box holds the words and the halo round them
+                val metrics = if (p.textSize == 13f * d) Metrics(0.6f) else Metrics(0.56f)
+                assertTrue("$what: ${p.label}'s box holds its halo", b.width >= metrics.width(p.label, p.textSize) + 2 * 2.5f * d - 1e-3f)
+                assertTrue("$what: ${p.label} inside the view", b.x - b.width / 2 >= 0f && b.x + b.width / 2 <= w.width)
+                assertTrue("$what: ${p.label} clear of the chrome", b.y - b.height / 2 >= w.top && b.y + b.height / 2 <= w.height - w.bottom)
+                for (c in clear) assertFalse("$what: ${p.label} under a tool",
+                    kotlin.math.abs(b.x - c.x) * 2 < b.width + c.width && kotlin.math.abs(b.y - c.y) * 2 < b.height + c.height)
+                val owner = TreeNames.owner(sample, into.coerceAtLeast(0), p.index)
+                if (screen.any { s -> !TreeNames.bough(sample, s.index) && !sample.within(owner, s.index) &&
+                        kotlin.math.max(kotlin.math.abs(s.x - b.x) - b.width / 2, 0f).let { it * it } +
+                        kotlin.math.max(kotlin.math.abs(s.y - b.y) - b.height / 2, 0f).let { it * it } < s.pixels * s.pixels / 4 }) overLeaves++
+            }
+        }
+        println("${trees[tree].first}: $views views, $named names, $overLeaves over another branch's leaves")
+        assertEquals(3 * 12 * (1 + tops.size), views)
+        assertTrue("$overLeaves of $named names over another branch's leaves", overLeaves * 10 <= named)
+    }
+
     @Test fun theBigBranchesAreNamedAtTheFirstView() = eachTree {
         for (w in windows) {
             val (_, placed) = names(w, 0f)
@@ -165,7 +205,8 @@ class TreeNamesTest {
         }
         val yaw = com.cramdown.sorta.map.TreeFit.widestYaw(points, TREE_YAW)
         // the sample's widest is 45 degrees from three quarters round; iOS's TreeModel3DTests holds the same
-        assertEquals(-10.0, Math.toDegrees(yaw.toDouble()), 1e-3)
+        // 5 degrees right of front for the grown tree (19 Nov); iOS's suite treemodel3d holds the same
+        assertEquals(5.0, Math.toDegrees(yaw.toDouble()), 1e-3)
         for (k in 0 until 72) assertTrue(across(yaw) >= across(k * 5f * Math.PI.toFloat() / 180f) * (1 - 1e-4f))
         for (w in windows) {
             val (screen, _) = names(w, 0f)
@@ -277,7 +318,13 @@ class TreeNamesTest {
             assertTrue("${w.name} $yaw: the trunk and its branches named", 0 in first && first.size >= 3)
             for (p in placed) {
                 if (p.index != 0) assertFalse("${w.name} $yaw: ${p.label} covers the trunk", com.cramdown.sorta.map.LabelRoom.crosses(p.box, stem, 0f))
-                if (sample.depth[p.index] > 1) assertTrue("${w.name} $yaw: ${p.label} at its tip (spot ${p.spot})", p.spot <= TreeNames.ABOVE_TIP)
+                if (sample.depth[p.index] > 1) {
+                    assertTrue("${w.name} $yaw: ${p.label} at its tip (spot ${p.spot})", p.spot <= TreeNames.PAST_BELOW)
+                    // out past the crown, a leader runs back to the tip
+                    val s = screen.first { it.index == p.index }
+                    if (p.spot == TreeNames.OUTSIDE || p.spot >= TreeNames.PAST_ABOVE)
+                        assertTrue("${w.name} $yaw: ${p.label}'s leader runs to its tip", p.leadX == s.tipX && p.leadY == s.tipY || p.leadX.isNaN() && p.spot == TreeNames.OUTSIDE)
+                }
                 if (!p.leadX.isNaN()) {
                     val near = if (p.leadX < p.box.x) p.box.x - p.box.width / 2 else p.box.x + p.box.width / 2
                     val lead = com.cramdown.sorta.map.LabelLink(near, p.box.y, p.leadX, p.leadY, 1f)
@@ -296,10 +343,8 @@ class TreeNamesTest {
             val camera = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
             HomeView.framer(MapScene.tree(model))(base.width.toFloat(), base.height.toFloat(), room).applyTo(camera)
             val l = model.layout
-            val points = (0 until sample.size).flatMap { i -> listOf(0.0, l.length[i]).map { t ->
-                com.cramdown.sorta.map.Vec3((l.base[3 * i] + l.dir[3 * i] * t).toFloat(), (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(), (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat()) } } +
-                // and every body: a leaf sits past its twig's tip
-                (0 until sample.size).map { i -> com.cramdown.sorta.map.Vec3(l.anchor[3 * i].toFloat(), l.anchor[3 * i + 1].toFloat(), l.anchor[3 * i + 2].toFloat()) }
+            // every branch's ends and middle on its curve, and every body: a leaf sits past its twig's tip
+            val points = com.cramdown.sorta.map.TreeFit.points(l, 0)
             val f = camera.focalPixels(base.height.toFloat())
             val box = checkNotNull(com.cramdown.sorta.map.TreeFit.box(points, 0f, camera.eye(), camera.right(), camera.up(), camera.forward() * -1f, f))
             // from the view's middle, y up, to the view's pixels

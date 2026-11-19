@@ -7,7 +7,10 @@ import XCTest
 /// degrees), orbit120 (about 120 degrees round) and cardiology (flown in to
 /// Cardiology by a tap on its name). At each the names drawn never overlap
 /// and the big hubs are named (the app says where it put each name,
-/// `-SortaFractalProbe`); the map is Performance's night sky by day too, with
+/// `-SortaFractalProbe`); what is drawn, glows and all, stays in the room the
+/// framing fit it to, and flown in it is centred there with the first visit's
+/// card gone; a filter changed while flown in keeps the hub and Back; the
+/// map is Performance's night sky by day too, with
 /// lit dots on it. CI runs it by day and by night on the iPhone and the iPad
 /// (tools/run_ui_tests.sh, the ideas set). On the iPad the map is the pane
 /// beside the Sort screen.
@@ -54,6 +57,7 @@ final class FractalMapRenderTests: XCTestCase {
         let hub = try XCTUnwrap(whole.names.first { $0.0 == "All ideas" }, "All ideas named")
         XCTAssertLessThan(map.frame.minY + hub.1.maxY, card.frame.minY,
                           "All ideas' name \(hub.1) (map at \(map.frame.minY)) runs under the card \(card.frame)")
+        framed(whole, "whole", centred: false)
 
         // a drag of about 40 degrees round (3.2 radians a view's width)
         turn(map, by: 0.218)
@@ -63,12 +67,13 @@ final class FractalMapRenderTests: XCTestCase {
         let turned = orbit.yaw - whole.yaw
         XCTAssertTrue((0.45...1.0).contains(turned), "the drag turned the map \(turned) radians, not about 40 degrees")
 
-        // about 80 degrees more: 120 round from the first view
+        // about 80 degrees more: 120 round from the first view. Cardiology's parts stand round All ideas' dot
+        // there, so a name of it would read as theirs, and none is wanted (the review of S12's stills, item 9)
         turn(map, by: 0.218)
         turn(map, by: 0.218)
         keepShot("fractal-orbit120")
         sky(map, "orbit120")
-        let far = names(app, "orbit120", want: ["All ideas"])
+        let far = names(app, "orbit120", want: [])
         XCTAssertTrue((1.6...2.6).contains(far.yaw - whole.yaw), "the drags turned the map \(far.yaw - whole.yaw) radians, not about 120 degrees")
 
         // Recentre, then a tap on Cardiology's name flies in to it
@@ -90,16 +95,52 @@ final class FractalMapRenderTests: XCTestCase {
         let flown = names(app, "cardiology", want: ["Cardiology", "Heart failure"])
         let parts = flown.names.filter { TreeSample.under("Cardiology", $0.0) }
         XCTAssertGreaterThanOrEqual(parts.count, 6, "few of Cardiology's parts named: \(flown.names.map(\.0))")
+        // the tap that flew in put the first visit's card away: the fly-in is framed without it (the review, item 1)
+        XCTAssertEqual(flown.cardTop, flown.height, accuracy: 0.5, "flown in, the card still framed: its top at \(flown.cardTop) of \(flown.height)")
+        framed(flown, "cardiology", centred: true)
         // each name a VoiceOver element a touch target each way at least
         let heart = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Heart failure, folder")).firstMatch
         XCTAssertTrue(heart.waitForExistence(timeout: 10), "Heart failure, named")
         XCTAssertGreaterThanOrEqual(heart.frame.width, 43.5, "Heart failure's target: \(heart.frame)")
         XCTAssertGreaterThanOrEqual(heart.frame.height, 43.5, "Heart failure's target: \(heart.frame)")
 
+        // a filter changed while flown in keeps the hub and Back (the review, item 3)
+        filter(app, "Linked ideas")
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "a filter changed while flown in: Back")
+        XCTAssertTrue(map.label.hasPrefix("Fractal map of ideas, showing Cardiology"), "a filter changed while flown in: \(map.label)")
+        filter(app, "Everything")
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "the filter back to Everything: Back")
+        XCTAssertTrue(map.label.hasPrefix("Fractal map of ideas, showing Cardiology"), "the filter back to Everything: \(map.label)")
+
         back.tap()
         let gone = NSPredicate(format: "exists == false")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: gone, object: back)], timeout: 10),
                        .completed, "back to the whole map")
+    }
+
+    /// Chooses `what` in the map's Filter menu.
+    private func filter(_ app: XCUIApplication, _ what: String) {
+        let button = app.buttons["Filter"].firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "the Filter")
+        button.tap()
+        let item = app.buttons[what].firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "the Filter's \(what)")
+        item.tap()
+        sleep(2)
+    }
+
+    /// Every dot drawn, its glow and all, inside the room the framing fit it to (a point for rounding), and with
+    /// `centred` in that room's middle, as FractalFit puts the box of what it frames (the review, items 1 and 2).
+    private func framed(_ placed: Placed, _ what: String, centred: Bool) {
+        let room = CGRect(x: placed.room.left, y: placed.room.top, width: placed.width - placed.room.left - placed.room.right,
+                          height: placed.height - placed.room.top - placed.room.bottom)
+        let drawn = placed.box
+        XCTAssertGreaterThan(drawn.width, 0, "\(what): the dots' box")
+        XCTAssertTrue(room.insetBy(dx: -1, dy: -1).contains(drawn), "\(what): the dots \(drawn) leave the room \(room)")
+        guard centred else { return }
+        let slackX = max(4, room.width * 0.03), slackY = max(4, room.height * 0.03)
+        XCTAssertEqual(drawn.midX, room.midX, accuracy: slackX, "\(what): the dots \(drawn) off the room's middle \(room)")
+        XCTAssertEqual(drawn.midY, room.midY, accuracy: slackY, "\(what): the dots \(drawn) off the room's middle \(room)")
     }
 
     /// A drag across `share` of the map's width, from its right, at 40% down.
@@ -145,10 +186,15 @@ final class FractalMapRenderTests: XCTestCase {
         XCTAssertGreaterThan(lit * 400, all, "\(what): lit dots over \(lit) of \(all) of the map")
     }
 
-    /// What the app placed: the camera's turn, the dots drawn and each name's box, in the map.
+    /// What the app placed: the view's size, the camera's turn, the card's top, the dots drawn and their box with
+    /// their glows, the room the framing fit them to, and each name's box, in the map.
     struct Placed {
+        var width: CGFloat = 0, height: CGFloat = 0
         var yaw: Double = 0
+        var cardTop: CGFloat = 0
         var dots = 0
+        var box: CGRect = .zero
+        var room: (top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat) = (0, 0, 0, 0)
         var names: [(String, CGRect)] = []
     }
 
@@ -177,14 +223,18 @@ final class FractalMapRenderTests: XCTestCase {
         return placed
     }
 
-    /// The probe's label: "width height yaw focus cardTop dots", then "name<TAB>left top right bottom" a line each.
+    /// The probe's label: "width height yaw focus cardTop dots left top right bottom roomTop roomLeft roomBottom
+    /// roomRight", then "name<TAB>left top right bottom" a line each.
     static func read(_ label: String) -> Placed {
         var out = Placed()
         let lines = label.components(separatedBy: "\n")
         guard let head = lines.first else { return out }
         let first = head.split(separator: " ")
-        if first.count >= 3 { out.yaw = Double(first[2]) ?? 0 }
-        if first.count >= 6 { out.dots = Int(first[5]) ?? 0 }
+        let n = first.map { Double($0) ?? 0 }
+        if first.count >= 3 { out.width = CGFloat(n[0]); out.height = CGFloat(n[1]); out.yaw = n[2] }
+        if first.count >= 6 { out.cardTop = CGFloat(n[4]); out.dots = Int(first[5]) ?? 0 }
+        if first.count >= 10 { out.box = CGRect(x: CGFloat(n[6]), y: CGFloat(n[7]), width: CGFloat(n[8] - n[6]), height: CGFloat(n[9] - n[7])) }
+        if first.count >= 14 { out.room = (CGFloat(n[10]), CGFloat(n[11]), CGFloat(n[12]), CGFloat(n[13])) }
         for line in lines.dropFirst() {
             let parts = line.components(separatedBy: "\t")
             guard parts.count == 2 else { continue }

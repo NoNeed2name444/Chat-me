@@ -330,6 +330,8 @@ enum IdeasWords {
 
     // S12: the Fractal look
     static var lookFractal: String { String(localized: "look.fractal", defaultValue: "Fractal") }
+    /// The middle hub, every idea, as Android's map_peek_all_ideas.
+    static var fractalHub: String { String(localized: "fractal.hub", defaultValue: "All ideas") }
     static var fractalLine: String { String(localized: "fractal.line", defaultValue: "Each folder is a hub, with what it holds around it.") }
     static var fractalFirstVisit: String {
         String(localized: "fractal.firstVisit", defaultValue: "Drag to turn the map. Tap a hub to zoom in, or empty space to go back.")

@@ -1093,6 +1093,18 @@
         }
       }
     },
+    "fractal.hub" : {
+      "comment" : "The Fractal's middle hub, every idea: its name on the map and as VoiceOver reads it (S12)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All ideas"
+          }
+        }
+      }
+    },
     "fractal.ideaHint" : {
       "comment" : "VoiceOver hint: activating an idea on the Fractal map (S12)",
       "extractionState" : "manual",

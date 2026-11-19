@@ -3,22 +3,39 @@ import Foundation
 // The 3D Tree's draw lists, places on screen and names (S11), Foundation
 // only, so the suite treemodel3d tests them on Linux and TreeMetal only
 // uploads and draws them. Android's TreeModel.kt and TreeNames.kt are the
-// same: every branch an instance of one tapered tube and every leaf an
-// instance of one flattened ball, worked out once per tree and mode, never
-// per frame; the Graphics tier sets the meshes' detail and how many
-// instances are kept, and the layout's breadth-first order means a cap drops
-// the finest twigs and leaves first.
+// same: every branch an instance of one curved, tapering tube and every leaf
+// an instance of one leaf blade, worked out once per tree and mode, never per
+// frame; the Graphics tier sets the meshes' detail and how many instances are
+// kept, and the layout's breadth-first order means a cap drops the finest
+// twigs and leaves first. The owner's review of 19 Nov ("the tree doesn't
+// look realistic neither the leaves"): the bark is a brown leaning a fifth to
+// its folder's colour, a leaf a living green leaning nearly half to it, each
+// leaf a little lighter or darker and turned about its stem, seeded by its
+// node so every run, and Android, agree.
 
-/// `nodes` grown by `layout`, coloured by `colors` (the bark and leaf ramps'
-/// full step), for `tier`. `branches` holds `branchCount` instances of
-/// `branchFloats` (base xyz, tip xyz, base and tip radius, rgb, node),
-/// `leaves` `leafCount` of `leafFloats` (centre xyz, axis xyz, radius, rgb, node).
+/// `nodes` grown by `layout`, coloured by `colors` (wood3d and leaf3d), for
+/// `tier`. `branches` holds `branchCount` instances of `branchFloats` (base
+/// xyz, tip xyz, the curve's control point xyz, base and tip radius, rgb,
+/// node), `leaves` `leafCount` of `leafFloats` (centre xyz, axis xyz, radius,
+/// roll about the axis, rgb, node).
 final class TreeModel3D {
-    static let branchFloats = 12
-    static let leafFloats = 11
+    static let branchFloats = 15
+    static let leafFloats = 12
     /// Instances kept of each kind: the High tier draws every one a vault this size has, Smooth fewer.
     static let highCap = 30_000
     static let smoothCap = 8_000
+    /// A leaf turned about its stem at most this far either way (radians).
+    static let roll = 0.7
+    /// A leaf lighter or darker by at most half this, and at most this far toward `yellow`.
+    static let lightVar = 0.2, yellowMost = 0.15
+    static let yellow = 0xB9C24A
+    /// How far a trunk's base flares out and over what share of it; a branch's collar likewise.
+    static let flare: Float = 0.55, flareSpan: Float = 0.18, collar: Float = 0.18, collarSpan: Float = 0.12
+    /// The tube's closing ring's mark (past 1 along), and how far past the tip, by its radius, it closes.
+    static let cap: Float = 2, capReach: Float = 0.9
+    /// A leaf blade's widest half width, by its half length; how far its edges
+    /// rise off the midrib (by its width) and its tip curls down (by its length).
+    static let bladeWide = 0.44, fold = 0.3, curl = 0.3
 
     let nodes: NestNodes
     let layout: TreeLayout3D
@@ -30,7 +47,10 @@ final class TreeModel3D {
     let leafCount: Int
     /// Whether the tier's cap left any branch or leaf out.
     let capped: Bool
+    /// The tube's sides round and rings along, and the leaf blade's rows, for the tier.
     let segments: Int
+    let rings: Int
+    let bladeRows: Int
     /// The smallest leaf's radius, or a twig's length where there is none: how close the camera may come.
     let smallest: Float
     /// How far the bodies reach from the trunk's line: the crown's shade.
@@ -39,6 +59,8 @@ final class TreeModel3D {
     init(_ nodes: NestNodes, _ layout: TreeLayout3D, colors: TreeColors, tier: GraphicsTier) {
         self.nodes = nodes; self.layout = layout; self.colors = colors; self.tier = tier
         segments = tier == .high ? 12 : 7
+        rings = tier == .high ? 6 : 4
+        bladeRows = tier == .high ? 7 : 5
         let n = nodes.size
         let cap = tier == .high ? Self.highCap : Self.smoothCap
         let keptBranches = min(n, cap)
@@ -54,12 +76,14 @@ final class TreeModel3D {
             if b < keptBranches {
                 let o = b * Self.branchFloats
                 for a in 0..<3 {
-                    branches[o + a] = Float(layout.base[3 * i + a])
-                    branches[o + 3 + a] = Float(layout.base[3 * i + a] + layout.dir[3 * i + a] * layout.length[i])
+                    let base = layout.base[3 * i + a], run = layout.dir[3 * i + a] * layout.length[i]
+                    branches[o + a] = Float(base)
+                    branches[o + 3 + a] = Float(base + run)
+                    branches[o + 6 + a] = Float(base + run / 2 + layout.bend[3 * i + a])
                 }
-                branches[o + 6] = Float(layout.r0[i]); branches[o + 7] = Float(layout.r1[i])
-                Self.put(&branches, o + 8, colors.barkRamp[g][8])
-                branches[o + 11] = Float(i)
+                branches[o + 9] = Float(layout.r0[i]); branches[o + 10] = Float(layout.r1[i])
+                Self.put(&branches, o + 11, colors.wood3d[g])
+                branches[o + 14] = Float(i)
                 b += 1
             }
             if layout.leaf[i] > 0 {
@@ -70,8 +94,14 @@ final class TreeModel3D {
                         leaves[o + a] = Float(layout.anchor[3 * i + a]); leaves[o + 3 + a] = Float(layout.dir[3 * i + a])
                     }
                     leaves[o + 6] = Float(layout.leaf[i])
-                    Self.put(&leaves, o + 7, colors.leafRamp[g][8])
-                    leaves[o + 10] = Float(i)
+                    leaves[o + 7] = Float((2 * Self.hash(i, 1) - 1) * Self.roll)
+                    // a little lighter or darker, and some a touch toward yellow-green
+                    let tone = TreeColors.mix(colors.leaf3d[g], Self.yellow, Self.hash(i, 2) * Self.yellowMost)
+                    let light = 1 - Self.lightVar / 2 + Self.lightVar * Self.hash(i, 3)
+                    leaves[o + 8] = Float(min(Double((tone >> 16) & 255) / 255 * light, 1))
+                    leaves[o + 9] = Float(min(Double((tone >> 8) & 255) / 255 * light, 1))
+                    leaves[o + 10] = Float(min(Double(tone & 255) / 255 * light, 1))
+                    leaves[o + 11] = Float(i)
                     l += 1
                 }
             }
@@ -88,6 +118,12 @@ final class TreeModel3D {
         crown = Float(most)
     }
 
+    /// What a view pads round each framed point (subtreePoints holds every leaf's tip): a blade's half width.
+    var margin: Float { smallest * Float(Self.bladeWide) }
+
+    /// Triangles a frame draws: every branch's tube and every leaf's blade, in two instanced draws.
+    var triangles: Int { branchCount * segments * (rings + 1) * 2 + leafCount * (bladeRows - 1) * 4 }
+
     static func rgb(_ c: Int) -> SIMD3<Float> {
         SIMD3(Float((c >> 16) & 255) / 255, Float((c >> 8) & 255) / 255, Float(c & 255) / 255)
     }
@@ -96,48 +132,84 @@ final class TreeModel3D {
         out[at] = Float((c >> 16) & 255) / 255; out[at + 1] = Float((c >> 8) & 255) / 255; out[at + 2] = Float(c & 255) / 255
     }
 
-    /// A tube's `segments` round (cos, sin, along 0 or 1 per vertex), and its triangles.
-    static func tube(_ segments: Int) -> (vertices: [Float], indices: [UInt16]) {
-        var v = [Float](repeating: 0, count: (segments + 1) * 2 * 3)
-        for s in 0...segments {
-            for h in 0...1 {
-                let a = 2 * Double.pi * Double(s) / Double(segments)
-                let o = (s * 2 + h) * 3
-                v[o] = Float(cos(a)); v[o + 1] = Float(sin(a)); v[o + 2] = Float(h)
-            }
-        }
-        var idx = [UInt16](repeating: 0, count: segments * 6)
-        for s in 0..<segments {
-            let a = UInt16(s * 2), b = UInt16(s * 2 + 1), c = UInt16(s * 2 + 2), d = UInt16(s * 2 + 3)
-            let o = s * 6
-            idx[o] = a; idx[o + 1] = c; idx[o + 2] = b; idx[o + 3] = b; idx[o + 4] = c; idx[o + 5] = d
-        }
-        return (v, idx)
+    /// Node `i`'s seeded number in 0..<1 for `salt`, in 32-bit integer steps, as Android's TreeModel.hash.
+    static func hash(_ i: Int, _ salt: Int) -> Double {
+        var x = (UInt64(i) &* 2654435761 &+ UInt64(salt) &* 374761393) & 0xffffffff
+        x = ((x ^ (x >> 15)) &* 2246822519) & 0xffffffff
+        x ^= x >> 13
+        return Double(x) / 4294967296.0
     }
 
-    /// A unit ball, `rings` from pole to pole and `segments` round (x, y, z per vertex, y the leaf's axis), and its triangles.
-    static func ball(rings: Int, segments: Int) -> (vertices: [Float], indices: [UInt16]) {
-        var v = [Float](repeating: 0, count: (rings + 1) * (segments + 1) * 3)
-        for r in 0...rings {
+    /// How far along a branch ring `k` of `rings` sits: closer together near the base, where the trunk flares.
+    static func ringAt(_ k: Int, _ rings: Int) -> Float { Float(pow(Double(k) / Double(rings), 1.4)) }
+
+    /// A tube's `segments` round by `rings` along (cos, sin, along 0 to 1 per
+    /// vertex), then one more ring at `cap` along that closes its tip (the
+    /// shader draws it as a point just past the tip, so no branch ends in an
+    /// open cut), and its triangles.
+    static func tube(_ segments: Int, rings: Int) -> (vertices: [Float], indices: [UInt16]) {
+        var v = [Float](repeating: 0, count: (segments + 1) * (rings + 2) * 3)
+        for r in 0...(rings + 1) {
             for s in 0...segments {
-                let t = Double.pi * Double(r) / Double(rings), p = 2 * Double.pi * Double(s) / Double(segments)
+                let a = 2 * Double.pi * Double(s) / Double(segments)
                 let o = (r * (segments + 1) + s) * 3
-                v[o] = Float(sin(t) * cos(p)); v[o + 1] = Float(cos(t)); v[o + 2] = Float(sin(t) * sin(p))
+                v[o] = Float(cos(a)); v[o + 1] = Float(sin(a)); v[o + 2] = r > rings ? cap : ringAt(r, rings)
             }
         }
         var idx: [UInt16] = []
-        idx.reserveCapacity(rings * segments * 6)
-        for r in 0..<rings {
+        idx.reserveCapacity(segments * (rings + 1) * 6)
+        for r in 0...rings {
             for s in 0..<segments {
-                let a = r * (segments + 1) + s, b = a + segments + 1
-                idx += [UInt16(a), UInt16(b), UInt16(a + 1), UInt16(a + 1), UInt16(b), UInt16(b + 1)]
+                let a = r * (segments + 1) + s, c = a + segments + 1
+                idx += [UInt16(a), UInt16(a + 1), UInt16(c), UInt16(c), UInt16(a + 1), UInt16(c + 1)]
             }
         }
         return (v, idx)
     }
 
-    /// The ball's rings for this tier.
-    var rings: Int { segments > 8 ? 8 : 5 }
+    /// A leaf blade's half width at `y` from its stem (0) to its tip (1): a pointed oval, widest below its middle.
+    static func bladeWidth(_ y: Double) -> Double { bladeWide * pow(sin(Double.pi * y), 0.75) * (1.15 - 0.4 * y) }
+
+    /// A leaf blade, `rows` from stem to tip by three across (edge, midrib,
+    /// edge): each vertex its place (x across, y along from -1 at the stem to
+    /// 1 at the tip, z off the blade's face) and its normal, six floats;
+    /// folded along its midrib and curled down to its tip. Its triangles.
+    static func blade(_ rows: Int) -> (vertices: [Float], indices: [UInt16]) {
+        var v = [Float](repeating: 0, count: rows * 3 * 6)
+        for r in 0..<rows {
+            for c in 0...2 {
+                let y = Double(r) / Double(rows - 1), w = bladeWidth(y), side = Double(c - 1)
+                let o = (r * 3 + c) * 6
+                v[o] = Float(side * w); v[o + 1] = Float(2 * y - 1)
+                v[o + 2] = Float(fold * abs(side) * w - curl * y * y)
+            }
+        }
+        var idx: [UInt16] = []
+        idx.reserveCapacity((rows - 1) * 2 * 6)
+        for r in 0..<(rows - 1) {
+            for c in 0...1 {
+                let a = r * 3 + c, d = a + 3
+                idx += [UInt16(a), UInt16(a + 1), UInt16(d), UInt16(d), UInt16(a + 1), UInt16(d + 1)]
+            }
+        }
+        // each vertex's normal: its triangles' faces, by area, turned to the blade's face (+z)
+        var nrm = [Double](repeating: 0, count: rows * 3 * 3)
+        for t in 0..<(idx.count / 3) {
+            let p = (0..<3).map { Int(idx[3 * t + $0]) }
+            let e1 = (0..<3).map { Double(v[p[1] * 6 + $0] - v[p[0] * 6 + $0]) }
+            let e2 = (0..<3).map { Double(v[p[2] * 6 + $0] - v[p[0] * 6 + $0]) }
+            var f = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+            if f[2] < 0 { f = f.map { -$0 } }
+            for q in p { for a in 0..<3 { nrm[3 * q + a] += f[a] } }
+        }
+        for q in 0..<(rows * 3) {
+            let m = (nrm[3 * q] * nrm[3 * q] + nrm[3 * q + 1] * nrm[3 * q + 1] + nrm[3 * q + 2] * nrm[3 * q + 2]).squareRoot()
+            let o = q * 6
+            if m < 1e-12 { v[o + 5] = 1; continue }
+            for a in 0..<3 { v[o + 3 + a] = Float(nrm[3 * q + a] / m) }
+        }
+        return (v, idx)
+    }
 }
 
 /// The Tree's first view, fitted close (S11, the lead's review of 18 Nov):
@@ -238,6 +310,27 @@ struct TreeScreenNode: Equatable {
     var tip: SIMD2<Float>? = nil
 }
 
+/// Each node's state byte for the renderer (TreeMetal's state buffer):
+/// hidden by the filter, chosen, lit as a link of the chosen, faded toward
+/// the page (outside the part flown in to), or none, the first that holds.
+/// A flown-in part and all under it are never faded: they draw in full
+/// colour. Android's TreeState is the same.
+enum TreeState {
+    static let none: UInt8 = 0
+    static let hidden: UInt8 = 1
+    static let chosen: UInt8 = 2
+    static let linked: UInt8 = 3
+    static let faded: UInt8 = 4
+
+    static func of(_ nodes: NestNodes, _ i: Int, hidden gone: Bool, chosen: Int, linked: Bool, focus: Int) -> UInt8 {
+        if gone { return hidden }
+        if i == chosen { return Self.chosen }
+        if linked { return Self.linked }
+        if focus > 0, focus < nodes.size, !nodes.within(focus, i) { return faded }
+        return none
+    }
+}
+
 /// The Tree's camera moves (S11): the first view, a fly-in and how near and
 /// far the camera may go, all as GraphPerfCamera poses.
 enum TreeCamera3D {
@@ -258,19 +351,10 @@ enum TreeCamera3D {
         var c = GraphPerfCamera()
         c.pitch = pitch
         let l = m.layout
-        var points: [SIMD3<Float>] = []
-        points.reserveCapacity(m.branchCount * 2 + m.leafCount)
-        for k in 0..<m.branchCount {
-            let o = k * TreeModel3D.branchFloats
-            points.append(SIMD3(m.branches[o], m.branches[o + 1], m.branches[o + 2]))
-            points.append(SIMD3(m.branches[o + 3], m.branches[o + 4], m.branches[o + 5]))
-        }
-        for k in 0..<m.leafCount {
-            let o = k * TreeModel3D.leafFloats
-            points.append(SIMD3(m.leaves[o], m.leaves[o + 1], m.leaves[o + 2]))
-        }
-        // as Android's framer: the smallest leaf round each point; the fill's own margin holds a leaf's reach
-        let margin = m.smallest
+        // every branch's ends and middle on its curve, every body and every leaf's tip, as Android's TreeFit.points(layout, 0)
+        let points = subtreePoints(m, 0)
+        // as Android's framer: a blade's half width round each point
+        let margin = m.margin
         // from where the crown stands widest, near three quarters round (TreeFit.widestYaw)
         c.yaw = TreeFit.widestYaw(points, prefer: yaw)
         // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
@@ -288,8 +372,8 @@ enum TreeCamera3D {
     static func flyIn(_ m: TreeModel3D, _ index: Int, from camera: GraphPerfCamera, width: Float, height: Float,
                       insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
         let points = subtreePoints(m, index)
-        if let first = camera.framing(points: points, margin: m.smallest, width: width, height: height, insets: insets, fill: fill) {
-            return TreeFit.refine(points, margin: m.smallest, first, width: width, height: height, insets: insets, fill: fill)
+        if let first = camera.framing(points: points, margin: m.margin, width: width, height: height, insets: insets, fill: fill) {
+            return TreeFit.refine(points, margin: m.margin, first, width: width, height: height, insets: insets, fill: fill)
         }
         return camera.framing(centre: centre(m, index), radius: Float(m.layout.reach[index]), width: width, height: height,
                               insets: insets, fill: fill)
@@ -317,15 +401,24 @@ enum TreeCamera3D {
         return SIMD3<Float>(Float(x), Float(y), Float(z))
     }
 
+    /// Every branch's ends and middle (on its curve), every body and every leaf's tip of part `index`'s subtree, what a view of it frames.
     static func subtreePoints(_ m: TreeModel3D, _ index: Int) -> [SIMD3<Float>] {
         let l = m.layout, nodes = m.nodes
         var out: [SIMD3<Float>] = []
-        out.reserveCapacity((nodes.tout[index] - nodes.tin[index]) * 3)
+        out.reserveCapacity((nodes.tout[index] - nodes.tin[index]) * 4)
         for q in nodes.tin[index]..<nodes.tout[index] {
             let i = nodes.order[q]
-            for t in [0, l.length[i]] { out.append(point(l, i, along: t)) }
+            for t in [0.0, 0.5, 1.0] {
+                let p = l.curveAt(i, t)
+                out.append(SIMD3<Float>(Float(p[0]), Float(p[1]), Float(p[2])))
+            }
             let x: Double = l.anchor[3 * i], y: Double = l.anchor[3 * i + 1], z: Double = l.anchor[3 * i + 2]
             out.append(SIMD3<Float>(Float(x), Float(y), Float(z)))
+            let lr = l.leaf[i]
+            if lr > 0 {
+                let tx: Double = x + l.dir[3 * i] * lr, ty: Double = y + l.dir[3 * i + 1] * lr, tz: Double = z + l.dir[3 * i + 2] * lr
+                out.append(SIMD3<Float>(Float(tx), Float(ty), Float(tz)))
+            }
         }
         return out
     }
@@ -382,6 +475,8 @@ struct TreePlacedName: Equatable {
     let spot: Int
     /// Where a short leader from the name's near side runs to (its branch's tip); nil for none.
     var lead: SIMD2<Float>? = nil
+    /// Whether the name is cut to `TreeNames3D.shortCut` characters (its whole name found no clear spot).
+    var short: Bool = false
 
     var left: Float { x - width / 2 }
     var top: Float { y - height / 2 }
@@ -401,8 +496,16 @@ struct TreePlacedName: Equatable {
 /// the first view names the trunk, its branches and only what has clear room.
 /// Each name takes the first spot clear of every name and leader placed, halo
 /// and gap included, inside the view and off the chrome; a name with no clear
-/// spot is not drawn. So no two names ever overlap, at any angle or zoom.
-/// Android's TreeNames is the same.
+/// spot is not drawn. So no two names ever overlap, at any angle or zoom. The
+/// owner's review of 19 Nov ("the text overlaps a lot"): a branch also tries
+/// past the crown a row above and below its tip's row, and a name first looks
+/// for a spot clear of every other branch's leaves too (a branch here is one
+/// of the view's own: a top folder, or flown in, one growing from the part),
+/// its whole name and then cut to `shortCut` characters. Only the trunk, the
+/// part flown in to and the view's own branches may then go over another
+/// branch's leaves, again whole and then cut; a lesser name with no clear spot
+/// is left out, so fewer names show where they do not fit. Android's TreeNames
+/// is the same.
 enum TreeNames3D {
     /// The sizes the names keep, in points.
     struct Style {
@@ -417,8 +520,77 @@ enum TreeNames3D {
     /// A name's longest, in characters, as the map's.
     static let cut = 23
 
-    static func label(_ title: String) -> String {
+    /// A name cut this short when its whole name finds no clear spot.
+    static let shortCut = 12
+
+    static func label(_ title: String, cut: Int = TreeNames3D.cut) -> String {
         title.count > cut ? String(title.prefix(cut - 1)) + "…" : title
+    }
+
+    /// The branch of the view `i` grows on: its ancestor one level under the
+    /// part flown in to (`focus`, 0 for the whole tree, whose branches are the
+    /// top folders), or `i` itself if it is no deeper. A name keeps clear of
+    /// every other branch's leaves. Android's TreeNames.owner.
+    static func owner(_ nodes: NestNodes, focus: Int, _ i: Int) -> Int {
+        let under = (focus > 0 ? nodes.depth[focus] : 0) + 1
+        var k = i
+        while nodes.depth[k] > under { k = nodes.parent[k] }
+        return k
+    }
+
+    /// The leaves on screen by cell, `cell` across, so a name's box finds the
+    /// leaves under it at once: `start` by cell into `items`, each a `screen`
+    /// position. Made once a layout, as Android's TreeNames.Foliage.
+    private struct Foliage {
+        let screen: [TreeScreenNode]
+        let cell: Float
+        let cols: Int, rows: Int
+        var start: [Int]
+        var items: [Int] = []
+
+        init(_ screen: [TreeScreenNode], _ nodes: NestNodes, width: Float, height: Float, cell: Float) {
+            self.screen = screen
+            self.cell = cell
+            cols = max(1, Int((width / cell).rounded(.up)))
+            rows = max(1, Int((height / cell).rounded(.up)))
+            start = [Int](repeating: 0, count: cols * rows + 1)
+            var leaf = [Bool](repeating: false, count: screen.count)
+            for j in screen.indices where screen[j].index >= 0 && screen[j].index < nodes.size {
+                leaf[j] = !TreeNames3D.bough(nodes, screen[j].index)
+            }
+            for j in screen.indices where leaf[j] { each(screen[j]) { start[$0 + 1] += 1 } }
+            for k in stride(from: 1, through: cols * rows, by: 1) { start[k] += start[k - 1] }
+            items = [Int](repeating: 0, count: start[cols * rows])
+            var at = start
+            for j in screen.indices where leaf[j] { each(screen[j]) { items[at[$0]] = j; at[$0] += 1 } }
+        }
+
+        private func each(_ s: TreeScreenNode, _ f: (Int) -> Void) {
+            let r = s.pixels / 2
+            let c0 = max(Int(((s.x - r) / cell).rounded(.down)), 0), c1 = min(Int(((s.x + r) / cell).rounded(.down)), cols - 1)
+            let r0 = max(Int(((s.y - r) / cell).rounded(.down)), 0), r1 = min(Int(((s.y + r) / cell).rounded(.down)), rows - 1)
+            if c0 > c1 || r0 > r1 { return }
+            for y in r0...r1 { for x in c0...c1 { f(y * cols + x) } }
+        }
+
+        /// Whether the box (centre `x`, `y`) covers a leaf outside `owner`'s subtree.
+        func covers(_ x: Float, _ y: Float, _ w: Float, _ h: Float, owner: Int, _ nodes: NestNodes) -> Bool {
+            let c0 = max(Int(((x - w / 2) / cell).rounded(.down)), 0), c1 = min(Int(((x + w / 2) / cell).rounded(.down)), cols - 1)
+            let r0 = max(Int(((y - h / 2) / cell).rounded(.down)), 0), r1 = min(Int(((y + h / 2) / cell).rounded(.down)), rows - 1)
+            if c0 > c1 || r0 > r1 { return false }
+            for ry in r0...r1 {
+                for cx in c0...c1 {
+                    let k = ry * cols + cx
+                    for q in start[k]..<start[k + 1] {
+                        let s = screen[items[q]]
+                        if nodes.within(owner, s.index) { continue }
+                        let dx = max(abs(s.x - x) - w / 2, 0), dy = max(abs(s.y - y) - h / 2, 0)
+                        if dx * dx + dy * dy < s.pixels * s.pixels / 4 { return true }
+                    }
+                }
+            }
+            return false
+        }
     }
 
     static func bough(_ nodes: NestNodes, _ i: Int) -> Bool { i == 0 || nodes.childCount[i] > 0 || nodes.folder[i] }
@@ -481,14 +653,15 @@ enum TreeNames3D {
 
     /// The names to draw for `screen`, in a view `width` by `height` whose top
     /// `top` and bottom `bottom` points the chrome covers. `measure` gives a
-    /// node's words' width and height at a size, bold for a branch. `held` is
+    /// node's words' width and height at a size, whole or cut to `shortCut`
+    /// characters (`short`), bold for a branch. `held` is
     /// last time's spot by node, tried first so a name does not hop as the
     /// tree turns. `focus` is the part flown in to, whose names come first;
     /// flown in, only what `nameable` lets through is named, at most `cap`.
     /// `clear` are the chrome's boxes over the view (Back, the round tools): no
     /// name or leader goes under one.
     static func layout(_ screen: [TreeScreenNode], _ nodes: NestNodes, style: Style,
-                       measure: (_ node: Int, _ bold: Bool, _ size: Float) -> (width: Float, height: Float),
+                       measure: (_ node: Int, _ short: Bool, _ bold: Bool, _ size: Float) -> (width: Float, height: Float),
                        width: Float, height: Float, top: Float, bottom: Float,
                        held: [Int: Int] = [:], focus: Int = 0, clear: [CGRect] = [], cap: Int = most) -> [TreePlacedName] {
         var out: [TreePlacedName] = []
@@ -519,51 +692,70 @@ enum TreeNames3D {
             foot = f
             if whole { stem = Segment(a: f, b: t, half: trunk.pixels / 2) }
         }
+        let foliage = Foliage(screen, nodes, width: width, height: height, cell: 2 * style.bough)
         for node in order(screen, nodes, focus: focus).prefix(budget) {
             if out.count >= limit { break }
             let i = node.index
             if !nameable(nodes, focus: focus, i) { continue }
             let isBough = bough(nodes, i)
             if !isBough && node.pixels < style.leastLeaf { continue }
-            if label(nodes.titles[i]).isEmpty { continue }
+            let full = label(nodes.titles[i])
+            if full.isEmpty { continue }
+            let cuts = label(nodes.titles[i], cut: shortCut) != full
             let size = isBough ? style.bough : style.leaf
-            let words = measure(i, isBough, size)
-            let w = words.width + 2 * style.halo, h = words.height + 2 * style.halo
-            let all = spots(node, isBough: isBough, tipsOnly: whole && nodes.depth[i] > 1, w: w, h: h, style: style,
-                            middle: middle, crownL: crownL, crownR: crownR, foot: foot)
-            var boxes: [(Float, Float)?] = []
-            for s in all {
-                boxes.append(inView((s.x, s.y), w: w, h: h, width: width, height: height, top: top, bottom: bottom,
-                                    edge: style.edge, slides: s.slides))
-            }
-            var tried: [Int] = Array(boxes.indices)
-            if let last = held[i], last >= 0, last < boxes.count { tried.removeAll { $0 == last }; tried.insert(last, at: 0) }
-            for k in tried {
-                guard let b = boxes[k] else { continue }
-                if !out.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
-                if !blocked.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
-                if kept.contains(where: { $0.crosses(b.0, b.1, w, h, gap: style.gapY) }) { continue }
-                if i != 0, let stem, stem.crosses(b.0, b.1, w, h, gap: style.gapY) { continue }
-                let sp = all[k]
-                var line: Segment?
-                if let tip = sp.lead {
-                    // a leader runs from the box's near side to the tip, clear of every name
-                    let near: Float = tip.x < b.0 ? b.0 - w / 2 : b.0 + w / 2
-                    let l = Segment(a: SIMD2<Float>(near, b.1), b: tip, half: 1)
-                    if out.contains(where: { l.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
-                    if blocked.contains(where: { l.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
-                    line = l
+            let own = owner(nodes, focus: focus, i)
+            // only the trunk, the part and the view's own branches may go over another branch's leaves
+            let first = i == 0 || i == focus || own == i
+            var found: TreePlacedName?
+            var line: Segment?
+            search: for overLeaves in 0...(first ? 1 : 0) {
+                for short in cuts ? [false, true] : [false] {
+                    let words = measure(i, short, isBough, size)
+                    let w = words.width + 2 * style.halo, h = words.height + 2 * style.halo
+                    let all = spots(node, isBough: isBough, tipsOnly: whole && nodes.depth[i] > 1, w: w, h: h, style: style,
+                                    middle: middle, crownL: crownL, crownR: crownR, foot: foot)
+                    var boxes: [(Float, Float)?] = []
+                    for s in all {
+                        boxes.append(inView((s.x, s.y), w: w, h: h, width: width, height: height, top: top, bottom: bottom,
+                                            edge: style.edge, slides: s.slides))
+                    }
+                    var tried: [Int] = Array(boxes.indices)
+                    if let last = held[i], last >= 0, last < boxes.count { tried.removeAll { $0 == last }; tried.insert(last, at: 0) }
+                    for k in tried {
+                        guard let b = boxes[k] else { continue }
+                        if !out.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
+                        if !blocked.allSatisfy({ apart(b, w, h, $0, style) }) { continue }
+                        if kept.contains(where: { $0.crosses(b.0, b.1, w, h, gap: style.gapY) }) { continue }
+                        if i != 0, let stem, stem.crosses(b.0, b.1, w, h, gap: style.gapY) { continue }
+                        let sp = all[k]
+                        var l: Segment?
+                        if let tip = sp.lead {
+                            // a leader runs from the box's near side to the tip, clear of every name
+                            let near: Float = tip.x < b.0 ? b.0 - w / 2 : b.0 + w / 2
+                            let seg = Segment(a: SIMD2<Float>(near, b.1), b: tip, half: 1)
+                            if out.contains(where: { seg.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
+                            if blocked.contains(where: { seg.crosses($0.x, $0.y, $0.width, $0.height, gap: style.gapY) }) { continue }
+                            l = seg
+                        }
+                        if overLeaves == 0 && foliage.covers(b.0, b.1, w, h, owner: own, nodes) { continue }
+                        found = TreePlacedName(index: i, size: size, bold: isBough, x: b.0, y: b.1, width: w, height: h, spot: k,
+                                               lead: sp.lead, short: short)
+                        line = l
+                        break search
+                    }
                 }
-                if let line { kept.append(line) }
-                out.append(TreePlacedName(index: i, size: size, bold: isBough, x: b.0, y: b.1, width: w, height: h, spot: k, lead: sp.lead))
-                break
             }
+            guard let name = found else { continue }
+            if let line { kept.append(line) }
+            out.append(name)
         }
         return out
     }
 
-    /// The spots, in the order tried: a branch's tip, past the crown, above the tip; the trunk's foot and beside it.
-    static let tipSpot = 0, outsideSpot = 1, aboveTipSpot = 2, footSpot = 0
+    /// The spots, in the order tried: a branch's tip, past the crown, above the
+    /// tip, past the crown a row above and below (a leader back to the tip);
+    /// the trunk's foot and beside it.
+    static let tipSpot = 0, outsideSpot = 1, aboveTipSpot = 2, pastAboveSpot = 3, pastBelowSpot = 4, footSpot = 0
 
     /// A spot: its box's centre, whether it slides along its row to stay in, and the tip its leader runs to.
     private struct Spot {
@@ -595,6 +787,10 @@ enum TreeNames3D {
                 // past the crown, on the tip's row, unless that is the tip's own spot
                 out.append(side * (x - tip.x) > 1 ? Spot(x: x, y: t.y, slides: false, lead: t) : tip)
                 out.append(Spot(x: t.x, y: t.y - style.gapY - h / 2, slides: true))
+                // past the crown a row above and a row below, a leader back to the tip: free space for a crowded branch
+                let row = h + style.gapY
+                out.append(Spot(x: x, y: t.y - row, slides: false, lead: t))
+                out.append(Spot(x: x, y: t.y + row, slides: false, lead: t))
             }
         }
         if tipsOnly { return out }
