@@ -533,6 +533,10 @@ struct FractalMapView: View {
         }
         .overlay(alignment: .bottom) { card }
         .ideaTools(corner: true) { tools }
+        // the Fractal's sky is night by day too, and so is everything over it, Back, the tools and the
+        // cards, as Performance's (Graph3DView.perfSpace); the opaque map stops the backdrop under it
+        .environment(\.colorScheme, .dark)
+        .coversSky()
         .onAppear { host.reduced = reduceMotion }
         .onChange(of: reduceMotion) { _, now in host.reduced = now }
         .onChange(of: coverNow) { _, now in host.setCover(now) }

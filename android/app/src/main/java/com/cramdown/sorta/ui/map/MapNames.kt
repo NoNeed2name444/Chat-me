@@ -13,7 +13,9 @@ interface NameMetrics {
 }
 
 /** A name on the map: whose ([index]), its words, its text size, its box, and which of [LabelRoom.spots] it took. */
-data class PlacedName(val index: Int, val label: String, val textSize: Float, val box: LabelBox, val spot: Int) {
+data class PlacedName(val index: Int, val label: String, val textSize: Float, val box: LabelBox, val spot: Int,
+                       /** The Tree's (S11): where a short leader from the name's near side runs to (its branch's tip); NaN for none. */
+                       val leadX: Float = Float.NaN, val leadY: Float = Float.NaN) {
     /** Where its words' baseline goes, for words drawn centred on [LabelBox.x]. */
     fun baseline(metrics: NameMetrics): Float = box.y - (metrics.ascent(textSize) + metrics.descent(textSize)) / 2
 }

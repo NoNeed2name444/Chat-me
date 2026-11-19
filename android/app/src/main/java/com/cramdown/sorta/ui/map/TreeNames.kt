@@ -1,17 +1,21 @@
 package com.cramdown.sorta.ui.map
 
 import com.cramdown.sorta.map.LabelBox
+import com.cramdown.sorta.map.LabelLink
 import com.cramdown.sorta.map.LabelRoom
 import com.cramdown.sorta.map.nest.NestNodes
 
 /**
- * The 3D Tree's names (S11), from where its bodies are on screen. Branch names first (the trunk and
- * every part that holds others), then by the leaves under each, then the nearer; each takes the first
- * of its spots (on its branch for a branch, then under, above, after and before its body, and for a
- * branch a row further under and above) that is clear
- * of every name placed, halo and gap included, inside the view and off the chrome; a name with no clear
- * spot is not drawn. So no two names ever overlap, at any angle or zoom. Names may cross branches and
- * leaves: the halo, the page's colour, keeps them readable there.
+ * The 3D Tree's names (S11), from where its bodies are on screen. The trunk first, then branches by
+ * level (shallower first), then by the leaves under each, then the nearer. A branch's name goes first
+ * at its tip, on the side away from the trunk, then out past the crown on its tip's row with a short
+ * leader back to the tip, then above the tip; a leaf's beside it, away from the trunk; the trunk's under
+ * its foot, then beside it. Flown in, or for the trunk's own branches, the old spots follow (on the
+ * body, under, above, after, before, a row further under and above). On the whole tree ([focus] 0) the
+ * trunk is kept clear and deeper names get only their tip spots, so the first view names the trunk,
+ * its branches and only what has clear room. Each name takes the first spot clear of every name and
+ * leader placed (halo and gap included), inside the view and off the chrome; a name with no clear spot
+ * is not drawn. So no two names ever overlap, at any angle or zoom. iOS's TreeNames3D is the same.
  */
 object TreeNames {
     /** The sizes the names keep, in pixels. */
@@ -41,33 +45,92 @@ object TreeNames {
     const val BUDGET = 380
     const val MOST = 120
 
+    /** Flown in, a name for about every [ROOM_PER_NAME] square dp of the room, at least [FEWEST_FLOWN], at most [MOST_FLOWN]. */
+    const val ROOM_PER_NAME = 18_000f
+    const val FEWEST_FLOWN = 6
+    const val MOST_FLOWN = 30
+
+    /**
+     * How many names a flown-in view draws (the lead's review of 18 Nov: 45 names over a wall of leaves
+     * was unreadable): one for about every [ROOM_PER_NAME] square dp of the [width] by [height] pixel room
+     * the chrome leaves, at [density] pixels a dp. A phone gets about 12 to 14.
+     */
+    fun flownCap(width: Float, height: Float, density: Float): Int {
+        val d = kotlin.math.max(density, 0.1f)
+        val dp2 = kotlin.math.max(width, 0f) / d * (kotlin.math.max(height, 0f) / d)
+        return (dp2 / ROOM_PER_NAME).toInt().coerceIn(FEWEST_FLOWN, MOST_FLOWN)
+    }
+
+    /**
+     * Whether part [i] may be named flown in to [focus] (the lead's review of 18 Nov): the part itself,
+     * what grows straight from it, and the ideas further in; never a part of another branch, nor a
+     * folder deeper in (its ideas speak for it).
+     */
+    fun nameable(nodes: NestNodes, focus: Int, i: Int): Boolean =
+        focus <= 0 || i == focus || (nodes.within(focus, i) && (nodes.parent[i] == focus || !bough(nodes, i)))
+
+    /** The spots, in the order tried: a branch's tip, past the crown, above the tip; the trunk's foot and beside it. */
+    const val TIP = 0
+    const val OUTSIDE = 1
+    const val ABOVE_TIP = 2
+    const val FOOT = 0
+
     fun bough(nodes: NestNodes, i: Int): Boolean = i == 0 || nodes.childCount[i] > 0 || nodes.folder[i]
 
     /**
      * The order names are placed in: the part flown in to ([focus], 0 for the whole tree) and what grows
-     * from it before the rest, then branches first, then by weight, then the nearer (bigger on screen).
+     * from it before the rest, then branches first, the shallower first, then by weight, then the nearer
+     * (bigger on screen).
      */
     fun order(screen: List<ScreenNode>, nodes: NestNodes, focus: Int = 0): List<ScreenNode> =
         screen.filter { it.index in 0 until nodes.size }.sortedWith(
             compareByDescending<ScreenNode> { focus !in 0 until nodes.size || nodes.within(focus, it.index) }
-                .thenByDescending { bough(nodes, it.index) }.thenByDescending { nodes.weight[it.index] }
+                .thenByDescending { bough(nodes, it.index) }.thenBy { nodes.depth[it.index] }.thenByDescending { nodes.weight[it.index] }
                 .thenByDescending { it.pixels }.thenBy { it.index })
+
+    /** A spot: its box's centre, whether it slides along its row to stay in, and the tip its leader runs to (NaN for none). */
+    private class Spot(val x: Float, val y: Float, val slides: Boolean, val leadX: Float = Float.NaN, val leadY: Float = Float.NaN)
 
     /**
      * The names to draw for [screen], in a view [width] by [height] whose top [top] and bottom [bottom]
      * pixels the chrome covers. [boughs] and [leaves] measure the two kinds' words. [held] is last
      * frame's spot by node, tried first so a name does not hop as the tree turns. [focus] is the part
-     * flown in to, whose names come first.
+     * flown in to, whose names come first; 0 is the whole tree. Flown in, only what [nameable] lets
+     * through is named, at most [cap] names. [clear] are the chrome's boxes over the view (the Back
+     * button, the round tools): no name or leader goes under one.
      */
     fun layout(screen: List<ScreenNode>, nodes: NestNodes, boughs: NameMetrics, leaves: NameMetrics, style: Style,
-               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0): List<PlacedName> {
-        val placed = ArrayList<LabelBox>()
+               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0,
+               clear: List<LabelBox> = emptyList(), cap: Int = MOST): List<PlacedName> {
+        // the chrome's boxes are taken before any name
+        val placed = ArrayList<LabelBox>(clear.size + 32).apply { addAll(clear) }
         val out = ArrayList<PlacedName>()
+        val most = if (focus > 0) minOf(cap, MOST) else MOST
+        val whole = focus <= 0
+        val trunk = screen.firstOrNull { it.index == 0 }
+        // the crown's sides on screen, every body and tip
+        var crownL = Float.POSITIVE_INFINITY; var crownR = Float.NEGATIVE_INFINITY
+        for (n in screen) {
+            crownL = minOf(crownL, n.x - n.pixels / 2); crownR = maxOf(crownR, n.x + n.pixels / 2)
+            if (!n.tipX.isNaN()) { crownL = minOf(crownL, n.tipX); crownR = maxOf(crownR, n.tipX) }
+        }
+        val middle = trunk?.x ?: width / 2
+        // what no name may cover: every leader drawn, and on the whole tree the trunk (but for its own name)
+        val kept = ArrayList<LabelLink>()
+        var stem: LabelLink? = null
+        var footX = Float.NaN; var footY = Float.NaN
+        if (trunk != null && !trunk.tipX.isNaN()) {
+            // the body is ANCHOR up the trunk, so its foot is back past it from the top
+            val a = com.cramdown.sorta.map.TreeShape3D.ANCHOR.toFloat()
+            footX = (trunk.x - a * trunk.tipX) / (1 - a); footY = (trunk.y - a * trunk.tipY) / (1 - a)
+            if (whole) stem = LabelLink(footX, footY, trunk.tipX, trunk.tipY, trunk.pixels / 2)
+        }
         val ordered = order(screen, nodes, focus)
         for (k in 0 until minOf(ordered.size, BUDGET)) {
-            if (out.size >= MOST) break
+            if (out.size >= most) break
             val node = ordered[k]
             val i = node.index
+            if (!nameable(nodes, focus, i)) continue
             val isBough = bough(nodes, i)
             if (!isBough && node.pixels < style.leastLeaf) continue
             val metrics = if (isBough) boughs else leaves
@@ -76,20 +139,72 @@ object TreeNames {
             if (label.isEmpty()) continue
             val w = metrics.width(label, size) + 2 * style.halo
             val h = metrics.descent(size) - metrics.ascent(size) + 2 * style.halo
-            val below = node.pixels / 2 + h / 2 + style.gapY
-            // under, above, after, before: the first two slide along their row to stay in, the others don't
-            val around = LabelRoom.spots(node.x, node.y, node.pixels, w, h, below, style.gapX).mapIndexed { k, b -> b to (k < 2) }
-            // a branch also tries its own body first and, in a crowd, a row further under and above
-            val all = if (!isBough) around else listOf(LabelBox(node.x, node.y, w, h) to true) + around +
-                listOf(LabelBox(node.x, node.y + below + h + style.gapY, w, h) to true, LabelBox(node.x, node.y - below - h - style.gapY, w, h) to true)
-            val spots: List<LabelBox?> = all.map { (b, slides) ->
-                LabelRoom.inView(b, width, style.edge, slides)?.takeIf { it.y - it.height / 2 >= top && it.y + it.height / 2 <= height - bottom }
+            val spots = spots(node, i, isBough, whole && nodes.depth[i] > 1, w, h, style, middle, crownL, crownR, footX, footY)
+            val boxes: List<LabelBox?> = spots.map { sp ->
+                LabelRoom.inView(LabelBox(sp.x, sp.y, w, h), width, style.edge, sp.slides)?.takeIf { it.y - it.height / 2 >= top && it.y + it.height / 2 <= height - bottom }
             }
             val last = held[i]
-            val tried = (if (last != null && last in spots.indices) listOf(spots[last]) + spots.filterIndexed { k, _ -> k != last } else spots).filterNotNull()
-            val box = LabelRoom.place(tried, placed, emptyList(), emptyList(), style.gapX, style.gapY) ?: continue
+            val tried = if (last != null && last in boxes.indices) listOf(last) + boxes.indices.filter { it != last } else boxes.indices.toList()
+            var at = -1
+            for (q in tried) {
+                val box = boxes[q] ?: continue
+                if (!LabelRoom.fits(box, placed, style.gapX, style.gapY)) continue
+                if (kept.any { LabelRoom.crosses(box, it, style.gapY) }) continue
+                if (i != 0 && stem != null && LabelRoom.crosses(box, stem, style.gapY)) continue
+                val sp = spots[q]
+                // a leader runs from the box's near side to the tip, clear of every name
+                if (!sp.leadX.isNaN() && placed.any { LabelRoom.crosses(it, lead(box, sp), style.gapY) }) continue
+                at = q; break
+            }
+            if (at < 0) continue
+            val box = checkNotNull(boxes[at]); val sp = spots[at]
             placed.add(box)
-            out.add(PlacedName(i, label, size, box, spots.indexOf(box)))
+            if (!sp.leadX.isNaN()) kept.add(lead(box, sp))
+            out.add(PlacedName(i, label, size, box, at, sp.leadX, sp.leadY))
+        }
+        return out
+    }
+
+    /** A leader's line, from the box's side nearer the tip to the tip, kept a hair wide. */
+    private fun lead(box: LabelBox, sp: Spot): LabelLink {
+        val near = if (sp.leadX < box.x) box.x - box.width / 2 else box.x + box.width / 2
+        return LabelLink(near, box.y, sp.leadX, sp.leadY, 1f)
+    }
+
+    /** Where [node]'s name may go, in the order tried; [tipsOnly] leaves out all but its tip's spots. */
+    private fun spots(node: ScreenNode, i: Int, isBough: Boolean, tipsOnly: Boolean, w: Float, h: Float, style: Style,
+                      middle: Float, crownL: Float, crownR: Float, footX: Float, footY: Float): List<Spot> {
+        val out = ArrayList<Spot>(10)
+        if (i == 0) {
+            if (!footX.isNaN()) {
+                out.add(Spot(footX, footY + style.gapY + h / 2, true))
+                val beside = node.pixels / 2 + style.gapX + w / 2
+                out.add(Spot(footX + beside, footY - h / 2, false)); out.add(Spot(footX - beside, footY - h / 2, false))
+            }
+        } else {
+            val tx = if (node.tipX.isNaN()) node.x else node.tipX
+            val ty = if (node.tipY.isNaN()) node.y else node.tipY
+            val side = if (tx >= middle) 1f else -1f
+            val reach = if (isBough) 0f else node.pixels / 2
+            val tip = Spot(tx + side * (reach + style.gapX + w / 2), ty, false)
+            out.add(tip)
+            if (isBough) {
+                val edge = if (side > 0) crownR else crownL
+                val x = edge + side * (style.gapX + w / 2)
+                // past the crown, on the tip's row, unless that is the tip's own spot
+                out.add(if (side * (x - tip.x) > 1f) Spot(x, ty, false, tx, ty) else tip)
+                out.add(Spot(tx, ty - style.gapY - h / 2, true))
+            }
+        }
+        if (tipsOnly) return out
+        val below = node.pixels / 2 + h / 2 + style.gapY
+        // under, above, after, before: the first two slide along their row to stay in, the others don't
+        val around = LabelRoom.spots(node.x, node.y, node.pixels, w, h, below, style.gapX)
+        if (isBough) out.add(Spot(node.x, node.y, true))
+        for ((k, b) in around.withIndex()) out.add(Spot(b.x, b.y, k < 2))
+        // a branch, in a crowd, a row further under and above
+        if (isBough) {
+            out.add(Spot(node.x, node.y + below + h + style.gapY, true)); out.add(Spot(node.x, node.y - below - h - style.gapY, true))
         }
         return out
     }
@@ -106,12 +221,13 @@ object TreeNames {
 
 /**
  * The Tree's bodies on screen (S11): each node's body ([TreeLayout3D.anchor]) through [viewProj] into a
- * [width] by [height] view, those [filter] lets through and in front of the eye, a little past the view
- * kept so a name can slide in. A leaf's size is its own; a branch's its thickness. [clip] is scratch.
+ * [width] by [height] view, with a branch's tip, those [filter] lets through and in front of the eye, a little past the view
+ * kept so a name can slide in. A leaf's size is its own, held between the floor and ceiling it is drawn
+ * with at [density] pixels a dp (TreeWeight); a branch's its thickness. [clip] is scratch.
  */
 object TreeScreen {
     fun project(model: com.cramdown.sorta.map.TreeModel, viewProj: FloatArray, focal: Float, width: Int, height: Int,
-                filter: com.cramdown.sorta.map.MapFilterView?, clip: FloatArray): List<ScreenNode> {
+                filter: com.cramdown.sorta.map.MapFilterView?, clip: FloatArray, density: Float): List<ScreenNode> {
         val l = model.layout
         val count = model.nodes.size
         val out = ArrayList<ScreenNode>(count)
@@ -123,7 +239,18 @@ object TreeScreen {
             val sy = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height
             if (sx < -width * 0.25f || sx > width * 1.25f || sy < -height * 0.25f || sy > height * 1.25f) continue
             val size = if (l.leaf[i] > 0) l.leaf[i] * 2 else l.r0[i] * 2
-            out.add(ScreenNode(i, sx, sy, (size * focal / clip[3]).toFloat(), true, focal / clip[3]))
+            val perUnit = focal / clip[3]
+            var tx = Float.NaN; var ty = Float.NaN
+            // a branch's tip: where its name goes first
+            if (l.leaf[i] <= 0) {
+                val t = l.length[i]
+                com.cramdown.sorta.map.Mat4.project(viewProj, (l.base[3 * i] + l.dir[3 * i] * t).toFloat(),
+                    (l.base[3 * i + 1] + l.dir[3 * i + 1] * t).toFloat(), (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat(), clip)
+                if (clip[3] > 1e-4f) { tx = (clip[0] / clip[3] * 0.5f + 0.5f) * width; ty = (1f - (clip[1] / clip[3] * 0.5f + 0.5f)) * height }
+            }
+            var pixels = (size * perUnit).toFloat()
+            if (l.leaf[i] > 0) pixels = pixels.coerceIn(TreeWeight.LEAF_DP * density, TreeWeight.LEAF_MOST_DP * density)
+            out.add(ScreenNode(i, sx, sy, pixels, true, perUnit, tx, ty))
         }
         return out
     }

@@ -6,7 +6,7 @@ import XCTest
 /// suite maplook's.
 final class MapLookWordsTests: XCTestCase {
     func testTheLooksAreNamed() {
-        XCTAssertEqual(MapLook.allCases.map(\.title), ["Space", "Neuron", "2D", "Performance"])
+        XCTAssertEqual(MapLook.allCases.map(\.title), ["Space", "Neuron", "Tree", "2D", "Performance", "Fractal"])
     }
 
     func testTheChipIsSpokenAsTheTheme() {

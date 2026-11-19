@@ -122,7 +122,16 @@ function layout(T) {
 // branch tapers to TAPER of its base radius, and a child is never thicker than 0.85 of where it
 // joins. A leaf is an ellipsoid past its twig's tip. Its own draw (a second rng on the same seed), so
 // the flat numbers above stay as they were. Android's TreeLayout3D and iOS's TreeLayout3D.swift.
-const GOLDEN = Math.PI * (3 - Math.sqrt(5)), LIFT = 0.18, TAPER = 0.6, JOIN = 0.85, ANCHOR = 0.6;
+const GOLDEN = Math.PI * (3 - Math.sqrt(5)), LIFT = 0.45, TAPER = 0.6, JOIN = 0.85, ANCHOR = 0.6;
+// the crown's own shape (the lead's review of 18 Nov: a pole with twigs, now a crown about as wide as
+// it is tall): the trunk's branches leave it RISE0 to RISE1 off upright (heaviest the most upright), a
+// deeper branch SPLAY0 to SPLAY1 off its parent's line, then lifted (LIFT) so a limb curves up; lengths
+// RATIO1 (the trunk's, not shortened by rank) and RATIO2 (deeper) of the parent's, the trunk's branches
+// along its top DROP1; thicker (ROOT_WID, WID) and bigger leaves (LEAF3) than the flat tree's
+const RISE0 = 35 * Math.PI / 180, RISE1 = 55 * Math.PI / 180, SPLAY0 = 15 * Math.PI / 180, SPLAY1 = 45 * Math.PI / 180;
+const RATIO1 = 0.9, RATIO2 = 0.75, DROP1 = 0.3, ROOT_WID = 0.15, WID = 0.1, LEAF3 = 0.8;
+// a leaf's largest radius (LEAF_MOST, beside the trunk's length): a long limb's leaf no bigger than a twig's
+const LEAF_MOST = 0.07;
 
 function layout3d(T) {
   const N = T.parent.length, PAR = T.parent;
@@ -139,13 +148,13 @@ function layout3d(T) {
   const place = function (i, b, D, U, len, S, rmax) {
     for (let a = 0; a < 3; a++) { E.base[3 * i + a] = b[a]; E.dir[3 * i + a] = D[a]; }
     E.len[i] = len;
-    const r0 = Math.min(len * (i === 0 ? P.rootWid : P.wid) / 2, rmax);
+    const r0 = Math.min(len * (i === 0 ? ROOT_WID : WID) / 2, rmax);
     E.r0[i] = r0; E.r1[i] = r0 * TAPER;
     const V = [D[1] * U[2] - D[2] * U[1], D[2] * U[0] - D[0] * U[2], D[0] * U[1] - D[1] * U[0]];
     const phi0 = rnd() * TAU;
     const n = CC[i];
     if (!n && i > 0) {
-      const lr = len * LEAFK * 0.5; E.leaf[i] = lr;
+      const lr = Math.min(len * LEAF3 * 0.5, LEAF_MOST); E.leaf[i] = lr;
       for (let a = 0; a < 3; a++) E.anchor[3 * i + a] = b[a] + D[a] * (len + lr);
       return;
     }
@@ -159,15 +168,17 @@ function layout3d(T) {
     for (let q = 0; q < n; q++) {
       const c = kids[q];
       const rel = n === 1 ? 0.45 : q === 0 ? 0.1 : 0.45 + 0.55 * q / (n - 1);
-      const phi = phi0 + q * GOLDEN, th = S * P.spread * rel;
+      const s = n === 1 ? 0.5 : q / (n - 1), trunk = i === 0;
+      const phi = phi0 + q * GOLDEN, th = trunk ? RISE0 + (RISE1 - RISE0) * s : SPLAY0 + (SPLAY1 - SPLAY0) * s;
       const ct = Math.cos(th), st = Math.sin(th), cp = Math.cos(phi), sp = Math.sin(phi);
       const d = [0, 0, 0];
       for (let a = 0; a < 3; a++) d[a] = D[a] * ct + (U[a] * cp + V[a] * sp) * st;
-      d[1] += LIFT;
+      if (!trunk) d[1] += LIFT;
       const dm = Math.hypot(d[0], d[1], d[2]); for (let a = 0; a < 3; a++) d[a] /= dm;
-      const t = clamp(1 - P.drop * Math.pow(rel, 0.85) + (rnd() - 0.5) * 0.05, 1 - P.drop, 1);
+      const drop = trunk ? DROP1 : P.drop;
+      const t = clamp(1 - drop * Math.pow(rel, 0.85) + (rnd() - 0.5) * 0.05, 1 - drop, 1);
       const at = [b[0] + D[0] * len * t, b[1] + D[1] * len * t, b[2] + D[2] * len * t];
-      const cl = len * P.ratio * (0.5 + 0.5 * Math.sqrt(WP[c] / wmax)) * (1 - P.shorten * rel);
+      const cl = len * (trunk ? RATIO1 : RATIO2) * (0.5 + 0.5 * Math.sqrt(WP[c] / wmax)) * (trunk ? 1 : 1 - P.shorten * rel);
       const cS = clamp(2 * S * WP[c] / tot * 0.9 + 0.3, P.fanMin, P.fanMax);
       let ud = U[0] * d[0] + U[1] * d[1] + U[2] * d[2];
       let u = [U[0] - d[0] * ud, U[1] - d[1] * ud, U[2] - d[2] * ud];

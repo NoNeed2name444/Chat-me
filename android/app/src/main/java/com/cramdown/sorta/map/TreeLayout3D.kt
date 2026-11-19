@@ -12,8 +12,9 @@ import kotlin.math.sqrt
 // The Tree in 3D (S11, the owner's decision of 18 Nov): the flat layout's weights, lengths, fans and
 // drop (TreeLayout), grown round the trunk instead of across the page. The trunk goes up the y axis;
 // each branch's children leave it spread round it by the golden angle from a seeded start, the
-// heaviest nearly straight on and the lighter ones further out and lower down, lifted a little toward
-// the sky. A branch tapers to TAPER of its base radius and a child is never thicker than JOIN of where
+// heaviest the most upright and the lighter ones further out and lower down; a crown about as wide as
+// it is tall (the trunk's branches 35 to 55 degrees off upright, a deeper one 15 to 45 off its
+// parent's line, lifted toward the sky so a limb curves up). A branch tapers to TAPER of its base radius and a child is never thicker than JOIN of where
 // it joins. A leaf is a shape past its twig's tip. tools/tree_fixture.mjs keeps the same rules
 // (layout3d), and tree-fixture.json's expect3d holds this and iOS's TreeLayout3D.swift to them.
 
@@ -22,7 +23,25 @@ object TreeShape3D {
     /** The golden angle, the turn between one child and the next round their parent. */
     val GOLDEN = Math.PI * (3 - sqrt(5.0))
     /** How far each child is lifted toward the sky before its direction is made whole. */
-    const val LIFT = 0.18
+    const val LIFT = 0.45
+    /** The trunk's branches leave it this far off upright, the heaviest the least. */
+    const val RISE0 = 35 * Math.PI / 180
+    const val RISE1 = 55 * Math.PI / 180
+    /** A deeper branch leaves its parent's line this far, before its lift. */
+    const val SPLAY0 = 15 * Math.PI / 180
+    const val SPLAY1 = 45 * Math.PI / 180
+    /** A branch's length beside its parent's: the trunk's branches (not shortened by rank), then deeper ones. */
+    const val RATIO1 = 0.9
+    const val RATIO2 = 0.75
+    /** How far down the trunk its branches start, as a share of it. */
+    const val DROP1 = 0.3
+    /** Thickness, across beside length: the trunk's and a branch's. */
+    const val ROOT_WIDTH = 0.15
+    const val WIDTH = 0.1
+    /** A leaf's length beside its twig's. */
+    const val LEAF = 0.8
+    /** A leaf's largest radius, beside the trunk's length: a long limb's leaf no bigger than a twig's, so a fly-in is not walled in leaves. */
+    const val LEAF_MOST = 0.07
     /** A branch's tip radius beside its base's. */
     const val TAPER = 0.6
     /** A child's base radius at most this much of its parent's where it joins. */
@@ -79,13 +98,13 @@ class TreeLayout3D(val nodes: NestNodes) {
         base[3 * i] = bx; base[3 * i + 1] = by; base[3 * i + 2] = bz
         for (a in 0..2) { dir[3 * i + a] = d[a]; w.d[a] = d[a]; w.u[a] = u[a] }
         length[i] = len
-        val radius = min(len * (if (i == 0) TreeShape.ROOT_WIDTH else TreeShape.WIDTH) / 2, rmax)
+        val radius = min(len * (if (i == 0) TreeShape3D.ROOT_WIDTH else TreeShape3D.WIDTH) / 2, rmax)
         r0[i] = radius; r1[i] = radius * TreeShape3D.TAPER
         w.v[0] = d[1] * u[2] - d[2] * u[1]; w.v[1] = d[2] * u[0] - d[0] * u[2]; w.v[2] = d[0] * u[1] - d[1] * u[0]
         w.phi0 = rnd.next() * 2 * Math.PI
         val count = nodes.childCount[i]
         if (count == 0 && i > 0) {
-            val lr = len * TreeShape.LEAF * 0.5
+            val lr = minOf(len * TreeShape3D.LEAF * 0.5, TreeShape3D.LEAF_MOST)
             leaf[i] = lr
             for (a in 0..2) anchor[3 * i + a] = base[3 * i + a] + d[a] * (len + lr)
             return w
@@ -108,15 +127,18 @@ class TreeLayout3D(val nodes: NestNodes) {
         val c = w.kids[q]
         val i = w.i; val len = w.len; val fan = w.fan
         val rel = if (count == 1) 0.45 else if (q == 0) 0.1 else 0.45 + 0.55 * q / (count - 1)
+        val s = if (count == 1) 0.5 else q.toDouble() / (count - 1); val trunk = i == 0
         val phi = w.phi0 + q * TreeShape3D.GOLDEN
-        val th = fan * TreeShape.SPREAD * rel
+        val th = if (trunk) TreeShape3D.RISE0 + (TreeShape3D.RISE1 - TreeShape3D.RISE0) * s
+            else TreeShape3D.SPLAY0 + (TreeShape3D.SPLAY1 - TreeShape3D.SPLAY0) * s
         val ct = cos(th); val st = sin(th); val cp = cos(phi); val sp = sin(phi)
         val d = DoubleArray(3) { a -> w.d[a] * ct + (w.u[a] * cp + w.v[a] * sp) * st }
-        d[1] += TreeShape3D.LIFT
+        if (!trunk) d[1] += TreeShape3D.LIFT
         val dm = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
         for (a in 0..2) d[a] /= dm
-        val t = clamp(1 - TreeShape.DROP * rel.pow(0.85) + (rnd.next() - 0.5) * 0.05, 1 - TreeShape.DROP, 1.0)
-        val cl = len * TreeShape.RATIO * (0.5 + 0.5 * sqrt(wp[c] / w.wmax)) * (1 - TreeShape.SHORTEN * rel)
+        val drop = if (trunk) TreeShape3D.DROP1 else TreeShape.DROP
+        val t = clamp(1 - drop * rel.pow(0.85) + (rnd.next() - 0.5) * 0.05, 1 - drop, 1.0)
+        val cl = len * (if (trunk) TreeShape3D.RATIO1 else TreeShape3D.RATIO2) * (0.5 + 0.5 * sqrt(wp[c] / w.wmax)) * (if (trunk) 1.0 else 1 - TreeShape.SHORTEN * rel)
         val cs = clamp(2 * fan * wp[c] / w.tot * 0.9 + 0.3, TreeShape.FAN_MIN, TreeShape.FAN_MAX)
         // the child's own across: the parent's, turned square to the child
         var ud = w.u[0] * d[0] + w.u[1] * d[1] + w.u[2] * d[2]

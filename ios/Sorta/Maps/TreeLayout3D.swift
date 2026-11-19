@@ -4,8 +4,10 @@ import Foundation
 // weights, lengths, fans and drop (TreeLayout), grown round the trunk instead
 // of across the page. The trunk goes up the y axis; each branch's children
 // leave it spread round it by the golden angle from a seeded start, the
-// heaviest nearly straight on and the lighter ones further out and lower down,
-// lifted a little toward the sky. A branch tapers to `taper` of its base
+// heaviest the most upright and the lighter ones further out and lower down; a
+// crown about as wide as it is tall (the trunk's branches 35 to 55 degrees off
+// upright, a deeper one 15 to 45 off its parent's line, lifted toward the sky
+// so a limb curves up). A branch tapers to `taper` of its base
 // radius and a child is never thicker than `join` of where it joins. A leaf is
 // a shape past its twig's tip. Android's TreeLayout3D.kt is the same line for
 // line; tree-fixture.json's expect3d holds both (suite treelayout).
@@ -15,7 +17,22 @@ enum TreeShape3D {
     /// The golden angle, the turn between one child and the next round their parent.
     static let golden = Double.pi * (3 - 5.0.squareRoot())
     /// How far each child is lifted toward the sky before its direction is made whole.
-    static let lift = 0.18
+    static let lift = 0.45
+    /// The trunk's branches leave it this far off upright, the heaviest the least.
+    static let rise0 = 35 * Double.pi / 180, rise1 = 55 * Double.pi / 180
+    /// A deeper branch leaves its parent's line this far, before its lift.
+    static let splay0 = 15 * Double.pi / 180, splay1 = 45 * Double.pi / 180
+    /// A branch's length beside its parent's: the trunk's branches (not shortened by rank), then deeper ones.
+    static let ratio1 = 0.9, ratio2 = 0.75
+    /// How far down the trunk its branches start, as a share of it.
+    static let drop1 = 0.3
+    /// Thickness, across beside length: the trunk's and a branch's.
+    static let rootWidth = 0.15, width = 0.1
+    /// A leaf's length beside its twig's.
+    static let leaf = 0.8
+    /// A leaf's largest radius, beside the trunk's length: a long limb's leaf
+    /// no bigger than a twig's, so a fly-in is not walled in leaves.
+    static let leafMost = 0.07
     /// A branch's tip radius beside its base's.
     static let taper = 0.6
     /// A child's base radius at most this much of its parent's where it joins.
@@ -77,13 +94,13 @@ final class TreeLayout3D {
         base[3 * i] = bx; base[3 * i + 1] = by; base[3 * i + 2] = bz
         for a in 0..<3 { dir[3 * i + a] = d[a]; w.d[a] = d[a]; w.u[a] = u[a] }
         length[i] = len
-        let radius = min(len * (i == 0 ? TreeShape.rootWidth : TreeShape.width) / 2, rmax)
+        let radius = min(len * (i == 0 ? TreeShape3D.rootWidth : TreeShape3D.width) / 2, rmax)
         r0[i] = radius; r1[i] = radius * TreeShape3D.taper
         w.v[0] = d[1] * u[2] - d[2] * u[1]; w.v[1] = d[2] * u[0] - d[0] * u[2]; w.v[2] = d[0] * u[1] - d[1] * u[0]
         w.phi0 = rnd.next() * 2 * Double.pi
         let count = nodes.childCount[i]
         if count == 0 && i > 0 {
-            let lr = len * TreeShape.leaf * 0.5
+            let lr = min(len * TreeShape3D.leaf * 0.5, TreeShape3D.leafMost)
             leaf[i] = lr
             for a in 0..<3 { anchor[3 * i + a] = base[3 * i + a] + d[a] * (len + lr) }
             return w
@@ -108,15 +125,18 @@ final class TreeLayout3D {
         let c = w.kids[q]
         let i = w.i, len = w.len, fan = w.fan
         let rel = count == 1 ? 0.45 : (q == 0 ? 0.1 : 0.45 + 0.55 * Double(q) / Double(count - 1))
+        let s = count == 1 ? 0.5 : Double(q) / Double(count - 1), trunk = i == 0
         let phi = w.phi0 + Double(q) * TreeShape3D.golden
-        let th = fan * TreeShape.spread * rel
+        let th = trunk ? TreeShape3D.rise0 + (TreeShape3D.rise1 - TreeShape3D.rise0) * s
+            : TreeShape3D.splay0 + (TreeShape3D.splay1 - TreeShape3D.splay0) * s
         let ct = cos(th), st = sin(th), cp = cos(phi), sp = sin(phi)
         var d = (0..<3).map { a in w.d[a] * ct + (w.u[a] * cp + w.v[a] * sp) * st }
-        d[1] += TreeShape3D.lift
+        if !trunk { d[1] += TreeShape3D.lift }
         let dm = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).squareRoot()
         for a in 0..<3 { d[a] /= dm }
-        let t = clamp(1 - TreeShape.drop * pow(rel, 0.85) + (rnd.next() - 0.5) * 0.05, 1 - TreeShape.drop, 1)
-        let cl = len * TreeShape.ratio * (0.5 + 0.5 * (wp[c] / w.wmax).squareRoot()) * (1 - TreeShape.shorten * rel)
+        let drop = trunk ? TreeShape3D.drop1 : TreeShape.drop
+        let t = clamp(1 - drop * pow(rel, 0.85) + (rnd.next() - 0.5) * 0.05, 1 - drop, 1)
+        let cl = len * (trunk ? TreeShape3D.ratio1 : TreeShape3D.ratio2) * (0.5 + 0.5 * (wp[c] / w.wmax).squareRoot()) * (trunk ? 1 : 1 - TreeShape.shorten * rel)
         let cs = clamp(2 * fan * wp[c] / w.tot * 0.9 + 0.3, TreeShape.fanMin, TreeShape.fanMax)
         // the child's own across: the parent's, turned square to the child
         var ud = w.u[0] * d[0] + w.u[1] * d[1] + w.u[2] * d[2]

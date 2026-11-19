@@ -61,7 +61,7 @@ class FractalSight(val model: FractalModel) {
     /** The most dots this frame draws: the model's budget, never above [FractalRules.BUDGET]. */
     var budget = model.budget.coerceIn(1, FractalRules.BUDGET)
         set(value) { field = value.coerceIn(1, FractalRules.BUDGET) }
-    /** The cluster flown in to (0 the whole map): what is outside it dims. */
+    /** The cluster flown in to (0 the whole map): nothing outside it is drawn, so no other hub's glow or line strays in. */
     var focus = 0
     /** The chosen node (its ring) and the idea whose links stand out (Show links), -1 for none. */
     var chosen = -1
@@ -135,12 +135,13 @@ class FractalSight(val model: FractalModel) {
             if (ahead) {
                 val sx = (clip[0] / w * 0.5f + 0.5f) * width
                 val sy = (1f - (clip[1] / w * 0.5f + 0.5f)) * height
-                val h = if (tree.childCount[i] > 0) FractalRules.smooth(FractalRules.HUB_FROM, FractalRules.HUB_TO, onScreen.toDouble()).toFloat() else 0f
-                val r = FractalRules.clamp(layout.dot[i] * focal / w / d, 1.25 + 1.75 * h, 18.0 + 8 * h).toFloat() * d
+                // a hub is a hub at every depth: lit at least [HUB_LEAST], so a cluster's sub-hubs stand out from its ideas
+                val h = if (tree.childCount[i] > 0) max(HUB_LEAST, FractalRules.smooth(FractalRules.HUB_FROM, FractalRules.HUB_TO, onScreen.toDouble()).toFloat()) else 0f
+                val r = FractalRules.clamp(layout.dot[i] * focal / w / d, (LEAST_DP + HUB_MORE_DP * h).toDouble(), 18.0 + 8 * h).toFloat() * d
                 val glow = r * (1f + GLOW_REACH * h)
-                if (sx + glow >= 0f && sx - glow <= width && sy + glow >= 0f && sy - glow <= height) {
+                val inside = focus <= 0 || tree.holds(focus, i)
+                if (inside && sx + glow >= 0f && sx - glow <= width && sy + glow >= 0f && sy - glow <= height) {
                     var a = given[i]
-                    if (focus > 0 && !tree.holds(focus, i)) a *= FractalRules.DIM.toFloat()
                     if (count >= fadeFrom) a *= (budget - count) / (budget - fadeFrom)
                     if (i == chosen) a = max(a, 1f)
                     val k = count++
@@ -151,14 +152,16 @@ class FractalSight(val model: FractalModel) {
             }
             // its parts, once its cluster is open enough on screen
             val parts = tree.childCount[i]
-            if (parts == 0 || onScreen < FractalRules.OPEN) continue
-            val open = FractalRules.smooth(FractalRules.OPEN, FractalRules.OPEN_FULL, onScreen.toDouble()).toFloat()
+            if (parts == 0 || onScreen < OPEN) continue
+            val open = FractalRules.smooth(OPEN, OPEN_FULL, onScreen.toDouble()).toFloat()
             val s = tree.childStart[i]
             // heaviest first, and never more than a frame could draw: a folder of 100,000 costs what one of 380 does
             for (q in 0 until min(parts, budget)) {
                 if (pushed >= PUSH_MOST) break
                 val c = tree.children[s + q]
                 if (!isShown(c) || !inView(c, viewProj, focal, width, height)) continue
+                // flown in: only the way down to the cluster and the cluster itself
+                if (focus > 0 && !tree.holds(c, focus) && !tree.holds(focus, c)) continue
                 given[c] = given[i] * open
                 Mat4.project(viewProj, layout.pos[3 * c].toFloat(), layout.pos[3 * c + 1].toFloat(), layout.pos[3 * c + 2].toFloat(), clip)
                 push(c, if (clip[3] > NEAR) (layout.spacing[c] * focal / clip[3]).toFloat() else Float.MAX_VALUE / 2)
@@ -182,7 +185,7 @@ class FractalSight(val model: FractalModel) {
 
     /** The links between drawn ideas, each once, at most [FractalRules.LINK_BUDGET]: Show links' own bright, the rest faint. */
     private fun links() {
-        val base = (FractalRules.LINE * FractalRules.LINK_LINE).toFloat()
+        val base = LINK_LINE
         for (k in 0 until count) {
             val i = node[k]
             for (e in model.linkStart[i] until model.linkStart[i + 1]) {
@@ -234,13 +237,25 @@ class FractalSight(val model: FractalModel) {
     companion object {
         /** A hub's glow reaches this many more of its radius when fully lit. */
         const val GLOW_REACH = 1.2f
+        /** The least a hub is lit, at any depth, so it reads as a hub beside its ideas (the lead's review, run 44408042504). */
+        const val HUB_LEAST = 0.45f
+        /** The least dot radius on screen, in dp: an idea's 1.5 (3 dp across), a hub's [HUB_MORE_DP] more for each of its light. */
+        const val LEAST_DP = 1.5f
+        const val HUB_MORE_DP = 2f
+        /** A cluster opens once its spacing on screen passes [OPEN] dp, its dots in full by [OPEN_FULL]: sooner than
+         *  the flat look's 5 and 16, so a cluster's parts' parts show at the whole view, a smaller copy of it. */
+        const val OPEN = 3.0
+        const val OPEN_FULL = 9.0
+        /** A line's least width on screen, in dp. */
+        const val LINE_DP = 1f
+        /** A link's brightness beside its ideas', and a tree line's beside its dot's: seen on the sky, not hairlines. */
+        const val LINK_LINE = 0.26f
+        const val TREE_LINE = 0.42f
         /** A place nearer the eye than this (view depth) is not drawn. */
         const val NEAR = 1e-4f
         /** The most nodes a frame looks at, drawn or passed over: the frame's cost however big the tree. */
         const val LOOK_MOST = 4 * FractalRules.BUDGET
         /** The most nodes a frame queues. */
         const val PUSH_MOST = 8 * FractalRules.BUDGET
-        /** A tree line's brightness beside its dot's (Performance's folder line, the flat look's 0.22 x 1.2). */
-        val TREE_LINE = (FractalRules.LINE * FractalRules.TREE_LINE).toFloat()
     }
 }

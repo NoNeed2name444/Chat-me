@@ -19,31 +19,25 @@ nonisolated struct FractalScreenNode: Equatable {
 nonisolated enum FractalCamera3D {
     /// The first view looks a little down on All ideas, as Android's FRACTAL_PITCH.
     static let pitch: Float = 22 * Float.pi / 180
-    /// A fly-in fills this much of the room the chrome leaves.
-    static let fill: Float = 0.88
     /// A fly's length, as the map's.
     static let seconds: Double = 0.8
 
-    /// All ideas, its parts and theirs, framed from the first view's yaw and pitch in the window the insets leave.
+    /// All ideas, its parts and theirs, from the first view's yaw and pitch, as large as fits in the
+    /// room the chrome and the card leave, centred there (FractalFit).
     static func whole(_ m: FractalModel, width: Float, height: Float,
                       insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
         var c = GraphPerfCamera()
         c.yaw = 0; c.pitch = pitch
-        let l = m.layout, t = m.tree
-        var points: [SIMD3<Float>] = []
-        for i in 0..<t.count where t.depth[i] <= 2 {
-            points.append(SIMD3(Float(l.pos[3 * i]), Float(l.pos[3 * i + 1]), Float(l.pos[3 * i + 2])))
-        }
-        let margin = Float(l.dot.first ?? 0) * 3
-        if let fit = c.framing(points: points, margin: margin, width: width, height: height, insets: insets, fill: 0.9) { return fit }
-        return c.framing(centre: centre(m, 0), radius: Float(l.reach.first ?? 1.2), width: width, height: height, insets: insets, fill: 0.9)
+        if m.tree.count == 0 { return c.framing(centre: .zero, radius: 1.2, width: width, height: height, insets: insets, fill: 0.9) }
+        return FractalFit.fit(m.layout, FractalFit.nodes(m.tree, 0, levels: FractalFit.wholeLevels, most: m.budget), from: c,
+                              width: width, height: height, insets: insets)
     }
 
-    /// Hub `index`'s cluster ball framed from where the camera looks now.
+    /// Hub `index`'s cluster from where the camera looks now, as large as fits in the room the chrome leaves, centred there.
     static func flyIn(_ m: FractalModel, _ index: Int, from camera: GraphPerfCamera, width: Float, height: Float,
                       insets: (top: Float, left: Float, bottom: Float, right: Float)) -> GraphPerfCamera {
-        camera.framing(centre: centre(m, index), radius: Float(m.layout.reach[index]), width: width, height: height,
-                       insets: insets, fill: fill)
+        FractalFit.fit(m.layout, FractalFit.nodes(m.tree, index, levels: FractalFit.inLevels, most: m.budget), from: camera,
+                       width: width, height: height, insets: insets)
     }
 
     static func centre(_ m: FractalModel, _ i: Int) -> SIMD3<Float> {
@@ -75,6 +69,114 @@ nonisolated enum FractalCamera3D {
             out.append(FractalScreenNode(index: sight.node[k], x: sight.x[k], y: sight.y[k], pixels: 2 * sight.radius[k],
                                          crisp: sight.nameable[k], depth: sight.depth[k]))
         }
+        return out
+    }
+}
+
+/// The Fractal's framing in 3D (S12, the lead's review of run 44408042504): the first view and a
+/// fly-in show what they frame as large as it fits in the room the chrome leaves, centred there. From
+/// the camera's own yaw and pitch, the eye comes as near as it can while every framed dot, its mark
+/// round it, stays inside that room less a margin (`margin`, about 14 points on a phone); within the
+/// room left over the marks' box is put in the room's middle. Android's FractalFit.kt is the same.
+nonisolated enum FractalFit {
+    /// Room kept between what is framed and each edge of the room the chrome leaves, as a share of its narrower side.
+    static let margin: Float = 0.035
+    /// How many levels below All ideas the first view frames, and below a hub a fly-in frames.
+    static let wholeLevels = 3
+    static let inLevels = 2
+
+    /// `hub` and its parts down to `levels` below it, level by level, each hub's parts heaviest first,
+    /// at most `most` of them: what a view of `hub`'s cluster frames, never more than a frame draws.
+    static func nodes(_ tree: FractalTree, _ hub: Int, levels: Int, most: Int = FractalRules.budget) -> [Int] {
+        let cap = min(max(most, 1), tree.count)
+        var out: [Int] = [hub]
+        out.reserveCapacity(cap)
+        var from = 0
+        for _ in 0..<levels {
+            let to = out.count
+            for q in from..<to {
+                let i = out[q], s = tree.childStart[i]
+                for k in 0..<tree.childCount[i] {
+                    if out.count >= cap { return out }
+                    out.append(tree.children[s + k])
+                }
+            }
+            if out.count == to { break }
+            from = to
+        }
+        return out
+    }
+
+    /// How far a node's mark reaches round it, in the map's units: a hub's lit glow, an idea's dot.
+    static func mark(_ layout: FractalLayout3D, _ i: Int) -> Double {
+        layout.tree.childCount[i] > 0 ? layout.dot[i] * Double(1 + FractalSight.glowReach) : layout.dot[i]
+    }
+
+    /// The margin in points for the room `insets` leave in a `width` x `height` view.
+    static func margin(width: Float, height: Float, insets: (top: Float, left: Float, bottom: Float, right: Float)) -> Float {
+        margin * max(min(width - insets.left - insets.right, height - insets.top - insets.bottom), 0)
+    }
+
+    /// `camera` moved to show every one of `nodes` with its mark from its own yaw and pitch, as large as fits in the
+    /// room `insets` leave less the margin, centred in that room; it orbits the middle of what it frames.
+    static func fit(_ layout: FractalLayout3D, _ nodes: [Int], from camera: GraphPerfCamera, width: Float, height: Float,
+                    insets: (top: Float, left: Float, bottom: Float, right: Float), margin given: Float? = nil) -> GraphPerfCamera {
+        var out = camera
+        let r = SIMD3<Double>(camera.right), u = SIMD3<Double>(camera.up), b = SIMD3<Double>(-camera.forward)
+        let f = Double(camera.focal(viewHeight: height))
+        let w = Double(width), h = Double(height)
+        var m = Double(given ?? margin(width: width, height: height, insets: insets))
+        if w - Double(insets.left + insets.right) <= 4 * m || h - Double(insets.top + insets.bottom) <= 4 * m { m = 0 }
+        let left = Double(insets.left) + m - w / 2, right = w / 2 - Double(insets.right) - m
+        let top = h / 2 - Double(insets.top) - m, bottom = -(h / 2 - Double(insets.bottom) - m)
+        let count = nodes.count
+        if count == 0 { return out }
+        var x = [Double](repeating: 0, count: count), y = x, z = x, k = x
+        var zLow = Double.infinity, zHigh = -Double.infinity, nearest = -Double.infinity
+        for q in 0..<count {
+            let i = nodes[q]
+            let p = SIMD3<Double>(layout.pos[3 * i], layout.pos[3 * i + 1], layout.pos[3 * i + 2])
+            x[q] = (p * r).sum(); y[q] = (p * u).sum(); z[q] = (p * b).sum(); k[q] = mark(layout, i)
+            zLow = min(zLow, z[q]); zHigh = max(zHigh, z[q]); nearest = max(nearest, z[q] + k[q])
+        }
+        // for an eye at depth e along b, the eye's across and up that keep each mark in the room:
+        // across >= x + k - right (e - z) / f and across <= x - k - left (e - z) / f, and so for up
+        func spans(_ e: Double) -> (Double, Double, Double, Double) {
+            var lowX = -Double.infinity, highX = Double.infinity, lowY = -Double.infinity, highY = Double.infinity
+            for q in 0..<count {
+                let d = e - z[q]
+                lowX = max(lowX, x[q] + k[q] - right * d / f); highX = min(highX, x[q] - k[q] - left * d / f)
+                lowY = max(lowY, y[q] + k[q] - top * d / f); highY = min(highY, y[q] - k[q] - bottom * d / f)
+            }
+            return (lowX, highX, lowY, highY)
+        }
+        func fits(_ e: Double) -> Bool { let s = spans(e); return s.0 <= s.1 && s.2 <= s.3 }
+        // the nearest eye that fits: a farther one always fits too, so halve the gap between them
+        let reach = max(zHigh - zLow, 1e-6) + (k.max() ?? 0)
+        var near = nearest + 1e-9, far = nearest + reach
+        while !fits(far) { far = nearest + (far - nearest) * 2 }
+        for _ in 0..<48 { let mid = (near + far) / 2; if fits(mid) { far = mid } else { near = mid } }
+        let s = spans(far)
+        // then, within what fits, the across and up that put the marks' box in the room's middle: its middle
+        // moves the other way as the eye moves, each mark at its own pace, so halve towards it
+        func middle(_ at: Double, _ c: [Double]) -> Double {
+            var lo = Double.infinity, hi = -Double.infinity
+            for q in 0..<count {
+                let d = far - z[q]
+                lo = min(lo, (c[q] - k[q] - at) * f / d); hi = max(hi, (c[q] + k[q] - at) * f / d)
+            }
+            return (lo + hi) / 2
+        }
+        func centred(_ low: Double, _ high: Double, _ c: [Double], _ goal: Double) -> Double {
+            var a = low, z1 = high
+            for _ in 0..<48 { let mid = (a + z1) / 2; if middle(mid, c) > goal { a = mid } else { z1 = mid } }
+            return (a + z1) / 2
+        }
+        let ex = centred(s.0, s.1, x, (left + right) / 2), ey = centred(s.2, s.3, y, (top + bottom) / 2)
+        // orbit the middle of the framed depth, on the line through the view's middle
+        let zc = (zLow + zHigh) / 2
+        out.distance = Float(far - zc)
+        out.target = SIMD3<Float>(r * ex + u * ey + b * zc)
         return out
     }
 }

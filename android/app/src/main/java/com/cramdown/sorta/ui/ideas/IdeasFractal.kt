@@ -38,6 +38,8 @@ import com.cramdown.sorta.ui.map.Map3DView
 import com.cramdown.sorta.ui.map.MapFlyTo
 import com.cramdown.sorta.ui.map.fractalBudget
 import com.cramdown.sorta.ui.map.fractalScene
+import com.cramdown.sorta.ui.LocalWardLook
+import com.cramdown.sorta.ui.SortaTheme
 import com.cramdown.sorta.ui.ward.*
 import com.cramdown.sorta.ui.wardColor
 
@@ -161,6 +163,10 @@ internal fun fractalLowMemory(context: Context): Boolean =
     val showing = tree.titles[focus.coerceIn(0, tree.count - 1)]
     val spoken = stringResource(R.string.fractal_map_spoken, showing)
     val density = LocalDensity.current
+    // the Fractal's sky is night by day too, and so is everything over it, Back, the tools and the cards,
+    // as Space and Performance put their tools in night (IdeasSpace) and the top strip over them is
+    val outer = LocalWardLook.current
+    SortaTheme(dark = true, section = outer.section) {
     Box(Modifier.fillMaxSize().background(Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2])).testTag(FractalTags.MAP)) {
         Map3DView(scene, Modifier.fillMaxSize(), description = spoken, onTap = { tap(it) }, showControls = false, recenter = recenter,
             corner = 0.dp, onDrawn = { drawn = true }, top = top, hidden = hidden,
@@ -226,5 +232,6 @@ internal fun fractalLowMemory(context: Context): Boolean =
                 IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { pick(null); go(0) }
             }
         }
+    }
     }
 }

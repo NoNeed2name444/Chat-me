@@ -8,6 +8,7 @@ import android.util.Log
 import com.cramdown.sorta.map.ChunkCache
 import com.cramdown.sorta.map.CameraFlight
 import com.cramdown.sorta.map.MapFly
+import com.cramdown.sorta.map.MapFit
 import com.cramdown.sorta.map.MapInsets
 import com.cramdown.sorta.map.UniverseBeams
 import com.cramdown.sorta.map.UniverseLooks
@@ -58,6 +59,7 @@ import com.cramdown.sorta.map.SpaceOptics
 import com.cramdown.sorta.map.SpacePalette
 import com.cramdown.sorta.map.ThemeBodyKind
 import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.FractalFit
 import com.cramdown.sorta.map.FractalModel
 import com.cramdown.sorta.map.Vec3
 import com.cramdown.sorta.map.MapPose
@@ -556,7 +558,9 @@ enum class MapTheme { PLAIN, SPACE, NEURONS, TREE, FRACTAL }
  * the crisp zone); a note past the band's end is not listed at all, so it cannot be picked.
  */
 /** [perUnit] is how many pixels a world unit spans at its depth, which sizes its links' bands for the names. */
-data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f)
+data class ScreenNode(val index: Int, val x: Float, val y: Float, val pixels: Float, val crisp: Boolean = true, val perUnit: Float = 0f,
+                      /** The Tree's (S11): a branch's tip on screen, where its name goes first; NaN for the rest. */
+                      val tipX: Float = Float.NaN, val tipY: Float = Float.NaN)
 
 /**
  * The screen box of the drawn [nodes], each its drawn size ([ScreenNode.pixels] across) round its
@@ -680,7 +684,7 @@ class GlMapRenderer(
             ?: LinkGrowth(BooleanArray(neurons.plan.links.size), lively = lively)) else null
     private val neuronLively = lively
     /** S11: the Tree's draw, its own frame as the Neurons' is ([drawTree]). */
-    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast) else null
+    private val treeGl: TreeGl? = if (theme == MapTheme.TREE && treeModel != null) TreeGl(treeModel, contrast, density) else null
     /** The camera's pose the Tree's bodies were last handed on at, and whether its filter changed since. */
     private val treePose = FloatArray(6) { Float.NaN }
     private var treeFilterSent: MapFilterView? = null
@@ -1175,15 +1179,18 @@ class GlMapRenderer(
     }
 
     /**
-     * The Tree's fly-in (S11): branch [index]'s subtree ball framed in what the [insets] leave, from the
-     * camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames the whole tree.
+     * The Tree's fly-in (S11): branch [index]'s subtree fitted close in what the [insets] leave
+     * (TreeFit.flyIn), from the camera's own yaw and pitch, so an orbit is kept; the trunk (0) frames
+     * the whole tree. Its ball where the fit has no answer.
      */
     private fun flyToBranch(m: TreeModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         if (!canFlyTo(index)) return false
         val l = m.layout
         val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
         synchronized(camera) {
-            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
+            val fit = com.cramdown.sorta.map.TreeFit.flyIn(m, index, camera.yaw, camera.pitch, camera.fovY, viewWidth, viewHeight, insets, MapFly.FILL)
+                ?.let { MapFit(it.distance, it.target) }
+                ?: camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
             flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
         }
         flown = index
@@ -1196,11 +1203,10 @@ class GlMapRenderer(
      */
     private fun flyToHub(m: FractalModel, index: Int, viewWidth: Float, viewHeight: Float, insets: MapInsets): Boolean {
         if (!canFlyTo(index)) return false
-        val l = m.layout
-        val centre = Vec3(l.centre[3 * index].toFloat(), l.centre[3 * index + 1].toFloat(), l.centre[3 * index + 2].toFloat())
         synchronized(camera) {
-            val fit = camera.framing(centre, l.reach[index].toFloat(), viewWidth, viewHeight, insets, MapFly.FILL)
-            flight = CameraFlight(camera.target, camera.distance, fit, MapFly.seconds(lively))
+            // the cluster as large as fits in the room the chrome leaves, centred there (FractalFit)
+            val pose = FractalFit.flyIn(m, index, camera.yaw, camera.pitch, camera.fovY, viewWidth, viewHeight, insets)
+            flight = CameraFlight(camera.target, camera.distance, MapFit(pose.distance, pose.target), MapFly.seconds(lively))
         }
         flown = index
         return true
@@ -1785,6 +1791,8 @@ class GlMapRenderer(
         val distance = (eye - target).length()
         val focusReach = (if (flown in 0 until m.nodes.size) l.reach[flown] else l.reach[0]).toFloat()
         val fovY = synchronized(camera) { camera.fovY }
+        // all but the part flown in to fades toward the page, so it stands out
+        gl.focus = flown
         gl.draw(view, fovY, aspect, distance, toCentre, l.reach[0].toFloat(), focusReach, focal)
         val moved = treePose[0] != eye.x || treePose[1] != eye.y || treePose[2] != eye.z ||
             treePose[3] != target.x || treePose[4] != target.y || treePose[5] != target.z
@@ -1796,7 +1804,7 @@ class GlMapRenderer(
         treeFilterSent = f
         if (send) onScreenNodes?.let { callback ->
             viewProj = Mat4.multiply(proj, view)
-            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip)
+            val out = TreeScreen.project(m, viewProj, focal, width, height, f, clip, density)
             callback(out, framePose)
         }
         val workMs = (System.nanoTime() - start) / 1e6

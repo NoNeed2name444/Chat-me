@@ -14,9 +14,10 @@ import kotlin.math.max
 /**
  * Draws the 3D Fractal (S12) with OpenGL ES 3.0, as Performance draws its map: Performance's night
  * sky (PerfLook.SKY, by day too), each dot a lit ball facing the camera with a lit hub's glow round it,
- * and hair-thin lines from each dot to its hub and between linked ideas, all added onto the sky. What
+ * and thin lines, at least [FractalSight.LINE_DP] wide, from each dot to its hub and between linked
+ * ideas, all added onto the sky. What
  * is drawn is [FractalSight]'s frame: at most the tier's budget of dots, so the cost of a frame is the
- * same for 100 ideas or 100,000. Two instanced draws and one line draw a frame, from buffers made once
+ * same for 100 ideas or 100,000. Two instanced draws a frame, lines then dots, from buffers made once
  * and filled in place: a frame makes nothing. Runs on the GL thread only.
  */
 class FractalGl(val model: FractalModel) {
@@ -29,11 +30,11 @@ class FractalGl(val model: FractalModel) {
 
     private val dots: FloatBuffer = ByteBuffer.allocateDirect(FractalRules.BUDGET * DOT_FLOATS * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
     private val lineCap = FractalRules.BUDGET + FractalRules.LINK_BUDGET
-    private val lines: FloatBuffer = ByteBuffer.allocateDirect(lineCap * 2 * LINE_FLOATS * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+    private val lines: FloatBuffer = ByteBuffer.allocateDirect(lineCap * LINE_FLOATS * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
     private val proj = FloatArray(16)
     private val viewProj = FloatArray(16)
     private val dotU = IntArray(3)
-    private val lineU = IntArray(1)
+    private val lineU = IntArray(3)
     private val sky = PerfLook.SKY
 
     /** How many lines the last frame drew, links and tree lines. */
@@ -53,6 +54,8 @@ class FractalGl(val model: FractalModel) {
         dotU[1] = GLES30.glGetUniformLocation(dotProgram, "uViewport")
         dotU[2] = GLES30.glGetUniformLocation(dotProgram, "uGlow")
         lineU[0] = GLES30.glGetUniformLocation(lineProgram, "uVP")
+        lineU[1] = GLES30.glGetUniformLocation(lineProgram, "uViewport")
+        lineU[2] = GLES30.glGetUniformLocation(lineProgram, "uWidth")
         val ids = IntArray(3)
         // the dots: one quad's corners, and an instance a dot (place, radius in pixels, colour, brightness, hub, ring)
         GLES30.glGenVertexArrays(1, ids, 0); dotVao = ids[0]
@@ -74,16 +77,27 @@ class FractalGl(val model: FractalModel) {
             GLES30.glVertexAttribDivisor(k + 1, 1)
             offset += size
         }
-        // the lines: two ends a line, each a place and a colour already as bright as it is drawn
+        // the lines: a quad's corners (along 0..1, across -1..1), and an instance a line (its two ends, and a
+        // colour already as bright as it is drawn), so a line is as wide as asked on every GPU
         GLES30.glGenVertexArrays(1, ids, 0); lineVao = ids[0]
         GLES30.glBindVertexArray(lineVao)
-        GLES30.glGenBuffers(1, ids, 0); lineVbo = ids[0]
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, lineVbo)
-        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, lineCap * 2 * LINE_FLOATS * 4, null, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glGenBuffers(2, ids, 0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+        val ends = floatArrayOf(0f, -1f, 1f, -1f, 0f, 1f, 1f, 1f)
+        val eb = ByteBuffer.allocateDirect(ends.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(ends).also { it.flip() }
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, ends.size * 4, eb, GLES30.GL_STATIC_DRAW)
         GLES30.glEnableVertexAttribArray(0)
-        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, LINE_FLOATS * 4, 0)
-        GLES30.glEnableVertexAttribArray(1)
-        GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, LINE_FLOATS * 4, 12)
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
+        lineVbo = ids[1]
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, lineVbo)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, lineCap * LINE_FLOATS * 4, null, GLES30.GL_DYNAMIC_DRAW)
+        var at = 0
+        for ((k, size) in intArrayOf(3, 3, 3).withIndex()) {
+            GLES30.glEnableVertexAttribArray(k + 1)
+            GLES30.glVertexAttribPointer(k + 1, size, GLES30.GL_FLOAT, false, LINE_FLOATS * 4, at * 4)
+            GLES30.glVertexAttribDivisor(k + 1, 1)
+            at += size
+        }
         GLES30.glBindVertexArray(0)
     }
 
@@ -109,11 +123,12 @@ class FractalGl(val model: FractalModel) {
         if (lineCount > 0) {
             GLES30.glUseProgram(lineProgram)
             GLES30.glUniformMatrix4fv(lineU[0], 1, false, viewProj, 0)
+            GLES30.glUniform2f(lineU[1], width.toFloat(), height.toFloat())
+            GLES30.glUniform1f(lineU[2], max(FractalSight.LINE_DP * density, 1f))
             GLES30.glBindVertexArray(lineVao)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, lineVbo)
-            GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, lineCount * 2 * LINE_FLOATS * 4, lines)
-            GLES30.glLineWidth(1f)
-            GLES30.glDrawArrays(GLES30.GL_LINES, 0, lineCount * 2)
+            GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, lineCount * LINE_FLOATS * 4, lines)
+            GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLE_STRIP, 0, 4, lineCount)
         }
         if (sight.count > 0) {
             GLES30.glUseProgram(dotProgram)
@@ -163,16 +178,11 @@ class FractalGl(val model: FractalModel) {
 
     private fun putLine(a: Int, b: Int, alpha: Float, rgb: Int) {
         val pos = model.layout.pos
-        val r = ((rgb shr 16) and 255) / 255f * alpha; val g = ((rgb shr 8) and 255) / 255f * alpha; val bl = (rgb and 255) / 255f * alpha
-        for (k in intArrayOfTwo(a, b)) {
-            val i = sight.node[k]
-            lines.put(pos[3 * i].toFloat()); lines.put(pos[3 * i + 1].toFloat()); lines.put(pos[3 * i + 2].toFloat())
-            lines.put(r); lines.put(g); lines.put(bl)
-        }
+        val i = sight.node[a]; val j = sight.node[b]
+        lines.put(pos[3 * i].toFloat()); lines.put(pos[3 * i + 1].toFloat()); lines.put(pos[3 * i + 2].toFloat())
+        lines.put(pos[3 * j].toFloat()); lines.put(pos[3 * j + 1].toFloat()); lines.put(pos[3 * j + 2].toFloat())
+        lines.put(((rgb shr 16) and 255) / 255f * alpha); lines.put(((rgb shr 8) and 255) / 255f * alpha); lines.put((rgb and 255) / 255f * alpha)
     }
-
-    private val two = IntArray(2)
-    private fun intArrayOfTwo(a: Int, b: Int): IntArray { two[0] = a; two[1] = b; return two }
 
     private fun mixByte(a: Int, b: Int, t: Float): Float = ((a and 255) + ((b and 255) - (a and 255)) * t) / 255f
 
@@ -195,7 +205,7 @@ class FractalGl(val model: FractalModel) {
 
     companion object {
         const val DOT_FLOATS = 10
-        const val LINE_FLOATS = 6
+        const val LINE_FLOATS = 9
 
         /** A dot: its quad set round its place on screen, its radius in pixels, room for a hub's glow. */
         const val DOT_VS = """#version 300 es
@@ -252,15 +262,30 @@ void main() {
 }
 """
 
+        /** A line: a quad from one end to the other, [uWidth] pixels across on screen, square to the line. */
         const val LINE_VS = """#version 300 es
 precision highp float;
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aColor;
+layout(location = 0) in vec2 aEnd;
+layout(location = 1) in vec3 aA;
+layout(location = 2) in vec3 aB;
+layout(location = 3) in vec3 aColor;
 uniform mat4 uVP;
+uniform vec2 uViewport;
+uniform float uWidth;
 out vec3 vColor;
 void main() {
-    gl_Position = uVP * vec4(aPos, 1.0);
+    vec4 a = uVP * vec4(aA, 1.0);
+    vec4 b = uVP * vec4(aB, 1.0);
     vColor = aColor;
+    if (a.w <= 1e-4 || b.w <= 1e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    vec2 sa = a.xy / a.w * uViewport * 0.5;
+    vec2 sb = b.xy / b.w * uViewport * 0.5;
+    vec2 d = sb - sa;
+    float len = length(d);
+    vec2 across = len > 1e-4 ? vec2(-d.y, d.x) / len : vec2(0.0, 1.0);
+    vec4 c = mix(a, b, aEnd.x);
+    vec2 offset = across * aEnd.y * uWidth / uViewport;
+    gl_Position = vec4(c.xy + offset * c.w, 0.0, c.w);
 }
 """
 

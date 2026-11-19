@@ -120,3 +120,97 @@ class TreeModel(val nodes: NestNodes, val layout: TreeLayout3D, val colors: Tree
         }
     }
 }
+
+/**
+ * The Tree's first view, fitted close (S11, the lead's review of 18 Nov): MapFirstView.framing bounds
+ * each point on its own, which left the tree a third of the room; [refine] then projects every point
+ * through the pose and scales and moves it until their box, [margin] round each, fills [fill] of the
+ * window the insets leave on its binding side, centred in it. iOS's TreeFit is the same.
+ */
+object TreeFit {
+    const val ROUNDS = 8
+    /** How many yaws round widestYaw tries, every 5 degrees. */
+    const val YAWS = 72
+
+    /**
+     * The yaw from which [points] stand widest across (S11): a tree has no front, so the first view shows
+     * its crown spread, its limbs apart rather than one behind another. Tried from [prefer] outward, a
+     * step each way in turn, so a tie (within a hair) keeps the nearer. iOS's TreeFit.widestYaw.
+     */
+    fun widestYaw(points: List<Vec3>, prefer: Float): Float {
+        var best = prefer; var most = -1f
+        for (k in 0 until YAWS) {
+            val step = (k + 1) / 2 * (if (k % 2 == 1) 1 else -1)
+            val yaw = prefer + step * (2 * Math.PI / YAWS).toFloat()
+            val c = cos(yaw); val s = sin(yaw)
+            var lo = Float.POSITIVE_INFINITY; var hi = Float.NEGATIVE_INFINITY
+            for (p in points) { val x = p.x * c - p.z * s; lo = min(lo, x); hi = kotlin.math.max(hi, x) }
+            if (hi - lo > most * (1 + 1e-4f)) { most = hi - lo; best = yaw }
+        }
+        return best
+    }
+
+    fun refine(points: List<Vec3>, margin: Float, pose: MapPose, width: Float, height: Float, insets: MapInsets,
+               fill: Float, fovY: Float): MapPose {
+        if (points.isEmpty() || width <= 0f || height <= 0f) return pose
+        val lens = OrbitCamera(yaw = pose.yaw, pitch = pose.pitch, fovY = fovY, roll = pose.roll)
+        val r = lens.right(); val u = lens.up(); val b = lens.forward() * -1f
+        val f = lens.focalPixels(height)
+        val w = kotlin.math.max(width - insets.left - insets.right, 1f)
+        val h = kotlin.math.max(height - insets.top - insets.bottom, 1f)
+        // the window's middle from the view's, x right and y up, and the half box to fill
+        val wx = insets.left + w / 2 - width / 2; val wy = height / 2 - (insets.top + h / 2)
+        val hw = w / 2 * fill; val hh = h / 2 * fill
+        var target = pose.target; var d = pose.distance
+        repeat(ROUNDS) {
+            val box = box(points, margin, target + b * d, r, u, b, f) ?: run { d *= 1.5f; return@repeat }
+            val k = kotlin.math.max((box[1] - box[0]) / 2 / hw, (box[3] - box[2]) / 2 / hh)
+            if (!(k > 0f) || !k.isFinite()) return@repeat
+            val cx = (box[0] + box[1]) / 2; val cy = (box[2] + box[3]) / 2
+            val nd = d * k
+            // the box's middle shrinks toward the view's with the distance; then it is moved onto the window's
+            target = target + (r * (cx * d - wx * nd) + u * (cy * d - wy * nd)) * (1f / f)
+            d = nd
+        }
+        return MapPose(target, d, pose.yaw, pose.pitch, pose.roll)
+    }
+
+    /** Every branch end and body of part [index]'s subtree in [layout], what a view of it frames. */
+    fun points(layout: TreeLayout3D, index: Int): List<Vec3> {
+        val nodes = layout.nodes
+        val out = ArrayList<Vec3>((nodes.tout[index] - nodes.tin[index]) * 3)
+        for (q in nodes.tin[index] until nodes.tout[index]) {
+            val i = nodes.order[q]
+            for (t in doubleArrayOf(0.0, layout.length[i])) out.add(Vec3((layout.base[3 * i] + layout.dir[3 * i] * t).toFloat(),
+                (layout.base[3 * i + 1] + layout.dir[3 * i + 1] * t).toFloat(), (layout.base[3 * i + 2] + layout.dir[3 * i + 2] * t).toFloat()))
+            out.add(Vec3(layout.anchor[3 * i].toFloat(), layout.anchor[3 * i + 1].toFloat(), layout.anchor[3 * i + 2].toFloat()))
+        }
+        return out
+    }
+
+    /**
+     * A fly-in to part [index] (S11): its subtree's own points fitted close, as the first view is, from
+     * the camera's yaw and pitch (an orbit is kept), [fill] of the room the [insets] leave. Its ball
+     * overstated a big part: with the first view fitted close, flying in to Cardiology came no nearer.
+     */
+    fun flyIn(model: TreeModel, index: Int, yaw: Float, pitch: Float, fovY: Float, width: Float, height: Float,
+              insets: MapInsets, fill: Float): MapPose? {
+        val points = points(model.layout, index)
+        val first = MapFirstView.framing(points, model.smallest, width, height, insets, fill, yaw, pitch,
+            Math.toDegrees(fovY.toDouble()).toFloat()) ?: return null
+        return refine(points, model.smallest, first, width, height, insets, fill, fovY)
+    }
+
+    /** The points' box on screen from [eye] (left, right, bottom, top, in pixels from the view's middle, y up); null if one is behind the eye. */
+    fun box(points: List<Vec3>, margin: Float, eye: Vec3, r: Vec3, u: Vec3, b: Vec3, f: Float): FloatArray? {
+        var x0 = Float.POSITIVE_INFINITY; var x1 = Float.NEGATIVE_INFINITY; var y0 = Float.POSITIVE_INFINITY; var y1 = Float.NEGATIVE_INFINITY
+        for (p in points) {
+            val q = p - eye
+            val z = -q.dot(b)
+            if (z <= 1e-4f) return null
+            val k = f / z; val sx = q.dot(r) * k; val sy = q.dot(u) * k; val e = margin * k
+            x0 = kotlin.math.min(x0, sx - e); x1 = kotlin.math.max(x1, sx + e); y0 = kotlin.math.min(y0, sy - e); y1 = kotlin.math.max(y1, sy + e)
+        }
+        return floatArrayOf(x0, x1, y0, y1)
+    }
+}

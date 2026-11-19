@@ -130,7 +130,9 @@ import com.cramdown.sorta.map.PerfLayout
 import com.cramdown.sorta.map.PerfLook
 import com.cramdown.sorta.map.PerfMap
 import com.cramdown.sorta.map.PerfSynthetic
+import com.cramdown.sorta.map.TreeFit
 import com.cramdown.sorta.map.TreeModel
+import com.cramdown.sorta.map.FractalFit
 import com.cramdown.sorta.map.FractalModel
 import com.cramdown.sorta.ui.ward.WardControlSize
 import com.cramdown.sorta.ui.ward.WardSpace
@@ -336,7 +338,11 @@ private const val NEURONS_PITCH = (35.0 * Math.PI / 180.0).toFloat()
 /** Space's (GraphTilt.spaceDegrees, 45). */
 private const val SPACE_PITCH = (45.0 * Math.PI / 180.0).toFloat()
 /** The Tree's (S11): a little from above, so the crown's spread reads and the trunk still stands. */
-internal const val TREE_PITCH = (14.0 * Math.PI / 180.0).toFloat()
+// the Tree's first view looks a little down on it from three quarters round, so its depth shows
+internal const val TREE_PITCH = (20.0 * Math.PI / 180.0).toFloat()
+internal const val TREE_YAW = (35.0 * Math.PI / 180.0).toFloat()
+/** How much of the room the chrome and the card leave the Tree's first view fills, on its binding side. */
+internal const val TREE_FILL = 0.9f
 
 /**
  * iOS's camera per theme (S05j item 3), looking at [target]: Space and Neurons look down at GraphTilt's
@@ -348,7 +354,7 @@ internal fun firstCamera(theme: MapTheme, target: Vec3): OrbitCamera = when (the
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     MapTheme.SPACE -> OrbitCamera(target = target, yaw = 0f, pitch = SPACE_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
-    MapTheme.TREE -> OrbitCamera(target = target, yaw = 0f, pitch = TREE_PITCH,
+    MapTheme.TREE -> OrbitCamera(target = target, yaw = TREE_YAW, pitch = TREE_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
     MapTheme.FRACTAL -> OrbitCamera(target = target, yaw = 0f, pitch = FRACTAL_PITCH,
         fovY = MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES))
@@ -458,6 +464,11 @@ data class MapFlyTo(val id: String, val serial: Int)
      * (MapCardCover).
      */
     card: androidx.compose.ui.unit.Dp = 0.dp,
+    /**
+     * The chrome over the map besides its top and foot (the Tree's Back button and round tools, S11), in
+     * the map's own pixels: no Tree name goes under one, and a fly-in is framed clear of them.
+     */
+    keepClear: List<androidx.compose.ui.geometry.Rect> = emptyList(),
     /**
      * Lines: Straight (GraphLineStyle.inForce): the Space theme's links are drawn as straight
      * segments. It reaches the renderer as it changes and the next frame draws it, with no new
@@ -594,10 +605,13 @@ data class MapFlyTo(val id: String, val serial: Int)
         if (recenter != 0) { renderer.goHome(home); homes++; loop.touched() }
     }
     // Fly in (S05h; iOS's fly(to:)): the folder's system framed in what the chrome leaves, over 0.8 s
+    val clearNow by rememberUpdatedState(keepClear)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), framed)) loop.touched()
+        // the part flown in to between the chrome's boxes too: under a top one, over a foot one (S11)
+        val room = MapClear.around(framed, clearNow, viewSize.height.toFloat())
+        if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), room)) loop.touched()
     }
     // a lit day reaches the renderer as it changes; the next frame dims the rest (S06b)
     LaunchedEffect(renderer, lit) {
@@ -809,9 +823,11 @@ data class MapFlyTo(val id: String, val serial: Int)
     val treeType = remember(context, density) { if (treeModel == null) null else TreeType(context, density.density) }
     val treeNames: List<PlacedName> = if (treeModel == null || treeType == null) emptyList() else {
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
-        remember(screenNodes, viewSize, insets, cover) {
+        remember(screenNodes, viewSize, insets, cover, keepClear) {
+            val bottom = TreeNames.floor(insets, cover)
             TreeNames.layout(screenNodes, treeModel.nodes, treeType.boughs, treeType.leaves, treeType.style, w, h,
-                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                top = insets.top, bottom = bottom, held = HashMap(named), focus = renderer.flown.coerceAtLeast(0),
+                clear = MapClear.boxes(keepClear), cap = TreeNames.flownCap(w, h - insets.top - bottom, density.density)).also { placed ->
                 named.clear(); for (p in placed) named[p.index] = p.spot
             }
         }
@@ -1389,24 +1405,24 @@ internal class HomeView(camera: OrbitCamera, private val framer: (width: Float, 
                             (l.base[3 * i + 2] + l.dir[3 * i + 2] * t).toFloat())
                     } + bodies()
                     val margin = scene.treeModel?.smallest ?: scene.nodeRadius
+                    // from where the crown stands widest, near three quarters round (TreeFit.widestYaw)
+                    val yaw = TreeFit.widestYaw(points, TREE_YAW)
+                    // then fitted close: the tree fills the room the chrome and the card leave (TreeFit)
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
-                        MapFirstView.framing(points, margin, w, h, insets, fill = 0.9f, yaw = 0f, pitch = TREE_PITCH,
+                        MapFirstView.framing(points, margin, w, h, insets, fill = TREE_FILL, yaw = yaw, pitch = TREE_PITCH,
                             fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
-                            ?: MapFirstView.framing(Vec3(0f, 1f, 0f), 1.5f, w, h, insets, yaw = 0f, pitch = TREE_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                            ?.let { TreeFit.refine(points, margin, it, w, h, insets, TREE_FILL, MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES)) }
+                            ?: MapFirstView.framing(Vec3(0f, 1f, 0f), 1.5f, w, h, insets, yaw = yaw, pitch = TREE_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
                     }
                     first
                 }
                 MapTheme.FRACTAL -> {
-                    // All ideas, its parts and theirs, framed from the first view's yaw and pitch
+                    // All ideas, its parts and theirs, from the first view's yaw and pitch, as large as fits
+                    // in the room the chrome and the card leave, centred there (FractalFit)
                     val m = scene.fractalModel
-                    val points = if (m == null) bodies() else (0 until m.tree.count).filter { m.tree.depth[it] <= 2 }.map { i ->
-                        Vec3(m.layout.pos[3 * i].toFloat(), m.layout.pos[3 * i + 1].toFloat(), m.layout.pos[3 * i + 2].toFloat())
-                    }
-                    val margin = m?.let { (it.layout.dot[0] * 3).toFloat() } ?: scene.nodeRadius
                     val first: (Float, Float, MapInsets) -> MapPose = { w, h, insets ->
-                        MapFirstView.framing(points, margin, w, h, insets, fill = 0.9f, yaw = 0f, pitch = FRACTAL_PITCH,
-                            fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
-                            ?: MapFirstView.framing(Vec3.ZERO, 1.2f, w, h, insets, yaw = 0f, pitch = FRACTAL_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
+                        if (m != null) FractalFit.whole(m, 0f, FRACTAL_PITCH, MapFirstView.radians(MapFirstView.TILTED_FIELD_DEGREES), w, h, insets)
+                        else MapFirstView.framing(Vec3.ZERO, 1.2f, w, h, insets, yaw = 0f, pitch = FRACTAL_PITCH, fieldDegrees = MapFirstView.TILTED_FIELD_DEGREES)
                     }
                     first
                 }
@@ -1509,4 +1525,21 @@ private class LastLift {
     var hit: Int? = null; private set
     fun set(time: Long, position: Offset, body: Int?) { at = time; where = position; hit = body }
     fun clear() { at = -1L; hit = null }
+}
+
+/**
+ * The chrome's boxes over the map (S11; Map3DView's keepClear): as name boxes a placer keeps clear of,
+ * and the room a fly-in frames, the [insets] raised past each box in the top or bottom half.
+ */
+internal object MapClear {
+    fun boxes(rects: List<androidx.compose.ui.geometry.Rect>): List<com.cramdown.sorta.map.LabelBox> =
+        rects.map { com.cramdown.sorta.map.LabelBox(it.center.x, it.center.y, it.width, it.height) }
+
+    fun around(insets: MapInsets, rects: List<androidx.compose.ui.geometry.Rect>, height: Float): MapInsets {
+        var top = insets.top; var bottom = insets.bottom
+        for (r in rects) {
+            if (r.center.y < height / 2) top = kotlin.math.max(top, r.bottom) else bottom = kotlin.math.max(bottom, height - r.top)
+        }
+        return insets.copy(top = top, bottom = bottom)
+    }
 }

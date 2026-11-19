@@ -138,8 +138,35 @@ for (name, m) in models {
     frame(m, s, phone, yaw: 0, into: cardiology)
     let after = (0..<s.count).filter { tree.holds(cardiology, s.node[$0]) && s.nameable[$0] }.count
     check("\(name): flying in opens Cardiology (\(before) whole, \(after) in)", after > before && after >= 8)
-    check("\(name): outside Cardiology dims", (0..<s.count).allSatisfy { k in
-        tree.holds(cardiology, s.node[k]) || s.alpha[k] <= Float(FractalRules.dim) + 1e-6 })
+    // nothing outside it: no other hub's glow at the edge, no line running off
+    check("\(name): nothing outside Cardiology drawn", (0..<s.count).allSatisfy { tree.holds(cardiology, s.node[$0]) }
+          && (0..<s.linkCount).allSatisfy { tree.holds(cardiology, s.node[s.linkFrom[$0]]) && tree.holds(cardiology, s.node[s.linkTo[$0]]) })
+
+    // no dot is a speck, and every hub reads as one at every depth (the lead's review, run 44408042504)
+    let hubLeast = FractalSight.least + FractalSight.hubMore * FractalSight.hubLeast
+    for (what, into) in [("whole", -1), ("Cardiology", cardiology)] {
+        frame(m, s, phone, yaw: 0, into: into)
+        for k in 0..<s.count {
+            let i = s.node[k]
+            let label = "\(name) \(what): \(tree.titles[i])"
+            if tree.childCount[i] > 0 {
+                if s.hub[k] < FractalSight.hubLeast - 1e-6 || s.radius[k] < hubLeast - 1e-3 {
+                    check("\(label): a hub lit \(s.hub[k]), \(s.radius[k]) pt", false)
+                }
+            } else if s.radius[k] < FractalSight.least - 1e-3 || s.hub[k] != 0 {
+                check("\(label): an idea \(s.radius[k]) pt, lit \(s.hub[k])", false)
+            }
+        }
+        check("\(name) \(what): no speck, every hub a hub (\(s.count) dots)", s.count > 20)
+    }
+    // at the whole view, each top folder is a hub with its ring of parts, and its sub-hubs theirs
+    frame(m, s, phone, yaw: 0, into: -1)
+    let subHubs = (0..<s.count).filter { tree.depth[s.node[$0]] == 2 && tree.childCount[s.node[$0]] > 0 }
+    let third = (0..<s.count).filter { tree.depth[s.node[$0]] == 3 && s.alpha[$0] >= 0.5 }
+    check("\(name): sub-hubs drawn at the whole view, lit as hubs (\(subHubs.count))",
+          subHubs.count >= 3 && subHubs.allSatisfy { s.hub[$0] >= FractalSight.hubLeast - 1e-6 })
+    check("\(name): their parts drawn and seen (\(third.count)), each off its drawn hub",
+          third.count >= 10 && third.allSatisfy { s.parentSlot($0) >= 0 })
     let examples = tree.titles.firstIndex(of: "Examples") ?? -1
     s.shown = (0..<tree.count).map { $0 != examples }
     frame(m, s, phone, yaw: 0, into: -1)
@@ -158,6 +185,54 @@ for e in 0..<ls.linkCount {
     if !seen.insert(min(a, b) * 1000 + max(a, b)).inserted { once = false }
 }
 check("links drawn once each (\(ls.linkCount))", ls.linkCount > 0 && ls.linkCount <= FractalRules.linkBudget && once)
+// lines seen on the sky, not hairlines: at least a point wide, a tree line near half its dot's brightness, a link a quarter
+check("lines: \(FractalSight.lineWidth) pt wide, tree line \(FractalSight.treeLine), link \(FractalSight.linkLine)",
+      FractalSight.lineWidth >= 1 && FractalSight.treeLine >= 0.4 && FractalSight.linkLine >= 0.25
+      && (0..<ls.linkCount).allSatisfy { e in
+          abs(ls.linkAlpha[e] - min(ls.alpha[ls.linkFrom[e]], ls.alpha[ls.linkTo[e]]) * FractalSight.linkLine) < 1e-6 })
+
+// the framing (FractalFit): the first view and a fly-in to Cardiology show every framed mark inside the
+// room the chrome leaves, less the margin, as large as fits and in the room's middle, as Android's FractalFitTest
+let fitLayout = conceptModel.layout
+let fitTree = conceptModel.tree
+let fitCardiology = fitTree.titles.firstIndex(of: "Cardiology") ?? -1
+for w in windows {
+    let insets: (top: Float, left: Float, bottom: Float, right: Float) = (w.top, 0, w.bottom, 0)
+    let margin = FractalFit.margin(width: w.width, height: w.height, insets: insets)
+    for (what, hub, levels, yaw) in [("whole", 0, FractalFit.wholeLevels, Float(0)), ("whole at 40", 0, FractalFit.wholeLevels, rad(40)),
+                                     ("Cardiology", fitCardiology, FractalFit.inLevels, Float(0)),
+                                     ("Cardiology at 120", fitCardiology, FractalFit.inLevels, rad(120))] {
+        var c = GraphPerfCamera()
+        c.yaw = yaw; c.pitch = FractalCamera3D.pitch
+        let nodes = FractalFit.nodes(fitTree, hub, levels: levels)
+        c = FractalFit.fit(fitLayout, nodes, from: c, width: w.width, height: w.height, insets: insets)
+        let f = c.focal(viewHeight: w.height)
+        var lo = SIMD2<Float>(.infinity, .infinity), hi = SIMD2<Float>(-.infinity, -.infinity)
+        var ahead = true
+        let eye = SIMD3<Double>(c.eye), fw = SIMD3<Double>(c.forward), rt = SIMD3<Double>(c.right), upv = SIMD3<Double>(c.up)
+        for i in nodes {
+            let d = SIMD3<Double>(fitLayout.pos[3 * i], fitLayout.pos[3 * i + 1], fitLayout.pos[3 * i + 2]) - eye
+            let depth = (d * fw).sum()
+            if depth <= 0 { ahead = false; continue }
+            let px = Float(Double(w.width) / 2 + (d * rt).sum() * Double(f) / depth)
+            let py = Float(Double(w.height) / 2 - (d * upv).sum() * Double(f) / depth)
+            let r = Float(FractalFit.mark(fitLayout, i) * Double(f) / depth)
+            lo = SIMD2(min(lo.x, px - r), min(lo.y, py - r)); hi = SIMD2(max(hi.x, px + r), max(hi.y, py + r))
+        }
+        let left = margin, right = w.width - margin, top = w.top + margin, bottom = w.height - w.bottom - margin
+        let label = "fit \(w.name) \(what): box \(lo) \(hi) in [\(left), \(top), \(right), \(bottom)]"
+        let e: Float = 1.5
+        check("\(label): inside", ahead && lo.x >= left - e && hi.x <= right + e && lo.y >= top - e && hi.y <= bottom + e)
+        check("\(label): as large as fits", max((hi.x - lo.x) / (right - left), (hi.y - lo.y) / (bottom - top)) >= 0.98)
+        check("\(label): centred", abs((lo.x + hi.x) / 2 - (left + right) / 2) <= 2 && abs((lo.y + hi.y) / 2 - (top + bottom) / 2) <= 2)
+    }
+}
+let fitNodes = FractalFit.nodes(fitTree, fitCardiology, levels: 2)
+check("fit: Cardiology's cluster two levels deep, level by level, within the budget",
+      fitNodes.first == fitCardiology && fitNodes.allSatisfy { fitTree.holds(fitCardiology, $0) && fitTree.depth[$0] - fitTree.depth[fitCardiology] <= 2 }
+      && fitNodes.count == (0..<fitTree.count).filter { fitTree.holds(fitCardiology, $0) && fitTree.depth[$0] - fitTree.depth[fitCardiology] <= 2 }.count
+      && FractalFit.nodes(fitTree, 0, levels: 3, most: 7).count == 7
+      && zip(fitNodes, fitNodes.dropFirst()).allSatisfy { fitTree.depth[$0] <= fitTree.depth[$1] })
 
 // a hundred thousand ideas: the budget, the cost guards and the time a frame takes
 var parent: [Int] = [-1]

@@ -71,12 +71,24 @@ nonisolated final class FractalSight {
     static let lookMost = 4 * FractalRules.budget
     /// The most nodes a frame queues.
     static let pushMost = 8 * FractalRules.budget
-    /// A tree line's brightness beside its dot's (Performance's folder line, the flat look's 0.22 x 1.2).
-    static let treeLine = Float(FractalRules.line * FractalRules.treeLine)
+    /// The least a hub is lit, at any depth, so it reads as a hub beside its ideas (the lead's review, run 44408042504).
+    static let hubLeast: Float = 0.45
+    /// The least dot radius on screen, in points: an idea's 1.5 (3 across), a hub's `hubMore` more for each of its light.
+    static let least: Float = 1.5
+    static let hubMore: Float = 2
+    /// A cluster opens once its spacing on screen passes `open` points, its dots in full by `openFull`: sooner than
+    /// the flat look's 5 and 16, so a cluster's parts' parts show at the whole view, a smaller copy of it.
+    static let open: Double = 3
+    static let openFull: Double = 9
+    /// A line's least width on screen, in points.
+    static let lineWidth: Float = 1
+    /// A link's brightness beside its ideas', and a tree line's beside its dot's: seen on the sky, not hairlines.
+    static let linkLine: Float = 0.26
+    static let treeLine: Float = 0.42
 
     /// The most dots this frame draws: the model's budget, never above FractalRules.budget.
     var budget: Int { didSet { budget = min(max(budget, 1), FractalRules.budget) } }
-    /// The cluster flown in to (0 the whole map): what is outside it dims.
+    /// The cluster flown in to (0 the whole map): nothing outside it is drawn, so no other hub's glow or line strays in.
     var focus = 0
     /// The chosen node (its ring) and the idea whose links stand out (Show links), -1 for none.
     var chosen = -1
@@ -157,7 +169,7 @@ nonisolated final class FractalSight {
         given[0] = 1
         push(0, Float.greatestFiniteMagnitude)
         let fadeFrom = Float(budget) * 0.75
-        let open = FractalRules.open, openFull = FractalRules.openFull
+        let open = Self.open, openFull = Self.openFull
         while heapSize > 0 && count < budget && looked < Self.lookMost {
             let i = pop()
             looked += 1
@@ -169,12 +181,15 @@ nonisolated final class FractalSight {
             if ahead {
                 let sx = (clip.x / w * 0.5 + 0.5) * width
                 let sy = (1 - (clip.y / w * 0.5 + 0.5)) * height
-                let h: Float = tree.childCount[i] > 0 ? Float(FractalRules.smooth(FractalRules.hubFrom, FractalRules.hubTo, Double(onScreen))) : 0
-                let r = Float(FractalRules.clamp(layout.dot[i] * Double(focal) / Double(w) / Double(d), 1.25 + 1.75 * Double(h), 18 + 8 * Double(h))) * d
+                // a hub is a hub at every depth: lit at least hubLeast, so a cluster's sub-hubs stand out from its ideas
+                let h: Float = tree.childCount[i] > 0
+                    ? max(Self.hubLeast, Float(FractalRules.smooth(FractalRules.hubFrom, FractalRules.hubTo, Double(onScreen)))) : 0
+                let r = Float(FractalRules.clamp(layout.dot[i] * Double(focal) / Double(w) / Double(d),
+                                                 Double(Self.least + Self.hubMore * h), 18 + 8 * Double(h))) * d
                 let glow = r * (1 + Self.glowReach * h)
-                if sx + glow >= 0 && sx - glow <= width && sy + glow >= 0 && sy - glow <= height {
+                let inside = focus <= 0 || tree.holds(focus, i)
+                if inside && sx + glow >= 0 && sx - glow <= width && sy + glow >= 0 && sy - glow <= height {
                     var a = given[i]
-                    if focus > 0 && !tree.holds(focus, i) { a *= Float(FractalRules.dim) }
                     if Float(count) >= fadeFrom { a *= (Float(budget) - Float(count)) / (Float(budget) - fadeFrom) }
                     if i == chosen { a = max(a, 1) }
                     let k = count
@@ -194,6 +209,8 @@ nonisolated final class FractalSight {
                 if pushed >= Self.pushMost { break }
                 let c = tree.children[s + q]
                 if !isShown(c) || !inView(c, viewProj, focal: focal, width: width, height: height) { continue }
+                // flown in: only the way down to the cluster and the cluster itself
+                if focus > 0 && !tree.holds(c, focus) && !tree.holds(focus, c) { continue }
                 given[c] = given[i] * opening
                 let cc = viewProj.apply(at(c))
                 push(c, cc.w > Self.near ? Float(layout.spacing[c] * Double(focal) / Double(cc.w)) : Float.greatestFiniteMagnitude / 2)
@@ -217,7 +234,7 @@ nonisolated final class FractalSight {
 
     /// The links between drawn ideas, each once, at most FractalRules.linkBudget: Show links' own bright, the rest faint.
     private func links() {
-        let base = Float(FractalRules.line * FractalRules.linkLine)
+        let base = Self.linkLine
         for k in 0..<count {
             let i = node[k]
             var e = model.linkStart[i]

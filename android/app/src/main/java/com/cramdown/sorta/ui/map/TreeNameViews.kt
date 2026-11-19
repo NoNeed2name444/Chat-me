@@ -45,8 +45,15 @@ internal class TreeType(context: Context, density: Float) {
     val style = TreeNames.Style(bough = 13f * sp, leaf = 11.5f * sp, halo = 2.5f * density, gapX = 6f * density, gapY = 3f * density,
         edge = 12f * density, leastLeaf = 5f * density)
     private val haloWidth = style.halo * 2
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = density; style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
 
     fun draw(canvas: android.graphics.Canvas, names: List<PlacedName>, colors: TreeColors) {
+        // a name set out past the crown has a short leader back to its branch's tip, under the words
+        line.color = (0x8C shl 24) or colors.ink
+        for (name in names) if (!name.leadX.isNaN()) {
+            val near = if (name.leadX < name.box.x) name.box.x - name.box.width / 2 + style.halo else name.box.x + name.box.width / 2 - style.halo
+            canvas.drawLine(near, name.box.y, name.leadX, name.leadY, line)
+        }
         for (name in names) {
             val p = if (name.textSize == style.bough) bough else leaf
             val metrics = if (p === bough) boughs else leaves

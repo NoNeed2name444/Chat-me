@@ -13,7 +13,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -134,6 +137,11 @@ internal fun treeTier(context: Context): GraphicsTier =
     var drawn by remember(scene) { mutableStateOf(false) }
     var seen by remember { mutableStateOf(settings.treeSeen) }
     var cardPx by remember { mutableIntStateOf(0) }
+    // the Back button's and the round tools' boxes over the map, in its pixels: no name goes under them
+    // and a fly-in is framed clear of them (S11)
+    var backBox by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var toolsBox by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var mapAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
     fun pick(id: String?) { chosenId = id; if (id == null) linksShown = false }
     fun go(i: Int) {
@@ -159,9 +167,11 @@ internal fun treeTier(context: Context): GraphicsTier =
     val showing = nodes.titles[focus.coerceIn(0, nodes.size - 1)]
     val spoken = stringResource(R.string.tree_map_spoken, showing)
     val density = LocalDensity.current
-    Box(Modifier.fillMaxSize().background(Color(0xFF000000.toInt() or scene.treeModel!!.colors.sky)).testTag(TreeTags.MAP)) {
+    Box(Modifier.fillMaxSize().background(Color(0xFF000000.toInt() or scene.treeModel!!.colors.sky)).testTag(TreeTags.MAP)
+        .onGloballyPositioned { mapAt = it.positionInRoot() }) {
         Map3DView(scene, Modifier.fillMaxSize(), description = spoken, onTap = { tap(it) }, showControls = false, recenter = recenter,
             corner = 0.dp, onDrawn = { drawn = true }, top = top, hidden = hidden,
+            keepClear = listOfNotNull(if (focus > 0) backBox else null, toolsBox).map { it.translate(-mapAt) },
             // the first view keeps above the first-visit card while it shows, as the other looks' do
             card = if (!seen && chosenId == null && cardPx > 0) hidden + WardSpace.l.wardDp + with(density) { cardPx.toDp() } else 0.dp,
             chosenId = chosenId, linksId = if (linksShown) chosenId else null, flyTo = flyTo, onHome = { focus = 0; flyTo = null },
@@ -172,7 +182,7 @@ internal fun treeTier(context: Context): GraphicsTier =
             Box(Modifier.align(Alignment.TopStart).padding(top = top)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(WardSpace.gutter.wardDp)) {
                 IdeaToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.tree_back_spoken, up),
-                    modifier = Modifier.testTag(TreeTags.BACK)) { back() }
+                    modifier = Modifier.testTag(TreeTags.BACK).onGloballyPositioned { backBox = it.boundsInRoot() }) { back() }
             }
         }
 
@@ -218,7 +228,8 @@ internal fun treeTier(context: Context): GraphicsTier =
         }
 
         // the tools: Filter, and Recentre to the whole tree
-        Box(Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)) {
+        Box(Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)
+            .onGloballyPositioned { toolsBox = it.boundsInRoot() }) {
             IdeaToolCluster {
                 MapFilterTool(filter, mapTopFolders(book, null)) { filter = it }
                 IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { pick(null); go(0) }

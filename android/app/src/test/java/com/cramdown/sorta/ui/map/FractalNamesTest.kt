@@ -1,5 +1,6 @@
 package com.cramdown.sorta.ui.map
 
+import com.cramdown.sorta.map.FractalFit
 import com.cramdown.sorta.map.FractalFixture
 import com.cramdown.sorta.map.FractalLayout3D
 import com.cramdown.sorta.map.FractalModel
@@ -76,10 +77,9 @@ class FractalNamesTest {
         HomeView.framer(scene)(w.width.toFloat(), w.height.toFloat(), insets).applyTo(camera)
         camera.orbit(yaw, 0f)
         if (into >= 0) {
-            val l = model.layout
-            val c = Vec3(l.centre[3 * into].toFloat(), l.centre[3 * into + 1].toFloat(), l.centre[3 * into + 2].toFloat())
-            val fit = camera.framing(c, l.reach[into].toFloat(), w.width.toFloat(), w.height.toFloat(), insets, MapFly.FILL)
-            camera.target = fit.target; camera.distance = fit.distance
+            // as the renderer's fly-in frames a hub (GlMapRenderer.flyToHub)
+            val pose = FractalFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY, w.width.toFloat(), w.height.toFloat(), insets)
+            camera.target = pose.target; camera.distance = pose.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
         val focal = camera.focalPixels(w.height.toFloat())

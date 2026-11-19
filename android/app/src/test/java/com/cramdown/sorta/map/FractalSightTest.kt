@@ -9,7 +9,8 @@ import kotlin.math.PI
 // S12, the 3D Fractal's frame (FractalSight): the dots a frame draws never pass the Graphics tier's
 // budget (380, 300, 220) however big the tree; a frame looks at and queues a bounded number of nodes
 // and makes nothing; All ideas and its hubs show at the whole view, and flying in to Cardiology opens
-// its parts and dims the rest; links are drawn once each, between drawn dots; the filter hides.
+// its parts and draws nothing else; links are drawn once each, between drawn dots; the filter hides;
+// no dot is a speck and every hub reads as one, at every depth (the lead's review, run 44408042504).
 class FractalSightTest {
     private val fx by lazy { FractalFixture.read() }
     private val sample by lazy { FractalFixture.tree(fx) }
@@ -31,14 +32,14 @@ class FractalSightTest {
     private val height = 2400f
     private val density = 2.625f
 
-    /** The camera framing node [i]'s cluster ball from [yaw], tilted as the first view is, and its view-projection. */
+    /** The camera framing node [i]'s cluster from [yaw], tilted as the first view is, and its view-projection. */
     private fun camera(l: FractalLayout3D, i: Int, yaw: Float = 0f): Pair<FloatArray, Float> {
         val fov = (50.0 * PI / 180).toFloat()
-        val cam = OrbitCamera(yaw = yaw, pitch = (22.0 * PI / 180).toFloat(), fovY = fov)
-        // as the renderer's fly-in frames a hub (GlMapRenderer.flyToHub)
-        val fit = cam.framing(Vec3(l.centre[3 * i].toFloat(), l.centre[3 * i + 1].toFloat(), l.centre[3 * i + 2].toFloat()),
-            l.reach[i].toFloat(), width, height, MapInsets(top = 260f, bottom = 420f), MapFly.FILL)
-        cam.target = fit.target; cam.distance = fit.distance
+        val pitch = (22.0 * PI / 180).toFloat()
+        // as the first view frames All ideas (HomeView) and the renderer's fly-in a hub (GlMapRenderer.flyToHub)
+        val pose = FractalFit.fit(l, FractalFit.nodes(l.tree, i, if (i == 0) FractalFit.WHOLE_LEVELS else FractalFit.IN_LEVELS),
+            yaw, pitch, fov, width, height, MapInsets(top = 260f, bottom = 420f), 30f)
+        val cam = OrbitCamera(target = pose.target, distance = pose.distance, yaw = yaw, pitch = pitch, fovY = fov)
         return Mat4.multiply(cam.projection(width / height), cam.view()) to cam.focalPixels(height)
     }
 
@@ -103,8 +104,9 @@ class FractalSightTest {
         s.step(vp, focal, width, height, density)
         val after = inside()
         assertTrue("Cardiology's parts that may be named: $before whole, $after flown in", after > before && after >= 8)
-        for (k in 0 until s.count) if (!sample.holds(cardiology, s.node[k]))
-            assertTrue("${sample.titles[s.node[k]]} outside dims", s.alpha[k] <= FractalRules.DIM.toFloat() + 1e-6f)
+        // nothing outside it: no other hub's glow at the edge, no line running off
+        for (k in 0 until s.count) assertTrue("${sample.titles[s.node[k]]} outside Cardiology drawn", sample.holds(cardiology, s.node[k]))
+        for (e in 0 until s.linkCount) assertTrue(sample.holds(cardiology, s.node[s.linkFrom[e]]) && sample.holds(cardiology, s.node[s.linkTo[e]]))
         // the chosen dot is always full
         val heart = sample.titles.indexOf("Heart failure")
         s.chosen = heart
@@ -130,8 +132,59 @@ class FractalSightTest {
         s.step(vp, focal, width, height, density)
         for (e in 0 until s.linkCount) {
             val mine = s.node[s.linkFrom[e]] == a0 || s.node[s.linkTo[e]] == a0
-            val plain = minOf(s.alpha[s.linkFrom[e]], s.alpha[s.linkTo[e]]) * (FractalRules.LINE * FractalRules.LINK_LINE).toFloat()
+            val plain = minOf(s.alpha[s.linkFrom[e]], s.alpha[s.linkTo[e]]) * FractalSight.LINK_LINE
             assertEquals(plain * (if (mine) FractalRules.LINKS_ON else FractalRules.LINKS_OFF).toFloat(), s.linkAlpha[e], 1e-6f)
+        }
+    }
+
+    @Test fun noDotIsASpeckAndEveryHubReadsAsOne() {
+        val s = sight(sample)
+        for ((what, at) in listOf("whole" to 0, "Cardiology" to sample.titles.indexOf("Cardiology"))) {
+            val (vp, focal) = camera(s.model.layout, at)
+            s.focus = at
+            s.step(vp, focal, width, height, density)
+            assertTrue("$what: dots drawn (${s.count})", s.count > 20)
+            val hubLeast = (FractalSight.LEAST_DP + FractalSight.HUB_MORE_DP * FractalSight.HUB_LEAST) * density
+            for (k in 0 until s.count) {
+                val i = s.node[k]
+                val name = "$what: ${sample.titles[i]}"
+                assertTrue("$name: ${s.radius[k] / density} dp across half, at least ${FractalSight.LEAST_DP}",
+                    s.radius[k] >= FractalSight.LEAST_DP * density - 1e-3f)
+                if (sample.childCount[i] > 0) {
+                    assertTrue("$name: a hub lit ${s.hub[k]}", s.hub[k] >= FractalSight.HUB_LEAST - 1e-6f)
+                    assertTrue("$name: a hub ${s.radius[k] / density} dp, at least ${hubLeast / density}", s.radius[k] >= hubLeast - 1e-3f)
+                } else assertEquals("$name: an idea is not lit", 0f, s.hub[k])
+            }
+        }
+        // the least hub stands out from the least idea: half as wide again, and glowing
+        assertTrue(FractalSight.HUB_MORE_DP * FractalSight.HUB_LEAST >= 0.5f * FractalSight.LEAST_DP && FractalSight.GLOW_REACH * FractalSight.HUB_LEAST > 0.5f)
+    }
+
+    @Test fun theWholeViewShowsSmallerCopiesOfItself() {
+        // at the whole view, each top folder is a hub with its ring of parts, and its sub-hubs theirs:
+        // the third level is drawn, bright enough to see, round sub-hubs lit as hubs
+        val s = sight(sample)
+        val (vp, focal) = camera(s.model.layout, 0)
+        s.step(vp, focal, width, height, density)
+        val depth = IntArray(s.count) { sample.depth[s.node[it]] }
+        val subHubs = (0 until s.count).filter { depth[it] == 2 && sample.childCount[s.node[it]] > 0 }
+        assertTrue("sub-hubs drawn at the whole view (${subHubs.size})", subHubs.size >= 3)
+        for (k in subHubs) assertTrue("${sample.titles[s.node[k]]} lit as a hub", s.hub[k] >= FractalSight.HUB_LEAST - 1e-6f)
+        val third = (0 until s.count).filter { depth[it] == 3 && s.alpha[it] >= 0.5f }
+        assertTrue("their parts drawn and seen (${third.size})", third.size >= 10)
+        for (k in third) assertTrue("${sample.titles[s.node[k]]} hangs off its drawn hub", s.parentSlot(k) >= 0)
+    }
+
+    @Test fun linesAreSeenOnTheSky() {
+        // not hairlines: at least a dp wide, a tree line near half its dot's brightness, a link a quarter
+        assertTrue(FractalSight.LINE_DP >= 1f)
+        assertTrue(FractalSight.TREE_LINE >= 0.4f && FractalSight.LINK_LINE >= 0.25f)
+        val s = sight(sample, FractalFixture.links(fx))
+        val (vp, focal) = camera(s.model.layout, 0)
+        s.step(vp, focal, width, height, density)
+        for (e in 0 until s.linkCount) {
+            val full = minOf(s.alpha[s.linkFrom[e]], s.alpha[s.linkTo[e]])
+            assertEquals(full * FractalSight.LINK_LINE, s.linkAlpha[e], 1e-6f)
         }
     }
 

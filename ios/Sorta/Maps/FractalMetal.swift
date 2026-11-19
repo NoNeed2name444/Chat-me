@@ -1,11 +1,11 @@
 // The 3D Fractal's renderer (S12, the owner's rule of 18 Nov: the Fractal is
 // 3D): drawn by Metal as Performance draws its map, on Performance's night
 // sky by day too, each dot a lit ball facing the camera with a lit hub's
-// glow round it, and hair-thin lines from each dot to its hub and between
-// linked ideas, all added onto the sky. What is drawn is FractalSight's
+// glow round it, and thin lines, at least FractalSight.lineWidth across, from
+// each dot to its hub and between linked ideas, all added onto the sky. What is drawn is FractalSight's
 // frame, which FractalHost works out each time the pose changes: at most the
 // tier's budget of dots, so a frame costs the same for 100 ideas or 100,000.
-// One instanced draw and one line draw a frame, from buffers made once (three
+// Two instanced draws a frame, lines then dots, from buffers made once (three
 // of each, so the CPU never writes what the GPU still reads) and filled in
 // place: a frame makes nothing. Android's FractalGl.kt draws the same with
 // the same shaders.
@@ -22,8 +22,8 @@ import UIKit
 final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     /// A dot: place (3), radius in pixels, colour (3), brightness, how much a lit hub, ring.
     static let dotFloats = 10
-    /// A line's end: place (3) and colour (3), already as bright as it is drawn.
-    static let lineFloats = 6
+    /// A line: its two ends (3 and 3) and its colour (3), already as bright as it is drawn.
+    static let lineFloats = 9
     static let inFlight = 3
 
     private let device: MTLDevice
@@ -76,7 +76,7 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         var dots: [MTLBuffer] = [], lines: [MTLBuffer] = []
         for _ in 0..<Self.inFlight {
             guard let d = device.makeBuffer(length: FractalRules.budget * Self.dotFloats * 4, options: .storageModeShared),
-                  let l = device.makeBuffer(length: (FractalRules.budget + FractalRules.linkBudget) * 2 * Self.lineFloats * 4,
+                  let l = device.makeBuffer(length: (FractalRules.budget + FractalRules.linkBudget) * Self.lineFloats * 4,
                                             options: .storageModeShared) else { return nil }
             dots.append(d)
             lines.append(l)
@@ -113,13 +113,13 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
             // the sight works in points; the shader in the drawable's pixels
             let scale = Float(size.height) / max(Float(host.size.height), 1)
             fill(sight, model: model, dots: dotBuffer, lines: lineBuffer, scale: scale)
-            put(host.viewProj, width: Float(size.width), height: Float(size.height))
+            put(host.viewProj, width: Float(size.width), height: Float(size.height), lineWidth: max(FractalSight.lineWidth * scale, 1))
             encoder.setCullMode(.none)
             uniforms.withUnsafeBytes { raw in encoder.setVertexBytes(raw.baseAddress!, length: raw.count, index: 1) }
             if lineCount > 0 {
                 encoder.setRenderPipelineState(linePipeline)
                 encoder.setVertexBuffer(lineBuffer, offset: 0, index: 0)
-                encoder.drawPrimitives(type: .line, vertexStart: 0, vertexCount: lineCount * 2)
+                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: lineCount)
             }
             if sight.count > 0 {
                 encoder.setRenderPipelineState(dotPipeline)
@@ -154,7 +154,7 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
             d[o + 4] = Self.mix(c >> 16, b >> 16, h); d[o + 5] = Self.mix(c >> 8, b >> 8, h); d[o + 6] = Self.mix(c, b, h)
             d[o + 7] = s.alpha[k]; d[o + 8] = h; d[o + 9] = i == s.chosen ? 1 : 0
         }
-        let l = lines.contents().bindMemory(to: Float.self, capacity: lineCap * 2 * Self.lineFloats)
+        let l = lines.contents().bindMemory(to: Float.self, capacity: lineCap * Self.lineFloats)
         var n = 0
         for k in 0..<count {
             let p = s.parentSlot(k)
@@ -173,12 +173,11 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
     private func line(_ l: UnsafeMutablePointer<Float>, _ n: Int, _ s: FractalSight, _ pos: [Double],
                       _ a: Int, _ b: Int, _ alpha: Float, _ rgb: Int) {
         let r = Float((rgb >> 16) & 255) / 255 * alpha, g = Float((rgb >> 8) & 255) / 255 * alpha, bl = Float(rgb & 255) / 255 * alpha
-        let o = n * 2 * Self.lineFloats
+        let o = n * Self.lineFloats
         let i = s.node[a], j = s.node[b]
         l[o] = Float(pos[3 * i]); l[o + 1] = Float(pos[3 * i + 1]); l[o + 2] = Float(pos[3 * i + 2])
-        l[o + 3] = r; l[o + 4] = g; l[o + 5] = bl
-        l[o + 6] = Float(pos[3 * j]); l[o + 7] = Float(pos[3 * j + 1]); l[o + 8] = Float(pos[3 * j + 2])
-        l[o + 9] = r; l[o + 10] = g; l[o + 11] = bl
+        l[o + 3] = Float(pos[3 * j]); l[o + 4] = Float(pos[3 * j + 1]); l[o + 5] = Float(pos[3 * j + 2])
+        l[o + 6] = r; l[o + 7] = g; l[o + 8] = bl
     }
 
     private static func mix(_ a: Int, _ b: Int, _ t: Float) -> Float {
@@ -186,11 +185,11 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         return (x + (y - x) * t) / 255
     }
 
-    private func put(_ m: GraphPerfMatrix, width: Float, height: Float) {
+    private func put(_ m: GraphPerfMatrix, width: Float, height: Float, lineWidth: Float) {
         for r in 0..<4 {
             uniforms[r] = m.c0[r]; uniforms[4 + r] = m.c1[r]; uniforms[8 + r] = m.c2[r]; uniforms[12 + r] = m.c3[r]
         }
-        uniforms[16] = width; uniforms[17] = height; uniforms[18] = FractalSight.glowReach; uniforms[19] = 0
+        uniforms[16] = width; uniforms[17] = height; uniforms[18] = FractalSight.glowReach; uniforms[19] = lineWidth
     }
 
     /// Android's FractalGl shaders, in Metal: the same lit ball, glow, ring and lines.
@@ -200,7 +199,7 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
 
     struct FractalU {
         float4x4 vp;
-        float4 extra; // viewport width, height (pixels), the glow's reach, 0
+        float4 extra; // viewport width, height (pixels), the glow's reach, a line's width (pixels)
     };
 
     struct DotOut {
@@ -251,12 +250,25 @@ final class FractalMetalRenderer: NSObject, @preconcurrency MTKViewDelegate {
         float3 color;
     };
 
-    vertex LineOut fractal_line(uint vid [[vertex_id]], const device float* v [[buffer(0)]], constant FractalU& u [[buffer(1)]]) {
-        const device float* e = v + vid * 6;
+    // a line: a quad from one end to the other, a line's width across on screen, square to the line
+    vertex LineOut fractal_line(uint vid [[vertex_id]], uint iid [[instance_id]],
+                                const device float* v [[buffer(0)]], constant FractalU& u [[buffer(1)]]) {
+        const device float* e = v + iid * 9;
         LineOut o;
-        float4 c = u.vp * float4(e[0], e[1], e[2], 1.0);
-        o.position = c;
-        o.color = float3(e[3], e[4], e[5]);
+        o.color = float3(e[6], e[7], e[8]);
+        float4 a = u.vp * float4(e[0], e[1], e[2], 1.0);
+        float4 b = u.vp * float4(e[3], e[4], e[5], 1.0);
+        if (a.w <= 1e-4 || b.w <= 1e-4) { o.position = float4(2.0, 2.0, 0.5, 1.0); return o; }
+        float2 sa = a.xy / a.w * u.extra.xy * 0.5;
+        float2 sb = b.xy / b.w * u.extra.xy * 0.5;
+        float2 d = sb - sa;
+        float len = length(d);
+        float2 across = len > 1e-4 ? float2(-d.y, d.x) / len : float2(0.0, 1.0);
+        float along = (vid & 1u) ? 1.0 : 0.0;
+        float side = (vid & 2u) ? 1.0 : -1.0;
+        float4 c = mix(a, b, along);
+        float2 offset = across * side * u.extra.w / u.extra.xy;
+        o.position = float4(c.xy + offset * c.w, 0.5 * c.w, c.w);
         return o;
     }
 
