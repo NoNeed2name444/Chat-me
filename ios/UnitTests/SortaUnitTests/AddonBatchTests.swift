@@ -108,8 +108,10 @@ final class AddonBatchTests: XCTestCase {
             let r = store.applyAddonBatch(ops)
             XCTAssertEqual(r.applied.added.count, 20)
             times.append(Double(r.applyNanos) / 1e6)
+            // each batch's save, 2,000 ideas written on the store's own queue, is over before the next
+            // batch is timed: the budget is the apply's own time, and the save must not compete with it
+            store.waitForSaves()
         }
-        store.waitForSaves()
         let median = times.sorted()[10]
         print("apply median of 20 on 2,000 ideas: \(String(format: "%.3f", median)) ms (largest \(String(format: "%.3f", times.max() ?? 0)) ms)")
         XCTAssertLessThanOrEqual(median, 4.2)
