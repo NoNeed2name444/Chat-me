@@ -83,6 +83,8 @@ enum TreeBook {
 final class TreeCGSink: NestSink {
     var cg: CGContext?
     private var lines: [[CTLine]]
+    /// Each line's glyphs as one outline, for the halo (`outline`).
+    private var halos: [[CGPath]]
     private(set) var widths: [[Float]]
     private let ascent: [CGFloat], descent: [CGFloat]
 
@@ -90,8 +92,10 @@ final class TreeCGSink: NestSink {
         let fonts: [CTFont] = [Self.font(700), Self.font(800)]
         var lines: [[CTLine]] = [[], []]
         var widths: [[Float]] = [[], []]
+        var halos: [[CGPath]] = [[], []]
         for b in 0..<2 {
             lines[b].reserveCapacity(titles.count)
+            halos[b].reserveCapacity(titles.count)
             widths[b].reserveCapacity(titles.count)
             for title in titles {
                 let attributes: [NSAttributedString.Key: Any] = [
@@ -100,13 +104,41 @@ final class TreeCGSink: NestSink {
                 ]
                 let line = CTLineCreateWithAttributedString(NSAttributedString(string: title, attributes: attributes))
                 lines[b].append(line)
+                halos[b].append(Self.outline(line))
                 widths[b].append(Float(CTLineGetTypographicBounds(line, nil, nil, nil)))
             }
         }
         self.lines = lines
+        self.halos = halos
         self.widths = widths
         ascent = fonts.map { CTFontGetAscent($0) }
         descent = fonts.map { CTFontGetDescent($0) }
+    }
+
+    /// A line's glyphs as one path at 100 points, in text space (y up). The
+    /// halo strokes this path: a path's stroke scales with the context, so the
+    /// halo stays as wide as asked at any size. Text drawn in stroke mode kept
+    /// its 100-point width instead, and its halo, several times too wide,
+    /// blanked the tree round every name.
+    private static func outline(_ line: CTLine) -> CGPath {
+        let path = CGMutablePath()
+        let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+        for run in runs {
+            let count = CTRunGetGlyphCount(run)
+            if count == 0 { continue }
+            let attributes = CTRunGetAttributes(run) as NSDictionary
+            guard let value = attributes[kCTFontAttributeName as String] else { continue }
+            let font = value as! CTFont
+            var glyphs = [CGGlyph](repeating: 0, count: count)
+            var positions = [CGPoint](repeating: .zero, count: count)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: count), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
+            for k in 0..<count {
+                guard let glyph = CTFontCreatePathForGlyph(font, glyphs[k], nil) else { continue }
+                path.addPath(glyph, transform: CGAffineTransform(translationX: positions[k].x, y: positions[k].y))
+            }
+        }
+        return path
     }
 
     /// Nunito at 100 points and `wght`, falling to Baloo Bhaijaan 2 where it has no glyphs, as WardFont does.
@@ -163,13 +195,17 @@ final class TreeCGSink: NestSink {
         cg.saveGState()
         cg.translateBy(x: CGFloat(x), y: CGFloat(y))
         cg.scaleBy(x: s, y: s)
-        cg.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        // the halo: the glyphs' outline stroked where the line is drawn below, upright
+        cg.saveGState()
+        cg.translateBy(x: dx, y: base)
+        cg.scaleBy(x: 1, y: -1)
+        cg.addPath(halos[b][node])
         cg.setLineJoin(.round)
         cg.setLineWidth(CGFloat(haloWidth) / s)
         cg.setStrokeColor(red: Self.r(halo), green: Self.g(halo), blue: Self.b(halo), alpha: 1)
-        cg.setTextDrawingMode(.stroke)
-        cg.textPosition = CGPoint(x: dx, y: base)
-        CTLineDraw(line, cg)
+        cg.strokePath()
+        cg.restoreGState()
+        cg.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         cg.setFillColor(red: Self.r(ink), green: Self.g(ink), blue: Self.b(ink), alpha: 1)
         cg.setTextDrawingMode(.fill)
         cg.textPosition = CGPoint(x: dx, y: base)
