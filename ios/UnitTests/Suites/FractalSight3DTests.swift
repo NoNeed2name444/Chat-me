@@ -128,7 +128,8 @@ for (name, m) in models {
                   zip(placed, near).filter { $0.0.index != $0.1 }.map { "\(tree.titles[$0.0.index]) by \($0.1 >= 0 ? tree.titles[$0.1] : "none")" }.joined(separator: ", "))
             // a tap on a name lands on its part, before any dot under it
             check("\(label): a tap on a name lands on its part", placed.allSatisfy { p in
-                FractalNames3D.hit(screen, placed, x: p.x, y: p.y, least: 44) == p.index })
+                FractalNames3D.hit(screen, placed, x: p.x, y: p.y, least: 44) == p.index
+                    && FractalNames3D.hit(screen, placed, x: p.x + p.width / 2 - 1, y: p.y, least: 44) == p.index })
             // S12's iPad UI test: a tap in a name's touch target, off its words, fell to a dot by it. Each way
             // round a name, just inside its target, a tap lands on it, or on a name whose target holds it nearer
             check("\(label): a tap in a name's touch target lands on a name", placed.allSatisfy { p in

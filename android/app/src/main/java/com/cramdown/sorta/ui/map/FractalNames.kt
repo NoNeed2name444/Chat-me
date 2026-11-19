@@ -218,11 +218,13 @@ object FractalNames {
     fun ownPart(tree: FractalTree, i: Int, d: Int): Boolean = tree.holds(i, d) && (i != 0 || tree.kind[d] == FractalTree.IDEA)
 
     /**
-     * What a tap at [x], [y] lands on first: the name whose touch target holds it (its box, at least [least]
-     * pixels each way, as TalkBack's: [targets]), the nearest for its size, or null (then the dots, as iOS's
-     * FractalNames3D.hit).
+     * What a tap at [x], [y] lands on first: the name whose words it is on, else the name whose touch target
+     * holds it (its box, at least [least] pixels each way, as TalkBack's: [targets]), the nearest for its
+     * size, or null (then the dots, as iOS's FractalNames3D.hit).
      */
     fun nameAt(names: List<PlacedName>, x: Float, y: Float, least: Float): Int? {
+        names.firstOrNull { kotlin.math.abs(x - it.box.x) * 2 <= it.box.width && kotlin.math.abs(y - it.box.y) * 2 <= it.box.height }
+            ?.let { return it.index }
         var best: Int? = null; var bestScore = Float.MAX_VALUE
         for (p in names) {
             val score = max(kotlin.math.abs(x - p.box.x) * 2 / max(least, p.box.width), kotlin.math.abs(y - p.box.y) * 2 / max(least, p.box.height))
