@@ -174,12 +174,16 @@ func chrome(_ w: Window, flown: Bool) -> [CGRect] {
     return flown ? [back, tools] : [tools]
 }
 
+/// Half a touch target (44 pt), what TreeMapView's framed adds under the top.
+let half: Float = 22
+
 func view(_ w: Window, yaw: Float, into: Int) -> GraphPerfCamera {
     let insets: (top: Float, left: Float, bottom: Float, right: Float) = (w.top, 0, w.bottom, 0)
     var c = TreeCamera3D.whole(light, width: w.width, height: w.height, insets: insets)
     c.orbit(yaw: yaw, pitch: 0)
     if into > 0 {
-        let room = TreeCamera3D.around(insets, clear: chrome(w, flown: true), height: w.height)
+        // as the view flies in (TreeMapView.go): the fly-in's room, half a target under the top
+        let room = TreeCamera3D.flyRoom(top: w.top, bottom: w.bottom, half: half, clear: chrome(w, flown: true), height: w.height)
         c = TreeCamera3D.flyIn(light, into, from: c, width: w.width, height: w.height, insets: room)
     }
     return c
@@ -243,6 +247,34 @@ let inguinal = sample.titles.firstIndex(of: "Inguinal") ?? -1
 check("nameable: another branch's part never", inguinal > 0 && !TreeNames3D.nameable(sample, focus: cardiology, inguinal))
 let room = TreeCamera3D.around((80, 0, 80, 0), clear: chrome(windows[1], flown: true), height: windows[1].height)
 check("a fly-in's room is under Back and over the tools", room.top == 80 && abs(room.bottom - (2 * 44 + 8 + 16)) < 1e-3, "\(room)")
+
+// The fly-in's one rule, Android's too (MapClear.flyRoom; CI, 19 Nov: iOS
+// framed Cardiology above a first visit's card the tap put away, small and
+// high, its names cut at the right edge): the room is the chrome's window,
+// half a target under its top, past Back and the tools, never the card; the
+// part fills the fly's fill of it on its binding side, centred in it.
+// Android's aFlyInFillsTheChromesRoomCentred.
+for w in windows {
+    let tools = chrome(w, flown: true)
+    let fly = TreeCamera3D.flyRoom(top: w.top, bottom: w.bottom, half: half, clear: tools, height: w.height)
+    check("\(w.name): the fly-in's room is the chrome's window", abs(fly.top - max(w.top + half, Float(tools[0].maxY))) < 1e-3
+          && abs(fly.bottom - max(w.bottom, w.height - Float(tools[1].minY))) < 1e-3 && fly.left == 0 && fly.right == 0, "\(fly)")
+    let c = view(w, yaw: 0, into: cardiology)
+    guard let box = TreeFit.box(TreeCamera3D.subtreePoints(light, cardiology), margin: light.margin, eye: c.target + c.back * c.distance,
+                                r: c.right, u: c.up, b: c.back, f: c.focal(viewHeight: w.height)) else {
+        check("\(w.name): Cardiology in front of the eye", false); continue
+    }
+    let rh: Float = w.height - fly.top - fly.bottom
+    let across: Float = (box.x1 - box.x0) / w.width, tall: Float = (box.y1 - box.y0) / rh
+    let cx: Float = w.width / 2 + (box.x0 + box.x1) / 2, cy: Float = w.height / 2 - (box.y0 + box.y1) / 2
+    print(String(format: "fly %@: across %.4f tall %.4f off x %.4f off y %.4f", w.name, across, tall,
+                 (cx - w.width / 2) / w.width, (cy - (fly.top + rh / 2)) / rh))
+    check("\(w.name): Cardiology fills the room on its binding side", abs(max(across, tall) - TreeCamera3D.fill) <= 0.005, "\(across) \(tall)")
+    check("\(w.name): and no more on the other", min(across, tall) <= TreeCamera3D.fill + 0.005, "\(across) \(tall)")
+    check("\(w.name): centred across", abs(cx - w.width / 2) <= 0.005 * w.width, "\(cx)")
+    check("\(w.name): centred between Back and the tools", abs(cy - (fly.top + rh / 2)) <= 0.005 * rh, "\(cy) in \(fly)")
+}
+check("a fly-in fills as Android's MapFly.FILL", TreeCamera3D.fill == 0.88)
 
 // the order: branches first, then by weight
 let phone = windows[0]

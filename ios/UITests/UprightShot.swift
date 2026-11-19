@@ -11,15 +11,19 @@ import XCTest
 /// standing, it is turned by the device's side. A tablet is told by its
 /// screen, nearer square than a phone's, not by what the test runner calls
 /// itself. An iPhone app stays upright while the phone is turned, so its
-/// picture is left alone.
+/// picture is left alone, and the device's side is never asked for: on a slow
+/// simulator that question timed out and failed an iPhone test (CI, 19 Nov).
 func uprightShot() -> XCTAttachment {
     let screen: XCUIScreenshot = XCUIScreen.main.screenshot()
     let image: UIImage = screen.image
-    let side: UIDeviceOrientation = XCUIDevice.shared.orientation
     let across = CGFloat(image.cgImage?.width ?? 0)
     let down = CGFloat(image.cgImage?.height ?? 0)
     let tablet: Bool = min(across, down) > 0 && max(across, down) / min(across, down) < 1.6
-    guard tablet, side.isLandscape else {
+    guard tablet else {
+        return XCTAttachment(screenshot: screen)
+    }
+    let side: UIDeviceOrientation = XCUIDevice.shared.orientation
+    guard side.isLandscape else {
         return XCTAttachment(screenshot: screen)
     }
     let format = UIGraphicsImageRendererFormat()

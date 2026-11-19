@@ -89,6 +89,9 @@ class TreeNamesTest {
         return if (flown) listOf(back, tools) else listOf(tools)
     }
 
+    /** Half a touch target (48 dp), what Map3DView's framed adds under the top. */
+    private fun half(w: Window) = 24f * w.density
+
     private fun names(w: Window, yaw: Float, into: Int = -1, framed: MapInsets? = null): Pair<List<ScreenNode>, List<PlacedName>> {
         val scene = MapScene.tree(model)
         val camera = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
@@ -97,9 +100,9 @@ class TreeNamesTest {
         camera.orbit(yaw, 0f)
         val clear = chrome(w, into > 0)
         if (into >= 0) {
-            // as the renderer flies in (flyToBranch): the subtree fitted close, clear of the chrome's boxes
+            // as the renderer flies in (flyToBranch): the subtree fitted close in the fly-in's room (MapClear.flyRoom)
             val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY,
-                w.width.toFloat(), w.height.toFloat(), MapClear.around(insets, clear, w.height.toFloat()), com.cramdown.sorta.map.MapFly.FILL))
+                w.width.toFloat(), w.height.toFloat(), MapClear.flyRoom(insets, half(w), clear, w.height.toFloat()), com.cramdown.sorta.map.MapFly.FILL))
             camera.target = fit.target; camera.distance = fit.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
@@ -274,6 +277,39 @@ class TreeNamesTest {
             val top = w.height / 2f - box[3]; val bottom = w.height / 2f - box[2]
             assertTrue("${w.name}: Cardiology's top $top under the Back button's foot ${room.top}", top >= room.top - 0.5f)
             assertTrue("${w.name}: its foot $bottom over the tools' top ${w.height - room.bottom}", bottom <= w.height - room.bottom + 0.5f)
+        }
+    }
+
+    /**
+     * The fly-in's one rule, iOS's too (TreeCamera3D.flyRoom; CI, 19 Nov, iOS framed Cardiology above a first
+     * visit's card the tap put away, small and high, its names cut at the right edge): the room is the
+     * chrome's window, half a target under its top, past Back and the tools, never the card; the part fills
+     * MapFly.FILL of it on its binding side, centred in it.
+     */
+    @Test fun aFlyInFillsTheChromesRoomCentred() = eachTree {
+        for (w in windows) {
+            val h = w.height.toFloat()
+            val chrome = chrome(w, true)
+            val room = MapClear.flyRoom(MapInsets(top = w.top, bottom = w.bottom), half(w), chrome, h)
+            assertEquals("${w.name}: the room's top", kotlin.math.max(w.top + half(w), chrome[0].bottom), room.top, 1e-3f)
+            assertEquals("${w.name}: the room's foot", kotlin.math.max(w.bottom, h - chrome[1].top), room.bottom, 1e-3f)
+            val camera = firstCamera(MapTheme.TREE, com.cramdown.sorta.map.Vec3.ZERO)
+            HomeView.framer(MapScene.tree(model))(w.width.toFloat(), h, MapInsets(top = w.top, bottom = w.bottom)).applyTo(camera)
+            val fit = checkNotNull(com.cramdown.sorta.map.TreeFit.flyIn(model, cardiology, camera.yaw, camera.pitch, camera.fovY,
+                w.width.toFloat(), h, room, com.cramdown.sorta.map.MapFly.FILL))
+            val lens = com.cramdown.sorta.map.OrbitCamera(yaw = camera.yaw, pitch = camera.pitch, fovY = camera.fovY)
+            val b = lens.forward() * -1f
+            val box = checkNotNull(com.cramdown.sorta.map.TreeFit.box(com.cramdown.sorta.map.TreeFit.points(model.layout, cardiology), model.margin,
+                fit.target + b * fit.distance, lens.right(), lens.up(), b, lens.focalPixels(h)))
+            val rw = w.width.toFloat(); val rh = h - room.top - room.bottom
+            val across = (box[1] - box[0]) / rw; val tall = (box[3] - box[2]) / rh
+            // the box's middle on screen (y down) against the room's
+            val cx = w.width / 2f + (box[0] + box[1]) / 2; val cy = h / 2f - (box[2] + box[3]) / 2
+            println("fly ${w.name}: across %.4f tall %.4f off x %.4f off y %.4f".format(across, tall, (cx - rw / 2) / rw, (cy - (room.top + rh / 2)) / rh))
+            assertEquals("${w.name}: Cardiology fills the room on its binding side", com.cramdown.sorta.map.MapFly.FILL, kotlin.math.max(across, tall), 0.005f)
+            assertTrue("${w.name}: and no more on the other ($across, $tall)", kotlin.math.min(across, tall) <= com.cramdown.sorta.map.MapFly.FILL + 0.005f)
+            assertEquals("${w.name}: centred across", rw / 2, cx, 0.005f * rw)
+            assertEquals("${w.name}: centred between Back and the tools", room.top + rh / 2, cy, 0.005f * rh)
         }
     }
 

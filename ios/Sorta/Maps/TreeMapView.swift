@@ -458,8 +458,9 @@ struct TreePart: Identifiable {
             to = TreeCamera3D.whole(model, width: width, height: height, insets: framed)
         } else {
             home = false
-            // the part between the chrome's boxes too: under Back, over the round tools
-            let room = TreeCamera3D.around(framed, clear: clear, height: height)
+            // the part between the chrome's boxes too: under Back, over the round tools;
+            // not above the first visit's card, which this tap puts away (TreeCamera3D.flyRoom)
+            let room = TreeCamera3D.flyRoom(top: top, bottom: bottom, half: half, clear: clear, height: height)
             to = TreeCamera3D.flyIn(model, i, from: camera, width: width, height: height, insets: room)
         }
         if reduced || metal == nil {

@@ -603,8 +603,9 @@ data class MapFlyTo(val id: String, val serial: Int)
     LaunchedEffect(renderer, flyTo) {
         val wanted = flyTo ?: return@LaunchedEffect
         val index = scene.indexOf(wanted.id) ?: return@LaunchedEffect
-        // the part flown in to between the chrome's boxes too: under a top one, over a foot one (S11)
-        val room = MapClear.around(framed, clearNow, viewSize.height.toFloat())
+        // the part flown in to between the chrome's boxes too: under a top one, over a foot one (S11);
+        // never above the first visit's card, which the tap puts away (MapClear.flyRoom)
+        val room = MapClear.flyRoom(insets, half, clearNow, viewSize.height.toFloat())
         if (renderer.flyTo(index, viewSize.width.toFloat(), viewSize.height.toFloat(), room)) loop.touched()
     }
     // a lit day reaches the renderer as it changes; the next frame dims the rest (S06b)
@@ -1499,4 +1500,13 @@ internal object MapClear {
         }
         return insets.copy(top = top, bottom = bottom)
     }
+
+    /**
+     * The room a fly-in frames (S11): the chrome's window [insets], [half] a touch target more under its
+     * top, raised past each of the chrome's [rects]. Never the first visit's card: a fly-in puts the card
+     * away (framing above a card about to go left iOS's Cardiology small and high, CI, 19 Nov). iOS's
+     * TreeCamera3D.flyRoom is the same rule.
+     */
+    fun flyRoom(insets: MapInsets, half: Float, rects: List<androidx.compose.ui.geometry.Rect>, height: Float): MapInsets =
+        around(insets.copy(top = insets.top + half), rects, height)
 }
