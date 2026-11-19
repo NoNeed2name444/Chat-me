@@ -315,7 +315,7 @@ enum IdeasWords {
     // S11: the Tree look
     static var lookTree: String { String(localized: "look.tree", defaultValue: "Tree") }
     static var treeLine: String { String(localized: "tree.line", defaultValue: "Each folder grows as a branch, and each idea as a leaf.") }
-    static var treeFirstVisit: String { String(localized: "tree.firstVisit", defaultValue: "Tap a branch to zoom in. Tap empty space to go back.") }
+    static var treeFirstVisit: String { String(localized: "tree.firstVisit", defaultValue: "Drag to turn the tree. Tap a branch to zoom in, or empty space to go back.") }
     static func treeMapSpoken(_ part: String) -> String {
         String(format: String(localized: "tree.mapSpoken", defaultValue: "Tree map of ideas, showing %@"), part)
     }

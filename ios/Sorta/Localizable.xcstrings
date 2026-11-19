@@ -2492,7 +2492,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tap a branch to zoom in. Tap empty space to go back."
+            "value" : "Drag to turn the tree. Tap a branch to zoom in, or empty space to go back."
           }
         }
       }
