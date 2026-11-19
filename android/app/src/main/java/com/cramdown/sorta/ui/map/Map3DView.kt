@@ -838,9 +838,10 @@ data class MapFlyTo(val id: String, val serial: Int)
     val fractalType = remember(context, density) { if (fractalModel == null) null else FractalType(context, density.density) }
     val fractalNames: List<PlacedName> = if (fractalModel == null || fractalType == null) emptyList() else {
         val w = viewSize.width.toFloat(); val h = viewSize.height.toFloat()
-        remember(screenNodes, viewSize, insets, cover) {
+        remember(screenNodes, viewSize, insets, cover, keepClear) {
             FractalNames.layout(screenNodes, fractalModel.tree, fractalType.hubs, fractalType.ideas, fractalType.style, w, h,
-                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0)).also { placed ->
+                top = insets.top, bottom = TreeNames.floor(insets, cover), held = HashMap(named), focus = renderer.flown.coerceAtLeast(0),
+                clear = MapClear.boxes(keepClear)).also { placed ->
                 named.clear(); for (p in placed) named[p.index] = p.spot
             }
         }

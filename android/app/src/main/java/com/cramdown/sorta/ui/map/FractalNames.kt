@@ -35,11 +35,13 @@ object FractalNames {
     /**
      * The names to draw for [screen] in a view [width] by [height] whose top [top] and bottom [bottom]
      * pixels the chrome covers; [hubs] and [ideas] measure the two kinds' words; [held] is last frame's
-     * spot by node, tried first so a name does not hop as the map turns.
+     * spot by node, tried first so a name does not hop as the map turns; [clear] are the chrome's boxes
+     * over the view (Back, the tools), which no name goes under.
      */
     fun layout(screen: List<ScreenNode>, tree: FractalTree, hubs: NameMetrics, ideas: NameMetrics, style: TreeNames.Style,
-               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0): List<PlacedName> {
-        val placed = ArrayList<LabelBox>()
+               width: Float, height: Float, top: Float, bottom: Float, held: Map<Int, Int> = emptyMap(), focus: Int = 0,
+               clear: List<LabelBox> = emptyList()): List<PlacedName> {
+        val placed = ArrayList<LabelBox>(clear.size + 32).apply { addAll(clear) }
         val out = ArrayList<PlacedName>()
         val ordered = order(screen, tree, focus)
         // the dots a name keeps clear of, found by a grid, not one by one

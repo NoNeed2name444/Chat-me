@@ -13,7 +13,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -133,6 +136,12 @@ internal fun fractalLowMemory(context: Context): Boolean =
     var flyTo by remember(tree) { mutableStateOf<MapFlyTo?>(null) }
     var serial by remember { mutableIntStateOf(0) }
     var recenter by remember { mutableIntStateOf(0) }
+    // the chrome's boxes over the map, Back's place and the tools, as the Tree's (IdeasTree): no name goes
+    // under one, and a fly-in frames clear of them. Back's place is measured while Back is away too, so
+    // the first fly-in already knows it
+    var backBox by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var toolsBox by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var mapAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var drawn by remember(scene) { mutableStateOf(false) }
     var seen by remember { mutableStateOf(settings.fractalSeen) }
     var cardPx by remember { mutableIntStateOf(0) }
@@ -167,18 +176,20 @@ internal fun fractalLowMemory(context: Context): Boolean =
     // as Space and Performance put their tools in night (IdeasSpace) and the top strip over them is
     val outer = LocalWardLook.current
     SortaTheme(dark = true, section = outer.section) {
-    Box(Modifier.fillMaxSize().background(Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2])).testTag(FractalTags.MAP)) {
+    Box(Modifier.fillMaxSize().background(Color(PerfLook.SKY[0], PerfLook.SKY[1], PerfLook.SKY[2])).testTag(FractalTags.MAP)
+        .onGloballyPositioned { mapAt = it.positionInRoot() }) {
         Map3DView(scene, Modifier.fillMaxSize(), description = spoken, onTap = { tap(it) }, showControls = false, recenter = recenter,
             corner = 0.dp, onDrawn = { drawn = true }, top = top, hidden = hidden,
             // the first view keeps above the first-visit card while it shows, as the other looks' do
             card = if (!seen && chosenId == null && cardPx > 0) hidden + WardSpace.l.wardDp + with(density) { cardPx.toDp() } else 0.dp,
             chosenId = chosenId, linksId = if (linksShown) chosenId else null, flyTo = flyTo, onHome = { focus = 0; flyTo = null },
-            filter = view)
+            filter = view, keepClear = listOfNotNull(if (focus > 0) backBox else null, toolsBox).map { it.translate(-mapAt) })
 
-        if (focus > 0) {
-            val up = tree.titles[tree.parent[focus]]
-            Box(Modifier.align(Alignment.TopStart).padding(top = top)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(WardSpace.gutter.wardDp)) {
+        Box(Modifier.align(Alignment.TopStart).padding(top = top)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(WardSpace.gutter.wardDp)) {
+            Spacer(Modifier.size(WardControlSize.target.wardDp).onGloballyPositioned { backBox = it.boundsInRoot() })
+            if (focus > 0) {
+                val up = tree.titles[tree.parent[focus]]
                 IdeaToolButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.fractal_back_spoken, up),
                     modifier = Modifier.testTag(FractalTags.BACK)) { back() }
             }
@@ -226,7 +237,8 @@ internal fun fractalLowMemory(context: Context): Boolean =
         }
 
         // the tools: Filter, and Recentre to the whole map
-        Box(Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)) {
+        Box(Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(bottom = hidden)
+            .onGloballyPositioned { toolsBox = it.boundsInRoot() }) {
             IdeaToolCluster {
                 MapFilterTool(filter, mapTopFolders(book, null)) { filter = it }
                 IdeaToolButton(Icons.Outlined.RadioButtonChecked, "Recentre") { pick(null); go(0) }

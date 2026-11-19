@@ -54,15 +54,15 @@ class FractalNamesTest {
 
     /** A map [width] by [height] pixels under [top] and over [bottom] of chrome, naming at least [least] at each pose. */
     private class Window(val name: String, val width: Int, val height: Int, val density: Float, val top: Float, val bottom: Float,
-                         val least: Int = 6)
+                         val least: Int = 6, val bar: Float = bottom)
     private val windows get() = listOf(
         Window("${trees[tree].first} phone", 1080, 2400, 2.625f, 260f, 420f),
-        Window("${trees[tree].first} phone, first visit", 1080, 2400, 2.625f, 270f, 900f),
+        Window("${trees[tree].first} phone, first visit", 1080, 2400, 2.625f, 270f, 900f, bar = 420f),
         Window("${trees[tree].first} tablet", 2560, 1600, 2f, 180f, 200f),
         Window("${trees[tree].first} foldable open", 2208, 1840, 2.5f, 220f, 260f),
         // the open foldable's map pane beside the Sort list, under the chips and over the first visit's card, as the
         // emulator's FractalMapRenderTest draws it (run 44398433580): only All ideas and its four top folders are crisp
-        Window("${trees[tree].first} foldable pane, first visit", 1325, 1777, 2.625f, 280f, 740f, least = 5))
+        Window("${trees[tree].first} foldable pane, first visit", 1325, 1777, 2.625f, 280f, 740f, least = 5, bar = 400f))
 
     private fun style(d: Float) = TreeNames.Style(bough = 13f * d, leaf = 11.5f * d, halo = 2.5f * d, gapX = 6f * d, gapY = 3f * d,
         edge = 12f * d, leastLeaf = 5f * d)
@@ -70,7 +70,8 @@ class FractalNamesTest {
     private val cardiology get() = sample.titles.indexOf("Cardiology")
 
     /** The dots on screen and the names at [w]'s first view turned by [yaw], or flown in to [into]'s cluster. */
-    private fun names(w: Window, yaw: Float, into: Int = -1, held: Map<Int, Int> = emptyMap()): Pair<List<ScreenNode>, List<PlacedName>> {
+    private fun names(w: Window, yaw: Float, into: Int = -1, held: Map<Int, Int> = emptyMap(),
+                      chrome: List<androidx.compose.ui.geometry.Rect> = emptyList()): Pair<List<ScreenNode>, List<PlacedName>> {
         val scene = fractalScene(model)
         val camera = firstCamera(MapTheme.FRACTAL, Vec3.ZERO)
         val insets = MapInsets(top = w.top, bottom = w.bottom)
@@ -78,7 +79,9 @@ class FractalNamesTest {
         camera.orbit(yaw, 0f)
         if (into >= 0) {
             // as the renderer's fly-in frames a hub (GlMapRenderer.flyToHub)
-            val pose = FractalFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY, w.width.toFloat(), w.height.toFloat(), insets)
+            // in the room the chrome's boxes leave, as Map3DView's fly-in (MapClear.around)
+            val room = MapClear.around(insets, chrome, w.height.toFloat())
+            val pose = FractalFit.flyIn(model, into, camera.yaw, camera.pitch, camera.fovY, w.width.toFloat(), w.height.toFloat(), room)
             camera.target = pose.target; camera.distance = pose.distance
         }
         val viewProj = Mat4.multiply(camera.projection(w.width.toFloat() / w.height), camera.view())
@@ -88,8 +91,29 @@ class FractalNamesTest {
         sight.step(viewProj, focal, w.width.toFloat(), w.height.toFloat(), w.density)
         val screen = FractalNames.screen(sight, focal)
         val placed = FractalNames.layout(screen, sample, Metrics(0.6f), Metrics(0.56f), style(w.density), w.width.toFloat(), w.height.toFloat(),
-            w.top, w.bottom, held = held, focus = into.coerceAtLeast(0))
+            w.top, w.bottom, held = held, focus = into.coerceAtLeast(0), clear = MapClear.boxes(chrome))
         return screen to placed
+    }
+
+    /** Back's place under the top chrome and the two round tools over the bottom bar (beside a first visit's card), as IdeasFractal sets them. */
+    private fun chrome(w: Window, back: Boolean): List<androidx.compose.ui.geometry.Rect> {
+        val g = 16f * w.density; val t = 48f * w.density
+        val tools = androidx.compose.ui.geometry.Rect(w.width - t - 2 * g, w.height - w.bar - 2 * t - 3 * g, w.width.toFloat(), w.height - w.bar)
+        return if (back) listOf(androidx.compose.ui.geometry.Rect(g, w.top + g, g + t, w.top + g + t), tools) else listOf(tools)
+    }
+
+    // the lead's review of run 44449703726's stills: a name ran under Back and under the round tools
+    @Test fun noNameGoesUnderBackOrTheTools() = eachTree {
+        for (w in windows) for ((what, into) in listOf("whole" to -1, "Cardiology" to cardiology)) {
+            val boxes = chrome(w, into > 0)
+            val (_, placed) = names(w, 0f, into, chrome = boxes)
+            for (p in placed) for (r in boxes) {
+                val b = p.box
+                val apart = b.x + b.width / 2 <= r.left || b.x - b.width / 2 >= r.right || b.y + b.height / 2 <= r.top || b.y - b.height / 2 >= r.bottom
+                assertTrue("${w.name} $what: ${p.label} at $b under the chrome $r", apart)
+            }
+            if (into > 0) assertTrue("${w.name}: Cardiology's own parts still named", placed.count { sample.holds(cardiology, it.index) } >= 6)
+        }
     }
 
     @Test fun noTwoNamesEverOverlapNorCoverADot() = eachTree {
