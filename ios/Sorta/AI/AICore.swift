@@ -86,8 +86,10 @@ protocol AIProvider: AnyObject {
 enum AIThread {
     /// AI calls, embeddings and index work never run on the main thread.
     static func requireBackground() throws {
-        if Thread.isMainThread { throw AIError.mainThread }
+        if isMain { throw AIError.mainThread }
     }
+
+    static var isMain: Bool { Thread.isMainThread }
 }
 
 // MARK: - Text, the same way on both platforms

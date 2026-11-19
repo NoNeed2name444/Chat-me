@@ -227,6 +227,7 @@ final class AIConnect {
     }
 
     func disconnect(_ provider: AIProviderID) throws {
+        try AIThread.requireBackground()
         try vault.delete(provider)
     }
 

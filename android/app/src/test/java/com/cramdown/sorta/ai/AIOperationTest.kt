@@ -225,6 +225,16 @@ class AIOperationTest {
         assertEquals(AIOutcome.Failed(AIError.of(AIError.Reason.CAP_REACHED)), offMain { r.ask("What fits?", askIdeas) })
         assertEquals("the call not made", sentSoFar, net.requests.size)
 
+        // the main thread: every operation and the provider refuse it, and nothing is sent
+        val onMain = AIOutcome.Failed(AIError.of(AIError.Reason.MAIN_THREAD))
+        assertEquals(onMain, r.split(capture, folders))
+        assertEquals(onMain, r.why(AIIdea("n", "Beans", "Beans up the fence."), whySent))
+        assertEquals(onMain, r.ask("What fits?", askIdeas))
+        assertEquals(onMain, r.sumUp("Garden", sumIdeas))
+        assertEquals(AIError.of(AIError.Reason.MAIN_THREAD), thrown { r.provider() })
+        assertEquals("nothing sent from the main thread", sentSoFar, net.requests.size)
+        assertTrue("off it, the provider is there", offMain { r.provider() } != null)
+
         val text = ledgerFile.readText()
         assertFalse(text.contains("Paint") || text.contains("fence") || text.contains("What fits"))
         clock = clock.plusSeconds(89 * 86400L)

@@ -2,6 +2,7 @@ package com.cramdown.sorta.ai
 
 import android.content.Context
 import android.content.res.AssetManager
+import com.google.mlkit.common.MlKit
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
@@ -11,8 +12,8 @@ import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
-// The AI core as the app builds it (S08): the Keystore vault, HttpURLConnection, Gemini Nano through ML Kit's Prompt
-// API, and the bundled ai/ files (build.gradle.kts copies ai/prompts, ai/tables and the embedding table into the
+// The AI core as the app builds it (S08): the Keystore vault, HttpURLConnection, the phone's own model through ML
+// Kit's Prompt API, and the bundled ai/ files (build.gradle.kts copies ai/prompts, ai/tables and the embedding table into the
 // assets under ai/). S08u adds the screens that use it.
 
 /** The ai/ files: prompts/, tables/ and the embedding table. */
@@ -45,7 +46,7 @@ object AIApp {
             prices = AIPrices(files.read("tables/prices.json")),
             ledger = AILedger(File(context.filesDir, "ai-ledger.json")),
             transport = AIUrlTransport(),
-            onDevice = AIMlKitOnDevice(),
+            onDevice = AIMlKitOnDevice(context.applicationContext),
             files = files,
         )
     }
@@ -55,20 +56,37 @@ object AIApp {
 }
 
 /**
- * Android's on-device model (S08 A1, owner decision O1): Gemini Nano through ML Kit's Prompt API, free, on the phone,
- * and nothing leaves it. Where the phone lacks it (CI's emulators do) every call reports MODEL_UNAVAILABLE and nothing
+ * Android's on-device model (S08 A1, owner decision O1): the phone's own model through ML Kit's Prompt API, free, on
+ * the phone, and nothing leaves it. ML Kit does not start with the app (the manifest takes its startup provider out):
+ * it is started here, by hand, the first time the model is asked about or used, which is after the person chose it. Where the phone lacks it (CI's emulators do) every call reports MODEL_UNAVAILABLE and nothing
  * else happens. The Prompt API takes no schema, so the operation's instructions and input go as one text and the
  * answer is checked as any other.
  */
-class AIMlKitOnDevice(private val model: () -> GenerativeModel = { Generation.getClient() }) : AIProvider {
+class AIMlKitOnDevice(context: Context, private val model: () -> GenerativeModel = { Generation.getClient() }) : AIProvider {
     override val id = AIProviderId.MLKIT
     override val sendsSchema = false
+    private val app = context.applicationContext
+
+    companion object {
+        private val lock = Any()
+        /** Whether this process has started ML Kit. False until the phone's own model is first used. */
+        @Volatile var started = false
+            private set
+
+        /** Starts ML Kit once in the process; a second start is ML Kit's IllegalStateException, which means started. */
+        private fun start(context: Context) = synchronized(lock) {
+            if (!started) {
+                try { MlKit.initialize(context) } catch (_: IllegalStateException) { }
+                started = true
+            }
+        }
+    }
 
     /** Whether the model is on this phone now. Blocks; never on the main thread. */
     val isAvailable: Boolean
         get() {
             AIThread.requireBackground()
-            return try { status(model()) == FeatureStatus.AVAILABLE } catch (_: Exception) { false }
+            return try { start(app); status(model()) == FeatureStatus.AVAILABLE } catch (_: Exception) { false }
         }
 
     /** The model's status, or -1 when the phone gives none within ten seconds. */
@@ -76,7 +94,7 @@ class AIMlKitOnDevice(private val model: () -> GenerativeModel = { Generation.ge
 
     override fun complete(request: AIRequest): AIResponse {
         AIThread.requireBackground()
-        val client = try { model() } catch (_: Exception) { throw AIError.provider(AIErrorKind.MODEL_UNAVAILABLE) }
+        val client = try { start(app); model() } catch (_: Exception) { throw AIError.provider(AIErrorKind.MODEL_UNAVAILABLE) }
         val status = try { status(client) } catch (_: Exception) { -1 }
         if (status != FeatureStatus.AVAILABLE) throw AIError.provider(AIErrorKind.MODEL_UNAVAILABLE)
         val text = try {

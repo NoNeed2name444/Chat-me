@@ -137,5 +137,25 @@ class AIMoneyTest {
         assertTrue(calls > 0 && m.spent(AIProviderId.ANTHROPIC) <= 20 * dollar)
         val next = prices.price(AIProviderId.ANTHROPIC, "claude-opus-5-5")!!.cost(AIMoney.worstCase(opus, false).first, 4000)
         assertTrue(m.spent(AIProviderId.ANTHROPIC) + next > 20 * dollar)
+
+        // two runners over the same settings cannot overspend the cap between them
+        val shared = AIMemoryKeyValue()
+        val a = money(shared)
+        val b = money(shared)
+        a.setCap(20 * dollar, AIProviderId.ANTHROPIC)
+        val fits = (20 * dollar / next).toInt()
+        val held = java.util.concurrent.atomic.AtomicInteger()
+        val threads = (0 until 8).map { n ->
+            Thread {
+                val mine = if (n % 2 == 0) a else b
+                repeat(fits / 4 + 2) { if (thrown { mine.reserve(AIProviderId.ANTHROPIC, opus, false) } == null) held.incrementAndGet() }
+            }.also { it.start() }
+        }
+        threads.forEach { it.join() }
+        assertTrue("more than a few fit", fits > 8)
+        assertEquals("eight threads on two runners hold exactly what fits", fits, held.get())
+        assertEquals("and the count is theirs together", held.get() * next, a.spent(AIProviderId.ANTHROPIC))
+        assertEquals(a.spent(AIProviderId.ANTHROPIC), b.spent(AIProviderId.ANTHROPIC))
+        assertTrue(a.spent(AIProviderId.ANTHROPIC) <= 20 * dollar)
     }
 }

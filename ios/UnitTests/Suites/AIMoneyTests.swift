@@ -139,4 +139,32 @@ check("ceiling: calls held at their worst case stop at $20", money.spent(.anthro
 check("ceiling: and the next would pass it", money.spent(.anthropic) + prices.price(.anthropic, "claude-opus-5-5")!
       .cost(input: AIMoney.worstCase(opus, schemaSent: false).input, output: 4000) > 20 * dollar)
 
+// MARK: two runners over the same settings cannot overspend the cap between them
+
+do {
+    let shared = AIMemoryKeyValue()
+    let a = AIMoney(prices: prices, store: shared, zone: { zone }, now: { clock })
+    let b = AIMoney(prices: prices, store: shared, zone: { zone }, now: { clock })
+    a.setCap(20 * dollar, for: .anthropic)
+    let each = prices.price(.anthropic, "claude-opus-5-5")!.cost(input: AIMoney.worstCase(opus, schemaSent: false).input, output: 4000)
+    let fits = Int(20 * dollar / each)
+    let counted = NSLock()
+    var held = 0
+    let group = DispatchGroup()
+    for n in 0..<8 {
+        group.enter()
+        Thread {
+            let mine = n % 2 == 0 ? a : b
+            for _ in 0..<(fits / 4 + 2) where (try? mine.reserve(.anthropic, opus, schemaSent: false)) != nil {
+                counted.lock(); held += 1; counted.unlock()
+            }
+            group.leave()
+        }.start()
+    }
+    group.wait()
+    check("race: eight threads on two runners hold exactly what fits", held == fits && fits > 8, "\(held) of \(fits)")
+    check("race: and the count is theirs together, at or under $20", a.spent(.anthropic) == Int64(held) * each
+          && b.spent(.anthropic) == a.spent(.anthropic) && a.spent(.anthropic) <= 20 * dollar, "\(a.spent(.anthropic))")
+}
+
 finish("AI MONEY")

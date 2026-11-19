@@ -64,17 +64,21 @@ final class AIKeychainVault: AIVault {
     }
 
     /// The first access in an install deletes every item under the service.
+    /// The marker is written after the lock is let go: a UserDefaults write
+    /// can wait for the main thread, and nothing may hold the vault meanwhile.
     private func wipeIfNewInstall() {
-        guard !checked else { return }
+        lock.lock()
+        let first = !checked
         checked = true
-        guard !defaults.bool(forKey: Self.marker) else { return }
-        SecItemDelete(base(nil) as CFDictionary)
-        defaults.set(true, forKey: Self.marker)
+        let wiped = first && !defaults.bool(forKey: Self.marker)
+        if wiped { SecItemDelete(base(nil) as CFDictionary) }
+        lock.unlock()
+        if wiped { defaults.set(true, forKey: Self.marker) }
     }
 
     func save(_ secret: String, for provider: AIProviderID) throws {
-        lock.lock(); defer { lock.unlock() }
         wipeIfNewInstall()
+        lock.lock(); defer { lock.unlock() }
         SecItemDelete(base(provider) as CFDictionary)
         var item = base(provider)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -83,8 +87,8 @@ final class AIKeychainVault: AIVault {
     }
 
     func read(_ provider: AIProviderID) throws -> String? {
-        lock.lock(); defer { lock.unlock() }
         wipeIfNewInstall()
+        lock.lock(); defer { lock.unlock() }
         var q = base(provider)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -96,8 +100,8 @@ final class AIKeychainVault: AIVault {
     }
 
     func delete(_ provider: AIProviderID) throws {
-        lock.lock(); defer { lock.unlock() }
         wipeIfNewInstall()
+        lock.lock(); defer { lock.unlock() }
         let status = SecItemDelete(base(provider) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw AIError.vault }
     }

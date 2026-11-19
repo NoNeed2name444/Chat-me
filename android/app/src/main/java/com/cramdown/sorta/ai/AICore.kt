@@ -85,8 +85,10 @@ interface AIProvider {
 object AIThread {
     /** AI calls, embeddings and index work never run on the main thread. */
     fun requireBackground() {
-        if (Looper.myLooper() == Looper.getMainLooper()) throw AIError.of(AIError.Reason.MAIN_THREAD)
+        if (isMain) throw AIError.of(AIError.Reason.MAIN_THREAD)
     }
+
+    val isMain: Boolean get() = Looper.myLooper() == Looper.getMainLooper()
 }
 
 /** Text, the same way on both platforms: counted, cut and compared as Unicode code points. */

@@ -58,7 +58,7 @@ dependencies {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
-// S08: Android's on-device model, Gemini Nano through ML Kit's Prompt API (owner decision O1). No Gemini API
+// S08: the phone's own model, through ML Kit's Prompt API (owner decision O1). No Gemini API
 // library: AIGuardTest checks this file and the resolved classpath.
 dependencies { implementation("com.google.mlkit:genai-prompt:1.0.0-beta2") }
 

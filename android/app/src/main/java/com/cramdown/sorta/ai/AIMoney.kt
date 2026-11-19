@@ -78,6 +78,7 @@ class AIMoney(
         const val STANDARD = 5 * DOLLAR
         /** Input tokens added for the provider's message framing. */
         const val FRAMING = 64
+        private val shared = Any()
 
         /** The worst case: every byte sent as an input token, plus framing, and the whole maximum output. */
         fun worstCase(r: AIRequest, schemaSent: Boolean): Pair<Int, Int> {
@@ -86,7 +87,8 @@ class AIMoney(
         }
     }
 
-    private val lock = Any()
+    /** One lock for the whole app: two runners over the same settings must not both pass the cap's check first. */
+    private val lock = shared
 
     fun cap(provider: AIProviderId): Long = store.string("ai.cap." + provider.raw)?.toLongOrNull() ?: STANDARD
 

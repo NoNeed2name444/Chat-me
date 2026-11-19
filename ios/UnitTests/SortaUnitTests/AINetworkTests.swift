@@ -54,6 +54,35 @@ final class AINetworkTests: XCTestCase {
         XCTAssertEqual(AIStandInProtocol.seen.count, 3, "nothing sent from the main thread")
     }
 
+    /// The real URLSession transport, with no stand-in protocol, against two
+    /// listeners on this machine: the first answers 302 to the second.
+    func testARedirectIsNotFollowedAndTheKeyGoesNowhereElse() throws {
+        let first = try AILoopbackListener(), second = try AILoopbackListener()
+        defer { first.close(); second.close() }
+        let moved = "http://127.0.0.1:\(second.port)/callback?moved=1"
+        let served = AIBox<String>()
+        let ready = DispatchSemaphore(value: 0)
+        Thread {
+            served.result = Result { try first.next(timeout: 20, redirect: moved) }
+            ready.signal()
+        }.start()
+        let transport = AIURLSessionTransport()
+        let request = AIHTTPRequest(method: "GET", url: "http://127.0.0.1:\(first.port)/callback?first=1",
+                                    headers: [("Authorization", "Bearer " + AIFiles.fakeKey)], body: nil)
+        let answer = try aiOffMain { try transport.send(request) }
+        XCTAssertEqual(ready.wait(timeout: .now() + 20), .success)
+        XCTAssertEqual(try XCTUnwrap(served.result).get(), "/callback?first=1", "the first address was asked once")
+        XCTAssertEqual(answer.status, 302, "the 3xx answer comes back as it is")
+        XCTAssertThrowsError(try aiOffMain { try second.next(timeout: 1.5, redirect: AIConnect.returnURL) },
+                             "no second request, so the key goes nowhere else") { XCTAssertEqual($0 as? AIError, .cancelled) }
+
+        AIStandInProtocol.answer = { _ in .success((307, Data())) }
+        let provider = AIChatCompletions(.openrouter, base: AIAccounts.openRouterBase, transport: self.transport(), credential: { AIFiles.fakeKey })
+        XCTAssertThrowsError(try aiOffMain { try provider.complete(AIRequest(model: "m", instructions: "i", input: "x", maxOutput: 5)) }) {
+            XCTAssertEqual($0 as? AIError, .provider(.tryLater))
+        }
+    }
+
     func testTheListenerAnswersOnBothLoopbackAddresses() throws {
         let listener = try AILoopbackListener()
         defer { listener.close() }

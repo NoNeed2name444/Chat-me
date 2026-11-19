@@ -74,6 +74,11 @@ class AIDeviceTest {
         assertTrue(store.containsAlias(AIKeystoreVault.ALIAS + "openrouter"))
         assertNull("the key never leaves the Keystore", store.getKey(AIKeystoreVault.ALIAS + "openrouter", null).encoded)
 
+        var disconnectOnMain: Throwable? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            disconnectOnMain = thrown { AIConnect(v, StandIn { AIHttpResponse(500, ByteArray(0)) }).disconnect(AIProviderId.OPENROUTER) }
+        }
+        assertEquals("never on the main thread", AIError.of(AIError.Reason.MAIN_THREAD), disconnectOnMain)
         AIConnect(v, StandIn { AIHttpResponse(500, ByteArray(0)) }).disconnect(AIProviderId.OPENROUTER)
         assertNull("Disconnect deletes it at once", v.read(AIProviderId.OPENROUTER))
         assertFalse(file.exists())
@@ -199,7 +204,17 @@ class AIDeviceTest {
     }
 
     @Test fun theOnDeviceModelReportsItselfUnavailableCleanly() {
-        val model = AIMlKitOnDevice()
+        // O1: ML Kit does not start with the app. The installed app has no startup provider of its, the process has
+        // not started it, and it starts by hand at the model's first use.
+        val providers = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_PROVIDERS).providers.orEmpty()
+        assertTrue("no ML Kit startup provider: ${providers.map { it.name }}", providers.none { it.name.contains("mlkit", ignoreCase = true) })
+        val startedBefore = AIMlKitOnDevice.started
+        val runner = AIApp.runner(context)
+        assertEquals("building the runner does not start ML Kit", startedBefore, AIMlKitOnDevice.started)
+        var splitOnMain: AIOutcome<*>? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { splitOnMain = runner.split(capture, emptyList()) }
+        assertEquals(AIOutcome.Failed(AIError.of(AIError.Reason.MAIN_THREAD)), splitOnMain)
+        val model = AIMlKitOnDevice(context)
         val request = AIRequest("on-device", "Sort.", "Paint the shed. Plant beans.", maxOutput = 50)
         var onMain: Throwable? = null
         InstrumentationRegistry.getInstrumentation().runOnMainSync { onMain = thrown { model.complete(request) } }
@@ -210,7 +225,7 @@ class AIDeviceTest {
         } else {
             assertEquals("CI's emulators lack the model", AIError.provider(AIErrorKind.MODEL_UNAVAILABLE), thrown { model.complete(request) })
         }
-        val runner = AIApp.runner(context)
+        assertTrue("the model's first use started ML Kit by hand", AIMlKitOnDevice.started)
         assertEquals("the app's runner reads its bundled tables", "claude-haiku-5-5", runner.suggested[AIProviderId.ANTHROPIC])
         assertEquals("with nothing chosen, AI is off", AIOutcome.Off, runner.split(capture, emptyList()))
         assertEquals(29_528, AIEmbeddings.load(AIApp.files(context), AIApp.EMBEDDINGS).rows)

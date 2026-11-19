@@ -67,9 +67,10 @@ class AIProviderTest {
                 assertEquals("$name $status is thrown as that kind", AIError.provider(kind), e)
             }
         }
-        assertEquals(9, errors["cases"]!!["anthropic"]!!.array!!.size)
-        assertEquals(9, errors["cases"]!!["openrouter"]!!.array!!.size)
-        assertEquals(6, errors["cases"]!!["openai"]!!.array!!.size)
+        assertEquals(10, errors["cases"]!!["anthropic"]!!.array!!.size)
+        assertEquals(10, errors["cases"]!!["openrouter"]!!.array!!.size)
+        assertEquals(7, errors["cases"]!!["openai"]!!.array!!.size)
+        assertEquals(5, errors["cases"]!!["compatible"]!!.array!!.size)
 
         val gone = StandInTransport { throw AIError.of(AIError.Reason.TRANSPORT) }
         val e = thrown { offMain { AIChatCompletions(AIProviderId.OPENAI, AIAccounts.OPEN_AI_BASE, gone, given).complete(AIRequest("m", "i", "x", maxOutput = 5)) } }
@@ -85,7 +86,7 @@ class AIProviderTest {
     }
 
     /** A one-answer HTTP server on this machine: what it was sent, and the port. No internet. */
-    private fun serve(status: String, body: ByteArray, seen: MutableList<String>): java.net.ServerSocket {
+    private fun serve(status: String, body: ByteArray, seen: MutableList<String>, extra: String = ""): java.net.ServerSocket {
         val server = java.net.ServerSocket(0, 4, java.net.InetAddress.getByName("127.0.0.1"))
         Thread {
             try {
@@ -100,7 +101,7 @@ class AIProviderTest {
                     seen.add(head.toString())
                     seen.add(String(sent, Charsets.UTF_8))
                     c.getOutputStream().apply {
-                        write("HTTP/1.1 $status\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                        write("HTTP/1.1 $status\r\n${extra}Content-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
                         write(body)
                         flush()
                     }
@@ -131,6 +132,26 @@ class AIProviderTest {
         val closed = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1")).let { s -> s.localPort.also { s.close() } }
         assertEquals("nothing listening is a transport failure", AIError.of(AIError.Reason.TRANSPORT),
             thrown { offMain { provider(closed).complete(AIRequest("m", "i", "x", maxOutput = 5)) } })
+
+        // a redirect is never followed: the 3xx answer comes back as it is, and the second address hears nothing
+        val first = ArrayList<String>()
+        val second = java.util.Collections.synchronizedList(ArrayList<String>())
+        serve("200 OK", "{}".toByteArray(), second).use { elsewhere ->
+            serve("302 Found", ByteArray(0), first, "Location: http://127.0.0.1:${elsewhere.localPort}/moved\r\n").use { server ->
+                val moved = offMain {
+                    AIUrlTransport().send(AIHttpRequest("POST", "http://127.0.0.1:${server.localPort}/chat/completions",
+                        listOf("Authorization" to "Bearer $key"), "{}".toByteArray()))
+                }
+                assertEquals(302, moved.status)
+            }
+            assertTrue("the first address was asked, with the key", first[0].startsWith("POST /chat/completions HTTP/1.1\r\n") && first[0].contains("Bearer $key"))
+            Thread.sleep(1500)
+            assertTrue("no second request, so the key goes nowhere else: $second", second.isEmpty())
+        }
+        serve("307 Temporary Redirect", ByteArray(0), ArrayList(), "Location: https://elsewhere.invalid/\r\n").use { server ->
+            assertEquals("to an adapter it is one more reason to try later", AIError.provider(AIErrorKind.TRY_LATER),
+                thrown { offMain { provider(server.localPort).complete(AIRequest("m", "i", "x", maxOutput = 5)) } })
+        }
     }
 
     @Test fun compatibleServicesAreHttpsOnly() {
@@ -186,7 +207,9 @@ class AIProviderTest {
         offMain { connect.openRouter(" fake-code-for-tests-1\n", signIn) }
         assertEquals("fake-key-for-tests-2", vault.read(AIProviderId.OPENROUTER))
         assertEquals(listOf("https://openrouter.ai/api/v1/auth/keys", "https://openrouter.ai/api/v1/key"), t.requests.map { it.url })
-        connect.disconnect(AIProviderId.OPENROUTER)
+        assertEquals("never on the main thread", AIError.of(AIError.Reason.MAIN_THREAD), thrown { connect.disconnect(AIProviderId.OPENROUTER) })
+        assertEquals("and refused, it changes nothing", "fake-key-for-tests-2", vault.read(AIProviderId.OPENROUTER))
+        offMain { connect.disconnect(AIProviderId.OPENROUTER) }
         assertNull("Disconnect deletes it at once", vault.read(AIProviderId.OPENROUTER))
 
         val refusing = StandInTransport { AIHttpResponse(401, "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"x\"}}".toByteArray()) }
@@ -205,7 +228,7 @@ class AIProviderTest {
 
     @Test fun mlKitsModelReportsItselfUnavailableCleanly() {
         // Robolectric has no Gemini Nano: the client cannot be made, or says it is not available
-        val model = AIMlKitOnDevice()
+        val model = AIMlKitOnDevice(org.robolectric.RuntimeEnvironment.getApplication())
         val r = AIRequest("on-device", "Sort.", "Paint the shed. Plant beans.", maxOutput = 50)
         assertEquals(AIError.of(AIError.Reason.MAIN_THREAD), thrown { model.complete(r) })
         assertEquals(AIError.provider(AIErrorKind.MODEL_UNAVAILABLE), thrown { offMain { model.complete(r) } })

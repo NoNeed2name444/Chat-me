@@ -171,7 +171,10 @@ class AIConnect(private val vault: AIVault, private val transport: AITransport) 
         vault.save(trimmed, provider)
     }
 
-    fun disconnect(provider: AIProviderId) = vault.delete(provider)
+    fun disconnect(provider: AIProviderId) {
+        AIThread.requireBackground()
+        vault.delete(provider)
+    }
 
     private fun check(provider: AIProviderId, key: String, base: String? = null) {
         val given = { key }

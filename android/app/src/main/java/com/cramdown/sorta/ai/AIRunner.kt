@@ -35,8 +35,12 @@ class AIRunner(
         map?.map?.mapNotNull { (k, v) -> AIProviderId.of(k)?.let { id -> v["suggested"]?.string?.let { id to it } } }?.toMap() ?: emptyMap()
     } catch (_: Exception) { emptyMap() }
 
-    /** The provider an operation would use, or null: AI off, nothing on the phone, or no credential for the account. */
+    /**
+     * The provider an operation would use, or null: AI off, nothing on the phone, or no credential for the account.
+     * It reads the vault, so it throws MAIN_THREAD on the main thread.
+     */
     fun provider(): AIProvider? {
+        AIThread.requireBackground()
         val id = settings.provider ?: return null
         if (id.onDevice) return if (onDevice?.id == id) onDevice else null
         if ((try { vault.read(id) } catch (_: AIError) { null }) == null) return null
@@ -94,10 +98,12 @@ class AIRunner(
             AIOutcome.Failed(AIError.provider(AIErrorKind.TRY_LATER))
         }
 
+    private val mainThread = AIOutcome.Failed(AIError.of(AIError.Reason.MAIN_THREAD))
     private val onDeviceChosen: Boolean get() = settings.provider?.onDevice ?: false
 
     /** Split a capture into ideas; Off means "Sort it" as today. */
     fun split(capture: String, folders: List<AISplit.Folder>): AIOutcome<List<AISplit.Piece>> {
+        if (AIThread.isMain) return mainThread
         if (provider() == null || !consent.isOn(AIFeature.SPLIT)) return AIOutcome.Off
         if (!AISplit.needed(capture)) return AIOutcome.NotNeeded
         return run(AIFeature.SPLIT, "split", AISplit.payload(capture, folders), AISplit.MAX_OUTPUT) { AISplit.check(it, capture, folders) }
@@ -105,6 +111,7 @@ class AIRunner(
 
     /** The reasons behind suggested links (the links themselves are AILinks, on the phone). */
     fun why(idea: AIIdea, candidates: List<AIIdea>): AIOutcome<Map<String, String>> {
+        if (AIThread.isMain) return mainThread
         if (provider() == null || !consent.isOn(AIFeature.WHY)) return AIOutcome.Off
         if (candidates.isEmpty()) return AIOutcome.NotNeeded
         val (payload, sent) = AIWhy.payload(idea, candidates)
@@ -113,6 +120,7 @@ class AIRunner(
 
     /** Ask across ideas already found on the phone. */
     fun ask(question: String, found: List<AIIdea>): AIOutcome<AIAsk.Answer> {
+        if (AIThread.isMain) return mainThread
         if (provider() == null || !consent.isOn(AIFeature.ASK)) return AIOutcome.Off
         if (found.isEmpty()) return AIOutcome.Answered(AIVerdict.NOTHING_FITS, null)
         val (payload, sent) = AIAsk.payload(question, found, onDeviceChosen)
@@ -121,6 +129,7 @@ class AIRunner(
 
     /** Sum up a folder in parts; any part that fails changes nothing. */
     fun sumUp(folder: String, ideas: List<AIIdea>): AIOutcome<List<AIAsk.Answer>> {
+        if (AIThread.isMain) return mainThread
         if (provider() == null || !consent.isOn(AIFeature.SUMUP)) return AIOutcome.Off
         val parts = AISumUp.parts(ideas, if (onDeviceChosen) AISumUp.ON_DEVICE_PART else AISumUp.ACCOUNT_PART)
         if (parts.isEmpty()) return AIOutcome.NotNeeded

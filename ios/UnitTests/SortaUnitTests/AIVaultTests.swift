@@ -61,7 +61,10 @@ final class AIVaultTests: XCTestCase {
         XCTAssertEqual(found[kSecAttrAccessible as String] as? String, kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
         XCTAssertNotEqual(found[kSecAttrSynchronizable as String] as? Bool, true, "never in iCloud Keychain")
 
-        try AIConnect(vault: vault, transport: AIStandInTransport()).disconnect(.openrouter)
+        let connect = AIConnect(vault: vault, transport: AIStandInTransport())
+        XCTAssertThrowsError(try connect.disconnect(.openrouter), "never on the main thread") { XCTAssertEqual($0 as? AIError, .mainThread) }
+        XCTAssertEqual(try vault.read(.openrouter), "fake-key-for-tests-3", "and refused, it changes nothing")
+        try aiOffMain { try connect.disconnect(.openrouter) }
         XCTAssertNil(try vault.read(.openrouter), "Disconnect deletes it at once")
         XCTAssertEqual(present("openrouter"), errSecItemNotFound)
         XCTAssertEqual(try vault.read(.anthropic), "fake-key-for-tests-2", "the other account stays")
@@ -82,6 +85,32 @@ final class AIVaultTests: XCTestCase {
         try vault.save(AIFiles.fakeKey, for: .openrouter)
         let again = AIKeychainVault(defaults: defaults)
         XCTAssertEqual(try again.read(.openrouter), AIFiles.fakeKey, "the same install keeps what it saved")
+    }
+
+    /// A first access on a worker writes the install marker, and that write
+    /// can wait for the main thread. The vault's lock is let go before it, so
+    /// the main thread, parked and then reading, is never held.
+    func testAFirstAccessOnAWorkerNeverHoldsTheMainThread() throws {
+        defaults.removeObject(forKey: AIKeychainVault.marker)
+        let vault = AIKeychainVault(defaults: defaults)
+        let box = AIBox<Void>()
+        let done = DispatchSemaphore(value: 0)
+        Thread {
+            box.result = Result { try vault.save(AIFiles.fakeKey, for: .openrouter) }
+            done.signal()
+        }.start()
+        Thread.sleep(forTimeInterval: 0.3)          // the main thread parked while the worker starts
+        let started = Date()
+        _ = try vault.read(.anthropic)              // must not wait for the worker's marker write
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        let deadline = Date().addingTimeInterval(20)
+        while done.wait(timeout: .now()) == .timedOut, Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+        }
+        try XCTUnwrap(box.result, "the worker's save finished").get()
+        XCTAssertEqual(try vault.read(.openrouter), AIFiles.fakeKey)
+        XCTAssertTrue(defaults.bool(forKey: AIKeychainVault.marker))
+        try aiOffMain { try vault.delete(.openrouter) }
     }
 
     @MainActor
@@ -148,7 +177,16 @@ final class AIVaultTests: XCTestCase {
         XCTAssertTrue(net.requests.allSatisfy { !$0.url.contains(AIFiles.fakeKey) && $0.body.map { $0.range(of: key) == nil } ?? true },
                       "not in a request's address or body")
 
-        try AIConnect(vault: vault, transport: net).disconnect(.openrouter)
+        // on the main thread every operation and the provider are refused, and nothing is sent
+        let sentBefore = net.requests.count
+        if case .failed(.mainThread) = runner.split(capture, folders: folders) {} else { XCTFail("split on the main thread") }
+        if case .failed(.mainThread) = runner.ask("What fits?", found: []) {} else { XCTFail("ask on the main thread") }
+        if case .failed(.mainThread) = runner.why(AIIdea(id: "n", title: "Beans", text: "Beans."), candidates: []) {} else { XCTFail("why on the main thread") }
+        if case .failed(.mainThread) = runner.sumUp(folder: "Garden", ideas: []) {} else { XCTFail("sum up on the main thread") }
+        XCTAssertThrowsError(try runner.provider()) { XCTAssertEqual($0 as? AIError, .mainThread) }
+        XCTAssertEqual(net.requests.count, sentBefore)
+
+        try aiOffMain { try AIConnect(vault: vault, transport: net).disconnect(.openrouter) }
         XCTAssertNil(try vault.read(.openrouter))
     }
 }

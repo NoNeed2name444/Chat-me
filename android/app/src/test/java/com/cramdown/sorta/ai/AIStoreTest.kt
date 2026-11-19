@@ -146,7 +146,7 @@ class AIStoreTest {
         assertTrue("not in a request's address or body", net.requests.all { !it.url.contains(key) && !(it.body?.toString(Charsets.UTF_8) ?: "").contains(key) })
         assertTrue("only in the one header the provider reads", net.requests.all { r -> r.headers.filter { it.second.contains(key) }.map { it.first } == listOf("Authorization") })
 
-        AIConnect(vault, net).disconnect(AIProviderId.OPENROUTER)
+        offMain { AIConnect(vault, net).disconnect(AIProviderId.OPENROUTER) }
         assertNull(vault.read(AIProviderId.OPENROUTER))
         assertEquals(AIOutcome.Off, offMain { runner.split(capture, folders) })
         prefs.edit().clear().commit()
@@ -161,7 +161,17 @@ class AIStoreTest {
         }
         val table = AIEmbeddings.TABLE
         assertTrue(assets.read("${AIApp.EMBEDDINGS}/$table").contentEquals(File(AIRepo.ai, "embeddings/potion-base-4M/$table").readBytes()))
+        val startedBefore = AIMlKitOnDevice.started
         assertEquals("the app's runner reads its suggested models", "claude-haiku-5-5", AIApp.runner(context).suggested[AIProviderId.ANTHROPIC])
+        // O1: ML Kit does not start with the app. The merged manifest has no startup provider of its, and building
+        // the runner starts nothing.
+        val providers = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_PROVIDERS).providers.orEmpty()
+        assertTrue("no ML Kit startup provider: ${providers.map { it.name }}", providers.none { it.name.contains("mlkit", ignoreCase = true) })
+        val merged = File("build/intermediates/merged_manifest/debugUnitTest/mergeDebugUnitTestManifest/AndroidManifest.xml")
+        assertTrue("the merged manifest is built before the tests", merged.exists())
+        assertFalse("not in the merged manifest", merged.readText().contains("MlKitInitProvider"))
+        assertTrue("ML Kit's own parts are still there, so the check is not empty", merged.readText().contains("MlKitComponentDiscoveryService"))
+        assertEquals("building the runner does not start ML Kit", startedBefore, AIMlKitOnDevice.started)
         val e = AIEmbeddings.load(assets, AIApp.EMBEDDINGS)
         val v = AIRepo.fixture("embeddings/vectors.json")["vectors"]!!.array!![0]
         assertEquals(v["ids"]!!.array!!.map { it.int!! }, e.tokenIds(v["text"]!!.string!!))

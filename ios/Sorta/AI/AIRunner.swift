@@ -50,8 +50,10 @@ final class AIRunner {
     }
 
     /// The provider an operation would use, or nil: AI off, nothing on the
-    /// phone, or no credential for the account.
-    func provider() -> AIProvider? {
+    /// phone, or no credential for the account. It reads the vault, so it
+    /// throws on the main thread.
+    func provider() throws -> AIProvider? {
+        try AIThread.requireBackground()
         guard let id = settings.provider else { return nil }
         if id.onDevice { return onDevice?.id == id ? onDevice : nil }
         guard ((try? vault.read(id)) ?? nil) != nil else { return nil }
@@ -74,7 +76,7 @@ final class AIRunner {
     /// One call for `feature`, if consent allows it and the cap has room.
     func call(_ feature: AIFeature, prompt name: String, payload: AIPayload, maxOutput: Int) throws -> String {
         try AIThread.requireBackground()
-        guard let provider = provider() else { throw AIError.notConnected }
+        guard let provider = try provider() else { throw AIError.notConnected }
         let id = provider.id
         guard consent.allows(feature, id, connected: true) else { throw AIError.notAllowed }
         let prompt = try AIPrompt.load(name, root: promptRoot)
@@ -118,13 +120,17 @@ final class AIRunner {
         }
     }
 
+    /// Whether there is a provider to use. Never asked on the main thread.
+    private var connected: Bool { ((try? provider()) ?? nil) != nil }
+
     private var onDeviceChosen: Bool { settings.provider?.onDevice ?? false }
 
     // MARK: the operations
 
     /// Split a capture into ideas; .off means "Sort it" as today.
     func split(_ capture: String, folders: [AISplit.Folder]) -> AIOutcome<[AISplit.Piece]> {
-        guard provider() != nil, consent.isOn(.split) else { return .off }
+        guard !AIThread.isMain else { return .failed(.mainThread) }
+        guard connected, consent.isOn(.split) else { return .off }
         guard AISplit.needed(capture) else { return .notNeeded }
         return run(.split, "split", AISplit.payload(capture: capture, folders: folders), AISplit.maxOutput) {
             let (v, pieces) = AISplit.check($0, capture: capture, folders: folders)
@@ -135,7 +141,8 @@ final class AIRunner {
     /// The reasons behind suggested links (the links themselves are AILinks,
     /// on the phone).
     func why(_ idea: AIIdea, candidates: [AIIdea]) -> AIOutcome<[String: String]> {
-        guard provider() != nil, consent.isOn(.why) else { return .off }
+        guard !AIThread.isMain else { return .failed(.mainThread) }
+        guard connected, consent.isOn(.why) else { return .off }
         guard !candidates.isEmpty else { return .notNeeded }
         let (payload, sent) = AIWhy.payload(idea: idea, candidates: candidates)
         return run(.why, "why", payload, AIWhy.maxOutput) { AIWhy.check($0, sent: sent) }
@@ -143,7 +150,8 @@ final class AIRunner {
 
     /// Ask across ideas already found on the phone.
     func ask(_ question: String, found: [AIIdea]) -> AIOutcome<AIAsk.Answer> {
-        guard provider() != nil, consent.isOn(.ask) else { return .off }
+        guard !AIThread.isMain else { return .failed(.mainThread) }
+        guard connected, consent.isOn(.ask) else { return .off }
         guard !found.isEmpty else { return .answered(.nothingFits, nil) }
         let (payload, sent) = AIAsk.payload(question: question, found: found, onDevice: onDeviceChosen)
         return run(.ask, "ask", payload, AIAsk.maxOutput) { AIAsk.check($0, sent: sent) }
@@ -151,7 +159,8 @@ final class AIRunner {
 
     /// Sum up a folder in parts; any part that fails changes nothing.
     func sumUp(folder: String, ideas: [AIIdea]) -> AIOutcome<[AIAsk.Answer]> {
-        guard provider() != nil, consent.isOn(.sumup) else { return .off }
+        guard !AIThread.isMain else { return .failed(.mainThread) }
+        guard connected, consent.isOn(.sumup) else { return .off }
         let parts = AISumUp.parts(ideas, partChars: onDeviceChosen ? AISumUp.onDevicePart : AISumUp.accountPart)
         guard !parts.isEmpty else { return .notNeeded }
         var answers: [AIAsk.Answer] = []

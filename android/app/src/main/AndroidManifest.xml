@@ -23,5 +23,9 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <!-- S08 (O1): ML Kit does not start with the app. Its startup provider is taken out, and AIMlKitOnDevice
+             starts ML Kit by hand the first time the phone's own model is used -->
+        <provider xmlns:tools="http://schemas.android.com/tools" android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider" tools:node="remove" />
     </application>
 </manifest>

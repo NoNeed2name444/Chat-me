@@ -72,8 +72,9 @@ if case let .object(byProvider, _)? = errors["cases"] {
         }
     }
 }
-check("errors: every provider has its cases", errors["cases"]?["anthropic"]?.array?.count == 9
-      && errors["cases"]?["openrouter"]?.array?.count == 9 && errors["cases"]?["openai"]?.array?.count == 6)
+check("errors: every provider has its cases", errors["cases"]?["anthropic"]?.array?.count == 10
+      && errors["cases"]?["openrouter"]?.array?.count == 10 && errors["cases"]?["openai"]?.array?.count == 7
+      && errors["cases"]?["compatible"]?.array?.count == 5)
 
 do {
     let t = StandInTransport { _ in throw AIError.transport }
@@ -165,7 +166,11 @@ do {
     try? offMain { try connect.openRouter(pastedCode: " fake-code-for-tests-1\n", signIn: signIn) }
     check("connect: a pasted code is exchanged, checked and kept", (try? vault.read(.openrouter)) == "fake-key-for-tests-2"
           && t.requests.map(\.url) == ["https://openrouter.ai/api/v1/auth/keys", "https://openrouter.ai/api/v1/key"], "\(t.requests.map(\.url))")
-    try? connect.disconnect(.openrouter)
+    var onMain: Error?
+    do { try connect.disconnect(.openrouter) } catch { onMain = error }
+    check("disconnect: refused on the main thread, and the credential stays", (onMain as? AIError) == .mainThread
+          && (try? vault.read(.openrouter)) == "fake-key-for-tests-2", String(describing: onMain))
+    try? offMain { try connect.disconnect(.openrouter) }
     check("disconnect: the credential goes at once", ((try? vault.read(.openrouter)) ?? nil) == nil)
 
     let refusing = StandInTransport { _ in AIHTTPResponse(status: 401, body: Data("{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"x\"}}".utf8)) }
@@ -184,6 +189,39 @@ do {
           && ok.requests.count == 1, String(describing: insecure))
     try? offMain { try AIConnect(vault: vault, transport: ok).connect(.compatible, key: key1, base: "https://compatible.example/v1") }
     check("connect: a compatible service by https is checked at its own models", ok.requests.last?.url == "https://compatible.example/v1/models")
+}
+
+// MARK: a redirect is never followed (the real transport, two listeners on this machine)
+
+if let first = OneAnswerServer(), let second = OneAnswerServer() {
+    let moved = "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:\(second.port)/moved\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    let served = ResultBox<String?>()
+    let ready = DispatchSemaphore(value: 0)
+    Thread {
+        served.result = .success(first.serve(moved, wait: 20))
+        ready.signal()
+    }.start()
+    let transport = AIURLSessionTransport()
+    let request = AIHTTPRequest(method: "POST", url: "http://127.0.0.1:\(first.port)/chat/completions",
+                                headers: [("Authorization", "Bearer " + key1)], body: Data("{}".utf8))
+    let answer = try? offMain { try transport.send(request) }
+    _ = ready.wait(timeout: .now() + 20)
+    let head = ((try? served.result?.get()) ?? nil) ?? ""
+    check("redirect: the first address was asked, with the key", head.hasPrefix("POST /chat/completions HTTP/1.1\r\n")
+          && head.contains("Bearer " + key1), String(head.prefix(80)))
+    check("redirect: the 3xx answer comes back as it is", answer?.status == 302, String(describing: answer?.status))
+    let again = second.serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", wait: 1.5)
+    check("redirect: no second request, so the key goes nowhere else", again == nil, again ?? "")
+} else {
+    check("redirect: two listeners open on 127.0.0.1", false)
+}
+
+do {
+    let through = AIChatCompletions(.openrouter, base: AIAccounts.openRouterBase,
+                                    transport: StandInTransport { _ in AIHTTPResponse(status: 307, body: Data()) }, credential: given)
+    var thrown: Error?
+    do { _ = try offMain { try through.complete(AIRequest(model: "m", instructions: "i", input: "x", maxOutput: 5)) } } catch { thrown = error }
+    check("redirect: to an adapter it is one more reason to try later", (thrown as? AIError) == .provider(.tryLater), String(describing: thrown))
 }
 
 finish("AI PROVIDER")

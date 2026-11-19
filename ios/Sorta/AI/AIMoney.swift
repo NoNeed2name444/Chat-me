@@ -99,7 +99,10 @@ final class AIMoney {
     private let store: AIKeyValue
     private let zone: () -> TimeZone
     private let now: () -> Date
-    private let lock = NSLock()
+    /// One lock for the whole app: two runners over the same settings must
+    /// not both pass the cap's check before either counts its call.
+    private static let shared = NSLock()
+    private var lock: NSLock { Self.shared }
 
     init(prices: AIPrices, store: AIKeyValue, zone: @escaping () -> TimeZone = { TimeZone.current },
          now: @escaping () -> Date = Date.init) {

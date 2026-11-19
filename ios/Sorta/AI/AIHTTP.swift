@@ -6,8 +6,9 @@ import FoundationNetworking
 // MARK: - HTTP, straight from the phone to the provider (S08, section 4)
 //
 // URLSession only, with no HTTP library. The session is ephemeral, so no
-// cookie, cache entry or answer is kept on disk. Tests swap the transport
-// for a stand-in that replays ai/fixtures/http.
+// cookie, cache entry or answer is kept on disk. A redirect is never followed:
+// the 3xx answer comes back as it is, so the key's header goes to no second
+// address. Tests swap the transport for a stand-in that replays ai/fixtures/http.
 
 struct AIHTTPRequest {
     var method: String
@@ -33,12 +34,22 @@ protocol AITransport: AnyObject {
 final class AIURLSessionTransport: AITransport {
     private let session: URLSession
 
+    /// Refuses every redirect, so the task ends with the 3xx answer itself.
+    private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+            completionHandler(nil)
+        }
+    }
+
     init(configuration: URLSessionConfiguration = .ephemeral) {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.timeoutIntervalForRequest = 60
-        session = URLSession(configuration: configuration)
+        session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
     }
+
+    deinit { session.finishTasksAndInvalidate() }
 
     private final class Box: @unchecked Sendable {
         var response: AIHTTPResponse?

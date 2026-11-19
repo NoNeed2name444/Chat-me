@@ -340,7 +340,21 @@ check("leak: not in any request's address or body", leakNet.requests.count >= 4 
 check("leak: only in the one header the provider reads", leakNet.requests.allSatisfy { r in
     r.headers.filter { $0.1.contains(fakeKey) }.map { $0.0 } == ["Authorization"]
 })
-try! AIConnect(vault: leakVault, transport: leakNet).disconnect(.openrouter)
+// the main thread: every operation and the provider refuse it, and nothing is sent
+do {
+    func refused<V>(_ o: AIOutcome<V>) -> Bool { if case .failed(.mainThread) = o { return true } else { return false } }
+    let before = leakNet.requests.count
+    let idea = AIIdea(id: "n", title: "Beans", text: "Beans up the fence.")
+    check("main thread: split, why, ask and sum up are each refused", refused(leakRunner.split(capture, folders: folders))
+          && refused(leakRunner.why(idea, candidates: whySent)) && refused(leakRunner.ask("What fits?", found: askIdeas))
+          && refused(leakRunner.sumUp(folder: "Garden", ideas: sumIdeas)))
+    var thrown: Error?
+    do { _ = try leakRunner.provider() } catch { thrown = error }
+    check("main thread: the provider is refused too", (thrown as? AIError) == .mainThread, String(describing: thrown))
+    check("main thread: and nothing was sent", leakNet.requests.count == before)
+    check("main thread: off it, the provider is there", ((try? offMain { try leakRunner.provider() }) ?? nil) != nil)
+}
+try! offMain { try AIConnect(vault: leakVault, transport: leakNet).disconnect(.openrouter) }
 check("disconnect: the key is gone", (try? leakVault.read(.openrouter)) == .some(nil))
 check("disconnect: and every operation is off again", isOff(try! offMain { leakRunner.split(capture, folders: folders) }))
 

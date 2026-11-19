@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
 
 // Shared by the AI suites (S08): the check line, the fixtures in ai/fixtures,
 // a stand-in transport that replays them and counts requests, and running
@@ -110,4 +115,58 @@ func scratch(_ name: String) -> URL {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ai-\(name)-\(UUID().uuidString)", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     return dir
+}
+
+/// A listener on 127.0.0.1 alone, for the real transport: it takes one
+/// request, answers it with `answer`, and gives back what it was sent, or nil
+/// when nothing comes in `wait` seconds. (The app's own listener also needs
+/// ::1, which not every Linux machine has.)
+final class OneAnswerServer {
+    let port: UInt16
+    private let socketFD: Int32
+
+    init?() {
+        #if canImport(Glibc)
+        let s = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #else
+        let s = socket(AF_INET, SOCK_STREAM, 0)
+        #endif
+        guard s >= 0 else { return nil }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0
+        addr.sin_addr.s_addr = UInt32(0x7F00_0001).bigEndian
+        var size = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, size) }
+        } == 0 && listen(s, 4) == 0
+        let named = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(s, $0, &size) }
+        } == 0
+        guard bound, named else { close(s); return nil }
+        port = UInt16(bigEndian: addr.sin_port)
+        socketFD = s
+    }
+
+    deinit { close(socketFD) }
+
+    func serve(_ answer: String, wait: Double) -> String? {
+        var fd = pollfd(fd: socketFD, events: Int16(POLLIN), revents: 0)
+        guard poll(&fd, 1, Int32(wait * 1000)) > 0 else { return nil }
+        let c = accept(socketFD, nil, nil)
+        guard c >= 0 else { return nil }
+        defer { close(c) }
+        var tv = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(c, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var data = [UInt8]()
+        var buffer = [UInt8](repeating: 0, count: 2048)
+        while data.count < 16384, !String(decoding: data, as: UTF8.self).contains("\r\n\r\n") {
+            let n = recv(c, &buffer, buffer.count, 0)
+            guard n > 0 else { break }
+            data += buffer[0..<n]
+        }
+        let bytes = Array(answer.utf8)
+        _ = bytes.withUnsafeBytes { send(c, $0.baseAddress, bytes.count, 0) }
+        return String(decoding: data, as: UTF8.self)
+    }
 }

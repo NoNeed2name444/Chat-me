@@ -1,5 +1,5 @@
 {
- "about": "Each provider's error answers, made up from the references, and the plain kind each maps to.",
+ "about": "Each provider's error answers, made up from the references, and the plain kind each maps to. The 307 cases are a redirect: it is never followed, and is one more reason to try later.",
  "sources": {
   "openrouter": "https://openrouter.ai/docs/api_reference/errors-and-debugging.md (read 15 Nov 2026)",
   "anthropic": "https://platform.claude.com/docs/en/api/errors (read 15 Nov 2026)",
@@ -96,6 +96,11 @@
       "message": "No available provider"
      }
     },
+    "kind": "tryLater"
+   },
+   {
+    "status": 307,
+    "body": {},
     "kind": "tryLater"
    }
   ],
@@ -198,6 +203,11 @@
      }
     },
     "kind": "tryLater"
+   },
+   {
+    "status": 307,
+    "body": {},
+    "kind": "tryLater"
    }
   ],
   "openai": [
@@ -266,6 +276,11 @@
      }
     },
     "kind": "tryLater"
+   },
+   {
+    "status": 307,
+    "body": {},
+    "kind": "tryLater"
    }
   ],
   "compatible": [
@@ -307,6 +322,11 @@
       "message": "Bad gateway"
      }
     },
+    "kind": "tryLater"
+   },
+   {
+    "status": 307,
+    "body": {},
     "kind": "tryLater"
    }
   ]
