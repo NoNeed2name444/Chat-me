@@ -94,15 +94,27 @@ enum AddonApply {
         var list = notes
         // only the ideas the batch names are looked up, so only they are indexed; reading the id in
         // place keeps an unoptimised build from copying every note
+        // each id's text is read as a UUID once, here, and the ops below use what was read
         var wanted = Set<UUID>()
+        var first: [UUID?] = [], second: [UUID?] = []
+        first.reserveCapacity(ops.count)
+        second.reserveCapacity(ops.count)
         for op in ops {
             switch op {
-            case .capture: break
+            case let .capture(id, _, _, _, _):
+                first.append(UUID(uuidString: id))
+                second.append(nil)
             case let .link(a, b), let .unlink(a, b):
-                if let u = UUID(uuidString: a) { wanted.insert(u) }
-                if let u = UUID(uuidString: b) { wanted.insert(u) }
+                let u = UUID(uuidString: a), v = UUID(uuidString: b)
+                if let u { wanted.insert(u) }
+                if let v { wanted.insert(v) }
+                first.append(u)
+                second.append(v)
             case let .tag(id, _), let .untag(id, _), let .file(id, _):
-                if let u = UUID(uuidString: id) { wanted.insert(u) }
+                let u = UUID(uuidString: id)
+                if let u { wanted.insert(u) }
+                first.append(u)
+                second.append(nil)
             }
         }
         var index: [UUID: Int] = [:]
@@ -111,18 +123,20 @@ enum AddonApply {
             for i in notes.indices where wanted.contains(notes[i].id) { index[notes[i].id] = i }
         }
         var before: [UUID: (Int, Note)] = [:]
+        before.reserveCapacity(ops.count)
         var added: [UUID] = []
         var addedSet = Set<UUID>()
         var skipped = Set<String>()
-        func find(_ id: String) -> Int? { UUID(uuidString: id).flatMap { index[$0] } }
+        func find(_ uuid: UUID?) -> Int? { uuid.flatMap { index[$0] } }
         func touch(_ i: Int) {
             let id = list[i].id
-            if before[id] == nil, !addedSet.contains(id) { before[id] = (i, list[i]) }
+            if !addedSet.isEmpty, addedSet.contains(id) { return }
+            if before[id] == nil { before[id] = (i, list[i]) }
         }
-        for op in ops {
+        for (n, op) in ops.enumerated() {
             switch op {
-            case let .capture(id, title, body, x, y):
-                guard let uuid = UUID(uuidString: id) else { continue }
+            case let .capture(_, title, body, x, y):
+                guard let uuid = first[n] else { continue }
                 var note = Note(id: uuid, title: title, body: body, folderId: nil, kind: .idea)
                 note.boardX = x
                 note.boardY = y
@@ -133,9 +147,10 @@ enum AddonApply {
                 added.append(uuid)
                 addedSet.insert(uuid)
             case let .link(a, b), let .unlink(a, b):
-                guard let i = find(a), let j = find(b) else {
-                    if find(a) == nil { skipped.insert(a) }
-                    if find(b) == nil { skipped.insert(b) }
+                let i = find(first[n]), j = find(second[n])
+                guard let i, let j else {
+                    if i == nil { skipped.insert(a) }
+                    if j == nil { skipped.insert(b) }
                     continue
                 }
                 let ia = list[i].id, ib = list[j].id
@@ -149,18 +164,18 @@ enum AddonApply {
                     if list[j].links.contains(ia) { touch(j); list[j].links.removeAll { $0 == ia } }
                 }
             case let .tag(id, tags):
-                guard let i = find(id) else { skipped.insert(id); continue }
+                guard let i = find(first[n]) else { skipped.insert(id); continue }
                 var more: [String] = []
                 for t in tags where !list[i].tags.contains(t) && !more.contains(t) { more.append(t) }
                 if !more.isEmpty { touch(i); list[i].tags += more }
             case let .untag(id, tags):
-                guard let i = find(id) else { skipped.insert(id); continue }
+                guard let i = find(first[n]) else { skipped.insert(id); continue }
                 if list[i].tags.contains(where: { tags.contains($0) }) {
                     touch(i)
                     list[i].tags.removeAll { tags.contains($0) }
                 }
             case let .file(id, folder):
-                guard let i = find(id) else { skipped.insert(id); continue }
+                guard let i = find(first[n]) else { skipped.insert(id); continue }
                 var target: UUID?
                 if let folder {
                     guard let f = UUID(uuidString: folder), folders.contains(f) else { skipped.insert(folder); continue }
@@ -179,8 +194,9 @@ enum AddonApply {
         }
         changed.sort { $0.index < $1.index }
         let applied = AddonApplied(
-            added: added.map(AddonStoreMap.text).sorted(by: AddonText.less),
-            changed: changed.map { AddonStoreMap.text($0.note.id) }.sorted(by: AddonText.less),
+            // lowercase UUID text is ASCII, where String's order is JavaScript's UTF-16 order
+            added: added.map(AddonStoreMap.text).sorted(),
+            changed: changed.map { AddonStoreMap.text($0.note.id) }.sorted(),
             skipped: skipped.sorted(by: AddonText.less))
         return Result(notes: list, applied: applied, before: changed, added: added)
     }

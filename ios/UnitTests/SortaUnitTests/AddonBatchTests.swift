@@ -194,6 +194,12 @@ final class AddonBatchTests: XCTestCase {
         }
         let median = times.sorted()[10]
         print("apply median of 20 on 2,000 ideas: \(String(format: "%.3f", median)) ms (largest \(String(format: "%.3f", times.max() ?? 0)) ms)")
+        // the measured numbers are kept with the result, pass or fail (the xcresult), for a bound this tight
+        let kept = XCTAttachment(string: "apply median \(String(format: "%.3f", median)) ms, largest \(String(format: "%.3f", times.max() ?? 0)) ms; the twenty: "
+            + times.map { String(format: "%.3f", $0) }.joined(separator: " "))
+        kept.name = "addon-apply-timing"
+        kept.lifetime = .keepAlways
+        add(kept)
         XCTAssertLessThanOrEqual(median, 4.2)
     }
 }

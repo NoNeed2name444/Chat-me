@@ -226,8 +226,10 @@ final class AddonCenterTests: XCTestCase {
         var returned = 0.0
         let first = try XCTUnwrap(run(r, "store", mode: "end") { returned = Double(DispatchTime.now().uptimeNanoseconds - started) / 1e6 })
         let second = try XCTUnwrap(run(r, "fetch"))
-        r.registry.flush()
+        // the beat stops before flush(): flush makes the main thread wait for the registry's writes, which is the test's
+        // own wait (the app never calls it while it runs), and it would be counted as a gap
         heart.stop()
+        r.registry.flush()
         XCTAssertTrue(first.outcome.ok && second.outcome.ok, first.outcome.envelope + second.outcome.envelope)
         lock.lock()
         let seen = work
