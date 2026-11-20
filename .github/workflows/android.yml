@@ -434,6 +434,8 @@ jobs:
           api-level: '37.0'
           target: google_apis
           arch: x86_64
+          # pinned (S12, 20 Nov): 37.3.10.0 starved the tablet's Space renders of frames; every green run had 37.2.13.0
+          emulator-build: 16740729
           profile: ${{ steps.profile.outputs.profile }}
           disable-animations: true
           ram-size: 4096M
